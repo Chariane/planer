@@ -1,0 +1,22 @@
+{
+    "sourceFile": "backend/api_gateway/schemas.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1774870504176,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1774870520722,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -77,9 +77,8 @@\n     pays: Optional[str] = None\n     ville: Optional[str] = None\n     model_config = ConfigDict(from_attributes=True)\n \n-\n # ----------------------------------------\n # 🔐 AUTHENTIFICATION\n # ----------------------------------------\n \n"
+                }
+            ],
+            "date": 1774870504176,
+            "name": "Commit-0",
+            "content": "from typing import Optional, List, Any\nfrom decimal import Decimal\nfrom pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator, field_validator\nimport re\nfrom datetime import datetime\n\nPHONE_NUMBER_CLEANED_REGEX = r\"^\\+?\\d{7,20}$\"\nNAME_REGEX = r\"^[a-zA-ZÀ-ÿ\\s'-]+$\"\nUSERNAME_REGEX = r\"^[a-zA-Z0-9_.-]+$\"\n\n# ----------------------------------------\n# 🔐 UTILISATEURS\n# ----------------------------------------\n\nclass UtilisateurBase(BaseModel):\n    email: EmailStr\n    username: str = Field(..., min_length=3, max_length=30, pattern=USERNAME_REGEX)\n    nom: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)\n    prenoms: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)\n    telephone: Optional[str] = None\n    delivery_address: Optional[str] = Field(None, min_length=5, max_length=200)\n    is_entreprise: Optional[bool] = False\n\n    @model_validator(mode='before')\n    @classmethod\n    def clean_telephone(cls, data: Any) -> Any:\n        if isinstance(data, dict) and 'telephone' in data and data['telephone']:\n            phone = str(data['telephone'])\n            if phone.startswith('+'):\n                data['telephone'] = '+' + re.sub(r'\\D', '', phone[1:])\n            else:\n                data['telephone'] = re.sub(r'\\D', '', phone)\n        return data\n\n    @field_validator('telephone')\n    @classmethod\n    def validate_telephone(cls, v: Optional[str]) -> Optional[str]:\n        if v and not re.fullmatch(PHONE_NUMBER_CLEANED_REGEX, v):\n            raise ValueError(\"Numéro de téléphone invalide (7 à 20 chiffres, avec ou sans '+').\")\n        return v\n\nclass UtilisateurCreate(UtilisateurBase):\n    password: str = Field(..., min_length=8)\n    is_active: Optional[bool] = True\n    is_user: Optional[bool] = True\n    is_admin: Optional[bool] = False\n    is_super_admin: Optional[bool] = False\n    is_livreur: Optional[bool] = False\n    is_entreprise: Optional[bool] = False\n\nclass UtilisateurUpdate(BaseModel):\n    email: Optional[EmailStr] = None\n    username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)\n    prenoms: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)\n    nom: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)\n    telephone: Optional[str] = None\n    delivery_address: Optional[str] = Field(None, min_length=5, max_length=200)\n    current_password: Optional[str] = Field(None, min_length=8)\n    new_password: Optional[str] = Field(None, min_length=8)\n    biographie: Optional[str] = None\n    genre: Optional[str] = None\n    date_nais: Optional[datetime] = None\n    pays: Optional[str] = None\n    ville: Optional[str] = None\n\nclass UtilisateurOut(UtilisateurBase):\n    id: str\n    is_active: bool\n    is_user: bool\n    is_admin: bool\n    is_super_admin: bool\n    is_entreprise: bool\n    is_livreur: bool\n    biographie: Optional[str] = None\n    genre: Optional[str] = None\n    date_nais: Optional[datetime] = None\n    pays: Optional[str] = None\n    ville: Optional[str] = None\n    model_config = ConfigDict(from_attributes=True)\n\n\n# ----------------------------------------\n# 🔐 AUTHENTIFICATION\n# ----------------------------------------\n\nclass Token(BaseModel):\n    access_token: str\n    token_type: str = \"bearer\"\n    user: UtilisateurOut\n    model_config = ConfigDict(from_attributes=True)\n\nclass TokenData(BaseModel):\n    user_id: Optional[str] = None\n"
+        }
+    ]
+}
