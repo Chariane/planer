@@ -1,0 +1,26 @@
+{
+    "sourceFile": "frontend/.gitignore",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1775031966496,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1775031974486,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,1 @@\n-/home/otcbot/Téléchargements/K-Planer/frontend/node_modules\n\\ No newline at end of file\n+/K-Planer/frontend/node_modules\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1775032164176,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,2 @@\n-/K-Planer/frontend/node_modules\n\\ No newline at end of file\n+node_modules/\n+.env\n"
+                }
+            ],
+            "date": 1775031966496,
+            "name": "Commit-0",
+            "content": "/home/otcbot/Téléchargements/K-Planer/frontend/node_modules"
+        }
+    ]
+}

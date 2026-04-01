@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D20d0f5O.js";var t=e();function n({message:e=`Aucune donnée disponible`}){return(0,t.jsx)(`div`,{className:`feedback feedback-empty`,children:e})}export{n as t};

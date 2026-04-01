@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D20d0f5O.js";var t=e();function n({message:e=`Une erreur est survenue`}){return(0,t.jsx)(`div`,{className:`feedback feedback-error`,children:e})}export{n as t};

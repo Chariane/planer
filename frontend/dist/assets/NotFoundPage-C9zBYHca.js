@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D20d0f5O.js";var t=e();function n(){return(0,t.jsxs)(`section`,{children:[(0,t.jsx)(`h1`,{children:`404`}),(0,t.jsx)(`p`,{children:`Page introuvable.`})]})}export{n as default};
