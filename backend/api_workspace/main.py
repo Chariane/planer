@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes.workspaces import router as workspaces_router
+from .routes.workspaces import router as workspaces_router
 
 app = FastAPI(
     title="Microservice Api Workspace",
@@ -26,4 +26,4 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8006, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8003, reload=True)

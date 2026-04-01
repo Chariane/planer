@@ -18,7 +18,7 @@ class UtilisateurBase(BaseModel):
     nom: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)
     prenoms: Optional[str] = Field(None, min_length=2, max_length=50, pattern=NAME_REGEX)
     telephone: Optional[str] = None
-    delivery_address: Optional[str] = Field(None, min_length=5, max_length=200)
+    delivery_address: Optional[str] = Field(None, min_length=2, max_length=200)
     is_entreprise: Optional[bool] = False
 
     @model_validator(mode='before')
