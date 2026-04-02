@@ -23,3 +23,5 @@ export const ENDPOINTS = {
     details: (userId) => `/users/${userId}`,
   },
 };
+
+
