@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D20d0f5O.js";import{m as t}from"./index-BBrsc_Nj.js";var n=e();function r(){let e=t(e=>e.workspace.items);return(0,n.jsxs)(`section`,{children:[(0,n.jsx)(`h1`,{children:`Workspaces`}),(0,n.jsx)(`ul`,{children:e.map(e=>(0,n.jsx)(`li`,{children:e.name},e.id))})]})}export{r as default};

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/App.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775054879973,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775054879973,
+            "name": "Commit-0",
+            "content": "cat > src/App.jsx << 'EOF'\nfunction App() {\n  return (\n    <div className=\"min-h-screen bg-gray-50 flex items-center justify-center p-4\">\n      <div className=\"card p-8 text-center max-w-md w-full\">\n        <div className=\"mb-6\">\n          <div className=\"w-16 h-16 bg-primary-500 rounded-2xl flex items-center justify-center mx-auto mb-4\">\n            <span className=\"text-white text-2xl font-bold\">KP</span>\n          </div>\n          <h1 className=\"text-3xl font-bold text-primary-500 mb-2\">\n            K-PLANER\n          </h1>\n          <p className=\"text-secondary-500\">\n            Plateforme de gestion de projets\n          </p>\n        </div>\n        \n        <p className=\"text-secondary-600 mb-6\">\n          ✅ Tailwind CSS est installé avec succès !\n        </p>\n        \n        <div className=\"flex gap-3 justify-center\">\n          <button className=\"btn-primary\">\n            Se connecter\n          </button>\n          <button className=\"btn-secondary\">\n            S'inscrire\n          </button>\n        </div>\n        \n        <div className=\"mt-6 pt-6 border-t border-secondary-100\">\n          <div className=\"flex gap-2 justify-center\">\n            <span className=\"badge badge-success\">✓ Prêt</span>\n            <span className=\"badge badge-info\">⚡ Vite + React</span>\n            <span className=\"badge badge-success\">🎨 Tailwind</span>\n          </div>\n        </div>\n      </div>\n    </div>\n  )\n}\n\nexport default App\nEOF"
+        }
+    ]
+}
