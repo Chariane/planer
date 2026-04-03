@@ -19,7 +19,9 @@ from ..crud.utilisateur_crud import (
     get_utilisateur_by_email_or_username,
     create_utilisateur,
     get_utilisateur_by_id,
-    update_utilisateur
+    update_utilisateur,
+    get_utilisateur_by_email,
+    get_utilisateur_by_username
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
@@ -30,10 +32,13 @@ def register(user: UtilisateurCreate, db: Session = Depends(get_db)):
     print("DONNÉES REÇUES :", user.model_dump())
 
     # Vérifier si l'utilisateur existe déjà
-    existing = get_utilisateur_by_email_or_username(db, user.email, user.username)
-    if existing:
-        raise HTTPException(status_code=400, detail="Email ou nom d'utilisateur déjà utilisé")
-
+    existing_email = get_utilisateur_by_email(db, user.email)
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Cette adresse email est déjà utilisée")    
+    existing_username = get_utilisateur_by_username(db, user.username)
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Ce nom d'utilisateur est déjà utilisé")
+    
     # Préparer les données
     user_data = user.model_dump()
     password = user_data.pop("password")
