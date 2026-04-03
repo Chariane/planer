@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/PreferencesSettingsTab.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475078,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475078,
+            "name": "Commit-0",
+            "content": "import React, { useState } from 'react';\nimport toast from 'react-hot-toast';\n\nconst PreferencesSettingsTab = ({ isActive }) => {\n  const [loading, setLoading] = useState(false);\n  const [preferences, setPreferences] = useState({\n    language: 'fr',\n    theme: 'light'\n  });\n\n  const handleChange = (e) => {\n    setPreferences({\n      ...preferences,\n      [e.target.name]: e.target.value\n    });\n  };\n\n  const handleSave = async () => {\n    setLoading(true);\n\n    try {\n      // Simulation de l'appel API\n      await new Promise(resolve => setTimeout(resolve, 1000));\n\n      toast.success('Préférences mises à jour');\n    } catch (error) {\n      toast.error('Erreur lors de la mise à jour des préférences');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  if (!isActive) return null;\n\n  return (\n    <div className=\"p-6\">\n      <h2 className=\"text-xl font-semibold text-gray-900 mb-6\">Préférences générales</h2>\n\n      <div className=\"space-y-6\">\n        <div>\n          <label className=\"block text-sm font-medium text-gray-700 mb-2\">\n            Langue\n          </label>\n          <select\n            name=\"language\"\n            value={preferences.language}\n            onChange={handleChange}\n            className=\"w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500\"\n          >\n            <option value=\"fr\">Français</option>\n            <option value=\"en\">English</option>\n            <option value=\"es\">Español</option>\n          </select>\n        </div>\n\n        <div>\n          <label className=\"block text-sm font-medium text-gray-700 mb-2\">\n            Thème\n          </label>\n          <select\n            name=\"theme\"\n            value={preferences.theme}\n            onChange={handleChange}\n            className=\"w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500\"\n          >\n            <option value=\"light\">Clair</option>\n            <option value=\"dark\">Sombre</option>\n            <option value=\"auto\">Automatique</option>\n          </select>\n        </div>\n\n        <div className=\"flex justify-end\">\n          <button\n            onClick={handleSave}\n            disabled={loading}\n            className=\"px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50\"\n          >\n            {loading ? 'Sauvegarde...' : 'Sauvegarder les préférences'}\n          </button>\n        </div>\n      </div>\n    </div>\n  );\n};\n\nexport default PreferencesSettingsTab;"
+        }
+    ]
+}

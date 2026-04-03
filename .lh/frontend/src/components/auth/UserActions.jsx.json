@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/UserActions.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475081,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475081,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { Edit, Trash2, Eye, UserCheck, UserX } from 'lucide-react';\n\nconst UserActions = ({ user, onEdit, onDelete, onView, onToggleStatus }) => {\n  return (\n    <div className=\"flex items-center gap-2\">\n      <button\n        onClick={() => onView(user)}\n        className=\"p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded\"\n        title=\"Voir les détails\"\n      >\n        <Eye size={16} />\n      </button>\n\n      <button\n        onClick={() => onEdit(user)}\n        className=\"p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded\"\n        title=\"Modifier\"\n      >\n        <Edit size={16} />\n      </button>\n\n      <button\n        onClick={() => onToggleStatus(user)}\n        className={`p-1 rounded ${\n          user.is_active\n            ? 'text-red-600 hover:text-red-800 hover:bg-red-100'\n            : 'text-green-600 hover:text-green-800 hover:bg-green-100'\n        }`}\n        title={user.is_active ? 'Désactiver' : 'Activer'}\n      >\n        {user.is_active ? <UserX size={16} /> : <UserCheck size={16} />}\n      </button>\n\n      <button\n        onClick={() => onDelete(user)}\n        className=\"p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded\"\n        title=\"Supprimer\"\n      >\n        <Trash2 size={16} />\n      </button>\n    </div>\n  );\n};\n\nexport default UserActions;"
+        }
+    ]
+}

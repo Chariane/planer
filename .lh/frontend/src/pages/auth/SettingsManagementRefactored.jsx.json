@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/pages/auth/SettingsManagementRefactored.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475079,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475079,
+            "name": "Commit-0",
+            "content": "import React, { useState } from 'react';\nimport { User, Bell, Shield, Palette } from 'lucide-react';\nimport ProfileSettingsTab from '../../components/auth/ProfileSettingsTab';\nimport SecuritySettingsTab from '../../components/auth/SecuritySettingsTab';\nimport NotificationsSettingsTab from '../../components/auth/NotificationsSettingsTab';\nimport PreferencesSettingsTab from '../../components/auth/PreferencesSettingsTab';\n\nconst SettingsManagement = () => {\n  const [activeTab, setActiveTab] = useState('profile');\n\n  const tabs = [\n    { id: 'profile', label: 'Profil', icon: User },\n    { id: 'security', label: 'Sécurité', icon: Shield },\n    { id: 'notifications', label: 'Notifications', icon: Bell },\n    { id: 'preferences', label: 'Préférences', icon: Palette }\n  ];\n\n  return (\n    <div className=\"container mx-auto px-4 py-8 max-w-4xl\">\n      <div className=\"mb-8\">\n        <h1 className=\"text-3xl font-bold text-gray-900\">Paramètres</h1>\n        <p className=\"text-gray-600 mt-2\">Gérez votre compte et vos préférences</p>\n      </div>\n\n      <div className=\"bg-white rounded-lg shadow-md\">\n        {/* Onglets */}\n        <div className=\"border-b border-gray-200\">\n          <nav className=\"flex\">\n            {tabs.map((tab) => {\n              const Icon = tab.icon;\n              return (\n                <button\n                  key={tab.id}\n                  onClick={() => setActiveTab(tab.id)}\n                  className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm ${\n                    activeTab === tab.id\n                      ? 'border-indigo-500 text-indigo-600'\n                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'\n                  }`}\n                >\n                  <Icon size={16} />\n                  {tab.label}\n                </button>\n              );\n            })}\n          </nav>\n        </div>\n\n        {/* Contenu des onglets */}\n        <ProfileSettingsTab isActive={activeTab === 'profile'} />\n        <SecuritySettingsTab isActive={activeTab === 'security'} />\n        <NotificationsSettingsTab isActive={activeTab === 'notifications'} />\n        <PreferencesSettingsTab isActive={activeTab === 'preferences'} />\n      </div>\n    </div>\n  );\n};\n\nexport default SettingsManagement;"
+        }
+    ]
+}

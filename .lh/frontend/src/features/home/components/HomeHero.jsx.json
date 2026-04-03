@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/features/home/components/HomeHero.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775210057086,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775210057086,
+            "name": "Commit-0",
+            "content": "import React from 'react';\n\nconst HomeHero = () => {\n  return (\n    <div>\n      <h1>Home Hero Component</h1>\n      {/* Placeholder content */}\n    </div>\n  );\n};\n\nexport default HomeHero;"
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/ProfileCard.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475075,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475075,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { Link } from 'react-router-dom';\nimport { Settings } from 'lucide-react';\n\nconst ProfileCard = ({ user, roleInfo }) => {\n  return (\n    <div className=\"bg-white rounded-lg shadow-md p-6\">\n      <div className=\"flex items-center gap-6\">\n        <div className=\"flex-shrink-0\">\n          <div className=\"w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center\">\n            <span className=\"text-2xl font-bold text-indigo-600\">\n              {user.prenoms?.[0]}{user.nom?.[0]}\n            </span>\n          </div>\n        </div>\n        <div className=\"flex-1\">\n          <h2 className=\"text-2xl font-bold text-gray-900\">\n            {user.prenoms} {user.nom}\n          </h2>\n          <p className=\"text-gray-600\">@{user.username}</p>\n          <div className=\"mt-2\">\n            <span className={`px-3 py-1 text-sm rounded-full ${roleInfo.color}`}>\n              {roleInfo.label}\n            </span>\n          </div>\n        </div>\n        <div className=\"flex-shrink-0\">\n          <Link\n            to=\"/settings\"\n            className=\"flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50\"\n          >\n            <Settings size={16} />\n            Modifier\n          </Link>\n        </div>\n      </div>\n    </div>\n  );\n};\n\nexport default ProfileCard;"
+        }
+    ]
+}

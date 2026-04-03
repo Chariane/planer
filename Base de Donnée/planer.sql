@@ -2,6 +2,48 @@
 -- =========================
 -- TABLES DU SCHEMA planer
 -- =========================
+-- Table utilisateur
+CREATE TABLE public.utilisateur (
+    id varchar(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex'),
+    username varchar(150) NOT NULL,
+    nom VARCHAR(100),
+    prenoms VARCHAR(100),
+    email varchar(100) NOT NULL,
+    mot_de_passe varchar(255),
+	email_verified_at timestamptz,
+	statut varchar(20) NOT NULL DEFAULT 'Actif',
+    is_active boolean DEFAULT true NOT NULL,
+	token_confirmation_email varchar(255),
+	date_exp_token_confirmation_email timestamptz,
+    genre VARCHAR(10) CHECK (genre IN ('Homme', 'Femme', 'Autre')),
+    photo BYTEA,
+    date_nais DATE,
+    pays VARCHAR(100),
+    ville VARCHAR(100),
+    telephone VARCHAR(20),
+    biographie TEXT,
+    otp_code VARCHAR(5),
+    is_utilisateur_verifie boolean NOT NULL DEFAULT TRUE,
+    is_livreur BOOLEAN DEFAULT FALSE,
+    is_user BOOLEAN DEFAULT TRUE,
+    is_entreprise BOOLEAN DEFAULT FALSE,
+    is_admin BOOLEAN DEFAULT FALSE,
+    is_super_admin BOOLEAN DEFAULT FALSE,
+    type_compte VARCHAR(20) NOT NULL DEFAULT 'Utilisateur',
+    premium_expire_at TIMESTAMP,
+    badge VARCHAR(50) DEFAULT 'Aucun' CHECK (badge IN ('Aucun', 'Bronze', 'Argent', 'Or', 'Platine', 'Diamant')),
+    delivery_address VARCHAR(255),
+    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date_modif TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date_sup TIMESTAMP,
+    CONSTRAINT utilisateur_pk PRIMARY KEY (id),
+	CONSTRAINT utilisateur_constr_email UNIQUE (email),
+	CONSTRAINT utilisateur_constr_email_check CHECK (LENGTH(email) <= 255 AND email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$'),
+    CONSTRAINT utilisateur_constr_statut CHECK (statut in ( 'Actif', 'Suspendu',  'Supprimé')),
+    CONSTRAINT utilisateur_type_compte_check CHECK (type_compte IN ('Utilisateur', 'Premium')),
+    CONSTRAINT utilisateur_premium_expire_check CHECK (type_compte <> 'Premium' OR premium_expire_at IS NOT NULL)
+);
+
 CREATE TABLE planer.entreprise (
 	id varchar(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
 	nom varchar(100) NOT NULL,

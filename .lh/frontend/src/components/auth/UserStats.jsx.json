@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/UserStats.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475081,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475081,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { Users, UserCheck, UserX, Shield } from 'lucide-react';\n\nconst UserStats = ({ users }) => {\n  const totalUsers = users.length;\n  const activeUsers = users.filter(user => user.is_active).length;\n  const inactiveUsers = totalUsers - activeUsers;\n  const adminUsers = users.filter(user => user.role === 'admin' || user.role === 'super_admin').length;\n\n  const stats = [\n    {\n      label: 'Total utilisateurs',\n      value: totalUsers,\n      icon: Users,\n      color: 'text-blue-600',\n      bgColor: 'bg-blue-100'\n    },\n    {\n      label: 'Utilisateurs actifs',\n      value: activeUsers,\n      icon: UserCheck,\n      color: 'text-green-600',\n      bgColor: 'bg-green-100'\n    },\n    {\n      label: 'Utilisateurs inactifs',\n      value: inactiveUsers,\n      icon: UserX,\n      color: 'text-red-600',\n      bgColor: 'bg-red-100'\n    },\n    {\n      label: 'Administrateurs',\n      value: adminUsers,\n      icon: Shield,\n      color: 'text-purple-600',\n      bgColor: 'bg-purple-100'\n    }\n  ];\n\n  return (\n    <div className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6\">\n      {stats.map((stat, index) => (\n        <div key={index} className=\"bg-white p-4 rounded-lg shadow-sm border\">\n          <div className=\"flex items-center\">\n            <div className={`p-2 rounded-lg ${stat.bgColor}`}>\n              <stat.icon className={`h-6 w-6 ${stat.color}`} />\n            </div>\n            <div className=\"ml-4\">\n              <p className=\"text-sm font-medium text-gray-600\">{stat.label}</p>\n              <p className=\"text-2xl font-bold text-gray-900\">{stat.value}</p>\n            </div>\n          </div>\n        </div>\n      ))}\n    </div>\n  );\n};\n\nexport default UserStats;"
+        }
+    ]
+}

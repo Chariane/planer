@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/pages/auth/UnauthorizedPage.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775206157780,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775206157780,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { Link } from 'react-router-dom';\nimport { Shield, ArrowLeft } from 'lucide-react';\n\nconst UnauthorizedPage = () => {\n  return (\n    <div className=\"min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8\">\n      <div className=\"max-w-md w-full space-y-8\">\n        <div className=\"text-center\">\n          <div className=\"mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4\">\n            <Shield className=\"h-6 w-6 text-red-600\" />\n          </div>\n          <h2 className=\"text-2xl font-bold text-gray-900 mb-2\">\n            Accès non autorisé\n          </h2>\n          <p className=\"text-gray-600 mb-6\">\n            Vous n'avez pas les permissions nécessaires pour accéder à cette page.\n          </p>\n          <div className=\"space-y-3\">\n            <Link\n              to=\"/workspaces\"\n              className=\"w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md font-medium inline-flex items-center justify-center gap-2\"\n            >\n              <ArrowLeft size={16} />\n              Retour à l'accueil\n            </Link>\n            <Link\n              to=\"/profile\"\n              className=\"block text-indigo-600 hover:text-indigo-500 font-medium\"\n            >\n              Voir mon profil\n            </Link>\n          </div>\n        </div>\n      </div>\n    </div>\n  );\n};\n\nexport default UnauthorizedPage;"
+        }
+    ]
+}

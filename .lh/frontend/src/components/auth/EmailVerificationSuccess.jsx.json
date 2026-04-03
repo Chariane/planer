@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/EmailVerificationSuccess.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208253486,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208253486,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { CheckCircle } from 'lucide-react';\n\nconst EmailVerificationSuccess = ({ onNavigateToLogin }) => {\n  return (\n    <div className=\"text-center\">\n      <div className=\"mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4\">\n        <CheckCircle className=\"h-6 w-6 text-green-600\" />\n      </div>\n      <h2 className=\"text-2xl font-bold text-gray-900 mb-2\">\n        Email vérifié !\n      </h2>\n      <p className=\"text-gray-600 mb-6\">\n        Votre adresse email a été vérifiée avec succès. Vous pouvez maintenant accéder à toutes les fonctionnalités de K-Planer.\n      </p>\n      <button\n        onClick={onNavigateToLogin}\n        className=\"w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md font-medium\"\n      >\n        Se connecter\n      </button>\n    </div>\n  );\n};\n\nexport default EmailVerificationSuccess;"
+        }
+    ]
+}

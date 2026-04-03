@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/ProfileDetails.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208475076,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208475076,
+            "name": "Commit-0",
+            "content": "import React from 'react';\nimport { User, Mail, Phone, MapPin, Calendar, Shield } from 'lucide-react';\n\nconst ProfileDetails = ({ user }) => {\n  return (\n    <div className=\"bg-white rounded-lg shadow-md p-6\">\n      <h3 className=\"text-lg font-semibold text-gray-900 mb-4\">Informations personnelles</h3>\n      <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div className=\"flex items-center gap-3\">\n          <User className=\"h-5 w-5 text-gray-400\" />\n          <div>\n            <p className=\"text-sm text-gray-500\">Nom complet</p>\n            <p className=\"text-sm font-medium text-gray-900\">\n              {user.prenoms} {user.nom}\n            </p>\n          </div>\n        </div>\n\n        <div className=\"flex items-center gap-3\">\n          <Mail className=\"h-5 w-5 text-gray-400\" />\n          <div>\n            <p className=\"text-sm text-gray-500\">Email</p>\n            <p className=\"text-sm font-medium text-gray-900\">{user.email}</p>\n          </div>\n        </div>\n\n        {user.telephone && (\n          <div className=\"flex items-center gap-3\">\n            <Phone className=\"h-5 w-5 text-gray-400\" />\n            <div>\n              <p className=\"text-sm text-gray-500\">Téléphone</p>\n              <p className=\"text-sm font-medium text-gray-900\">{user.telephone}</p>\n            </div>\n          </div>\n        )}\n\n        {user.delivery_address && (\n          <div className=\"flex items-center gap-3\">\n            <MapPin className=\"h-5 w-5 text-gray-400\" />\n            <div>\n              <p className=\"text-sm text-gray-500\">Adresse de livraison</p>\n              <p className=\"text-sm font-medium text-gray-900\">{user.delivery_address}</p>\n            </div>\n          </div>\n        )}\n\n        <div className=\"flex items-center gap-3\">\n          <Calendar className=\"h-5 w-5 text-gray-400\" />\n          <div>\n            <p className=\"text-sm text-gray-500\">Membre depuis</p>\n            <p className=\"text-sm font-medium text-gray-900\">\n              {user.created_at ? new Date(user.created_at).toLocaleDateString('fr-FR') : 'N/A'}\n            </p>\n          </div>\n        </div>\n\n        <div className=\"flex items-center gap-3\">\n          <Shield className=\"h-5 w-5 text-gray-400\" />\n          <div>\n            <p className=\"text-sm text-gray-500\">Statut du compte</p>\n            <p className=\"text-sm font-medium text-gray-900\">\n              {user.is_active ? 'Actif' : 'Inactif'}\n            </p>\n          </div>\n        </div>\n      </div>\n    </div>\n  );\n};\n\nexport default ProfileDetails;"
+        }
+    ]
+}

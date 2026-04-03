@@ -1,0 +1,18 @@
+{
+    "sourceFile": "frontend/src/components/auth/EmailVerificationError.jsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775208253486,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775208253486,
+            "name": "Commit-0",
+            "content": "import React, { useState } from 'react';\nimport { XCircle, Mail, RefreshCw } from 'lucide-react';\n\nconst EmailVerificationError = ({ onResendVerification, onNavigateToRegister, onNavigateToLogin }) => {\n  const [loading, setLoading] = useState(false);\n\n  const handleResend = async () => {\n    setLoading(true);\n    try {\n      await onResendVerification();\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  return (\n    <div className=\"text-center\">\n      <div className=\"mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4\">\n        <XCircle className=\"h-6 w-6 text-red-600\" />\n      </div>\n      <h2 className=\"text-2xl font-bold text-gray-900 mb-2\">\n        Vérification échouée\n      </h2>\n      <p className=\"text-gray-600 mb-6\">\n        Le lien de vérification est invalide, expiré ou a déjà été utilisé.\n      </p>\n\n      <div className=\"space-y-4\">\n        <button\n          onClick={handleResend}\n          disabled={loading}\n          className=\"w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-md font-medium flex items-center justify-center gap-2\"\n        >\n          {loading ? (\n            <RefreshCw className=\"h-4 w-4 animate-spin\" />\n          ) : (\n            <Mail className=\"h-4 w-4\" />\n          )}\n          {loading ? 'Envoi en cours...' : 'Renvoyer l\\'email de vérification'}\n        </button>\n\n        <button\n          onClick={onNavigateToRegister}\n          className=\"w-full border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-md font-medium\"\n        >\n          Créer un nouveau compte\n        </button>\n      </div>\n\n      <div className=\"mt-6\">\n        <button\n          onClick={onNavigateToLogin}\n          className=\"text-indigo-600 hover:text-indigo-500 font-medium\"\n        >\n          Retour à la connexion\n        </button>\n      </div>\n    </div>\n  );\n};\n\nexport default EmailVerificationError;"
+        }
+    ]
+}
