@@ -23,6 +23,11 @@ CREATE TABLE public.utilisateur (
     telephone VARCHAR(20),
     biographie TEXT,
     otp_code VARCHAR(5),
+    code_verification_email VARCHAR(6),
+    date_exp_code_verification_email TIMESTAMPTZ,
+    google_auth_secret VARCHAR(64),
+    is_2fa_enabled BOOLEAN DEFAULT FALSE,
+    google_auth_configured_at TIMESTAMPTZ,
     is_utilisateur_verifie boolean NOT NULL DEFAULT TRUE,
     is_livreur BOOLEAN DEFAULT FALSE,
     is_user BOOLEAN DEFAULT TRUE,
@@ -462,4 +467,3 @@ CREATE INDEX IF NOT EXISTS idx_abonnement_statut_date_fin ON planer.abonnement_e
 CREATE INDEX IF NOT EXISTS idx_paiement_abonnement_id ON planer.paiement_abonnement (id_abonnement);
 CREATE INDEX IF NOT EXISTS idx_paiement_abonnement_statut ON planer.paiement_abonnement (statut);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_abonnement_entreprise_actif_unique ON planer.abonnement_entreprise (id_entreprise) WHERE statut IN ('En attente', 'Actif');
-

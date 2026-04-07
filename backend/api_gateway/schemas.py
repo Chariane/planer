@@ -135,6 +135,7 @@ class UtilisateurOut(UtilisateurBase):
     id: str
     is_active: bool
     is_utilisateur_verifie: bool
+    is_2fa_enabled: bool
     is_user: bool
     is_admin: bool
     is_super_admin: bool
@@ -202,8 +203,17 @@ class RegisterResponse(BaseModel):
 
 
 class GoogleAuthenticatorSetupResponse(MessageResponse):
+    setup_required: bool = True
+    is_2fa_enabled: bool = False
+    google_auth_configured_at: Optional[datetime] = None
     google_authenticator_secret: Optional[str] = None
     google_authenticator_otpauth_url: Optional[str] = None
+
+
+class GoogleAuthenticatorStatusResponse(MessageResponse):
+    setup_required: bool
+    is_2fa_enabled: bool
+    google_auth_configured_at: Optional[datetime] = None
 
 
 class LoginRequest(BaseModel):

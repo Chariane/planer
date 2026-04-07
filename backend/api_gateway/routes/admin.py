@@ -7,7 +7,6 @@ from ..core.function import (
     build_email_verification_metadata,
     email_has_changed,
     ensure_unique_user_identity_fields,
-    get_email_verification_code_from_state,
     validate_admin_password_update,
 )
 from ..core.security import get_password_hash, get_current_admin, get_current_super_admin
@@ -77,7 +76,7 @@ def update_user_by_admin(
 
     email_changed = email_has_changed(db_user, update_data)
     if email_changed:
-        update_data.update(build_email_verification_metadata(db_user.token_confirmation_email))
+        update_data.update(build_email_verification_metadata())
 
     # Mise à jour des autres champs
     updated_user = update_utilisateur(db, user_id, update_data)
@@ -87,7 +86,7 @@ def update_user_by_admin(
             send_verification_email,
             updated_user.username,
             EmailSchema(email=[updated_user.email]),
-            get_email_verification_code_from_state(updated_user.token_confirmation_email),
+            updated_user.code_verification_email,
         )
     return updated_user
 

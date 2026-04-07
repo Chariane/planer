@@ -2,11 +2,12 @@ from typing import Optional, List, Any
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator, field_validator
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 PHONE_NUMBER_CLEANED_REGEX = r"^\+?\d{7,20}$"
 NAME_REGEX = r"^[a-zA-ZÀ-ÿ\s'-]+$"
 USERNAME_REGEX = r"^[a-zA-Z0-9_.-]+$"
+WORKSPACE_ASSIGNABLE_ROLES = {"Administrateur", "Membre", "Invité"}
 
 # ----------------------------------------
 # 🔐 UTILISATEURS
@@ -23,13 +24,34 @@ class UtilisateurBase(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def clean_telephone(cls, data: Any) -> Any:
-        if isinstance(data, dict) and 'telephone' in data and data['telephone']:
-            phone = str(data['telephone'])
-            if phone.startswith('+'):
-                data['telephone'] = '+' + re.sub(r'\D', '', phone[1:])
-            else:
-                data['telephone'] = re.sub(r'\D', '', phone)
+    def clean_user_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for optional_text_field in [
+                "nom",
+                "prenoms",
+                "telephone",
+                "delivery_address",
+                "pays",
+                "ville",
+                "biographie",
+                "genre",
+            ]:
+                if optional_text_field in data and isinstance(data.get(optional_text_field), str):
+                    cleaned_value = data[optional_text_field].strip()
+                    data[optional_text_field] = cleaned_value or None
+
+            if data.get('email'):
+                data['email'] = str(data['email']).strip().lower()
+
+            if data.get('username'):
+                data['username'] = str(data['username']).strip()
+
+            if data.get('telephone'):
+                phone = str(data['telephone'])
+                if phone.startswith('+'):
+                    data['telephone'] = '+' + re.sub(r'\D', '', phone[1:])
+                else:
+                    data['telephone'] = re.sub(r'\D', '', phone)
         return data
 
     @field_validator('telephone')
@@ -40,13 +62,20 @@ class UtilisateurBase(BaseModel):
         return v
 
 class UtilisateurCreate(UtilisateurBase):
-    password: str = Field(..., min_length=8)
+    password: str
     is_active: Optional[bool] = True
     is_user: Optional[bool] = True
     is_admin: Optional[bool] = False
     is_super_admin: Optional[bool] = False
     is_livreur: Optional[bool] = False
     is_entreprise: Optional[bool] = False
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
+        return value
 
 class UtilisateurUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -63,9 +92,50 @@ class UtilisateurUpdate(BaseModel):
     pays: Optional[str] = None
     ville: Optional[str] = None
 
+    @model_validator(mode='before')
+    @classmethod
+    def clean_user_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for optional_text_field in [
+                "nom",
+                "prenoms",
+                "telephone",
+                "delivery_address",
+                "pays",
+                "ville",
+                "biographie",
+                "genre",
+            ]:
+                if optional_text_field in data and isinstance(data.get(optional_text_field), str):
+                    cleaned_value = data[optional_text_field].strip()
+                    data[optional_text_field] = cleaned_value or None
+
+            if data.get('email'):
+                data['email'] = str(data['email']).strip().lower()
+
+            if data.get('username'):
+                data['username'] = str(data['username']).strip()
+
+            if data.get('telephone'):
+                phone = str(data['telephone'])
+                if phone.startswith('+'):
+                    data['telephone'] = '+' + re.sub(r'\D', '', phone[1:])
+                else:
+                    data['telephone'] = re.sub(r'\D', '', phone)
+        return data
+
+    @field_validator('telephone')
+    @classmethod
+    def validate_telephone(cls, v: Optional[str]) -> Optional[str]:
+        if v and not re.fullmatch(PHONE_NUMBER_CLEANED_REGEX, v):
+            raise ValueError("Numéro de téléphone invalide (7 à 20 chiffres, avec ou sans '+').")
+        return v
+
 class UtilisateurOut(UtilisateurBase):
     id: str
     is_active: bool
+    is_utilisateur_verifie: bool
+    is_2fa_enabled: bool
     is_user: bool
     is_admin: bool
     is_super_admin: bool
@@ -91,6 +161,109 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: Optional[str] = None
 
+
+class EmailVerificationCodeRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code doit contenir exactement 6 chiffres.")
+        return code
+
+
+class EmailVerificationResendRequest(BaseModel):
+    email: EmailStr
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    user: UtilisateurOut
+
+
+class GoogleAuthenticatorSetupResponse(MessageResponse):
+    setup_required: bool = True
+    is_2fa_enabled: bool = False
+    google_auth_configured_at: Optional[datetime] = None
+    google_authenticator_secret: Optional[str] = None
+    google_authenticator_otpauth_url: Optional[str] = None
+
+
+class GoogleAuthenticatorStatusResponse(MessageResponse):
+    setup_required: bool
+    is_2fa_enabled: bool
+    google_auth_configured_at: Optional[datetime] = None
+
+
+class LoginRequest(BaseModel):
+    identifier: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=8)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_identifier(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            identifier = data.get("identifier") or data.get("email") or data.get("username")
+            if identifier is not None:
+                normalized_identifier = str(identifier).strip()
+                if "@" in normalized_identifier:
+                    normalized_identifier = normalized_identifier.lower()
+                data["identifier"] = normalized_identifier
+        return data
+
+
+class LoginChallengeResponse(MessageResponse):
+    requires_2fa: bool = True
+    challenge_token: str
+    setup_required: bool = False
+    google_authenticator_secret: Optional[str] = None
+    google_authenticator_otpauth_url: Optional[str] = None
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code Google Authenticator doit contenir exactement 6 chiffres.")
+        return code
+
+# ----------------------------------------
+# SCHÉMAS POUR LES RÔLES
+# ----------------------------------------
+
+class UserRolesUpdate(BaseModel):
+    is_admin: Optional[bool] = None
+    is_super_admin: Optional[bool] = None
+    is_livreur: Optional[bool] = None
+    is_entreprise: Optional[bool] = None
+    is_user: Optional[bool] = None
+
 # ----------------------------------------
 # 🏢 SCHÉMAS PLANER
 # ----------------------------------------
@@ -104,7 +277,7 @@ class EntrepriseBase(BaseModel):
     adresse: Optional[str] = Field(None, max_length=255)
     numero_ifu: Optional[str] = Field(None, max_length=13)
     numero_rccm: Optional[str] = Field(None, max_length=50)
-    date_creation_entreprise: Optional[datetime] = None
+    date_creation_entreprise: Optional[date] = None
     nom_responsable_entreprise: Optional[str] = Field(None, max_length=50)
     prenoms_responsable_entreprise: Optional[str] = Field(None, max_length=255)
     telephone_responsable_entreprise: Optional[str] = Field(None, max_length=20)
@@ -112,7 +285,7 @@ class EntrepriseBase(BaseModel):
     site_web: Optional[str] = Field(None, max_length=255)
 
 class EntrepriseCreate(EntrepriseBase):
-    id_utilisateur: str
+    id_utilisateur: Optional[str] = None
 
 class EntrepriseUpdate(BaseModel):
     nom: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -122,7 +295,7 @@ class EntrepriseUpdate(BaseModel):
     adresse: Optional[str] = Field(None, max_length=255)
     numero_ifu: Optional[str] = Field(None, max_length=13)
     numero_rccm: Optional[str] = Field(None, max_length=50)
-    date_creation_entreprise: Optional[datetime] = None
+    date_creation_entreprise: Optional[date] = None
     nom_responsable_entreprise: Optional[str] = Field(None, max_length=50)
     prenoms_responsable_entreprise: Optional[str] = Field(None, max_length=255)
     telephone_responsable_entreprise: Optional[str] = Field(None, max_length=20)
@@ -157,7 +330,7 @@ class PlanAbonnementBase(BaseModel):
     duree_jours: int = Field(..., gt=0)
 
 class PlanAbonnementCreate(PlanAbonnementBase):
-    pass
+    is_active: Optional[bool] = True
 
 class PlanAbonnementUpdate(BaseModel):
     code: Optional[str] = Field(None, min_length=1, max_length=40)
@@ -313,11 +486,9 @@ class TacheBase(BaseModel):
     description: Optional[str] = None
     date_debut: Optional[datetime] = None
     date_fin_prevue: Optional[datetime] = None
-    date_fin_reelle: Optional[datetime] = None
-    statut: str = Field(default="A faire")
-    priorite: str = Field(default="Moyenne")
-    progression: int = Field(default=0, ge=0, le=100)
-    commentaires: Optional[str] = None
+    statut: Optional[str] = None
+    priorite: Optional[str] = None
+    ordre_affichage: Optional[int] = Field(None, ge=0)
 
 class TacheCreate(TacheBase):
     id_liste: Optional[str] = None
@@ -327,17 +498,15 @@ class TacheUpdate(BaseModel):
     description: Optional[str] = None
     date_debut: Optional[datetime] = None
     date_fin_prevue: Optional[datetime] = None
-    date_fin_reelle: Optional[datetime] = None
     statut: Optional[str] = None
     priorite: Optional[str] = None
-    progression: Optional[int] = Field(None, ge=0, le=100)
-    commentaires: Optional[str] = None
+    ordre_affichage: Optional[int] = Field(None, ge=0)
     id_liste: Optional[str] = None
 
 class TacheOut(TacheBase):
     id: str
+    statut_date: Optional[datetime] = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
     id_liste: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -362,7 +531,7 @@ class MembreUpdate(BaseModel):
 
 class MembreOut(MembreBase):
     id: str
-    date_ajout: datetime
+    created_at: datetime
     id_workspace: Optional[str] = None
     id_espace: Optional[str] = None
     id_liste: Optional[str] = None
@@ -372,26 +541,75 @@ class MembreOut(MembreBase):
 class MembreDelete(BaseModel):
     id: str
 
+
+class WorkspaceMemberInvite(BaseModel):
+    email: EmailStr
+    role: str = Field(default="Membre")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        role = value.strip()
+        if role not in WORKSPACE_ASSIGNABLE_ROLES:
+            allowed_roles = ", ".join(sorted(WORKSPACE_ASSIGNABLE_ROLES))
+            raise ValueError(f"Role invalide. Valeurs autorisees: {allowed_roles}.")
+        return role
+
+
+class WorkspaceMemberUpdate(BaseModel):
+    role: Optional[str] = None
+    statut: Optional[str] = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        role = value.strip()
+        if role not in WORKSPACE_ASSIGNABLE_ROLES:
+            allowed_roles = ", ".join(sorted(WORKSPACE_ASSIGNABLE_ROLES))
+            raise ValueError(f"Role invalide. Valeurs autorisees: {allowed_roles}.")
+        return role
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut(cls, value: Optional[str]) -> Optional[str]:
+        allowed_statuses = {"Actif", "Suspendu", "Quitté"}
+        if value is None:
+            return value
+        statut = value.strip()
+        if statut not in allowed_statuses:
+            allowed = ", ".join(sorted(allowed_statuses))
+            raise ValueError(f"Statut invalide. Valeurs autorisees: {allowed}.")
+        return statut
+
 # Fichier
 class FichierBase(BaseModel):
-    nom_fichier: str = Field(..., min_length=1, max_length=255)
-    chemin_fichier: str = Field(..., min_length=1, max_length=500)
-    type_fichier: Optional[str] = Field(None, max_length=50)
-    taille_fichier: Optional[int] = None
+    nom: str = Field(..., min_length=1, max_length=255)
+    url_fichier: Optional[str] = None
+    type_fichier: Optional[str] = Field(None, max_length=20)
+    meta_donnees: Optional[dict] = None
 
 class FichierCreate(FichierBase):
     id_membre: Optional[str] = None
 
 class FichierUpdate(BaseModel):
-    nom_fichier: Optional[str] = Field(None, min_length=1, max_length=255)
-    chemin_fichier: Optional[str] = Field(None, min_length=1, max_length=500)
-    type_fichier: Optional[str] = Field(None, max_length=50)
-    taille_fichier: Optional[int] = None
+    nom: Optional[str] = Field(None, min_length=1, max_length=255)
+    url_fichier: Optional[str] = None
+    type_fichier: Optional[str] = Field(None, max_length=20)
+    meta_donnees: Optional[dict] = None
     id_membre: Optional[str] = None
 
 class FichierOut(FichierBase):
     id: str
-    date_upload: datetime
+    created_at: datetime
     id_membre: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -400,8 +618,11 @@ class FichierDelete(BaseModel):
 
 # Rapport
 class RapportBase(BaseModel):
-    titre: str = Field(..., min_length=1, max_length=255)
-    contenu: Optional[str] = None
+    titre: str = Field(..., min_length=1, max_length=150)
+    realisations: Optional[str] = None
+    difficultes_et_solutions: Optional[str] = None
+    commentaire: Optional[str] = None
+    fichier_joint: Optional[str] = None
     periode_debut: Optional[datetime] = None
     periode_fin: Optional[datetime] = None
 
@@ -409,8 +630,11 @@ class RapportCreate(RapportBase):
     id_membre: Optional[str] = None
 
 class RapportUpdate(BaseModel):
-    titre: Optional[str] = Field(None, min_length=1, max_length=255)
-    contenu: Optional[str] = None
+    titre: Optional[str] = Field(None, min_length=1, max_length=150)
+    realisations: Optional[str] = None
+    difficultes_et_solutions: Optional[str] = None
+    commentaire: Optional[str] = None
+    fichier_joint: Optional[str] = None
     periode_debut: Optional[datetime] = None
     periode_fin: Optional[datetime] = None
     id_membre: Optional[str] = None
@@ -426,30 +650,35 @@ class RapportDelete(BaseModel):
 
 # Absence Et Conge
 class AbsenceEtCongeBase(BaseModel):
-    type_absence: str
-    date_debut: datetime
-    date_fin: datetime
-    duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    motif: Optional[str] = None
-    commentaires: Optional[str] = None
-
-class AbsenceEtCongeCreate(AbsenceEtCongeBase):
-    id_membre: str
-
-class AbsenceEtCongeUpdate(BaseModel):
-    type_absence: Optional[str] = None
+    is_absence: bool = Field(default=True)
     date_debut: Optional[datetime] = None
     date_fin: Optional[datetime] = None
-    duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    motif: Optional[str] = None
     statut: Optional[str] = None
-    commentaires: Optional[str] = None
+    motif: Optional[str] = None
+    is_conge_planifie: Optional[bool] = Field(default=False)
+    duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
+    conge_interrompu_at: Optional[datetime] = None
+
+class AbsenceEtCongeCreate(AbsenceEtCongeBase):
+    id_membre: Optional[str] = None
+
+class AbsenceEtCongeUpdate(BaseModel):
+    is_absence: Optional[bool] = None
+    date_debut: Optional[datetime] = None
+    date_fin: Optional[datetime] = None
+    statut: Optional[str] = None
+    motif: Optional[str] = None
+    is_conge_planifie: Optional[bool] = None
+    duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
+    conge_interrompu_at: Optional[datetime] = None
+    id_membre: Optional[str] = None
 
 class AbsenceEtCongeOut(AbsenceEtCongeBase):
     id: str
     statut: str
+    statut_date: datetime
     created_at: datetime
-    id_membre: str
+    id_membre: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AbsenceEtCongeDelete(BaseModel):
@@ -457,20 +686,19 @@ class AbsenceEtCongeDelete(BaseModel):
 
 # Canevas
 class CanevasBase(BaseModel):
-    nom: str = Field(..., min_length=1, max_length=150)
-    description: Optional[str] = None
+    is_verrouille: bool = Field(default=False)
 
 class CanevasCreate(CanevasBase):
     id_liste: Optional[str] = None
 
 class CanevasUpdate(BaseModel):
-    nom: Optional[str] = Field(None, min_length=1, max_length=150)
-    description: Optional[str] = None
+    is_verrouille: Optional[bool] = None
     id_liste: Optional[str] = None
 
 class CanevasOut(CanevasBase):
     id: str
     created_at: datetime
+    updated_at: Optional[datetime] = None
     id_liste: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -479,22 +707,19 @@ class CanevasDelete(BaseModel):
 
 # Section
 class SectionBase(BaseModel):
-    titre: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    ordre: int = Field(default=1, ge=1)
+    titre: str = Field(..., min_length=1, max_length=150)
 
 class SectionCreate(SectionBase):
     id_canevas: Optional[str] = None
 
 class SectionUpdate(BaseModel):
-    titre: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    ordre: Optional[int] = Field(None, ge=1)
+    titre: Optional[str] = Field(None, min_length=1, max_length=150)
     id_canevas: Optional[str] = None
 
 class SectionOut(SectionBase):
     id: str
     created_at: datetime
+    updated_at: Optional[datetime] = None
     id_canevas: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -503,26 +728,23 @@ class SectionDelete(BaseModel):
 
 # Checklist
 class ChecklistBase(BaseModel):
-    titre: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
+    texte: str = Field(..., min_length=1, max_length=255)
     is_checked: bool = Field(default=False)
-    ordre: int = Field(default=1, ge=1)
 
 class ChecklistCreate(ChecklistBase):
     id_section: Optional[str] = None
     id_tache: Optional[str] = None
 
 class ChecklistUpdate(BaseModel):
-    titre: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
+    texte: Optional[str] = Field(None, min_length=1, max_length=255)
     is_checked: Optional[bool] = None
-    ordre: Optional[int] = Field(None, ge=1)
     id_section: Optional[str] = None
     id_tache: Optional[str] = None
 
 class ChecklistOut(ChecklistBase):
     id: str
     created_at: datetime
+    updated_at: Optional[datetime] = None
     id_section: Optional[str] = None
     id_tache: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

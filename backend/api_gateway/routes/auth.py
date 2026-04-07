@@ -1,20 +1,17 @@
 from datetime import timedelta
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..core.database import get_db
 from ..core.emails import EmailSchema, resend_verification_email, send_verification_email
 from ..core.function import (
     build_email_verification_metadata,
-    build_google_authenticator_otpauth_url,
-    build_auth_security_state,
+    build_google_authenticator_setup_payload,
     email_has_changed,
+    enable_google_authenticator,
     ensure_unique_user_identity_fields,
     get_current_utc_datetime,
-    get_email_verification_code_from_state,
     get_or_create_google_auth_secret,
-    get_google_auth_secret_from_state,
+    is_google_authenticator_setup_required,
     is_expired_datetime,
     validate_self_password_update,
     verify_google_authenticator_code,
@@ -33,6 +30,7 @@ from ..schemas import (
     EmailVerificationCodeRequest,
     EmailVerificationResendRequest,
     GoogleAuthenticatorSetupResponse,
+    GoogleAuthenticatorStatusResponse,
     LoginChallengeResponse,
     LoginRequest,
     MessageResponse,
@@ -75,7 +73,7 @@ def register(
         send_verification_email,
         new_user.username,
         EmailSchema(email=[new_user.email]),
-        get_email_verification_code_from_state(new_user.token_confirmation_email),
+        new_user.code_verification_email,
     )
     return {
         "message": "Compte cree. Un code de verification email a ete envoye.",
@@ -110,8 +108,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Votre adresse email n'est pas encore vérifiée.",
         )
 
-    google_auth_secret, setup_required = get_or_create_google_auth_secret(user)
-    if setup_required:
+    google_auth_secret, secret_created = get_or_create_google_auth_secret(user)
+    setup_required = is_google_authenticator_setup_required(user)
+    if secret_created:
         db.commit()
         db.refresh(user)
 
@@ -126,11 +125,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         "setup_required": setup_required,
     }
     if setup_required:
-        response["google_authenticator_secret"] = google_auth_secret
-        response["google_authenticator_otpauth_url"] = build_google_authenticator_otpauth_url(
-            google_auth_secret,
-            user.email,
+        setup_payload = build_google_authenticator_setup_payload(
+            user,
+            message="Configuration Google Authenticator preparee.",
         )
+        response["google_authenticator_secret"] = google_auth_secret
+        response["google_authenticator_otpauth_url"] = setup_payload["google_authenticator_otpauth_url"]
     return response
 
 
@@ -146,34 +146,27 @@ def verify_email_code(
     if user.is_utilisateur_verifie:
         return {"message": "Votre adresse email est deja verifiee."}
 
-    if is_expired_datetime(user.date_exp_token_confirmation_email):
+    if is_expired_datetime(user.date_exp_code_verification_email):
         raise HTTPException(
             status_code=400,
             detail="Le code de verification a expire. Veuillez demander un nouveau code.",
         )
 
-    expected_code = get_email_verification_code_from_state(user.token_confirmation_email)
+    expected_code = user.code_verification_email
     if not expected_code or expected_code != payload.code:
         raise HTTPException(status_code=400, detail="Code de verification invalide")
 
-    google_auth_secret, _ = get_or_create_google_auth_secret(user)
+    get_or_create_google_auth_secret(user)
     user.is_utilisateur_verifie = True
     user.email_verified_at = get_current_utc_datetime()
-    user.token_confirmation_email = build_auth_security_state(
-        user.token_confirmation_email,
-        clear_email_verification_code=True,
-    )
-    user.date_exp_token_confirmation_email = None
+    user.code_verification_email = None
+    user.date_exp_code_verification_email = None
     db.commit()
 
-    return {
-        "message": "Votre adresse email a ete verifiee avec succes.",
-        "google_authenticator_secret": google_auth_secret,
-        "google_authenticator_otpauth_url": build_google_authenticator_otpauth_url(
-            google_auth_secret,
-            user.email,
-        ),
-    }
+    return build_google_authenticator_setup_payload(
+        user,
+        message="Votre adresse email a ete verifiee avec succes.",
+    )
 
 
 @router.post("/resend-verification-code", response_model=MessageResponse)
@@ -189,18 +182,18 @@ def resend_verification_code(
     if user.is_utilisateur_verifie:
         return {"message": "Cette adresse email est déjà vérifiée."}
 
-    verification_data = build_email_verification_metadata(user.token_confirmation_email)
+    verification_data = build_email_verification_metadata()
     user.is_utilisateur_verifie = verification_data["is_utilisateur_verifie"]
     user.email_verified_at = verification_data["email_verified_at"]
-    user.token_confirmation_email = verification_data["token_confirmation_email"]
-    user.date_exp_token_confirmation_email = verification_data["date_exp_token_confirmation_email"]
+    user.code_verification_email = verification_data["code_verification_email"]
+    user.date_exp_code_verification_email = verification_data["date_exp_code_verification_email"]
     db.commit()
 
     background_tasks.add_task(
         resend_verification_email,
         user.username,
         EmailSchema(email=[user.email]),
-        get_email_verification_code_from_state(user.token_confirmation_email),
+        user.code_verification_email,
     )
 
     return {"message": "Un nouveau code de verification a ete envoye."}
@@ -213,6 +206,49 @@ def resend_verification_email_legacy(
     db: Session = Depends(get_db),
 ):
     return resend_verification_code(payload, background_tasks, db)
+
+
+@router.get("/2fa/status", response_model=GoogleAuthenticatorStatusResponse)
+def get_google_authenticator_status(
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    return {
+        "message": "Statut Google Authenticator recupere avec succes.",
+        "setup_required": is_google_authenticator_setup_required(user),
+        "is_2fa_enabled": bool(user.is_2fa_enabled),
+        "google_auth_configured_at": user.google_auth_configured_at,
+    }
+
+
+@router.get("/2fa/setup", response_model=GoogleAuthenticatorSetupResponse)
+def get_google_authenticator_setup(
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    if not user.is_utilisateur_verifie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre adresse email n'est pas encore verifiee.",
+        )
+
+    _, secret_created = get_or_create_google_auth_secret(user)
+    if secret_created:
+        db.commit()
+        db.refresh(user)
+
+    return build_google_authenticator_setup_payload(
+        user,
+        message="Configuration Google Authenticator recuperee avec succes.",
+    )
 
 
 @router.post("/verify-2fa", response_model=Token)
@@ -239,7 +275,7 @@ def verify_two_factor_code(
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
 
-    google_auth_secret = get_google_auth_secret_from_state(user.token_confirmation_email)
+    google_auth_secret = user.google_auth_secret
     if not google_auth_secret:
         raise HTTPException(
             status_code=400,
@@ -248,6 +284,11 @@ def verify_two_factor_code(
 
     if not verify_google_authenticator_code(google_auth_secret, payload.code):
         raise HTTPException(status_code=400, detail="Code Google Authenticator invalide")
+
+    if not user.is_2fa_enabled:
+        enable_google_authenticator(user)
+        db.commit()
+        db.refresh(user)
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -292,7 +333,7 @@ def update_me(
 
     email_changed = email_has_changed(db_user, update_data)
     if email_changed:
-        update_data.update(build_email_verification_metadata(db_user.token_confirmation_email))
+        update_data.update(build_email_verification_metadata())
 
     # Mise à jour des autres champs
     updated_user = update_utilisateur(db, current_user.id, update_data)
@@ -302,7 +343,7 @@ def update_me(
             send_verification_email,
             updated_user.username,
             EmailSchema(email=[updated_user.email]),
-            get_email_verification_code_from_state(updated_user.token_confirmation_email),
+            updated_user.code_verification_email,
         )
     return updated_user
 

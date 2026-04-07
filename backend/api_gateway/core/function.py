@@ -2,7 +2,6 @@ import secrets
 import base64
 import hashlib
 import hmac
-import json
 import string
 import struct
 import time
@@ -113,72 +112,52 @@ def generate_google_authenticator_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode("utf-8").rstrip("=")
 
 
-def _parse_auth_security_state(raw_state: str | None) -> dict[str, str]:
-    if not raw_state:
-        return {}
-
-    try:
-        parsed = json.loads(raw_state)
-    except (TypeError, json.JSONDecodeError):
-        return {}
-
-    if isinstance(parsed, dict):
-        return {str(key): str(value) for key, value in parsed.items() if value}
-    return {}
-
-
-def build_auth_security_state(
-    existing_state: str | None = None,
-    *,
-    email_verification_code: str | None = None,
-    google_auth_secret: str | None = None,
-    clear_email_verification_code: bool = False,
-) -> str | None:
-    state = _parse_auth_security_state(existing_state)
-
-    if clear_email_verification_code:
-        state.pop("email_verification_code", None)
-    elif email_verification_code is not None:
-        state["email_verification_code"] = email_verification_code
-
-    if google_auth_secret is not None:
-        state["google_auth_secret"] = google_auth_secret
-    elif "google_auth_secret" not in state:
-        state["google_auth_secret"] = generate_google_authenticator_secret()
-
-    return json.dumps(state) if state else None
-
-
-def get_email_verification_code_from_state(state: str | None) -> str | None:
-    return _parse_auth_security_state(state).get("email_verification_code")
-
-
-def get_google_auth_secret_from_state(state: str | None) -> str | None:
-    return _parse_auth_security_state(state).get("google_auth_secret")
-
-
 def get_or_create_google_auth_secret(user: Utilisateur) -> tuple[str, bool]:
-    google_auth_secret = get_google_auth_secret_from_state(user.token_confirmation_email)
-    if google_auth_secret:
-        return google_auth_secret, False
+    if user.google_auth_secret:
+        return user.google_auth_secret, False
 
-    user.token_confirmation_email = build_auth_security_state(user.token_confirmation_email)
-    google_auth_secret = get_google_auth_secret_from_state(user.token_confirmation_email)
-    return google_auth_secret, True
+    user.google_auth_secret = generate_google_authenticator_secret()
+    return user.google_auth_secret, True
+
+
+def is_google_authenticator_setup_required(user: Utilisateur) -> bool:
+    return not bool(user.is_2fa_enabled)
+
+
+def enable_google_authenticator(user: Utilisateur) -> None:
+    if not user.is_2fa_enabled:
+        user.is_2fa_enabled = True
+        user.google_auth_configured_at = get_current_utc_datetime()
+
+
+def build_google_authenticator_setup_payload(
+    user: Utilisateur,
+    message: str,
+) -> dict[str, Any]:
+    setup_required = is_google_authenticator_setup_required(user)
+    payload: dict[str, Any] = {
+        "message": message,
+        "setup_required": setup_required,
+        "is_2fa_enabled": bool(user.is_2fa_enabled),
+        "google_auth_configured_at": user.google_auth_configured_at,
+    }
+    if setup_required and user.google_auth_secret:
+        payload["google_authenticator_secret"] = user.google_auth_secret
+        payload["google_authenticator_otpauth_url"] = build_google_authenticator_otpauth_url(
+            user.google_auth_secret,
+            user.email,
+        )
+    return payload
 
 
 def build_email_verification_metadata(
-    existing_state: str | None = None,
     hours: int = 24,
 ) -> dict[str, Any]:
     return {
         "is_utilisateur_verifie": False,
         "email_verified_at": None,
-        "token_confirmation_email": build_auth_security_state(
-            existing_state,
-            email_verification_code=generate_email_verification_code(),
-        ),
-        "date_exp_token_confirmation_email": get_email_verification_expiration(hours=hours),
+        "code_verification_email": generate_email_verification_code(),
+        "date_exp_code_verification_email": get_email_verification_expiration(hours=hours),
     }
 
 
