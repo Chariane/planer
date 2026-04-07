@@ -29,7 +29,7 @@ class Utilisateur(Base):
     email: Mapped[str] = mapped_column(String(100))
     statut: Mapped[str] = mapped_column(String(20), server_default=text("'Actif'::character varying"))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text('true'))
-    is_utilisateur_verifie: Mapped[bool] = mapped_column(Boolean, server_default=text('true'))
+    is_utilisateur_verifie: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
     is_livreur: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
     is_user: Mapped[bool] = mapped_column(Boolean, server_default=text('true'))
     is_entreprise: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))

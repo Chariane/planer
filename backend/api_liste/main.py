@@ -1,32 +1,28 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import listes, taches, checklists, canevas, rapports
+from .routes.listes import router as listes_router
 
 app = FastAPI(
-    title="Microservice Liste (Projets, Tâches, Checklists)",
-    description="API pour la gestion des listes, tâches et sous‑tâches",
+    title="Microservice Api Liste",
+    description="API pour la gestion des listes, tâches, canevas, sections et checklists",
     version="1.0.0"
 )
 
+# Configuration CORS (à adapter selon tes besoins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(listes.router)
-app.include_router(taches.router)
-app.include_router(checklists.router)
-app.include_router(canevas.router)
-app.include_router(rapports.router)
-
+app.include_router(listes_router)
 
 @app.get("/")
 def root():
-    return {"message": "Bienvenue sur le microservice Liste"}
+    return {"message": "Bienvenue sur le microservice Api Liste"}
 
 if __name__ == "__main__":
     import uvicorn

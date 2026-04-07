@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/api_liste/schemas.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775295525295,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775295525295,
+            "name": "Commit-0",
+            "content": "# api_liste/schemas.py\nfrom api_gateway.schemas import (\n    ListeBase, ListeCreate, ListeUpdate, ListeOut, ListeDelete,\n    TacheBase, TacheCreate, TacheUpdate, TacheOut, TacheDelete,\n    CanevasBase, CanevasCreate, CanevasUpdate, CanevasOut, CanevasDelete,\n    SectionBase, SectionCreate, SectionUpdate, SectionOut, SectionDelete,\n    ChecklistBase, ChecklistCreate, ChecklistUpdate, ChecklistOut, ChecklistDelete\n)"
+        }
+    ]
+}

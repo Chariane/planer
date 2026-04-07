@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes.espaces import router as espaces_router
+from .routes.utilisateur import router as espaces_router
 
 app = FastAPI(
     title="Microservice Api Espace",

@@ -1,0 +1,163 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+from ..core.database import get_db
+from ..core.security import get_password_hash, get_current_admin, get_current_super_admin
+from ..schemas import UtilisateurOut, UtilisateurUpdate, UserRolesUpdate
+from ..crud.utilisateur import (
+    get_all_utilisateurs,
+    get_utilisateur_by_email,
+    get_utilisateur_by_id,
+    get_utilisateur_by_username,
+    update_utilisateur,
+)
+
+
+
+router = APIRouter(prefix="/admin", tags=["Administrateur"])
+
+
+def _ensure_unique_user_identity_fields(
+    db: Session,
+    email: str | None = None,
+    username: str | None = None,
+    current_user_id: str | None = None,
+) -> None:
+    if email:
+        existing_email = get_utilisateur_by_email(db, email)
+        if existing_email and existing_email.id != current_user_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"field": "email", "message": "Cette adresse email est déjà utilisée"},
+            )
+
+    if username:
+        existing_username = get_utilisateur_by_username(db, username)
+        if existing_username and existing_username.id != current_user_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"field": "username", "message": "Ce nom d'utilisateur est déjà utilisé"},
+            )
+
+
+def _validate_admin_password_update(update_data: dict) -> None:
+    if "current_password" in update_data and "new_password" not in update_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Pour modifier le mot de passe d'un utilisateur, fournissez new_password.",
+        )
+
+
+# ----------------------------------------
+# ROUTES ADMINISTRATEUR
+# ----------------------------------------
+
+@router.get("/users", response_model=List[UtilisateurOut])
+def get_all_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    return get_all_utilisateurs(db, skip=skip, limit=limit)
+
+@router.get("/users/{user_id}", response_model=UtilisateurOut)
+def get_user_by_id(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    user = get_utilisateur_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    return user
+
+@router.put("/users/{user_id}", response_model=UtilisateurOut)
+def update_user_by_admin(
+    user_id: str,
+    user_update: UtilisateurUpdate,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    db_user = get_utilisateur_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    update_data = user_update.model_dump(exclude_unset=True)
+    _ensure_unique_user_identity_fields(
+        db,
+        email=update_data.get("email"),
+        username=update_data.get("username"),
+        current_user_id=user_id,
+    )
+    _validate_admin_password_update(update_data)
+
+    # Gestion du changement de mot de passe par admin (sans vérifier l'ancien)
+    if "new_password" in update_data:
+        db_user.mot_de_passe = get_password_hash(update_data["new_password"])
+        del update_data["new_password"]
+    if "current_password" in update_data:
+        del update_data["current_password"]  # Ignorer pour admin
+
+    # Mise à jour des autres champs
+    updated_user = update_utilisateur(db, user_id, update_data)
+    return updated_user
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    db_user = get_utilisateur_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Soft delete : changer le statut à "Supprimé"
+    update_utilisateur(db, user_id, {"statut": "Supprimé"})
+    return None
+
+@router.post("/users/{user_id}/activate", response_model=UtilisateurOut)
+def activate_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    db_user = get_utilisateur_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    updated_user = update_utilisateur(db, user_id, {"is_active": True, "statut": "Actif"})
+    return updated_user
+
+@router.post("/users/{user_id}/deactivate", response_model=UtilisateurOut)
+def deactivate_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: UtilisateurOut = Depends(get_current_admin)
+):
+    db_user = get_utilisateur_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    updated_user = update_utilisateur(db, user_id, {"is_active": False, "statut": "Suspendu"})
+    return updated_user
+
+@router.put("/users/{user_id}/roles", response_model=UtilisateurOut)
+def update_user_roles(
+    user_id: str,
+    roles: UserRolesUpdate,
+    db: Session = Depends(get_db),
+    current_super_admin: UtilisateurOut = Depends(get_current_super_admin)
+):
+    db_user = get_utilisateur_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    update_data = roles.model_dump(exclude_unset=True)
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Aucun champ de rôle fourni")
+    
+    updated_user = update_utilisateur(db, user_id, update_data)
+    return updated_user

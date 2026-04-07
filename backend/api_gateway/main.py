@@ -1,7 +1,23 @@
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes.auth import router as auth_router
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from backend.api_gateway.routes.admin import router as admin_router
+    from backend.api_gateway.routes.auth import router as auth_router
+    from backend.api_gateway.routes.entreprise import router as entreprise_router
+    from backend.api_gateway.routes.super_admin import router as super_admin_router
+else:
+    from .routes.admin import router as admin_router
+    from .routes.auth import router as auth_router
+    from .routes.entreprise import router as entreprise_router
+    from .routes.super_admin import router as super_admin_router
 
 app = FastAPI(
     title="Microservice Api Gateway",
@@ -18,7 +34,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(entreprise_router)
+app.include_router(super_admin_router)
 
 @app.get("/")
 def root():
@@ -26,4 +45,5 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)

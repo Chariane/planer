@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/api_liste/database.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775295525294,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775295525294,
+            "name": "Commit-0",
+            "content": "# api_liste/database.py\nimport os\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import sessionmaker\nfrom sqlalchemy.ext.declarative import declarative_base\nfrom dotenv import dotenv_values, load_dotenv\ndotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\n# Charge le .env\n\nload_dotenv(dotenv_path)\n\nconfig_data = dotenv_values(dotenv_path)\n\nENV = config_data.get('ENV')\nif ENV == 'Prod':\n    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER_PROD')}:{config_data.get('DB_PASSWORD_PROD')}@{config_data.get('DB_HOST_PROD')}:{config_data.get('DB_PORT_PROD')}/{config_data.get('DB_NAME_PROD')}\"\nelse:\n    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER')}:{config_data.get('DB_PASSWORD')}@{config_data.get('DB_HOST')}:{config_data.get('DB_PORT')}/{config_data.get('DB_NAME')}\"\n\nengine = create_engine(DATABASE_URL)\nSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)\nBase = declarative_base()\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()"
+        }
+    ]
+}

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes.workspaces import router as workspaces_router
+from .routes.utilisateur import router as workspaces_router
 
 app = FastAPI(
     title="Microservice Api Workspace",

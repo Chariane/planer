@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/api_notification/requirements.txt",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775295682701,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775295682701,
+            "name": "Commit-0",
+            "content": "fastapi\nuvicorn[standard]\nfastapi-mail\nbcrypt==4.0.1\npasslib[bcrypt]==1.7.4\nsqlalchemy\npsycopg2-binary\nalembic\npython-jose[cryptography]\npyjwt\npython-multipart\nhttpx\nsqlacodegen"
+        }
+    ]
+}

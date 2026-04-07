@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/api_liste/main.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1775295525302,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1775295525302,
+            "name": "Commit-0",
+            "content": "from fastapi import FastAPI\nfrom fastapi.middleware.cors import CORSMiddleware\n\nfrom .routes.listes import router as listes_router\n\napp = FastAPI(\n    title=\"Microservice Api Liste\",\n    description=\"API pour la gestion des listes, tâches, canevas, sections et checklists\",\n    version=\"1.0.0\"\n)\n\n# Configuration CORS (à adapter selon tes besoins)\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"*\"],  \n    allow_credentials=True,\n    allow_methods=[\"*\"],\n    allow_headers=[\"*\"],\n)\n\napp.include_router(listes_router)\n\n@app.get(\"/\")\ndef root():\n    return {\"message\": \"Bienvenue sur le microservice Api Liste\"}\n\nif __name__ == \"__main__\":\n    import uvicorn\n    uvicorn.run(\"main:app\", host=\"0.0.0.0\", port=8004, reload=True)"
+        }
+    ]
+}
