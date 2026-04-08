@@ -177,3 +177,18 @@ async def logout_user(token: str):
     """Déconnecte un utilisateur en blacklistant son token"""
     add_to_blacklist(token)
     logger.info(f"Utilisateur déconnecté - token blacklisté")
+
+
+def check_workspace_role(db: Session, user_id: str, workspace_id: str, allowed_roles: Optional[list[str]] = None) -> bool:
+    from ..models import Membre
+
+    membre = db.query(Membre).filter(
+        Membre.id_workspace == workspace_id,
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif",
+    ).first()
+    if not membre:
+        return False
+    if allowed_roles and membre.role not in allowed_roles:
+        return False
+    return True

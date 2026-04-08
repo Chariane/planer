@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from api_gateway.models import Utilisateur, Espace, Liste, Canevas, Section, Checklist
-from backend.api_gateway.core.security import get_current_user, check_workspace_role
-from ..database import get_db
+from ..models import Espace, Liste, Canevas, Section, Checklist
+from ..core.security import get_current_user, check_workspace_role
+from ..core.database import get_db
 from ..schemas import (
     ListeCreate, ListeOut, ListeUpdate,
     TacheCreate, TacheOut, TacheUpdate,

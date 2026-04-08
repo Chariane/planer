@@ -10,12 +10,10 @@ const WorkspacesList = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulation de chargement des workspaces - Remplacer par appel API
     const loadWorkspaces = async () => {
       setLoading(true);
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Mock data
       const mockWorkspaces = [
         {
           id: 1,
@@ -40,7 +38,7 @@ const WorkspacesList = () => {
           nom: 'Support Client',
           description: 'Gestion des tickets et support utilisateur',
           created_at: '2024-03-01',
-          owner_id: 3, // Autre propriétaire
+          owner_id: 3,
           members_count: 12,
           role: 'member'
         }

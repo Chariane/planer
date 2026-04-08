@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
-
-from ..core.function import generate_unique_id
+from ..core.function import commit_or_raise
 from ..models import PlanerEntreprise, Utilisateur
 from ..schemas import EntrepriseCreate, EntrepriseUpdate
 
@@ -42,7 +41,6 @@ def create_entreprise(db: Session, entreprise_in: EntrepriseCreate, user_id: str
     entreprise_data = entreprise_in.model_dump(exclude={"id_utilisateur"}, exclude_none=True)
     entreprise = PlanerEntreprise(
         **entreprise_data,
-        id=generate_unique_id(db, PlanerEntreprise),
         id_utilisateur=user_id,
     )
 
@@ -50,8 +48,11 @@ def create_entreprise(db: Session, entreprise_in: EntrepriseCreate, user_id: str
 
     set_user_entreprise_flag(db, user_id, True)
 
-    db.commit()
-    db.refresh(entreprise)
+    commit_or_raise(
+        db,
+        detail="Impossible de creer l'entreprise a cause d'une contrainte d'integrite.",
+        refresh_instance=entreprise,
+    )
     return entreprise
 
 
@@ -61,8 +62,11 @@ def update_entreprise(db: Session, entreprise: PlanerEntreprise, entreprise_in: 
         setattr(entreprise, key, value)
 
     entreprise.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(entreprise)
+    commit_or_raise(
+        db,
+        detail="Impossible de mettre a jour l'entreprise a cause d'une contrainte d'integrite.",
+        refresh_instance=entreprise,
+    )
     return entreprise
 
 
@@ -70,4 +74,7 @@ def delete_entreprise(db: Session, entreprise: PlanerEntreprise) -> None:
     set_user_entreprise_flag(db, entreprise.id_utilisateur, False)
 
     db.delete(entreprise)
-    db.commit()
+    commit_or_raise(
+        db,
+        detail="Impossible de supprimer l'entreprise a cause d'une contrainte d'integrite.",
+    )

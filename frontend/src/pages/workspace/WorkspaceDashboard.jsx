@@ -14,12 +14,10 @@ const WorkspaceDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulation de chargement des données
     const loadWorkspaceData = async () => {
       setLoading(true);
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Mock data
       const mockWorkspace = {
         id: parseInt(id),
         nom: 'Projet Marketing 2024',
@@ -62,7 +60,7 @@ const WorkspaceDashboard = () => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Workspace introuvable</h1>
+          <h1 className="mb-4 text-2xl font-bold text-gray-900">Workspace introuvable</h1>
           <Link to="/workspaces" className="text-indigo-600 hover:text-indigo-500">
             Retour à la liste
           </Link>

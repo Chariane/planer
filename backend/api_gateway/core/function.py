@@ -1,39 +1,17 @@
-import secrets
 import base64
 import hashlib
 import hmac
 import string
 import struct
 import time
+import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Type, TypeVar
-from urllib.parse import quote
+from typing import Any
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 from ..models import Utilisateur
-
-ModelType = TypeVar("ModelType")
-
-
-def generate_unique_id(db: Session, model: Type[ModelType]) -> str:
-    """
-    Genere un ID hexadecimal unique de 12 caracteres pour un modele donne.
-    Verifie l'unicite dans la table cible avant de le retourner.
-    """
-    while True:
-        new_id = secrets.token_hex(6)
-        result = db.execute(select(model).where(model.id == new_id))
-        existing_obj = result.scalars().first()
-        if not existing_obj:
-            return new_id
-
-
-def generate_unique_user_id(db: Session) -> str:
-    """
-    Conserve l'API demandee pour la table utilisateur.
-    """
-    return generate_unique_id(db, Utilisateur)
 
 
 def ensure_unique_user_identity_fields(
@@ -70,6 +48,14 @@ def validate_self_password_update(update_data: dict) -> None:
         )
 
 
+def validate_new_password_is_different(current_password: str, new_password: str) -> None:
+    if current_password == new_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Le nouveau mot de passe doit etre different de l'ancien.",
+        )
+
+
 def validate_admin_password_update(update_data: dict) -> None:
     if "current_password" in update_data and "new_password" not in update_data:
         raise HTTPException(
@@ -80,6 +66,18 @@ def validate_admin_password_update(update_data: dict) -> None:
 
 def email_has_changed(db_user: Utilisateur, update_data: dict) -> bool:
     return "email" in update_data and update_data["email"] != db_user.email
+
+
+def build_email_not_verified_detail(email: str) -> dict[str, Any]:
+    return {
+        "code": "email_not_verified",
+        "message": "Votre adresse email n'est pas encore verifiee.",
+        "next_action": {
+            "method": "POST",
+            "endpoint": "/auth/resend-verification-code",
+            "payload": {"email": email},
+        },
+    }
 
 
 def generate_email_verification_code(length: int = 6) -> str:
@@ -108,6 +106,13 @@ def get_email_verification_expiration(hours: int = 24) -> datetime:
     return get_current_utc_datetime() + timedelta(hours=hours)
 
 
+def build_password_reset_metadata(hours: int = 1) -> dict[str, Any]:
+    return {
+        "token_reinitialisation_mdp": generate_email_verification_code(),
+        "date_exp_token_reinitialisation": get_current_utc_datetime() + timedelta(hours=hours),
+    }
+
+
 def generate_google_authenticator_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode("utf-8").rstrip("=")
 
@@ -128,6 +133,12 @@ def enable_google_authenticator(user: Utilisateur) -> None:
     if not user.is_2fa_enabled:
         user.is_2fa_enabled = True
         user.google_auth_configured_at = get_current_utc_datetime()
+
+
+def disable_google_authenticator(user: Utilisateur) -> None:
+    user.is_2fa_enabled = False
+    user.google_auth_secret = None
+    user.google_auth_configured_at = None
 
 
 def build_google_authenticator_setup_payload(
@@ -204,3 +215,19 @@ def verify_google_authenticator_code(secret: str, code: str, window: int = 1) ->
         if generate_totp_code(secret, timestamp=comparison_time) == sanitized_code:
             return True
     return False
+
+
+def commit_or_raise(
+    db: Session,
+    *,
+    detail: str,
+    status_code: int = 409,
+    refresh_instance: Any | None = None,
+) -> None:
+    try:
+        db.commit()
+        if refresh_instance is not None:
+            db.refresh(refresh_instance)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status_code, detail=detail) from exc

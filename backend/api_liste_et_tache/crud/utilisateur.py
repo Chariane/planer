@@ -1,7 +1,10 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
-from api_gateway.models import Liste, Tache, Canevas, Section, Checklist
+
+from ..models import Liste, Tache, Canevas, Section, Checklist
 
 # Liste CRUD
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -16,8 +19,15 @@ def get_listes_for_workspace(db: Session, workspace_id: str) -> List[Liste]:
 def create_liste(db: Session, nom: str, description: str = None, id_espace: str = None, id_workspace: str = None) -> Liste:
     liste = Liste(nom=nom, description=description, id_espace=id_espace, id_workspace=id_workspace)
     db.add(liste)
-    db.commit()
-    db.refresh(liste)
+    try:
+        db.commit()
+        db.refresh(liste)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de creer la liste a cause d'une contrainte d'integrite.",
+        ) from exc
     return liste
 
 def update_liste(db: Session, liste_id: str, nom: str = None, description: str = None, id_espace: str = None, id_workspace: str = None) -> Liste:
@@ -72,8 +82,15 @@ def create_tache(
         id_liste=id_liste,
     )
     db.add(tache)
-    db.commit()
-    db.refresh(tache)
+    try:
+        db.commit()
+        db.refresh(tache)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de creer la tache a cause d'une contrainte d'integrite.",
+        ) from exc
     return tache
 
 def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
@@ -104,8 +121,15 @@ def get_canevas_for_liste(db: Session, liste_id: str) -> Optional[Canevas]:
 def create_canevas(db: Session, is_verrouille: bool = False, id_liste: Optional[str] = None) -> Canevas:
     canevas = Canevas(is_verrouille=is_verrouille, id_liste=id_liste)
     db.add(canevas)
-    db.commit()
-    db.refresh(canevas)
+    try:
+        db.commit()
+        db.refresh(canevas)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de creer le canevas a cause d'une contrainte d'integrite.",
+        ) from exc
     return canevas
 
 def update_canevas(db: Session, canevas_id: str, is_verrouille: Optional[bool] = None, id_liste: Optional[str] = None) -> Optional[Canevas]:
@@ -137,8 +161,15 @@ def get_sections_for_canevas(db: Session, canevas_id: str) -> List[Section]:
 def create_section(db: Session, titre: str, id_canevas: Optional[str] = None) -> Section:
     section = Section(titre=titre, id_canevas=id_canevas)
     db.add(section)
-    db.commit()
-    db.refresh(section)
+    try:
+        db.commit()
+        db.refresh(section)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de creer la section a cause d'une contrainte d'integrite.",
+        ) from exc
     return section
 
 def update_section(db: Session, section_id: str, titre: Optional[str] = None, id_canevas: Optional[str] = None) -> Optional[Section]:
@@ -173,8 +204,15 @@ def get_checklists_for_tache(db: Session, tache_id: str) -> List[Checklist]:
 def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:
     checklist = Checklist(texte=texte, is_checked=is_checked, id_section=id_section, id_tache=id_tache)
     db.add(checklist)
-    db.commit()
-    db.refresh(checklist)
+    try:
+        db.commit()
+        db.refresh(checklist)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Impossible de creer la checklist a cause d'une contrainte d'integrite.",
+        ) from exc
     return checklist
 
 def update_checklist(db: Session, checklist_id: str, texte: Optional[str] = None, is_checked: Optional[bool] = None, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Optional[Checklist]:

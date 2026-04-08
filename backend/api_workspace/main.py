@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .routes.admin import router as admin_workspaces_router
+from .routes.entreprise import router as entreprise_workspaces_router
 from .routes.utilisateur import router as workspaces_router
 
 app = FastAPI(
@@ -19,6 +21,8 @@ app.add_middleware(
 )
 
 app.include_router(workspaces_router)
+app.include_router(entreprise_workspaces_router)
+app.include_router(admin_workspaces_router)
 
 @app.get("/")
 def root():

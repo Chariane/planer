@@ -1,26 +1,10 @@
-import secrets
 from datetime import datetime
-from typing import Optional, Type, TypeVar
-
-from sqlalchemy import select
+from typing import Any, Optional
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace
-
-ModelType = TypeVar("ModelType")
-
-
-def generate_unique_id(db: Session, model: Type[ModelType]) -> str:
-    """
-    Genere un ID hexadecimal unique de 12 caracteres pour un modele donne.
-    Verifie l'unicite dans la table cible avant de le retourner.
-    """
-    while True:
-        new_id = secrets.token_hex(6)
-        result = db.execute(select(model).where(model.id == new_id))
-        existing_obj = result.scalars().first()
-        if not existing_obj:
-            return new_id
 
 
 def is_premium_user(user: Optional[Utilisateur]) -> bool:
@@ -71,3 +55,19 @@ def can_create_espace(db: Session, user_id: str) -> bool:
     if user_has_premium_workspace_access(db, user_id):
         return True
     return get_espace_count_for_owner(db, user_id) < 1
+
+
+def commit_or_raise(
+    db: Session,
+    *,
+    detail: str,
+    status_code: int = 409,
+    refresh_instance: Any | None = None,
+) -> None:
+    try:
+        db.commit()
+        if refresh_instance is not None:
+            db.refresh(refresh_instance)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status_code, detail=detail) from exc

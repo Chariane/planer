@@ -1,337 +1,257 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
 from ..core.database import get_db
-from ..models import Membre, Utilisateur
-from ..schemas import (
-    EspaceCreate, EspaceOut, EspaceUpdate,
-    MembreCreate, MembreOut, MembreUpdate, UtilisateurOut
-)
+from ..core.function import can_create_espace
 from ..core.security import get_current_user
 from ..crud.utilisateur import (
-    get_espace_by_id,
-    get_espaces_in_workspace,
-    create_espace,
-    update_espace,
-    delete_espace,
-    get_space_member,
-    get_space_members,
     add_member_to_espace,
-    update_space_member_role,
-    remove_space_member,
+    create_espace,
+    delete_espace,
+    get_espace_by_id,
+    get_espace_member,
+    get_espace_members,
+    get_espaces_for_workspace,
+    remove_espace_member,
+    update_espace,
+    update_espace_member,
+)
+from ..models import Membre, Utilisateur, Workspace
+from ..schemas import (
+    EspaceCreate,
+    EspaceOut,
+    EspaceUpdate,
+    MembreCreate,
+    MembreOut,
+    UtilisateurOut,
+    WorkspaceMemberInvite,
+    WorkspaceMemberUpdate,
 )
 
 router = APIRouter(tags=["Espaces"])
 
+WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
+ESPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
 
-# ========== UTILITAIRES DE VÉRIFICATION (accès au workspace) ==========
-def check_workspace_member(
-    db: Session,
-    workspace_id: str,
-    user_id: str,
-    required_roles: List[str] = None
-) -> Membre:
-    """Vérifie que l'utilisateur est membre actif du workspace."""
-    membre = db.query(Membre).filter(
-        Membre.id_workspace == workspace_id,
-        Membre.id_utilisateur == user_id,
-        Membre.statut == "Actif"
-    ).first()
-    if not membre:
-        raise HTTPException(status_code=403, detail="Accès refusé au workspace")
-    if required_roles and membre.role not in required_roles:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Rôle '{membre.role}' insuffisant. Rôle requis : {required_roles}"
+
+def _get_workspace_or_404(db: Session, workspace_id: str) -> Workspace:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+    return workspace
+
+
+def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str) -> Membre:
+    membre = (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif",
         )
+        .first()
+    )
+    if not membre:
+        raise HTTPException(status_code=403, detail="Acces refuse au workspace")
     return membre
 
 
-# ========== CRÉER UN ESPACE DANS UN WORKSPACE ==========
-@router.post("/workspaces/{workspace_id}/spaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
-def create_space_in_workspace(
+def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str) -> Membre:
+    membre = _get_workspace_member_or_403(db, workspace_id, current_user_id)
+    if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="Privileges insuffisants sur le workspace")
+    return membre
+
+
+def _get_espace_or_404(db: Session, espace_id: str) -> EspaceOut:
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
+    return espace
+
+
+def _require_espace_access(db: Session, espace_id: str, workspace_id: str, current_user_id: str):
+    espace_member = get_espace_member(db, espace_id, current_user_id)
+    if espace_member:
+        return espace_member
+    return _get_workspace_member_or_403(db, workspace_id, current_user_id)
+
+
+def _require_espace_management_access(db: Session, espace_id: str, workspace_id: str, current_user_id: str):
+    espace_member = get_espace_member(db, espace_id, current_user_id)
+    if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
+        return espace_member
+    return _require_workspace_management_access(db, workspace_id, current_user_id)
+
+
+@router.post("/workspaces/{workspace_id}/espaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
+def create_espace_endpoint(
     workspace_id: str,
-    space_in: EspaceCreate,
+    espace_in: EspaceCreate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    # Vérifier les droits dans le workspace (Propriétaire, Admin, Editeur)
-    check_workspace_member(db, workspace_id, current_user.id,
-                           required_roles=["Propriétaire", "Admin", "Editeur"])
+    workspace = _get_workspace_or_404(db, workspace_id)
+    _require_workspace_management_access(db, workspace_id, current_user.id)
 
-    new_space = create_espace(
-        db,
-        nom=space_in.nom,
-        description=space_in.description,
-        workspace_id=workspace_id,
-        parent_id=space_in.id_espace_parent  # peut être None
-    )
-    return new_space
+    if workspace.id_utilisateur and not can_create_espace(db, workspace.id_utilisateur):
+        raise HTTPException(
+            status_code=403,
+            detail="Compte non premium: vous avez droit a un seul workspace et un seul espace.",
+        )
+
+    if espace_in.id_espace_parent:
+        parent_espace = get_espace_by_id(db, espace_in.id_espace_parent)
+        if not parent_espace:
+            raise HTTPException(status_code=404, detail="Espace parent non trouve")
+        if parent_espace.id_workspace != workspace_id:
+            raise HTTPException(status_code=400, detail="L'espace parent doit appartenir au meme workspace")
+
+    espace_payload = espace_in.model_copy(update={"id_workspace": workspace_id})
+    return create_espace(db, espace_payload, current_user.id)
 
 
-# ========== LISTER LES ESPACES RACINE D'UN WORKSPACE ==========
-@router.get("/workspaces/{workspace_id}/spaces", response_model=List[EspaceOut])
-def get_spaces_in_workspace(
+@router.get("/workspaces/{workspace_id}/espaces", response_model=List[EspaceOut])
+def list_workspaces_espaces(
     workspace_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    # Vérifier simplement que l'utilisateur est membre (lecture)
-    check_workspace_member(db, workspace_id, current_user.id)
-
-    spaces = get_espaces_in_workspace(db, workspace_id, parent_id=None)
-    return spaces
+    _get_workspace_or_404(db, workspace_id)
+    _get_workspace_member_or_403(db, workspace_id, current_user.id)
+    return get_espaces_for_workspace(db, workspace_id)
 
 
-# ========== DÉTAIL D'UN ESPACE ==========
-@router.get("/spaces/{space_id}", response_model=EspaceOut)
-def get_space(
-    space_id: str,
+@router.get("/espaces/{espace_id}", response_model=EspaceOut)
+def get_espace_endpoint(
+    espace_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier que l'utilisateur est membre du workspace parent
-    check_workspace_member(db, space.id_workspace, current_user.id)
-
-    return space
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
+    return espace
 
 
-# ========== LISTER LES SOUS-ESPACES D'UN ESPACE ==========
-@router.get("/spaces/{space_id}/subspaces", response_model=List[EspaceOut])
-def get_subspaces(
-    space_id: str,
+@router.put("/espaces/{espace_id}", response_model=EspaceOut)
+def update_espace_endpoint(
+    espace_id: str,
+    espace_in: EspaceUpdate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    parent_space = get_espace_by_id(db, space_id)
-    if not parent_space:
-        raise HTTPException(status_code=404, detail="Espace parent non trouvé")
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
-    # Vérifier que l'utilisateur est membre du workspace parent
-    check_workspace_member(db, parent_space.id_workspace, current_user.id)
+    if espace_in.id_workspace and espace_in.id_workspace != espace.id_workspace:
+        raise HTTPException(status_code=400, detail="Le workspace d'un espace ne peut pas etre modifie")
 
-    subspaces = get_espaces_in_workspace(db, parent_space.id_workspace, parent_id=space_id)
-    return subspaces
+    if espace_in.id_espace_parent:
+        parent_espace = get_espace_by_id(db, espace_in.id_espace_parent)
+        if not parent_espace:
+            raise HTTPException(status_code=404, detail="Espace parent non trouve")
+        if parent_espace.id_workspace != espace.id_workspace:
+            raise HTTPException(status_code=400, detail="L'espace parent doit appartenir au meme workspace")
+        if parent_espace.id == espace.id:
+            raise HTTPException(status_code=400, detail="Un espace ne peut pas etre son propre parent")
 
-
-# ========== MODIFIER UN ESPACE ==========
-@router.put("/spaces/{space_id}", response_model=EspaceOut)
-def update_space(
-    space_id: str,
-    space_in: EspaceUpdate,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier les droits dans le workspace (Propriétaire, Admin, Editeur)
-    check_workspace_member(db, space.id_workspace, current_user.id,
-                           required_roles=["Propriétaire", "Admin", "Editeur"])
-
-    updated_space = update_espace(db, space_id, space_in.nom, space_in.description)
-    return updated_space
-
-
-# ========== SUPPRIMER UN ESPACE ==========
-@router.delete("/spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_space(
-    space_id: str,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Seul Propriétaire ou Admin peut supprimer un espace
-    check_workspace_member(db, space.id_workspace, current_user.id,
-                           required_roles=["Propriétaire", "Admin"])
-
-    if not delete_espace(db, space_id):
-        raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
-    return None
-
-
-# ========== CRÉER UN SOUS-ESPACE ==========
-@router.post("/spaces/{space_id}/subspaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
-def create_subspace(
-    space_id: str,
-    space_in: EspaceCreate,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    parent_space = get_espace_by_id(db, space_id)
-    if not parent_space:
-        raise HTTPException(status_code=404, detail="Espace parent non trouvé")
-
-    # Vérifier les droits dans le workspace (Propriétaire, Admin, Editeur)
-    check_workspace_member(db, parent_space.id_workspace, current_user.id,
-                           required_roles=["Propriétaire", "Admin", "Editeur"])
-
-    new_space = create_espace(
-        db,
-        nom=space_in.nom,
-        description=space_in.description,
-        workspace_id=parent_space.id_workspace,
-        parent_id=space_id
-    )
-    return new_space
-
-
-# ========== INVITER UN MEMBRE DANS UN ESPACE ==========
-@router.post("/spaces/{space_id}/invite", response_model=MembreOut)
-def invite_member_to_space(
-    space_id: str,
-    membre_in: MembreCreate,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier que l'utilisateur actuel peut inviter (Propriétaire ou Admin du workspace)
-    check_workspace_member(db, space.id_workspace, current_user.id,
-                           required_roles=["Propriétaire", "Admin"])
-
-    # Vérifier que l'utilisateur invité existe
-    from ..models import Utilisateur
-    target_user = db.query(Utilisateur).filter(Utilisateur.id == membre_in.id_utilisateur).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Utilisateur invité non trouvé")
-
-    # Vérifier qu'il n'est pas déjà membre de cet espace
-    if get_space_member(db, space_id, membre_in.id_utilisateur):
-        raise HTTPException(status_code=400, detail="L'utilisateur est déjà membre de cet espace")
-
-    # Ajouter le membre
-    new_membre = add_member_to_espace(
-        db,
-        espace_id=space_id,
-        user_id=membre_in.id_utilisateur,
-        role=membre_in.role,
-        statut=membre_in.statut
-    )
-    if not new_membre:
-        raise HTTPException(status_code=500, detail="Erreur lors de l'ajout du membre")
-    return new_membre
-
-
-# ========== LISTER LES MEMBRES D'UN ESPACE ==========
-@router.get("/spaces/{space_id}/members", response_model=List[MembreOut])
-def get_space_members(
-    space_id: str,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier que l'utilisateur est membre du workspace parent (lecture)
-    check_workspace_member(db, space.id_workspace, current_user.id)
-
-    members = get_space_members(db, space_id)
-    return members
-
-
-# ========== MODIFIER LE RÔLE D'UN MEMBRE DANS UN ESPACE ==========
-@router.put("/spaces/{space_id}/members/{user_id}", response_model=MembreOut)
-def update_space_member_role(
-    space_id: str,
-    user_id: str,
-    membre_in: MembreUpdate,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier que l'utilisateur actuel a le droit de modifier les membres (Propriétaire ou Admin)
-    current_membre = check_workspace_member(db, space.id_workspace, current_user.id,
-                                            required_roles=["Propriétaire", "Admin"])
-
-    target_membre = get_space_member(db, space_id, user_id)
-    if not target_membre:
-        raise HTTPException(status_code=404, detail="Membre non trouvé dans cet espace")
-
-    # Ne pas autoriser la modification du rôle du propriétaire du workspace (sauf si l'actuel est propriétaire)
-    if target_membre.role == "Propriétaire" and current_membre.role != "Propriétaire":
-        raise HTTPException(status_code=403, detail="Vous ne pouvez pas modifier le rôle du propriétaire")
-
-    updated = update_space_member_role(
-        db,
-        espace_id=space_id,
-        user_id=user_id,
-        role=membre_in.role,
-        statut=membre_in.statut
-    )
+    updated = update_espace(db, espace_id, espace_in)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
     return updated
 
 
-# ========== RETIRER UN MEMBRE D'UN ESPACE ==========
-@router.delete("/spaces/{space_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_space_member(
-    space_id: str,
-    user_id: str,
+@router.delete("/espaces/{espace_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_espace_endpoint(
+    espace_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
-
-    # Vérifier que l'utilisateur actuel a le droit de retirer des membres
-    current_membre = check_workspace_member(db, space.id_workspace, current_user.id,
-                                            required_roles=["Propriétaire", "Admin"])
-
-    if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous retirer vous‑même de l'espace")
-
-    target_membre = get_space_member(db, space_id, user_id)
-    if not target_membre:
-        raise HTTPException(status_code=404, detail="Membre non trouvé dans cet espace")
-
-    if target_membre.role == "Propriétaire":
-        raise HTTPException(status_code=403, detail="Le propriétaire du workspace ne peut pas être retiré de l'espace")
-
-    if not remove_space_member(db, space_id, user_id):
-        raise HTTPException(status_code=500, detail="Erreur lors du retrait du membre")
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+    if not delete_espace(db, espace_id):
+        raise HTTPException(status_code=400, detail="Erreur lors de la suppression de l'espace")
     return None
 
 
-# ========== ARBORESCENCE D'UN ESPACE (optionnel) ==========
-@router.get("/spaces/{space_id}/tree", response_model=dict)
-def get_space_tree(
-    space_id: str,
+@router.get("/espaces/{espace_id}/members", response_model=List[MembreOut])
+def list_espace_members(
+    espace_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    space = get_espace_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Espace non trouvé")
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
+    return get_espace_members(db, espace_id)
 
-    check_workspace_member(db, space.id_workspace, current_user.id)
 
-    def build_tree(sp_id):
-        sp = get_espace_by_id(db, sp_id)
-        if not sp:
-            return None
-        children = get_espaces_in_workspace(db, sp.id_workspace, parent_id=sp.id)
-        return {
-            "id": sp.id,
-            "nom": sp.nom,
-            "description": sp.description,
-            "created_at": sp.created_at,
-            "sous_espaces": [build_tree(child.id) for child in children]
-        }
+@router.post("/espaces/{espace_id}/members", response_model=MembreOut, status_code=status.HTTP_201_CREATED)
+def invite_espace_member(
+    espace_id: str,
+    membre_in: WorkspaceMemberInvite,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
-    return build_tree(space_id)
+    target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Utilisateur invite non trouve")
+
+    if get_espace_member(db, espace_id, target_user.id):
+        raise HTTPException(status_code=400, detail="L'utilisateur est deja membre de cet espace")
+
+    membre_payload = MembreCreate(
+        id_utilisateur=target_user.id,
+        id_espace=espace_id,
+        role=membre_in.role,
+        statut="Actif",
+    )
+    return add_member_to_espace(db, espace_id, membre_payload)
+
+
+@router.put("/espaces/{espace_id}/members/{user_id}", response_model=MembreOut)
+def update_espace_member_endpoint(
+    espace_id: str,
+    user_id: str,
+    membre_in: WorkspaceMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+
+    target_member = get_espace_member(db, espace_id, user_id)
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre non trouve")
+    if target_member.role == "Créateur":
+        raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
+
+    updated = update_espace_member(db, espace_id, user_id, membre_in)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Membre non trouve")
+    return updated
+
+
+@router.delete("/espaces/{espace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_espace_member_endpoint(
+    espace_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    espace = _get_espace_or_404(db, espace_id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+
+    target_member = get_espace_member(db, espace_id, user_id)
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre non trouve")
+    if target_member.role == "Créateur":
+        raise HTTPException(status_code=403, detail="Le createur de l'espace ne peut pas etre supprime")
+
+    if not remove_espace_member(db, espace_id, user_id):
+        raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")
+    return None

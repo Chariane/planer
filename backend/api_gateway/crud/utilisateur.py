@@ -1,19 +1,20 @@
 from typing import Optional, List
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-
-from ..models import Utilisateur
-from ..core.function import generate_unique_user_id
+from ..models import Motdepasseoublie, Utilisateur
+from ..core.function import commit_or_raise
 
 
 
 def create_utilisateur(db: Session, user_data: dict) -> Utilisateur:
     """Crée un utilisateur en base de données."""
-    user_data.setdefault("id", generate_unique_user_id(db))
     new_user = Utilisateur(**user_data)
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    commit_or_raise(
+        db,
+        detail="Impossible de creer l'utilisateur a cause d'une contrainte d'integrite.",
+        refresh_instance=new_user,
+    )
     return new_user
 
 def get_utilisateur_by_id(db: Session, user_id: str) -> Optional[Utilisateur]:
@@ -41,6 +42,62 @@ def get_utilisateur_by_email_or_username(db: Session, email: str, username: str)
 def get_utilisateur_by_verification_token(db: Session, token: str) -> Optional[Utilisateur]:
     return db.query(Utilisateur).filter(Utilisateur.token_confirmation_email == token).first()
 
+
+def get_password_reset_request_by_user_id(db: Session, user_id: str) -> Optional[Motdepasseoublie]:
+    return db.query(Motdepasseoublie).filter(Motdepasseoublie.id_utilisateur == user_id).first()
+
+
+def get_password_reset_request_by_email_and_code(
+    db: Session,
+    email: str,
+    code: str,
+) -> Optional[Motdepasseoublie]:
+    normalized_email = email.strip().lower()
+    return (
+        db.query(Motdepasseoublie)
+        .join(Utilisateur, Motdepasseoublie.id_utilisateur == Utilisateur.id)
+        .filter(
+            func.lower(Utilisateur.email) == normalized_email,
+            Motdepasseoublie.token_reinitialisation_mdp == code,
+        )
+        .first()
+    )
+
+
+def create_or_update_password_reset_request(
+    db: Session,
+    user: Utilisateur,
+    token: str,
+    expires_at,
+) -> Motdepasseoublie:
+    reset_request = get_password_reset_request_by_user_id(db, user.id)
+    if reset_request:
+        reset_request.token_reinitialisation_mdp = token
+        reset_request.date_exp_token_reinitialisation = expires_at
+    else:
+        reset_request = Motdepasseoublie(
+            id_utilisateur=user.id,
+            token_reinitialisation_mdp=token,
+            date_exp_token_reinitialisation=expires_at,
+        )
+        db.add(reset_request)
+
+    commit_or_raise(
+        db,
+        detail="Impossible de preparer la reinitialisation du mot de passe a cause d'une contrainte d'integrite.",
+        refresh_instance=reset_request,
+    )
+    return reset_request
+
+
+def clear_password_reset_request(db: Session, reset_request: Motdepasseoublie) -> None:
+    reset_request.token_reinitialisation_mdp = None
+    reset_request.date_exp_token_reinitialisation = None
+    commit_or_raise(
+        db,
+        detail="Impossible de finaliser la reinitialisation du mot de passe a cause d'une contrainte d'integrite.",
+    )
+
 def get_all_utilisateurs(db: Session, skip: int = 0, limit: int = 100) -> List[Utilisateur]:
     return db.query(Utilisateur).offset(skip).limit(limit).all()
 
@@ -49,8 +106,11 @@ def update_utilisateur(db: Session, user_id: str, update_data: dict) -> Optional
     if user:
         for key, value in update_data.items():
             setattr(user, key, value)
-        db.commit()
-        db.refresh(user)
+        commit_or_raise(
+            db,
+            detail="Impossible de mettre a jour l'utilisateur a cause d'une contrainte d'integrite.",
+            refresh_instance=user,
+        )
     return user
 
 def delete_utilisateur(db: Session, user_id: str) -> bool:
@@ -58,6 +118,9 @@ def delete_utilisateur(db: Session, user_id: str) -> bool:
     if user:
         user.statut = "Supprimé"
         user.is_active = False
-        db.commit()
+        commit_or_raise(
+            db,
+            detail="Impossible de supprimer l'utilisateur a cause d'une contrainte d'integrite.",
+        )
         return True
     return False

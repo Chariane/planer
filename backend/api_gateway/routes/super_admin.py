@@ -1,22 +1,61 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..crud.super_admin import (
+    create_user_with_roles,
     delete_entreprise,
     get_all_entreprises,
     get_all_users,
     get_entreprise_by_id,
     get_user_by_id,
     update_entreprise,
-    update_user_roles,
+    update_user_role_flags,
 )
 from ..core.database import get_db
-from ..core.security import get_current_super_admin
-from ..schemas import EntrepriseOut, EntrepriseUpdate, UserRolesUpdate, UtilisateurOut
+from ..core.emails import EmailSchema, send_verification_email
+from ..core.function import build_email_verification_metadata, ensure_unique_user_identity_fields
+from ..core.security import get_current_super_admin, get_password_hash
+from ..schemas import (
+    EntrepriseOut,
+    EntrepriseUpdate,
+    RegisterResponse,
+    SuperAdminUtilisateurCreate,
+    UserRolesUpdate,
+    UtilisateurOut,
+)
 
 router = APIRouter(prefix="/super-admin", tags=["Super Admin"])
+
+
+@router.post("/users", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+def create_user_as_super_admin(
+    user: SuperAdminUtilisateurCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+):
+    ensure_unique_user_identity_fields(db, email=user.email, username=user.username)
+
+    user_data = user.model_dump()
+    password = user_data.pop("password")
+    user_data["mot_de_passe"] = get_password_hash(password)
+    user_data.update(build_email_verification_metadata())
+
+    new_user = create_user_with_roles(db, user_data)
+
+    background_tasks.add_task(
+        send_verification_email,
+        new_user.username,
+        EmailSchema(email=[new_user.email]),
+        new_user.code_verification_email,
+    )
+
+    return {
+        "message": "Utilisateur cree avec succes. Un code de verification email a ete envoye.",
+        "user": new_user,
+    }
 
 
 @router.get("/users", response_model=List[UtilisateurOut])
@@ -42,7 +81,7 @@ def get_user(
 
 
 @router.put("/users/{user_id}/roles", response_model=UtilisateurOut)
-def update_user_role_flags(
+def update_user_role_flags_route(
     user_id: str,
     roles: UserRolesUpdate,
     db: Session = Depends(get_db),
@@ -56,7 +95,7 @@ def update_user_role_flags(
     if not update_data:
         raise HTTPException(status_code=400, detail="Aucun champ de role fourni")
 
-    return update_user_roles(db, user, update_data)
+    return update_user_role_flags(db, user, update_data)
 
 
 @router.get("/entreprises", response_model=List[EntrepriseOut])
