@@ -10,6 +10,7 @@ from ..crud.super_admin import (
     get_all_users,
     get_entreprise_by_id,
     get_user_by_id,
+    set_user_account_status,
     update_entreprise,
     update_user_role_flags,
 )
@@ -96,6 +97,32 @@ def update_user_role_flags_route(
         raise HTTPException(status_code=400, detail="Aucun champ de role fourni")
 
     return update_user_role_flags(db, user, update_data)
+
+
+@router.post("/users/{user_id}/activate", response_model=UtilisateurOut)
+def activate_user_as_super_admin(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+):
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    return set_user_account_status(db, user, True)
+
+
+@router.post("/users/{user_id}/deactivate", response_model=UtilisateurOut)
+def deactivate_user_as_super_admin(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+):
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    return set_user_account_status(db, user, False)
 
 
 @router.get("/entreprises", response_model=List[EntrepriseOut])

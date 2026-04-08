@@ -56,6 +56,18 @@ def update_user_role_flags(db: Session, user: Utilisateur, update_data: dict) ->
     return user
 
 
+def set_user_account_status(db: Session, user: Utilisateur, is_active: bool) -> Utilisateur:
+    user.is_active = is_active
+    user.statut = "Actif" if is_active else "Suspendu"
+
+    commit_or_raise(
+        db,
+        detail="Impossible de mettre a jour le statut du compte utilisateur a cause d'une contrainte d'integrite.",
+        refresh_instance=user,
+    )
+    return user
+
+
 def get_all_entreprises(db: Session, skip: int = 0, limit: int = 100) -> List[PlanerEntreprise]:
     return db.query(PlanerEntreprise).offset(skip).limit(limit).all()
 
