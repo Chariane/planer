@@ -14,9 +14,9 @@ const navItems = [
 export default function Sidebar() {
   const location = useLocation();
   return (
-    <div className="flex h-full flex-col bg-[#264A67] px-4 py-6 shadow-xl">
+    <div className="flex h-full flex-col bg-primary px-4 py-6 shadow-xl">
       <div className="mb-10 flex items-center gap-2 px-2">
-        <div className="h-8 w-8 rounded-lg bg-[#FF6600] flex items-center justify-center font-bold text-white">KP</div>
+        <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white">KP</div>
         <span className="text-xl font-bold text-white">K‑Planner</span>
       </div>
       <nav className="flex-1 space-y-1">
