@@ -71,7 +71,7 @@ export default function LeftSidebar() {
   const workspace = workspaces.find(w => w.id === workspaceId);
 
   return (
-    <div className="w-80 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+    <div className="w-full md:w-80 flex-shrink-0 bg-white border-b md:border-b-0 md:border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
         <select
           value={workspaceId || ''}
@@ -97,7 +97,7 @@ export default function LeftSidebar() {
       {workspace && (
         <div className="mt-4 px-2">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2">Espaces et listes</h3>
-          <div className="mt-2 space-y-1">
+          <div className="mt-2 space-y-1 max-h-[40vh] md:max-h-none overflow-y-auto">
             {renderSpaceTree(workspace.spaces, workspaceId!, spaceId, listId, openSpaces, toggleSpace)}
           </div>
         </div>

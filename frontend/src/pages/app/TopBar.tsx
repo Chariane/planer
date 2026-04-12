@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Menu, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 export default function TopBar() {
@@ -12,13 +12,13 @@ export default function TopBar() {
 
   const breadcrumb = [
     { name: 'Dashboard', path: '/dashboard' },
-    ...(workspace ? [{ name: workspace.name, path: `/app/${workspace.id}` }] : []),
-    ...(space ? [{ name: space.name, path: `/app/${workspaceId}/${space.id}` }] : []),
-    ...(list ? [{ name: list.name, path: `/app/${workspaceId}/${spaceId}/${list.id}` }] : []),
+    ...(workspace ? [{ name: workspace.name, path: `/workspace/${workspace.id}` }] : []),
+    ...(space ? [{ name: space.name, path: `/workspace/${workspaceId}/${space.id}` }] : []),
+    ...(list ? [{ name: list.name, path: `/workspace/${workspaceId}/${spaceId}/${list.id}` }] : []),
   ];
 
   return (
-    <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between shadow-sm">
+    <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center shadow-sm">
       <div className="flex items-center gap-2">
         <button className="p-1 rounded hover:bg-gray-100" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5 text-gray-600" />
@@ -26,7 +26,7 @@ export default function TopBar() {
         <button className="p-1 rounded hover:bg-gray-100" onClick={() => navigate(1)}>
           <ArrowRight className="h-5 w-5 text-gray-600" />
         </button>
-        <div className="ml-2 flex items-center text-sm text-gray-500">
+        <div className="ml-2 flex items-center text-sm text-gray-500 flex-wrap">
           {breadcrumb.map((item, idx) => (
             <div key={item.path} className="flex items-center">
               {idx > 0 && <ChevronRight className="h-4 w-4 mx-1" />}
@@ -40,9 +40,6 @@ export default function TopBar() {
           ))}
         </div>
       </div>
-      <button className="p-1 rounded hover:bg-gray-100">
-        <Menu className="h-5 w-5 text-gray-600" />
-      </button>
     </div>
   );
 }

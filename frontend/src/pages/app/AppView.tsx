@@ -12,7 +12,6 @@ export default function AppView() {
   const { workspaces, setActiveWorkspaceId, setActiveSpaceId, setActiveListId } = useApp();
 
   useEffect(() => {
-    // Synchroniser l'état global avec l'URL
     if (workspaceId && workspaces.find(w => w.id === workspaceId)) {
       setActiveWorkspaceId(workspaceId);
     } else {
@@ -22,22 +21,23 @@ export default function AppView() {
     setActiveListId(listId || null);
   }, [workspaceId, spaceId, listId, workspaces]);
 
-  // Si aucun workspace n'est sélectionné, rediriger vers le premier
   useEffect(() => {
     if (!workspaceId && workspaces.length > 0) {
-      navigate(`/app/${workspaces[0].id}`, { replace: true });
+      navigate(`/workspace/${workspaces[0].id}`, { replace: true });
     }
   }, [workspaceId, workspaces]);
-
-  const activeWorkspace = workspaces.find(w => w.id === workspaceId);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        <LeftSidebar />
-        <CenterContent />
-        <RightCanevas />
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-col md:flex-row h-full">
+          <LeftSidebar />
+          <div className="flex-1 min-w-0">
+            <CenterContent />
+          </div>
+          <RightCanevas />
+        </div>
       </div>
     </div>
   );
