@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, FolderKanban, MessageSquare, Users, FileText, Calendar, MoreHorizontal, Briefcase, Hash, LayoutDashboard } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderKanban, MessageSquare, Users, FileText, Calendar, MoreHorizontal, Briefcase, Hash, LayoutDashboard, Plus } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
+import { useAuth } from '../../contexts/AuthContext';
+import Modal from '../../components/ui/Modal';
+import { Button } from '../../components/ui/Button';
 
 interface SpaceNode {
   id: string;
@@ -61,17 +64,33 @@ function renderSpaceTree(
 
 export default function LeftSidebar() {
   const { workspaceId, spaceId, listId } = useParams();
-  const { workspaces } = useApp();
+  const { workspaces, addEspace, loadEspaces } = useApp();
+  const { user } = useAuth();
   const [openSpaces, setOpenSpaces] = useState<Record<string, boolean>>({});
+  const [isCreateSpaceModalOpen, setIsCreateSpaceModalOpen] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState('');
+  const [newSpaceDesc, setNewSpaceDesc] = useState('');
+  const workspace = workspaces.find(w => w.id === workspaceId);
 
   const toggleSpace = (id: string) => {
     setOpenSpaces(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const workspace = workspaces.find(w => w.id === workspaceId);
+  const handleCreateSpace = async () => {
+    if (!newSpaceName.trim() || !workspaceId) return;
+    try {
+      await addEspace(workspaceId, { nom: newSpaceName, description: newSpaceDesc });
+      await loadEspaces(workspaceId); // Recharger les espaces
+      setNewSpaceName('');
+      setNewSpaceDesc('');
+      setIsCreateSpaceModalOpen(false);
+    } catch (error) {
+      console.error('Erreur lors de la création de l\'espace', error);
+    }
+  };
 
   return (
-    <div className="w-full md:w-80 flex-shrink-0 bg-white border-b md:border-b-0 md:border-r border-gray-200">
+    <div className="w-full md:w-80 flex-shrink-0 bg-white border-b md:border-b-0 md:border-r border-gray-200 overflow-y-auto">
       <div className="p-4 border-b border-gray-200">
         <select
           value={workspaceId || ''}
@@ -96,9 +115,21 @@ export default function LeftSidebar() {
 
       {workspace && (
         <div className="mt-4 px-2">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2">Espaces et listes</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2">Espaces et listes</h3>
+            <button
+              onClick={() => setIsCreateSpaceModalOpen(true)}
+              className="p-1 rounded-lg hover:bg-gray-100 text-gray-500"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
           <div className="mt-2 space-y-1 max-h-[40vh] md:max-h-none overflow-y-auto">
-            {renderSpaceTree(workspace.espaces, workspaceId!, spaceId, listId, openSpaces, toggleSpace)}
+            {workspace.espaces && workspace.espaces.length > 0 ? (
+              renderSpaceTree(workspace.espaces, workspaceId!, spaceId, listId, openSpaces, toggleSpace)
+            ) : (
+              <div className="text-sm text-gray-500 px-2">Aucun espace. Cliquez sur + pour en créer.</div>
+            )}
           </div>
         </div>
       )}
@@ -120,6 +151,30 @@ export default function LeftSidebar() {
         <Link to="/reports" className="flex items-center gap-2 p-2 rounded hover:bg-gray-100 text-sm text-gray-700"><FileText className="h-4 w-4" /> Gestion des rapports</Link>
         <Link to="/absences" className="flex items-center gap-2 p-2 rounded hover:bg-gray-100 text-sm text-gray-700"><Calendar className="h-4 w-4" /> Gestion des absences/congés</Link>
       </div>
+
+      {/* Modal de création d'espace */}
+      <Modal isOpen={isCreateSpaceModalOpen} onClose={() => setIsCreateSpaceModalOpen(false)} title="Créer un espace" size="md">
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Nom de l'espace"
+            value={newSpaceName}
+            onChange={(e) => setNewSpaceName(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg focus:ring-secondary"
+          />
+          <textarea
+            placeholder="Description (optionnelle)"
+            value={newSpaceDesc}
+            onChange={(e) => setNewSpaceDesc(e.target.value)}
+            rows={2}
+            className="w-full px-3 py-2 border rounded-lg focus:ring-secondary"
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setIsCreateSpaceModalOpen(false)}>Annuler</Button>
+            <Button onClick={handleCreateSpace}>Créer</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
