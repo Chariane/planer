@@ -497,6 +497,13 @@ class WorkspaceOut(WorkspaceBase):
     id_utilisateur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+
+class WorkspaceWithContextOut(WorkspaceOut):
+    member_count: int = 0
+    current_user_role: Optional[str] = None
+    current_user_statut: Optional[str] = None
+
+
 class WorkspaceDelete(BaseModel):
     id: str
 
@@ -607,6 +614,19 @@ class MembreOut(MembreBase):
     id_liste: Optional[str] = None
     id_tache: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceMemberUserOut(BaseModel):
+    id: str
+    username: str
+    email: EmailStr
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+
+
+class WorkspaceMemberOut(MembreOut):
+    utilisateur: Optional[WorkspaceMemberUserOut] = None
+
 
 class MembreDelete(BaseModel):
     id: str
