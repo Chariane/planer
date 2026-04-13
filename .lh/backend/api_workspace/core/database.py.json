@@ -3,7 +3,7 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 3,
+            "activePatchIndex": 4,
             "patches": [
                 {
                     "date": 1776072293050,
@@ -20,6 +20,10 @@
                 {
                     "date": 1776072325344,
                     "content": "Index: \n===================================================================\n--- \n+++ \n@@ -5,9 +5,8 @@\n from dotenv import dotenv_values, load_dotenv\r\n dotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\r\n \r\n # Charge le .env\r\n-\r\n load_dotenv(dotenv_path)\r\n \r\n config_data = dotenv_values(dotenv_path)\r\n \r\n"
+                },
+                {
+                    "date": 1776073325856,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,27 +0,0 @@\n-import os\r\n-from sqlalchemy import create_engine\r\n-from sqlalchemy.orm import sessionmaker\r\n-from sqlalchemy.ext.declarative import declarative_base\r\n-from dotenv import dotenv_values, load_dotenv\r\n-dotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\r\n-\r\n-# Charge le .env\r\n-load_dotenv(dotenv_path)\r\n-\r\n-config_data = dotenv_values(dotenv_path)\r\n-\r\n-ENV = config_data.get('ENV')\r\n-if ENV == 'Prod':\r\n-    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER_PROD')}:{config_data.get('DB_PASSWORD_PROD')}@{config_data.get('DB_HOST_PROD')}:{config_data.get('DB_PORT_PROD')}/{config_data.get('DB_NAME_PROD')}\"\r\n-else:\r\n-    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER')}:{config_data.get('DB_PASSWORD')}@{config_data.get('DB_HOST')}:{config_data.get('DB_PORT')}/{config_data.get('DB_NAME')}\"\r\n-\r\n-engine = create_engine(DATABASE_URL)\r\n-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)\r\n-Base = declarative_base()\r\n-def get_db():\r\n-    db = SessionLocal()\r\n-    try:\r\n-        yield db\r\n-    finally:\r\n-        db.close()\r\n\\ No newline at end of file\n"
                 }
             ],
             "date": 1776072293050,
