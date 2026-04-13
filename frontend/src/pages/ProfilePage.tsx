@@ -3,12 +3,14 @@ import { useAuth } from '../contexts/AuthContext';
 import Card from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { Shield, Copy, Check } from 'lucide-react';
+import { Shield, Copy, Check, Edit2 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 
 export default function ProfilePage() {
-  const { user, setup2FA, enable2FA, disable2FA, changePassword } = useAuth();
+  const { user, updateProfile, setup2FA, enable2FA, disable2FA, changePassword } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ nom: user?.nom || '', prenoms: user?.prenoms || '' });
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
   const [twoFASetup, setTwoFASetup] = useState<any>(null);
   const [twoFACode, setTwoFACode] = useState('');
@@ -16,40 +18,78 @@ export default function ProfilePage() {
   const [disablePassword, setDisablePassword] = useState('');
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handleEditSubmit = async () => {
+    try {
+      await updateProfile({ nom: editForm.nom, prenoms: editForm.prenoms });
+      setMessage('Profil mis à jour avec succès');
+      setIsEditing(false);
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
 
   const handleSetup2FA = async () => {
-    const data = await setup2FA();
-    setTwoFASetup(data);
-    setIs2FAModalOpen(true);
+    try {
+      const data = await setup2FA();
+      setTwoFASetup(data);
+      setIs2FAModalOpen(true);
+    } catch (err) {
+      setError('Erreur lors de la préparation 2FA');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   const handleEnable2FA = async () => {
-    await enable2FA(twoFACode);
-    setIs2FAModalOpen(false);
-    setTwoFASetup(null);
-    setTwoFACode('');
-    setMessage('2FA activée avec succès');
-    setTimeout(() => setMessage(''), 3000);
+    try {
+      await enable2FA(twoFACode);
+      setIs2FAModalOpen(false);
+      setTwoFASetup(null);
+      setTwoFACode('');
+      setMessage('2FA activée avec succès');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError('Code 2FA invalide');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   const handleDisable2FA = async () => {
-    if (!disablePassword) return;
-    await disable2FA(disablePassword);
-    setDisablePassword('');
-    setMessage('2FA désactivée');
-    setTimeout(() => setMessage(''), 3000);
+    if (!disablePassword) {
+      setError('Veuillez entrer votre mot de passe');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    try {
+      await disable2FA(disablePassword);
+      setDisablePassword('');
+      setMessage('2FA désactivée avec succès');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Erreur lors de la désactivation');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   const handleChangePassword = async () => {
     if (passwordForm.new !== passwordForm.confirm) {
-      setMessage('Les nouveaux mots de passe ne correspondent pas');
-      setTimeout(() => setMessage(''), 3000);
+      setError('Les nouveaux mots de passe ne correspondent pas');
+      setTimeout(() => setError(''), 3000);
       return;
     }
-    await changePassword(passwordForm.current, passwordForm.new);
-    setMessage('Mot de passe modifié avec succès');
-    setPasswordForm({ current: '', new: '', confirm: '' });
-    setTimeout(() => setMessage(''), 3000);
+    try {
+      await changePassword(passwordForm.current, passwordForm.new);
+      setMessage('Mot de passe modifié avec succès');
+      setPasswordForm({ current: '', new: '', confirm: '' });
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError('Mot de passe actuel incorrect');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   return (
@@ -67,7 +107,21 @@ export default function ProfilePage() {
           <div className="space-y-4">
             <div><label className="block text-sm font-medium text-gray-700">Nom d'utilisateur</label><p className="mt-1">{user?.username}</p></div>
             <div><label className="block text-sm font-medium text-gray-700">Email</label><p className="mt-1">{user?.email}</p></div>
-            <div><label className="block text-sm font-medium text-gray-700">Nom complet</label><p className="mt-1">{user?.nom} {user?.prenoms}</p></div>
+            {!isEditing ? (
+              <>
+                <div><label className="block text-sm font-medium text-gray-700">Nom</label><p className="mt-1">{user?.nom || 'Non renseigné'}</p></div>
+                <div><label className="block text-sm font-medium text-gray-700">Prénoms</label><p className="mt-1">{user?.prenoms || 'Non renseigné'}</p></div>
+                <Button variant="outline" onClick={() => { setEditForm({ nom: user?.nom || '', prenoms: user?.prenoms || '' }); setIsEditing(true); }}>
+                  <Edit2 className="h-4 w-4 mr-2" /> Modifier mon profil
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div><label className="block text-sm font-medium text-gray-700">Nom</label><input type="text" value={editForm.nom} onChange={e => setEditForm({ ...editForm, nom: e.target.value })} className="w-full border rounded p-2" /></div>
+                <div><label className="block text-sm font-medium text-gray-700">Prénoms</label><input type="text" value={editForm.prenoms} onChange={e => setEditForm({ ...editForm, prenoms: e.target.value })} className="w-full border rounded p-2" /></div>
+                <div className="flex gap-2"><Button onClick={handleEditSubmit}>Enregistrer</Button><Button variant="outline" onClick={() => setIsEditing(false)}>Annuler</Button></div>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -103,9 +157,7 @@ export default function ProfilePage() {
         {twoFASetup && (
           <div className="space-y-4">
             <p>Scannez ce QR code avec Google Authenticator :</p>
-            <div className="flex justify-center">
-              <QRCodeCanvas value={twoFASetup.google_authenticator_otpauth_url} size={200} />
-            </div>
+            <div className="flex justify-center"><QRCodeCanvas value={twoFASetup.google_authenticator_otpauth_url} size={200} /></div>
             <p>Ou saisissez ce code secret :</p>
             <div className="flex items-center gap-2">
               <code className="bg-gray-100 p-2 rounded">{twoFASetup.google_authenticator_secret}</code>
@@ -118,6 +170,7 @@ export default function ProfilePage() {
       </Modal>
 
       {message && <div className="fixed bottom-4 right-4 bg-green-100 text-green-700 p-3 rounded shadow">{message}</div>}
+      {error && <div className="fixed bottom-4 right-4 bg-red-100 text-red-700 p-3 rounded shadow">{error}</div>}
     </div>
   );
 }

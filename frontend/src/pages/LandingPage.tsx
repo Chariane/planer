@@ -1,7 +1,8 @@
 import { motion, useInView, easeOut } from 'framer-motion';
 import { useRef, useState, useEffect } from 'react';
-import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X, ChevronDown } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 60, scale: 0.9 },
@@ -23,6 +24,10 @@ export default function LandingPage() {
 
   const [scrolled, setScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -41,6 +46,15 @@ export default function LandingPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
+  const handleDashboard = () => {
+    navigate('/dashboard');
+  };
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
@@ -67,7 +81,38 @@ export default function LandingPage() {
             <a href="#features" className="text-gray-600 hover:text-secondary transition">Fonctionnalités</a>
             <a href="#demo" className="text-gray-600 hover:text-secondary transition">Démo</a>
             <a href="#how-it-works" className="text-gray-600 hover:text-secondary transition">Guide</a>
-            <Link to="/dashboard" className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition">Se connecter</Link>
+
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                >
+                  <span>{user.username || 'Mon compte'}</span>
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                    <button
+                      onClick={handleDashboard}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Tableau de bord
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                    >
+                      Déconnexion
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link to="/login" className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition">
+                Se connecter
+              </Link>
+            )}
           </nav>
 
           {/* Bouton burger mobile */}
@@ -83,17 +128,24 @@ export default function LandingPage() {
         {isMenuOpen && (
           <>
             <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsMenuOpen(false)} />
-            <div className="fixed top-0 right-0 h-full w-64 bg-white shadow-xl z-50 md:hidden flex flex-col p-6 animate-in slide-in-from-right">
+            <div className="fixed top-0 right-0 h-full w-64 bg-white shadow-xl z-50 md:hidden flex flex-col p-6">
               <div className="flex justify-end mb-6">
                 <button onClick={() => setIsMenuOpen(false)} className="p-2">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <nav className="flex flex-col gap-4">
-                <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary transition">Fonctionnalités</a>
-                <a href="#demo" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary transition">Démo</a>
-                <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary transition">Guide</a>
-                <Link to="/dashboard" onClick={() => setIsMenuOpen(false)} className="px-4 py-2 rounded-lg bg-primary text-white text-center hover:bg-[#1d3a52] transition">Se connecter</Link>
+                <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Fonctionnalités</a>
+                <a href="#demo" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Démo</a>
+                <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Guide</a>
+                {user ? (
+                  <>
+                    <button onClick={() => { handleDashboard(); setIsMenuOpen(false); }} className="text-left text-gray-700 hover:text-secondary">Tableau de bord</button>
+                    <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="text-left text-red-600 hover:text-red-700">Déconnexion</button>
+                  </>
+                ) : (
+                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="px-4 py-2 rounded-lg bg-primary text-white text-center hover:bg-[#1d3a52]">Se connecter</Link>
+                )}
               </nav>
             </div>
           </>
@@ -259,6 +311,7 @@ export default function LandingPage() {
                 </button>
               </div>
               <div className="flex gap-4">
+                {/* Icônes des réseaux sociaux (inchangées) */}
                 <a href="#" className="text-gray-400 hover:text-secondary transition">
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg>
                 </a>

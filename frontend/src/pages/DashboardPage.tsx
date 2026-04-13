@@ -6,7 +6,7 @@ import { FolderKanban, CheckSquare, Users, Calendar } from 'lucide-react';
 export default function DashboardPage() {
   const { workspaces } = useApp();
   const totalTasks = 12; // À remplacer par données réelles
-  const totalMembers = workspaces.reduce((acc, ws) => acc + ws.members.length, 0);
+  const totalMembers = workspaces.reduce((acc, ws) => acc + (ws.membres?.length || 0), 0);
   const pendingAbsences = 2;
 
   return (
@@ -52,8 +52,8 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {workspaces.slice(0, 3).map(ws => (
                 <Link key={ws.id} to={`/workspace/${ws.id}`} className="block p-2 hover:bg-gray-50 rounded">
-                  <p className="font-medium">{ws.name}</p>
-                  <p className="text-xs text-gray-400">{ws.members.length} membres</p>
+                  <p className="font-medium">{ws.nom}</p>
+                  <p className="text-xs text-gray-400">{ws.membres?.length || 0} membres</p>
                 </Link>
               ))}
             </div>

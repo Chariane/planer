@@ -11,8 +11,8 @@ export default function RightCanevas() {
 
   let activeList = null;
   for (const ws of workspaces) {
-    for (const space of ws.spaces) {
-      const list = space.lists.find(l => l.id === listId);
+    for (const space of ws.espaces) {
+      const list = space.listes.find(l => l.id === listId);
       if (list) {
         activeList = list;
         break;

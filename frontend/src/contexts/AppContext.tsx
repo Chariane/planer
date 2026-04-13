@@ -1,67 +1,12 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { workspaceService } from '../services/workspace.service';
+import { espaceService } from '../services/espace.service';
+import { listeService } from '../services/liste.service';
+import { tacheService } from '../services/tache.service';
+import type { Member, Task, ChecklistItem, Period, List, Space, Workspace } from '../types';
 
-export interface Member {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'member';
-}
-
-export interface ChecklistItem {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: 'en_cours' | 'en_attente' | 'terminee' | 'bloquee' | 'archivee';
-  priority: 'tres_elevee' | 'elevee' | 'normale' | 'faible' | 'tres_faible';
-  dueDate: string;
-  assignees: Member[];
-  listId: string;
-  createdAt: Date;
-  subTasks?: ChecklistItem[];
-}
-
-export interface Period {
-  id: string;
-  name: string;
-  progress: number;
-  expanded?: boolean;
-  children?: Period[];
-  items?: ChecklistItem[];
-}
-
-export interface List {
-  id: string;
-  name: string;
-  description: string;
-  tasks: Task[];
-  periods?: Period[];
-  createdAt: Date;
-}
-
-export interface Space {
-  id: string;
-  name: string;
-  description: string;
-  spaces?: Space[];
-  lists: List[];
-  createdAt: Date;
-}
-
-export interface Workspace {
-  id: string;
-  name: string;
-  description: string;
-  members: Member[];
-  spaces: Space[];
-  createdAt: Date;
-}
+export type { Member, Task, ChecklistItem, Period, List, Space, Workspace };
 
 interface AppContextType {
   workspaces: Workspace[];
@@ -71,9 +16,24 @@ interface AppContextType {
   setActiveWorkspaceId: (id: string | null) => void;
   setActiveSpaceId: (id: string | null) => void;
   setActiveListId: (id: string | null) => void;
-  addTask: (listId: string, task: Task) => void;
-  updateTask: (task: Task) => void;
-  deleteTask: (listId: string, taskId: string) => void;
+  loadWorkspaces: () => Promise<void>;
+  loadEspaces: (workspaceId: string) => Promise<void>;
+  loadListes: (espaceId: string) => Promise<void>;
+  loadTaches: (listeId: string) => Promise<void>;
+  addWorkspace: (data: { nom: string; description?: string }) => Promise<void>;
+  updateWorkspace: (id: string, data: { nom?: string; description?: string }) => Promise<void>;
+  deleteWorkspace: (id: string) => Promise<void>;
+  addEspace: (workspaceId: string, data: { nom: string; description?: string }) => Promise<void>;
+  updateEspace: (id: string, data: { nom?: string; description?: string }) => Promise<void>;
+  deleteEspace: (id: string) => Promise<void>;
+  addListe: (espaceId: string, data: { nom: string; description?: string }) => Promise<void>;
+  updateListe: (id: string, data: { nom?: string; description?: string }) => Promise<void>;
+  deleteListe: (id: string) => Promise<void>;
+  addTask: (listId: string, task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
+  updateTask: (task: Task) => Promise<void>;
+  deleteTask: (listId: string, taskId: string) => Promise<void>;
+  inviteMember: (workspaceId: string, email: string, role: string) => Promise<void>;
+  removeMember: (workspaceId: string, memberId: string) => Promise<void>;
   toggleSubTask: (taskId: string, subTaskId: string) => void;
   toggleChecklistItem: (listId: string, periodId: string, itemId: string) => void;
   addMember: (workspaceId: string, member: Member) => void;
@@ -81,188 +41,176 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const initialWorkspaces: Workspace[] = [
-  {
-    id: '1',
-    name: 'Kapital Human & Conseil',
-    description: 'Environnement principal',
-    members: [
-      { id: 'u1', name: 'Thomas D.', email: 'thomas@kplaner.com', role: 'admin' },
-      { id: 'u2', name: 'Alice M.', email: 'alice@kplaner.com', role: 'member' },
-    ],
-    spaces: [
-      {
-        id: 's1',
-        name: 'Espace 1',
-        description: '',
-        spaces: [],
-        lists: [
-          {
-            id: 'l1',
-            name: 'Liste 1 du workspace',
-            description: '',
-            tasks: [
-              {
-                id: 't1',
-                title: 'Pré-sélection CV',
-                description: '',
-                status: 'en_cours',
-                priority: 'elevee',
-                dueDate: '2025-04-15',
-                assignees: [{ id: 'u2', name: 'Alice M.', email: 'alice@kplaner.com', role: 'member' }],
-                listId: 'l1',
-                createdAt: new Date(),
-                subTasks: [
-                  { id: 'st1', text: 'Recevoir les CV', completed: true },
-                  { id: 'st2', text: 'Noter chaque CV', completed: false },
-                ],
-              },
-            ],
-            periods: [],
-            createdAt: new Date(),
-          },
-        ],
-        createdAt: new Date(),
-      },
-    ],
-    createdAt: new Date(),
-  },
-];
-
-// Fonction utilitaire pour mettre à jour les workspaces de manière immuable
-function updateWorkspaces(workspaces: Workspace[], updater: (ws: Workspace) => Workspace): Workspace[] {
-  return workspaces.map(updater);
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [workspaces, setWorkspaces] = useState(initialWorkspaces);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
-  const addTask = (listId: string, task: Task) => {
+  const loadWorkspaces = async () => {
+    try {
+      const data = await workspaceService.getAll();
+      setWorkspaces(data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des workspaces', error);
+    }
+  };
+
+  const loadEspaces = async (workspaceId: string) => {
+    try {
+      const data = await espaceService.getByWorkspace(workspaceId);
+      setWorkspaces(prev => prev.map(ws => ws.id === workspaceId ? { ...ws, espaces: data } : ws));
+    } catch (error) {
+      console.error('Erreur lors du chargement des espaces', error);
+    }
+  };
+
+  const loadListes = async (espaceId: string) => {
+    try {
+      const data = await listeService.getByEspace(espaceId);
+      setWorkspaces(prev => prev.map(ws => ({
+        ...ws,
+        espaces: ws.espaces.map(space => space.id === espaceId ? { ...space, listes: data } : space),
+      })));
+    } catch (error) {
+      console.error('Erreur lors du chargement des listes', error);
+    }
+  };
+
+  const loadTaches = async (listeId: string) => {
+    try {
+      const data = await tacheService.getByListe(listeId);
+      setWorkspaces(prev => prev.map(ws => ({
+        ...ws,
+        espaces: ws.espaces.map(space => ({
+          ...space,
+          listes: space.listes.map(list => list.id === listeId ? { ...list, taches: data } : list),
+        })),
+      })));
+    } catch (error) {
+      console.error('Erreur lors du chargement des tâches', error);
+    }
+  };
+
+  const addWorkspace = async (data: { nom: string; description?: string }) => {
+    const newWorkspace = await workspaceService.create(data);
+    setWorkspaces(prev => [newWorkspace, ...prev]);
+  };
+
+  const updateWorkspace = async (id: string, data: { nom?: string; description?: string }) => {
+    const updated = await workspaceService.update(id, data);
+    setWorkspaces(prev => prev.map(ws => ws.id === id ? updated : ws));
+  };
+
+  const deleteWorkspace = async (id: string) => {
+    await workspaceService.delete(id);
+    setWorkspaces(prev => prev.filter(ws => ws.id !== id));
+    if (activeWorkspaceId === id) setActiveWorkspaceId(null);
+  };
+
+  const addEspace = async (workspaceId: string, data: { nom: string; description?: string }) => {
+    const newEspace = await espaceService.create({ ...data, id_workspace: workspaceId });
+    setWorkspaces(prev => prev.map(ws => ws.id === workspaceId ? { ...ws, espaces: [...ws.espaces, newEspace] } : ws));
+  };
+
+  const updateEspace = async (id: string, data: { nom?: string; description?: string }) => {
+    const updated = await espaceService.update(id, data);
     setWorkspaces(prev => prev.map(ws => ({
       ...ws,
-      spaces: ws.spaces.map(space => ({
-        ...space,
-        spaces: space.spaces?.map(sub => ({
-          ...sub,
-          lists: sub.lists.map(list => list.id === listId ? { ...list, tasks: [...list.tasks, task] } : list)
-        })) ?? [],
-        lists: space.lists.map(list => list.id === listId ? { ...list, tasks: [...list.tasks, task] } : list)
-      }))
+      espaces: ws.espaces.map(space => space.id === id ? updated : space),
     })));
   };
 
-  const updateTask = (updatedTask: Task) => {
+  const deleteEspace = async (id: string) => {
+    await espaceService.delete(id);
     setWorkspaces(prev => prev.map(ws => ({
       ...ws,
-      spaces: ws.spaces.map(space => ({
-        ...space,
-        spaces: space.spaces?.map(sub => ({
-          ...sub,
-          lists: sub.lists.map(list => list.id === updatedTask.listId ? {
-            ...list,
-            tasks: list.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
-          } : list)
-        })) ?? [],
-        lists: space.lists.map(list => list.id === updatedTask.listId ? {
-          ...list,
-          tasks: list.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
-        } : list)
-      }))
+      espaces: ws.espaces.filter(space => space.id !== id),
+    })));
+    if (activeSpaceId === id) setActiveSpaceId(null);
+  };
+
+  const addListe = async (espaceId: string, data: { nom: string; description?: string }) => {
+    const newListe = await listeService.create({ ...data, id_espace: espaceId });
+    setWorkspaces(prev => prev.map(ws => ({
+      ...ws,
+      espaces: ws.espaces.map(space => space.id === espaceId ? { ...space, listes: [...space.listes, newListe] } : space),
     })));
   };
 
-  const deleteTask = (listId: string, taskId: string) => {
+  const updateListe = async (id: string, data: { nom?: string; description?: string }) => {
+    const updated = await listeService.update(id, data);
     setWorkspaces(prev => prev.map(ws => ({
       ...ws,
-      spaces: ws.spaces.map(space => ({
+      espaces: ws.espaces.map(space => ({
         ...space,
-        spaces: space.spaces?.map(sub => ({
-          ...sub,
-          lists: sub.lists.map(list => list.id === listId ? {
-            ...list,
-            tasks: list.tasks.filter(t => t.id !== taskId)
-          } : list)
-        })) ?? [],
-        lists: space.lists.map(list => list.id === listId ? {
-          ...list,
-          tasks: list.tasks.filter(t => t.id !== taskId)
-        } : list)
-      }))
+        listes: space.listes.map(list => list.id === id ? updated : list),
+      })),
     })));
   };
 
-  const toggleSubTask = (taskId: string, subTaskId: string) => {
+  const deleteListe = async (id: string) => {
+    await listeService.delete(id);
     setWorkspaces(prev => prev.map(ws => ({
       ...ws,
-      spaces: ws.spaces.map(space => ({
+      espaces: ws.espaces.map(space => ({
         ...space,
-        spaces: space.spaces?.map(sub => ({
-          ...sub,
-          lists: sub.lists.map(list => ({
-            ...list,
-            tasks: list.tasks.map(task => task.id === taskId ? {
-              ...task,
-              subTasks: task.subTasks?.map(st => st.id === subTaskId ? { ...st, completed: !st.completed } : st)
-            } : task)
-          }))
-        })) ?? [],
-        lists: space.lists.map(list => ({
-          ...list,
-          tasks: list.tasks.map(task => task.id === taskId ? {
-            ...task,
-            subTasks: task.subTasks?.map(st => st.id === subTaskId ? { ...st, completed: !st.completed } : st)
-          } : task)
-        }))
-      }))
+        listes: space.listes.filter(list => list.id !== id),
+      })),
+    })));
+    if (activeListId === id) setActiveListId(null);
+  };
+
+  const addTask = async (listId: string, task: Omit<Task, 'id' | 'createdAt'>) => {
+    const newTask = await tacheService.create(listId, task);
+    setWorkspaces(prev => prev.map(ws => ({
+      ...ws,
+      espaces: ws.espaces.map(space => ({
+        ...space,
+        listes: space.listes.map(list => list.id === listId ? { ...list, taches: [...list.taches, newTask] } : list),
+      })),
     })));
   };
 
-  const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => {
+  const updateTask = async (task: Task) => {
+    const updated = await tacheService.update(task.id, task);
     setWorkspaces(prev => prev.map(ws => ({
       ...ws,
-      spaces: ws.spaces.map(space => ({
+      espaces: ws.espaces.map(space => ({
         ...space,
-        spaces: space.spaces?.map(sub => ({
-          ...sub,
-          lists: sub.lists.map(list => {
-            if (list.id !== listId) return list;
-            const toggleInPeriod = (periods: Period[] | undefined): Period[] | undefined => {
-              if (!periods) return periods;
-              return periods.map(period => {
-                if (period.id === periodId && period.items) {
-                  return { ...period, items: period.items.map(item => item.id === itemId ? { ...item, completed: !item.completed } : item) };
-                }
-                if (period.children) return { ...period, children: toggleInPeriod(period.children) };
-                return period;
-              });
-            };
-            return { ...list, periods: toggleInPeriod(list.periods) };
-          })
-        })) ?? [],
-        lists: space.lists.map(list => {
-          if (list.id !== listId) return list;
-          const toggleInPeriod = (periods: Period[] | undefined): Period[] | undefined => {
-            if (!periods) return periods;
-            return periods.map(period => {
-              if (period.id === periodId && period.items) {
-                return { ...period, items: period.items.map(item => item.id === itemId ? { ...item, completed: !item.completed } : item) };
-              }
-              if (period.children) return { ...period, children: toggleInPeriod(period.children) };
-              return period;
-            });
-          };
-          return { ...list, periods: toggleInPeriod(list.periods) };
-        })
-      }))
+        listes: space.listes.map(list => list.id === task.listId ? { ...list, taches: list.taches.map(t => t.id === task.id ? updated : t) } : list),
+      })),
     })));
   };
 
-  const addMember = (workspaceId: string, member: Member) => {
-    setWorkspaces(prev => prev.map(ws => ws.id === workspaceId ? { ...ws, members: [...ws.members, member] } : ws));
+  const deleteTask = async (listId: string, taskId: string) => {
+    await tacheService.delete(taskId);
+    setWorkspaces(prev => prev.map(ws => ({
+      ...ws,
+      espaces: ws.espaces.map(space => ({
+        ...space,
+        listes: space.listes.map(list => list.id === listId ? { ...list, taches: list.taches.filter(t => t.id !== taskId) } : list),
+      })),
+    })));
   };
+
+  const inviteMember = async (workspaceId: string, email: string, role: string) => {
+    await workspaceService.inviteMember(workspaceId, email, role);
+    await loadWorkspaces();
+  };
+
+  const removeMember = async (workspaceId: string, memberId: string) => {
+    await workspaceService.removeMember(workspaceId, memberId);
+    await loadWorkspaces();
+  };
+
+  const toggleSubTask = (taskId: string, subTaskId: string) => {};
+  const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => {};
+  const addMember = (workspaceId: string, member: Member) => {};
+
+  useEffect(() => {
+    loadWorkspaces();
+  }, []);
 
   return (
     <AppContext.Provider value={{
@@ -273,9 +221,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setActiveWorkspaceId,
       setActiveSpaceId,
       setActiveListId,
+      loadWorkspaces,
+      loadEspaces,
+      loadListes,
+      loadTaches,
+      addWorkspace,
+      updateWorkspace,
+      deleteWorkspace,
+      addEspace,
+      updateEspace,
+      deleteEspace,
+      addListe,
+      updateListe,
+      deleteListe,
       addTask,
       updateTask,
       deleteTask,
+      inviteMember,
+      removeMember,
       toggleSubTask,
       toggleChecklistItem,
       addMember,

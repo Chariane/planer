@@ -78,20 +78,20 @@ export default function CenterContent() {
     role: 'member' as 'admin' | 'member',
   });
 
-  const findList = (spaces: any[], listId: string): any => {
-    for (const space of spaces) {
-      const list = space.lists.find((l: any) => l.id === listId);
+  const findList = (espaces: any[], listId: string): any => {
+    for (const espace of espaces) {
+      const list = espace.listes?.find((l: any) => l.id === listId);
       if (list) return list;
-      if (space.spaces) {
-        const found = findList(space.spaces, listId);
+      if (espace.sous_espaces) {
+        const found = findList(espace.sous_espaces, listId);
         if (found) return found;
       }
     }
     return null;
   };
   const workspace = workspaces.find(w => w.id === workspaceId);
-  const list = workspace ? findList(workspace.spaces, listId || '') : null;
-  const tasks: Task[] = list?.tasks || [];
+  const list = workspace ? findList(workspace.espaces || [], listId || '') : null;
+  const tasks: Task[] = list?.taches || [];
 
   const toggleTaskExpand = (taskId: string) => {
     setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
@@ -133,7 +133,7 @@ export default function CenterContent() {
 
   const handleTaskSubmit = () => {
     if (!taskForm.title.trim() || !listId) return;
-    const assignee = workspace?.members.find(m => m.id === taskForm.assigneeId);
+    const assignee = workspace?.membres.find(m => m.id === taskForm.assigneeId);
     const task: Task = {
       id: editingTask?.id || Date.now().toString(),
       title: taskForm.title,
@@ -222,15 +222,34 @@ export default function CenterContent() {
                   {expandedStatus[status] && (
                     <div className="mt-4 overflow-x-auto">
                       <table className="min-w-[600px] md:min-w-full text-sm">
-                        <thead className="text-gray-500 border-b"><tr><th className="text-left py-2">#</th><th className="text-left py-2">Titre</th><th className="text-left py-2">Membres</th><th className="text-left py-2">Priorité</th><th className="text-left py-2">Date fin</th><th className="text-left py-2">Actions</th></tr></thead>
+                        <thead className="text-gray-500 border-b">
+                          <tr><th className="text-left py-2">#</th><th className="text-left py-2">Titre</th><th className="text-left py-2">Membres</th><th className="text-left py-2">Priorité</th><th className="text-left py-2">Date fin</th><th className="text-left py-2">Actions</th></tr>
+                        </thead>
                         <tbody>
-                          {(tasks as Task[]).map(task => (
+                          {tasks.map(task => (
                             <React.Fragment key={task.id}>
                               <tr className="border-b border-gray-100 hover:bg-gray-50">
                                 <td className="py-2">{task.id}</td>
-                                <td className="py-2 font-medium"><button onClick={() => toggleTaskExpand(task.id)} className="flex items-center gap-1 hover:text-secondary">{expandedTasks[task.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}{task.title}</button></td>
-                                <td className="py-2"><div className="flex -space-x-2">{task.assignees.map(a => <div key={a.id} className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold border-2 border-white">{a.name.charAt(0)}</div>)}</div></td>
-                                <td className="py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>{priorityLabels[task.priority]}</span></td>
+                                <td className="py-2 font-medium">
+                                  <button onClick={() => toggleTaskExpand(task.id)} className="flex items-center gap-1 hover:text-secondary">
+                                    {expandedTasks[task.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                    {task.title}
+                                  </button>
+                                </td>
+                                <td className="py-2">
+                                  <div className="flex -space-x-2">
+                                    {task.assignees.map(a => (
+                                      <div key={a.id} className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold border-2 border-white">
+                                        {a.name.charAt(0)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="py-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>
+                                    {priorityLabels[task.priority]}
+                                  </span>
+                                </td>
                                 <td className="py-2 text-gray-500">{task.dueDate}</td>
                                 <td className="py-2">
                                   <div className="relative group">
@@ -243,7 +262,18 @@ export default function CenterContent() {
                                 </td>
                               </tr>
                               {expandedTasks[task.id] && task.subTasks && task.subTasks.length > 0 && (
-                                <tr className="bg-gray-50"><td colSpan={6} className="py-2 pl-8"><div className="space-y-1">{task.subTasks.map(sub => <div key={sub.id} className="flex items-center gap-2 cursor-pointer group" onClick={() => toggleSubTask(task.id, sub.id)}>{sub.completed ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Circle className="h-4 w-4 text-gray-300 group-hover:text-gray-400" />}<span className={`text-xs ${sub.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{sub.text}</span></div>)}</div></td></tr>
+                                <tr className="bg-gray-50">
+                                  <td colSpan={6} className="py-2 pl-8">
+                                    <div className="space-y-1">
+                                      {task.subTasks.map(sub => (
+                                        <div key={sub.id} className="flex items-center gap-2 cursor-pointer group" onClick={() => toggleSubTask(task.id, sub.id)}>
+                                          {sub.completed ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Circle className="h-4 w-4 text-gray-300 group-hover:text-gray-400" />}
+                                          <span className={`text-xs ${sub.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{sub.text}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
                             </React.Fragment>
                           ))}
@@ -271,7 +301,7 @@ export default function CenterContent() {
       {activeTab === 'gantt' && <GanttView tasks={tasks} />}
       {activeTab === 'membres' && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {workspace?.members.map(m => <Card key={m.id} className="flex items-center gap-3 p-4"><div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center font-bold">{m.name.charAt(0)}</div><div><p className="font-medium">{m.name}</p><p className="text-sm text-gray-500">{m.email}</p><p className="text-xs text-gray-400">Rôle : {m.role}</p></div></Card>)}
+          {workspace?.membres.map(m => <Card key={m.id} className="flex items-center gap-3 p-4"><div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center font-bold">{m.name.charAt(0)}</div><div><p className="font-medium">{m.name}</p><p className="text-sm text-gray-500">{m.email}</p><p className="text-xs text-gray-400">Rôle : {m.role}</p></div></Card>)}
         </div>
       )}
 
@@ -286,7 +316,7 @@ export default function CenterContent() {
           <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} className="w-full p-2 border rounded-lg" />
           <select value={taskForm.assigneeId} onChange={e => setTaskForm({...taskForm, assigneeId: e.target.value})} className="w-full p-2 border rounded-lg">
             <option value="">Non assigné</option>
-            {workspace?.members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {workspace?.membres.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setIsTaskModalOpen(false)}>Annuler</Button><Button onClick={handleTaskSubmit}>{editingTask ? "Enregistrer" : "Créer"}</Button></div>
         </div>

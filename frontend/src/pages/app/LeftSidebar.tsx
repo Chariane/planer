@@ -5,14 +5,14 @@ import { useApp } from '../../contexts/AppContext';
 
 interface SpaceNode {
   id: string;
-  name: string;
+  nom: string;
   description: string;
-  spaces?: SpaceNode[];
-  lists: { id: string; name: string }[];
+  sous_espaces?: SpaceNode[];
+  listes: { id: string; nom: string }[];
 }
 
 function renderSpaceTree(
-  spaces: SpaceNode[],
+  espaces: SpaceNode[],
   workspaceId: string,
   spaceId: string | undefined,
   listId: string | undefined,
@@ -20,7 +20,7 @@ function renderSpaceTree(
   toggleSpace: (id: string) => void,
   depth: number = 0
 ) {
-  return spaces.map(space => (
+  return espaces.map(space => (
     <div key={space.id} className={`ml-${depth * 4}`}>
       <div className="flex items-center justify-between">
         <Link
@@ -30,9 +30,9 @@ function renderSpaceTree(
           }`}
         >
           <FolderKanban className="h-4 w-4" />
-          {space.name}
+          {space.nom}
         </Link>
-        {(space.spaces?.length > 0 || space.lists.length > 0) && (
+        {(space.sous_espaces?.length > 0 || space.listes.length > 0) && (
           <button onClick={() => toggleSpace(space.id)} className="p-1 text-gray-400 hover:text-gray-600">
             {openSpaces[space.id] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
@@ -41,8 +41,8 @@ function renderSpaceTree(
       </div>
       {openSpaces[space.id] && (
         <div className="ml-6 space-y-0.5">
-          {space.spaces && renderSpaceTree(space.spaces, workspaceId, spaceId, listId, openSpaces, toggleSpace, depth + 1)}
-          {space.lists.map(list => (
+          {space.sous_espaces && renderSpaceTree(space.sous_espaces, workspaceId, spaceId, listId, openSpaces, toggleSpace, depth + 1)}
+          {space.listes.map(list => (
             <Link
               key={list.id}
               to={`/workspace/${workspaceId}/${space.id}/${list.id}`}
@@ -50,7 +50,7 @@ function renderSpaceTree(
                 listId === list.id ? 'bg-gray-100 text-gray-900 font-medium' : 'hover:bg-gray-50'
               }`}
             >
-              {list.name}
+              {list.nom}
             </Link>
           ))}
         </div>
@@ -80,7 +80,7 @@ export default function LeftSidebar() {
         >
           <option value="">Choisir un environnement</option>
           {workspaces.map(ws => (
-            <option key={ws.id} value={ws.id}>{ws.name}</option>
+            <option key={ws.id} value={ws.id}>{ws.nom}</option>
           ))}
         </select>
       </div>
@@ -98,7 +98,7 @@ export default function LeftSidebar() {
         <div className="mt-4 px-2">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2">Espaces et listes</h3>
           <div className="mt-2 space-y-1 max-h-[40vh] md:max-h-none overflow-y-auto">
-            {renderSpaceTree(workspace.spaces, workspaceId!, spaceId, listId, openSpaces, toggleSpace)}
+            {renderSpaceTree(workspace.espaces, workspaceId!, spaceId, listId, openSpaces, toggleSpace)}
           </div>
         </div>
       )}

@@ -7,14 +7,14 @@ export default function TopBar() {
   const { workspaceId, spaceId, listId } = useParams();
   const { workspaces } = useApp();
   const workspace = workspaces.find(w => w.id === workspaceId);
-  const space = workspace?.spaces.find(s => s.id === spaceId);
-  const list = space?.lists.find(l => l.id === listId);
+  const space = workspace?.espaces.find(s => s.id === spaceId);
+  const list = space?.listes.find(l => l.id === listId);
 
   const breadcrumb = [
     { name: 'Dashboard', path: '/dashboard' },
-    ...(workspace ? [{ name: workspace.name, path: `/workspace/${workspace.id}` }] : []),
-    ...(space ? [{ name: space.name, path: `/workspace/${workspaceId}/${space.id}` }] : []),
-    ...(list ? [{ name: list.name, path: `/workspace/${workspaceId}/${spaceId}/${list.id}` }] : []),
+    ...(workspace ? [{ name: workspace.nom, path: `/workspace/${workspace.id}` }] : []),
+    ...(space ? [{ name: space.nom, path: `/workspace/${workspaceId}/${space.id}` }] : []),
+    ...(list ? [{ name: list.nom, path: `/workspace/${workspaceId}/${spaceId}/${list.id}` }] : []),
   ];
 
   return (

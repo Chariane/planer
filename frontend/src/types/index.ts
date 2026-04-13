@@ -1,11 +1,3 @@
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  role: 'admin' | 'member' | 'guest';
-}
-
 export interface Member {
   id: string;
   name: string;
@@ -13,83 +5,57 @@ export interface Member {
   role: 'admin' | 'member';
 }
 
-export interface Workspace {
-  id: string;
-  name: string;
-  description: string;
-  members: Member[];
-  createdAt: Date;
-}
-
-export interface Space {
-  id: string;
-  name: string;
-  description: string;
-  workspaceId: string;
-  createdAt: Date;
-}
-
-export interface List {
-  id: string;
-  name: string;
-  description: string;
-  workspaceId: string;
-  spaceId?: string;
-  globalChecklistSections: ChecklistSection[];
-  createdAt: Date;
-}
-
-export interface ChecklistSection {
-  id: string;
-  title: string;
-  items: ChecklistItem[];
-}
-
 export interface ChecklistItem {
   id: string;
-  content: string;
-  checked: boolean;
+  text: string;
+  completed: boolean;
 }
 
 export interface Task {
   id: string;
   title: string;
-  description: string;
-  status: 'todo' | 'in-progress' | 'done' | 'blocked';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  dueDate: Date | null;
-  assigneeId: string | null;
+  description?: string;
+  status: 'en_cours' | 'en_attente' | 'terminee' | 'bloquee' | 'archivee';
+  priority: 'tres_elevee' | 'elevee' | 'normale' | 'faible' | 'tres_faible';
+  dueDate: string;
+  assignees: Member[];
   listId: string;
-  checklists: ChecklistItem[];
-  attachments: Attachment[];
+  createdAt: Date;
+  subTasks?: ChecklistItem[];
+}
+
+export interface Period {
+  id: string;
+  name: string;
+  progress: number;
+  expanded?: boolean;
+  children?: Period[];
+  items?: ChecklistItem[];
+}
+
+export interface List {
+  id: string;
+  nom: string;
+  description: string;
+  taches: Task[];
+  periods?: Period[];
   createdAt: Date;
 }
 
-export interface Attachment {
+export interface Space {
   id: string;
-  name: string;
-  url: string;
-  type: 'image' | 'pdf' | 'other';
-  uploadedBy: string;
+  nom: string;
+  description: string;
+  sous_espaces?: Space[];
+  listes: List[];
+  createdAt: Date;
 }
 
-export interface Absence {
+export interface Workspace {
   id: string;
-  userId: string;
-  startDate: Date;
-  endDate: Date;
-  type: 'vacation' | 'sick' | 'other';
-  status: 'pending' | 'approved' | 'rejected';
-  reason: string;
-}
-
-export interface Report {
-  id: string;
-  userId: string;
-  listId: string;
-  content: string;
-  achievements: string;
-  difficulties: string;
-  solutions: string;
+  nom: string;
+  description: string;
+  membres: Member[];
+  espaces: Space[];
   createdAt: Date;
 }

@@ -1,25 +1,37 @@
-# api_gateway/databases.py
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from dotenv import dotenv_values, load_dotenv
-dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-# Charge le .env
+from dotenv import load_dotenv
 
-load_dotenv(dotenv_path)
+load_dotenv()
 
-config_data = dotenv_values(dotenv_path)
-
-ENV = config_data.get('ENV')
-if ENV == 'Prod':
-    DATABASE_URL = f"postgresql+psycopg2://{config_data.get('DB_USER_PROD')}:{config_data.get('DB_PASSWORD_PROD')}@{config_data.get('DB_HOST_PROD')}:{config_data.get('DB_PORT_PROD')}/{config_data.get('DB_NAME_PROD')}"
+ENV = os.getenv("ENV", "Dev")
+if ENV == "Prod":
+    DB_USER = os.getenv("DB_USER_PROD")
+    DB_PASSWORD = os.getenv("DB_PASSWORD_PROD")
+    DB_HOST = os.getenv("DB_HOST_PROD")
+    DB_PORT = os.getenv("DB_PORT_PROD")
+    DB_NAME = os.getenv("DB_NAME_PROD")
 else:
-    DATABASE_URL = f"postgresql+psycopg2://{config_data.get('DB_USER')}:{config_data.get('DB_PASSWORD')}@{config_data.get('DB_HOST')}:{config_data.get('DB_PORT')}/{config_data.get('DB_NAME')}"
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_NAME = os.getenv("DB_NAME")
 
-engine = create_engine(DATABASE_URL)
+# Convertir le port en entier (si None, mettre 5432)
+try:
+    port_int = int(DB_PORT) if DB_PORT else 5432
+except ValueError:
+    port_int = 5432
+
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{port_int}/{DB_NAME}"
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 def get_db():
     db = SessionLocal()
     try:
