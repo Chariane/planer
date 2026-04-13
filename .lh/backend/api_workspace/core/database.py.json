@@ -1,0 +1,30 @@
+{
+    "sourceFile": "backend/api_workspace/core/database.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 3,
+            "patches": [
+                {
+                    "date": 1776072293050,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1776072303585,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,5 +1,5 @@\n-# api_gateway/databases.py\r\n+\r\n import os\r\n from sqlalchemy import create_engine\r\n from sqlalchemy.orm import sessionmaker\r\n from sqlalchemy.ext.declarative import declarative_base\r\n"
+                },
+                {
+                    "date": 1776072312733,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,11 +1,11 @@\n-\r\n import os\r\n from sqlalchemy import create_engine\r\n from sqlalchemy.orm import sessionmaker\r\n from sqlalchemy.ext.declarative import declarative_base\r\n from dotenv import dotenv_values, load_dotenv\r\n dotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\r\n+\r\n # Charge le .env\r\n \r\n load_dotenv(dotenv_path)\r\n \r\n"
+                },
+                {
+                    "date": 1776072325344,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -5,9 +5,8 @@\n from dotenv import dotenv_values, load_dotenv\r\n dotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\r\n \r\n # Charge le .env\r\n-\r\n load_dotenv(dotenv_path)\r\n \r\n config_data = dotenv_values(dotenv_path)\r\n \r\n"
+                }
+            ],
+            "date": 1776072293050,
+            "name": "Commit-0",
+            "content": "# api_gateway/databases.py\r\nimport os\r\nfrom sqlalchemy import create_engine\r\nfrom sqlalchemy.orm import sessionmaker\r\nfrom sqlalchemy.ext.declarative import declarative_base\r\nfrom dotenv import dotenv_values, load_dotenv\r\ndotenv_path = os.path.join(os.path.dirname(__file__), \".env\")\r\n# Charge le .env\r\n\r\nload_dotenv(dotenv_path)\r\n\r\nconfig_data = dotenv_values(dotenv_path)\r\n\r\nENV = config_data.get('ENV')\r\nif ENV == 'Prod':\r\n    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER_PROD')}:{config_data.get('DB_PASSWORD_PROD')}@{config_data.get('DB_HOST_PROD')}:{config_data.get('DB_PORT_PROD')}/{config_data.get('DB_NAME_PROD')}\"\r\nelse:\r\n    DATABASE_URL = f\"postgresql+psycopg2://{config_data.get('DB_USER')}:{config_data.get('DB_PASSWORD')}@{config_data.get('DB_HOST')}:{config_data.get('DB_PORT')}/{config_data.get('DB_NAME')}\"\r\n\r\nengine = create_engine(DATABASE_URL)\r\nSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)\r\nBase = declarative_base()\r\ndef get_db():\r\n    db = SessionLocal()\r\n    try:\r\n        yield db\r\n    finally:\r\n        db.close()\r\n"
+        }
+    ]
+}
