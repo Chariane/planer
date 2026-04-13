@@ -52,22 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('Erreur lors du chargement de l’utilisateur', error);
           localStorage.removeItem('access_token');
           setToken(null);
-          if (import.meta.env.DEV) {
-            setUser({
-              id: 'dev',
-              username: 'Développeur',
-              email: 'dev@kplaner.com',
-            });
-          }
+          setUser(null);
         }
       } else {
-        if (import.meta.env.DEV) {
-          setUser({
-            id: 'dev',
-            username: 'Développeur',
-            email: 'dev@kplaner.com',
-          });
-        }
+        setUser(null);
       }
       setIsLoading(false);
     };
