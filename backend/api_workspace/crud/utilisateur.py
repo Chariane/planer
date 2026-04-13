@@ -1,4 +1,5 @@
 from typing import List, Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from datetime import datetime
@@ -28,8 +29,14 @@ def get_workspaces_for_user(db: Session, user_id: str) -> List[Workspace]:
     return (
         db.query(Workspace)
         .options(joinedload(Workspace.membres))
-        .join(Membre, Workspace.id == Membre.id_workspace)
-        .filter(Membre.id_utilisateur == user_id)
+        .outerjoin(Membre, Workspace.id == Membre.id_workspace)
+        .filter(
+            or_(
+                Workspace.id_utilisateur == user_id,
+                Membre.id_utilisateur == user_id,
+            )
+        )
+        .distinct()
         .order_by(Workspace.created_at.desc())
         .all()
     )

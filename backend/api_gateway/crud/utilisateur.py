@@ -1,21 +1,57 @@
 from typing import Optional, List
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from ..models import Motdepasseoublie, Utilisateur
+from ..models import Membre, Motdepasseoublie, Utilisateur, Workspace
 from ..core.function import commit_or_raise
 
 
+def _build_default_workspace_name(user_data: dict) -> str:
+    full_name = " ".join(
+        part.strip()
+        for part in [user_data.get("prenoms"), user_data.get("nom")]
+        if isinstance(part, str) and part.strip()
+    )
+    owner_name = full_name or user_data.get("username") or "utilisateur"
+    return f"Workspace de {owner_name}"
 
-def create_utilisateur(db: Session, user_data: dict) -> Utilisateur:
-    """Crée un utilisateur en base de données."""
+
+def create_utilisateur(db: Session, user_data: dict) -> tuple[Utilisateur, Workspace]:
+    """Cree un utilisateur avec son workspace personnel par defaut."""
     new_user = Utilisateur(**user_data)
     db.add(new_user)
-    commit_or_raise(
-        db,
-        detail="Impossible de creer l'utilisateur a cause d'une contrainte d'integrite.",
-        refresh_instance=new_user,
-    )
-    return new_user
+
+    try:
+        db.flush()
+
+        default_workspace = Workspace(
+            nom=_build_default_workspace_name(user_data),
+            description="Workspace personnel cree automatiquement a l'inscription.",
+            id_utilisateur=new_user.id,
+        )
+        db.add(default_workspace)
+        db.flush()
+
+        workspace_creator = Membre(
+            id_utilisateur=new_user.id,
+            id_workspace=default_workspace.id,
+            role="Administrateur",
+            statut="Actif",
+        )
+        db.add(workspace_creator)
+
+        db.commit()
+        db.refresh(new_user)
+        db.refresh(default_workspace)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Impossible de creer l'utilisateur et son workspace par defaut a cause d'une contrainte d'integrite.",
+        ) from exc
+
+    return new_user, default_workspace
 
 def get_utilisateur_by_id(db: Session, user_id: str) -> Optional[Utilisateur]:
     return db.query(Utilisateur).filter(Utilisateur.id == user_id).first()

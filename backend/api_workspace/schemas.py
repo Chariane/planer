@@ -77,6 +77,23 @@ class UtilisateurCreate(UtilisateurBase):
             raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
         return value
 
+
+class SuperAdminUtilisateurCreate(UtilisateurBase):
+    password: str
+    is_active: bool = True
+    is_user: bool = True
+    is_admin: bool = False
+    is_super_admin: bool = False
+    is_livreur: bool = False
+    is_entreprise: bool = False
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
+        return value
+
 class UtilisateurUpdate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
@@ -202,6 +219,43 @@ class RegisterResponse(BaseModel):
     user: UtilisateurOut
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=8)
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code de reinitialisation doit contenir exactement 6 chiffres.")
+        return code
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8)
+
+
 class GoogleAuthenticatorSetupResponse(MessageResponse):
     setup_required: bool = True
     is_2fa_enabled: bool = False
@@ -214,6 +268,22 @@ class GoogleAuthenticatorStatusResponse(MessageResponse):
     setup_required: bool
     is_2fa_enabled: bool
     google_auth_configured_at: Optional[datetime] = None
+
+
+class TwoFactorEnableRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code Google Authenticator doit contenir exactement 6 chiffres.")
+        return code
+
+
+class TwoFactorDisableRequest(BaseModel):
+    current_password: str = Field(..., min_length=8)
 
 
 class LoginRequest(BaseModel):
@@ -233,12 +303,12 @@ class LoginRequest(BaseModel):
         return data
 
 
-class LoginChallengeResponse(MessageResponse):
-    requires_2fa: bool = True
-    challenge_token: str
-    setup_required: bool = False
-    google_authenticator_secret: Optional[str] = None
-    google_authenticator_otpauth_url: Optional[str] = None
+class LoginResponse(MessageResponse):
+    requires_2fa: bool = False
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    user: Optional[UtilisateurOut] = None
+    challenge_token: Optional[str] = None
 
 
 class TwoFactorVerifyRequest(BaseModel):
@@ -427,12 +497,6 @@ class WorkspaceOut(WorkspaceBase):
     id_utilisateur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
-
-class WorkspaceWithContextOut(WorkspaceOut):
-    member_count: int = 0
-    current_user_role: Optional[str] = None
-    current_user_statut: Optional[str] = None
-
 class WorkspaceDelete(BaseModel):
     id: str
 
@@ -542,20 +606,6 @@ class MembreOut(MembreBase):
     id_espace: Optional[str] = None
     id_liste: Optional[str] = None
     id_tache: Optional[str] = None
-    model_config = ConfigDict(from_attributes=True)
-
-
-class WorkspaceMemberUserOut(BaseModel):
-    id: str
-    username: str
-    email: EmailStr
-    nom: Optional[str] = None
-    prenoms: Optional[str] = None
-    model_config = ConfigDict(from_attributes=True)
-
-
-class WorkspaceMemberOut(MembreOut):
-    utilisateur: Optional[WorkspaceMemberUserOut] = None
     model_config = ConfigDict(from_attributes=True)
 
 class MembreDelete(BaseModel):

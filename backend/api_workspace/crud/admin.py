@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from .ustilisateur import (
+from .utilisateur import (
     delete_workspace,
     get_all_workspaces,
     get_member,

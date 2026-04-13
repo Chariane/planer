@@ -1,8 +1,6 @@
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..crud.entreprise import (
     create_entreprise,
     delete_entreprise,

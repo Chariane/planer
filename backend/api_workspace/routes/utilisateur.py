@@ -14,8 +14,8 @@ from ..schemas import (
     UtilisateurOut,
 )
 from ..core.security import get_current_user
-from ..crud.ustilisateur import (
-    get_workspace_by_id,
+from ..crud.utilisateur import (
+    get_owned_workspaces,
     get_workspaces_for_user,
     create_workspace,
     update_workspace,
@@ -26,77 +26,15 @@ from ..crud.ustilisateur import (
     update_member_role,
     remove_member_from_workspace
 )
+from ..core.function import (
+    _serialize_member,
+    _serialize_workspace,
+    _get_workspace_member_context,
+    _require_workspace_owner_access,
+)
+
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
-
-WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
-
-
-def _serialize_workspace(workspace, membre=None, member_count=None):
-    effective_member = membre
-    if effective_member is None:
-        effective_member = next(
-            (
-                workspace_member
-                for workspace_member in workspace.membres
-                if workspace_member.id_utilisateur == workspace.id_utilisateur
-            ),
-            None,
-        )
-
-    resolved_member_count = member_count if member_count is not None else len(workspace.membres or [])
-
-    return {
-        "id": workspace.id,
-        "nom": workspace.nom,
-        "description": workspace.description,
-        "created_at": workspace.created_at,
-        "updated_at": workspace.updated_at,
-        "id_utilisateur": workspace.id_utilisateur,
-        "member_count": resolved_member_count,
-        "current_user_role": effective_member.role if effective_member else None,
-        "current_user_statut": effective_member.statut if effective_member else None,
-    }
-
-
-def _serialize_member(membre):
-    utilisateur = membre.utilisateur
-    return {
-        "id": membre.id,
-        "created_at": membre.created_at,
-        "role": membre.role,
-        "statut": membre.statut,
-        "id_utilisateur": membre.id_utilisateur,
-        "id_workspace": membre.id_workspace,
-        "id_espace": membre.id_espace,
-        "id_liste": membre.id_liste,
-        "id_tache": membre.id_tache,
-        "utilisateur": (
-            {
-                "id": utilisateur.id,
-                "username": utilisateur.username,
-                "email": utilisateur.email,
-                "nom": utilisateur.nom,
-                "prenoms": utilisateur.prenoms,
-            }
-            if utilisateur
-            else None
-        ),
-    }
-
-
-def _get_member_or_403(db: Session, workspace_id: str, current_user_id: str):
-    membre = get_member(db, workspace_id, current_user_id)
-    if not membre:
-        raise HTTPException(status_code=403, detail="Acces refuse")
-    return membre
-
-
-def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str):
-    membre = _get_member_or_403(db, workspace_id, current_user_id)
-    if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
-        raise HTTPException(status_code=403, detail="Privileges insuffisants")
-    return membre
 
 
 @router.post("", response_model=WorkspaceWithContextOut, status_code=status.HTTP_201_CREATED)
@@ -115,12 +53,27 @@ def create_workspace_endpoint(
     return _serialize_workspace(new_workspace, membre=membre, member_count=1)
 
 
-@router.get("", response_model=List[WorkspaceWithContextOut])
+@router.get("/all-workspaces", response_model=List[WorkspaceWithContextOut])
 def get_workspaces_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     workspaces = get_workspaces_for_user(db, current_user.id)
+    return [
+        _serialize_workspace(
+            workspace,
+            membre=get_member(db, workspace.id, current_user.id),
+        )
+        for workspace in workspaces
+    ]
+
+
+@router.get("/my-workspaces", response_model=List[WorkspaceWithContextOut])
+def get_owned_workspaces_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user)
+):
+    workspaces = get_owned_workspaces(db, current_user.id)
     return [
         _serialize_workspace(
             workspace,
@@ -136,10 +89,7 @@ def get_workspace_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
-    membre = _get_member_or_403(db, workspace_id, current_user.id)
+    workspace, membre = _get_workspace_member_context(db, workspace_id, current_user.id)
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -150,10 +100,8 @@ def update_workspace_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    membre = _require_workspace_management_access(db, workspace_id, current_user.id)
+    workspace, membre = _require_workspace_owner_access(db, workspace_id, current_user.id)
     workspace = update_workspace(db, workspace_id, workspace_in)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -163,9 +111,7 @@ def delete_workspace_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    membre = _get_member_or_403(db, workspace_id, current_user.id)
-    if membre.role != "Créateur":
-        raise HTTPException(status_code=403, detail="Seul le createur peut supprimer le workspace")
+    _require_workspace_owner_access(db, workspace_id, current_user.id)
     if not delete_workspace(db, workspace_id):
         raise HTTPException(status_code=404, detail="Workspace non trouve")
     return None
@@ -178,10 +124,7 @@ def invite_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_owner_access(db, workspace_id, current_user.id)
     from ..models import Utilisateur
     target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
     if not target_user:
@@ -208,7 +151,7 @@ def get_members_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _get_member_or_403(db, workspace_id, current_user.id)
+    _get_workspace_member_context(db, workspace_id, current_user.id)
     members = get_members_of_workspace(db, workspace_id)
     return [_serialize_member(member) for member in members]
 
@@ -221,7 +164,7 @@ def update_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_owner_access(db, workspace_id, current_user.id)
     target_membre = get_member(db, workspace_id, user_id)
     if not target_membre:
         raise HTTPException(status_code=404, detail="Membre cible non trouve")
@@ -238,7 +181,7 @@ def remove_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_owner_access(db, workspace_id, current_user.id)
     if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous retirer vous-meme")
     target_membre = get_member(db, workspace_id, user_id)
@@ -257,5 +200,9 @@ def get_my_role_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    membre = _get_member_or_403(db, workspace_id, current_user.id)
-    return {"role": membre.role, "statut": membre.statut}
+    workspace, membre = _get_workspace_member_context(db, workspace_id, current_user.id)
+    if membre:
+        return {"role": membre.role, "statut": membre.statut}
+    if workspace.id_utilisateur == current_user.id:
+        return {"role": "Créateur", "statut": "Actif"}
+    raise HTTPException(status_code=403, detail="Acces refuse")

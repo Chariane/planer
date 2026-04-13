@@ -497,6 +497,12 @@ class WorkspaceOut(WorkspaceBase):
     id_utilisateur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+
+class RegisterWithWorkspaceResponse(BaseModel):
+    message: str
+    user: UtilisateurOut
+    workspace: WorkspaceOut
+
 class WorkspaceDelete(BaseModel):
     id: str
 

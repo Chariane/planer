@@ -9,7 +9,7 @@ from ..core.function import (
     ensure_unique_user_identity_fields,
     validate_admin_password_update,
 )
-from ..core.security import get_password_hash, get_current_admin, get_current_super_admin
+from ..core.security import get_password_hash, get_current_admin
 from ..schemas import UtilisateurOut, UtilisateurUpdate, UserRolesUpdate
 from ..crud.utilisateur import (
     get_all_utilisateurs,
@@ -130,21 +130,3 @@ def deactivate_user(
     updated_user = update_utilisateur(db, user_id, {"is_active": False, "statut": "Suspendu"})
     return updated_user
 
-@router.put("/users/{user_id}/roles", response_model=UtilisateurOut)
-def update_user_roles(
-    user_id: str,
-    roles: UserRolesUpdate,
-    db: Session = Depends(get_db),
-    current_super_admin: UtilisateurOut = Depends(get_current_super_admin)
-):
-    db_user = get_utilisateur_by_id(db, user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    update_data = roles.model_dump(exclude_unset=True)
-    
-    if not update_data:
-        raise HTTPException(status_code=400, detail="Aucun champ de rôle fourni")
-    
-    updated_user = update_utilisateur(db, user_id, update_data)
-    return updated_user

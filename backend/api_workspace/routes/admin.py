@@ -1,8 +1,6 @@
 from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..core.database import get_db
 from ..core.security import get_current_admin
 from ..crud.admin import (

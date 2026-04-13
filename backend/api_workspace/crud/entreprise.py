@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from .ustilisateur import (
+from .utilisateur import (
     add_member_to_workspace,
     get_member,
     get_members_of_workspace,

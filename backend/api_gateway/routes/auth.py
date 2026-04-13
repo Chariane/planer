@@ -26,7 +26,6 @@ from ..core.function import (
     verify_google_authenticator_code,
 )
 from ..core.security import (
-    decode_token,
     get_password_hash,
     verify_password,
     create_access_token,
@@ -45,7 +44,7 @@ from ..schemas import (
     LoginResponse,
     LoginRequest,
     MessageResponse,
-    RegisterResponse,
+    RegisterWithWorkspaceResponse,
     ResetPasswordRequest,
     Token,
     TwoFactorDisableRequest,
@@ -64,11 +63,12 @@ from ..crud.utilisateur import (
     get_password_reset_request_by_email_and_code,
     update_utilisateur,
 )
+from ..core.function import decode_token
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterWithWorkspaceResponse, status_code=status.HTTP_201_CREATED)
 def register(
     user: UtilisateurCreate,
     background_tasks: BackgroundTasks,
@@ -83,7 +83,7 @@ def register(
     user_data.update(build_email_verification_metadata())
 
     # Créer l'utilisateur
-    new_user = create_utilisateur(db, user_data)
+    new_user, default_workspace = create_utilisateur(db, user_data)
 
     background_tasks.add_task(
         send_verification_email,
@@ -94,6 +94,7 @@ def register(
     return {
         "message": "Compte cree. Un code de verification email a ete envoye.",
         "user": new_user,
+        "workspace": default_workspace,
     }
 
 

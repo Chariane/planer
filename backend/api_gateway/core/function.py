@@ -5,14 +5,41 @@ import string
 import struct
 import time
 import secrets
+import logging
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from dotenv import dotenv_values
 from urllib.parse import quote
 from ..models import Utilisateur
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
 
+lodotenv = dotenv_values(".env")
+
+# -----------------------------
+# Configuration
+# -----------------------------
+config_data = dotenv_values(".env")
+SECRET_KEY = config_data.get("SECRET_KEY")
+ALGORITHM = config_data.get("ALGORITHM")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/routers/auth/token")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def _require_secret_key() -> str:
+    if not SECRET_KEY:
+        raise RuntimeError("SECRET_KEY non défini dans le fichier .env")
+    return SECRET_KEY
 
 def ensure_unique_user_identity_fields(
     db: Session,
@@ -231,3 +258,12 @@ def commit_or_raise(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+def decode_token(token: str, expected_purpose: Optional[str] = None) -> dict:
+    secret_key = _require_secret_key()
+
+    payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
+    token_purpose = payload.get("purpose", "access")
+    if expected_purpose and token_purpose != expected_purpose:
+        raise JWTError(f"Jeton invalide pour l'usage attendu: {expected_purpose}")
+    return payload

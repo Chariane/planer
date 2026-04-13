@@ -1,0 +1,22 @@
+{
+    "sourceFile": "backend/api_workspace/crud/entreprise.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1776084169224,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1776084765745,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,7 +1,7 @@\n from typing import List, Optional\n from sqlalchemy.orm import Session\n-from .utilisateur import (\n+from .ustilisateur import (\n     add_member_to_workspace,\n     get_member,\n     get_members_of_workspace,\n     get_owned_workspaces,\n"
+                }
+            ],
+            "date": 1776084169224,
+            "name": "Commit-0",
+            "content": "from typing import List, Optional\nfrom sqlalchemy.orm import Session\nfrom .utilisateur import (\n    add_member_to_workspace,\n    get_member,\n    get_members_of_workspace,\n    get_owned_workspaces,\n    get_workspace_by_id,\n    remove_member_from_workspace,\n    update_member_role,\n)\nfrom ..models import Membre, Workspace\nfrom ..schemas import MembreUpdate, WorkspaceMemberInvite\n\n\ndef get_entreprise_workspaces(db: Session, entreprise_user_id: str) -> List[Workspace]:\n    return get_owned_workspaces(db, entreprise_user_id)\n\n\ndef get_entreprise_workspace(db: Session, entreprise_user_id: str, workspace_id: str) -> Optional[Workspace]:\n    workspace = get_workspace_by_id(db, workspace_id)\n    if not workspace or workspace.id_utilisateur != entreprise_user_id:\n        return None\n    return workspace\n\n\ndef get_entreprise_workspace_members(\n    db: Session,\n    entreprise_user_id: str,\n    workspace_id: str,\n) -> Optional[List[Membre]]:\n    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)\n    if not workspace:\n        return None\n    return get_members_of_workspace(db, workspace_id)\n\n\ndef invite_member_for_entreprise_workspace(\n    db: Session,\n    entreprise_user_id: str,\n    workspace_id: str,\n    membre_in: WorkspaceMemberInvite,\n) -> Optional[Membre]:\n    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)\n    if not workspace:\n        return None\n    return add_member_to_workspace(db, workspace_id, membre_in)\n\n\ndef update_member_for_entreprise_workspace(\n    db: Session,\n    entreprise_user_id: str,\n    workspace_id: str,\n    user_id: str,\n    membre_in: MembreUpdate,\n) -> Optional[Membre]:\n    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)\n    if not workspace:\n        return None\n    return update_member_role(db, workspace_id, user_id, membre_in)\n\n\ndef remove_member_for_entreprise_workspace(\n    db: Session,\n    entreprise_user_id: str,\n    workspace_id: str,\n    user_id: str,\n) -> Optional[bool]:\n    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)\n    if not workspace:\n        return None\n    return remove_member_from_workspace(db, workspace_id, user_id)\n\n\ndef get_member_for_entreprise_workspace(\n    db: Session,\n    entreprise_user_id: str,\n    workspace_id: str,\n    user_id: str,\n) -> Optional[Membre]:\n    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)\n    if not workspace:\n        return None\n    return get_member(db, workspace_id, user_id)\n"
+        }
+    ]
+}

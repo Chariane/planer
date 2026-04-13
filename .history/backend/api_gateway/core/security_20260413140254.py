@@ -1,0 +1,212 @@
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+from ..models import Utilisateur, Membre
+from ..schemas import UtilisateurOut
+from .database import get_db
+
+# -----------------------------
+# Chargement des variables d'environnement
+# -----------------------------
+# Chemin absolu vers le fichier .env du module api_gateway
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(base_dir, ".env")
+load_dotenv(env_path)
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM") or "HS256"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def _get_access_token_expire_minutes() -> int:
+    raw_value = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
+    if raw_value in (None, ""):
+        return 30
+
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "ACCESS_TOKEN_EXPIRE_MINUTES invalide (%r). Valeur par defaut 30 minutes appliquee.",
+            raw_value,
+        )
+        return 30
+
+
+ACCESS_TOKEN_EXPIRE_MINUTES = _get_access_token_expire_minutes()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Note : l'URL doit correspondre au endpoint de login défini dans routes/auth.py
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+def _require_secret_key() -> str:
+    if not SECRET_KEY:
+        raise RuntimeError("SECRET_KEY non défini dans le fichier .env")
+    return SECRET_KEY
+
+# -----------------------------
+# Blacklist des tokens (simple en mémoire)
+# -----------------------------
+token_blacklist = set()
+
+def add_to_blacklist(token: str):
+    token_blacklist.add(token)
+    logger.info(f"Token ajouté à la blacklist")
+
+def is_token_blacklisted(token: str) -> bool:
+    return token in token_blacklist
+
+
+def logout_user(token: str) -> None:
+    add_to_blacklist(token)
+
+# -----------------------------
+# Fonctions de hash et vérification
+# -----------------------------
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+# -----------------------------
+# Création et validation du token JWT
+# -----------------------------
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    secret_key = _require_secret_key()
+    to_encode = data.copy()
+    to_encode.setdefault("purpose", "access")
+    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def decode_token(token: str, expected_purpose: Optional[str] = None) -> dict:
+    secret_key = _require_secret_key()
+
+    payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
+    token_purpose = payload.get("purpose", "access")
+    if expected_purpose and token_purpose != expected_purpose:
+        raise JWTError(f"Jeton invalide pour l'usage attendu: {expected_purpose}")
+    return payload
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UtilisateurOut:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Impossible de valider les informations d'identification",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    if is_token_blacklisted(token):
+        logger.warning("Tentative d'utilisation d'un token blacklisté")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expirée. Veuillez vous reconnecter.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    try:
+        payload = decode_token(token, expected_purpose="access")
+        user_id: Optional[str] = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+            
+        exp = payload.get("exp")
+        if exp and datetime.utcnow() > datetime.fromtimestamp(exp):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expiré",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+    except JWTError as e:
+        logger.error(f"Erreur JWT: {e}")
+        raise credentials_exception
+
+    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé")
+
+    return UtilisateurOut.model_validate(user)
+
+# -----------------------------
+# Dépendances pour les rôles
+# -----------------------------
+async def get_current_active_user(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Utilisateur inactif. Veuillez contacter un administrateur."
+        )
+    return current_user
+
+async def get_current_admin(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite les privilèges d'administrateur."
+        )
+    return current_user
+
+async def get_current_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_livreur:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite les privilèges de livreur."
+        )
+    return current_user
+
+async def get_current_active_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Utilisateur inactif."
+        )
+    if not current_user.is_livreur:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite les privilèges de livreur."
+        )
+    return current_user
+
+async def get_current_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_entreprise:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite le statut de gérant d'entreprise."
+        )
+    return current_user
+
+async def get_current_active_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Utilisateur inactif."
+        )
+    if not current_user.is_entreprise:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite le statut de gérant d'entreprise."
+        )
+    return current_user
+
+async def get_current_super_admin(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Opération non autorisée. Nécessite les privilèges de super administrateur."
+        )
+    return current_user
+

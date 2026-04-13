@@ -1,0 +1,22 @@
+{
+    "sourceFile": "backend/api_workspace/crud/admin.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1776084169218,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1776084765744,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,9 +1,9 @@\n from typing import List, Optional\n \n from sqlalchemy.orm import Session\n \n-from .utilisateur import (\n+from .ustilisateur import (\n     delete_workspace,\n     get_all_workspaces,\n     get_member,\n     get_members_of_workspace,\n"
+                }
+            ],
+            "date": 1776084169218,
+            "name": "Commit-0",
+            "content": "from typing import List, Optional\n\nfrom sqlalchemy.orm import Session\n\nfrom .utilisateur import (\n    delete_workspace,\n    get_all_workspaces,\n    get_member,\n    get_members_of_workspace,\n    get_workspace_by_id,\n    remove_member_from_workspace,\n    update_member_role,\n)\nfrom ..models import Membre, Workspace\nfrom ..schemas import MembreUpdate\n\n\ndef get_admin_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Workspace]:\n    return get_all_workspaces(db, skip=skip, limit=limit)\n\n\ndef get_admin_workspace(db: Session, workspace_id: str) -> Optional[Workspace]:\n    return get_workspace_by_id(db, workspace_id)\n\n\ndef get_admin_workspace_members(db: Session, workspace_id: str) -> Optional[List[Membre]]:\n    workspace = get_workspace_by_id(db, workspace_id)\n    if not workspace:\n        return None\n    return get_members_of_workspace(db, workspace_id)\n\n\ndef update_admin_workspace_member(\n    db: Session,\n    workspace_id: str,\n    user_id: str,\n    membre_in: MembreUpdate,\n) -> Optional[Membre]:\n    workspace = get_workspace_by_id(db, workspace_id)\n    if not workspace:\n        return None\n    return update_member_role(db, workspace_id, user_id, membre_in)\n\n\ndef remove_admin_workspace_member(db: Session, workspace_id: str, user_id: str) -> Optional[bool]:\n    workspace = get_workspace_by_id(db, workspace_id)\n    if not workspace:\n        return None\n    return remove_member_from_workspace(db, workspace_id, user_id)\n\n\ndef delete_admin_workspace(db: Session, workspace_id: str) -> bool:\n    return delete_workspace(db, workspace_id)\n\n\ndef get_admin_workspace_member(db: Session, workspace_id: str, user_id: str) -> Optional[Membre]:\n    workspace = get_workspace_by_id(db, workspace_id)\n    if not workspace:\n        return None\n    return get_member(db, workspace_id, user_id)\n"
+        }
+    ]
+}
