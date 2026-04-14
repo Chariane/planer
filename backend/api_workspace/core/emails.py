@@ -21,6 +21,7 @@ conf = ConnectionConfig(
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
+front_workspace_invitation_url = config_data.get("FRONT_WORKSPACE_INVITATION_URL", "/workspace-invitations/accept")
 
 
 
@@ -187,6 +188,57 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
         recipients=email,  # Liste des destinataires. Ici, un seul.
         body=template,
         subtype=MessageType.html
+    )
+
+    the_email = FastMail(conf)
+    await the_email.send_message(message=message)
+
+    return token
+
+
+async def send_workspace_invitation_email(
+    inviter_username: str,
+    invited_username: str,
+    email: EmailSchema,
+    workspace_name: str,
+    role: str,
+    token: str,
+):
+    invitation_link = f"{front_base_url}{front_workspace_invitation_url}?token={token}"
+    template = f"""
+        <!DOCTYPE html>
+            <html lang="fr">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Invitation Workspace</title>
+            </head>
+            <body style="background-color:#faf4f4;font-family:Arial,sans-serif;">
+                <div style="max-width:600px;margin:auto;padding:20px;">
+                    <div style="background:#ffffff;border-radius:8px;padding:24px;box-shadow:0 0 10px rgba(0,0,0,0.08);">
+                        <h2>Invitation a rejoindre un workspace</h2>
+                        <p>Bonjour <strong>{invited_username}</strong>,</p>
+                        <p><strong>{inviter_username}</strong> vous invite a rejoindre le workspace <strong>{workspace_name}</strong>.</p>
+                        <p>Role propose : <strong>{role}</strong>.</p>
+                        <p>Pour accepter l'invitation, cliquez sur le lien ci-dessous :</p>
+                        <p>
+                            <a href="{invitation_link}" style="background-color:#264a67;color:#ffffff;padding:10px 16px;text-decoration:none;border-radius:4px;">
+                                Accepter l'invitation
+                            </a>
+                        </p>
+                        <p>Si le bouton ne fonctionne pas, utilisez ce token dans l'application :</p>
+                        <p style="font-weight:bold;letter-spacing:1px;">{token}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+    """
+
+    message = MessageSchema(
+        subject="K-Planer - Invitation a rejoindre un workspace",
+        recipients=email.email,
+        body=template,
+        subtype=MessageType.html,
     )
 
     the_email = FastMail(conf)

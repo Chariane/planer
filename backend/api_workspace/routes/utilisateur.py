@@ -1,25 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import timedelta
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func
+
+from ..core.emails import send_workspace_invitation_email
 from ..core.database import get_db
-from ..core.function import can_create_workspace
-from ..schemas import (
-    MembreCreate,WorkspaceCreate,WorkspaceMemberInvite,WorkspaceMemberOut,
-    WorkspaceMemberUpdate,WorkspaceUpdate,WorkspaceWithContextOut,UtilisateurOut,
-)
-from ..core.security import get_current_user
-from ..crud.utilisateur import (
-    get_owned_workspaces,get_workspaces_for_user,create_workspace,
-    update_workspace,delete_workspace,get_member,get_members_of_workspace,add_member_to_workspace,
-    update_member_role,remove_member_from_workspace
-)
 from ..core.function import (
+    _require_workspace_management_access,
+    _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
-    _get_workspace_member_context,
-    _require_workspace_owner_access,
 )
-
+from ..core.security import ALGORITHM, SECRET_KEY, create_access_token, get_current_user
+from ..crud.utilisateur import (
+    accept_workspace_invitation,
+    create_workspace,
+    delete_workspace,
+    get_member,
+    get_workspace_by_id,
+    get_workspaces_for_user,
+    invite_member_to_workspace,
+    update_workspace,
+)
+from ..models import Utilisateur
+from ..schemas import (
+    EmailSchema,
+    UtilisateurOut,
+    WorkspaceCreate,
+    WorkspaceInvitationAcceptRequest,
+    WorkspaceMemberInvite,
+    WorkspaceMemberOut,
+    WorkspaceUpdate,
+    WorkspaceWithContextOut,
+)
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
@@ -28,22 +43,17 @@ router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 def create_workspace_endpoint(
     workspace_in: WorkspaceCreate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    if not can_create_workspace(db, current_user.id):
-        raise HTTPException(
-            status_code=403,
-            detail="Compte non premium: vous avez droit a un seul workspace et un seul espace.",
-        )
-    new_workspace = create_workspace(db, workspace_in, current_user.id)
-    membre = get_member(db, new_workspace.id, current_user.id)
-    return _serialize_workspace(new_workspace, membre=membre, member_count=1)
+    workspace = create_workspace(db, workspace_in, current_user.id)
+    membre = get_member(db, workspace.id, current_user.id)
+    return _serialize_workspace(workspace, membre=membre, member_count=1)
 
 
-@router.get("/all-workspaces", response_model=List[WorkspaceWithContextOut])
-def get_workspaces_endpoint(
+@router.get("", response_model=list[WorkspaceWithContextOut])
+def list_my_and_joined_workspaces_endpoint(
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
     workspaces = get_workspaces_for_user(db, current_user.id)
     return [
@@ -55,40 +65,17 @@ def get_workspaces_endpoint(
     ]
 
 
-@router.get("/my-workspaces", response_model=List[WorkspaceWithContextOut])
-def get_owned_workspaces_endpoint(
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    workspaces = get_owned_workspaces(db, current_user.id)
-    return [
-        _serialize_workspace(
-            workspace,
-            membre=get_member(db, workspace.id, current_user.id),
-        )
-        for workspace in workspaces
-    ]
-
-
-@router.get("/{workspace_id}", response_model=WorkspaceWithContextOut)
-def get_workspace_endpoint(
-    workspace_id: str,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    workspace, membre = _get_workspace_member_context(db, workspace_id, current_user.id)
-    return _serialize_workspace(workspace, membre=membre)
-
-
 @router.put("/{workspace_id}", response_model=WorkspaceWithContextOut)
 def update_workspace_endpoint(
     workspace_id: str,
     workspace_in: WorkspaceUpdate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    workspace, membre = _require_workspace_owner_access(db, workspace_id, current_user.id)
+    _, membre = _require_workspace_owner_access(db, workspace_id, current_user.id)
     workspace = update_workspace(db, workspace_id, workspace_in)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -96,7 +83,7 @@ def update_workspace_endpoint(
 def delete_workspace_endpoint(
     workspace_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
     _require_workspace_owner_access(db, workspace_id, current_user.id)
     if not delete_workspace(db, workspace_id):
@@ -104,92 +91,90 @@ def delete_workspace_endpoint(
     return None
 
 
-@router.post("/{workspace_id}/invite", response_model=WorkspaceMemberOut)
+@router.post("/{workspace_id}/invite", response_model=WorkspaceMemberOut, status_code=status.HTTP_201_CREATED)
 def invite_member_endpoint(
     workspace_id: str,
     membre_in: WorkspaceMemberInvite,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_owner_access(db, workspace_id, current_user.id)
-    from ..models import Utilisateur
-    target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
+    admin_member = _require_workspace_management_access(db, workspace_id, current_user.id)
+    if admin_member and admin_member.role != "Administrateur":
+        raise HTTPException(
+            status_code=403,
+            detail="Seuls les administrateurs du workspace peuvent envoyer des invitations.",
+        )
+
+    target_user = None
+    if membre_in.email:
+        target_user = (
+            db.query(Utilisateur)
+            .filter(func.lower(Utilisateur.email) == membre_in.email.lower())
+            .first()
+        )
+    elif membre_in.username:
+        target_user = (
+            db.query(Utilisateur)
+            .filter(func.lower(Utilisateur.username) == membre_in.username.lower())
+            .first()
+        )
+
     if not target_user:
         raise HTTPException(status_code=404, detail="Utilisateur invite non trouve")
-    if get_member(db, workspace_id, target_user.id):
-        raise HTTPException(status_code=400, detail="L'utilisateur est deja membre")
-    membership_payload = MembreCreate(
-        id_utilisateur=target_user.id,
-        id_workspace=workspace_id,
-        role=membre_in.role,
-        statut="Actif",
+
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+
+    existing_member = get_member(db, workspace_id, target_user.id)
+    if existing_member and existing_member.statut == "Actif":
+        raise HTTPException(status_code=400, detail="L'utilisateur est deja membre actif de ce workspace")
+
+    membre = invite_member_to_workspace(db, workspace_id, target_user.id, membre_in.role)
+    invitation_token = create_access_token(
+        {
+            "sub": target_user.id,
+            "workspace_id": workspace_id,
+            "scope": "workspace_invitation_accept",
+        },
+        expires_delta=timedelta(days=7),
     )
-    new_membre = add_member_to_workspace(
-        db,
-        workspace_id,
-        membership_payload,
+    background_tasks.add_task(
+        send_workspace_invitation_email,
+        current_user.username,
+        target_user.username,
+        EmailSchema(email=[target_user.email]),
+        workspace.nom,
+        membre_in.role,
+        invitation_token,
     )
-    return _serialize_member(new_membre)
+    return _serialize_member(membre)
 
 
-@router.get("/{workspace_id}/members", response_model=List[WorkspaceMemberOut])
-def get_members_endpoint(
-    workspace_id: str,
+@router.post("/invitations/accept", response_model=WorkspaceMemberOut)
+def accept_workspace_invitation_endpoint(
+    invitation_in: WorkspaceInvitationAcceptRequest,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _get_workspace_member_context(db, workspace_id, current_user.id)
-    members = get_members_of_workspace(db, workspace_id)
-    return [_serialize_member(member) for member in members]
+    try:
+        payload = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail="Invitation invalide ou expiree") from exc
 
+    if payload.get("scope") != "workspace_invitation_accept":
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
 
-@router.put("/{workspace_id}/members/{user_id}", response_model=WorkspaceMemberOut)
-def update_member_endpoint(
-    workspace_id: str,
-    user_id: str,
-    membre_in: WorkspaceMemberUpdate,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    _require_workspace_owner_access(db, workspace_id, current_user.id)
-    target_membre = get_member(db, workspace_id, user_id)
-    if not target_membre:
-        raise HTTPException(status_code=404, detail="Membre cible non trouve")
-    if target_membre.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
-    updated = update_member_role(db, workspace_id, user_id, membre_in)
-    return _serialize_member(updated)
+    invited_user_id = payload.get("sub")
+    workspace_id = payload.get("workspace_id")
+    if not invited_user_id or not workspace_id:
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
 
+    if invited_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cette invitation ne vous est pas destinee")
 
-@router.delete("/{workspace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_member_endpoint(
-    workspace_id: str,
-    user_id: str,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    _require_workspace_owner_access(db, workspace_id, current_user.id)
-    if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous retirer vous-meme")
-    target_membre = get_member(db, workspace_id, user_id)
-    if not target_membre:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_membre.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Le createur du workspace ne peut pas etre supprime")
-    if not remove_member_from_workspace(db, workspace_id, user_id):
-        raise HTTPException(status_code=404, detail="Erreur lors de la suppression")
-    return None
-
-
-@router.get("/{workspace_id}/my-role", response_model=dict)
-def get_my_role_endpoint(
-    workspace_id: str,
-    db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
-):
-    workspace, membre = _get_workspace_member_context(db, workspace_id, current_user.id)
-    if membre:
-        return {"role": membre.role, "statut": membre.statut}
-    if workspace.id_utilisateur == current_user.id:
-        return {"role": "Créateur", "statut": "Actif"}
-    raise HTTPException(status_code=403, detail="Acces refuse")
+    membre = accept_workspace_invitation(db, workspace_id, current_user.id)
+    if not membre:
+        raise HTTPException(status_code=400, detail="Invitation introuvable ou deja traitee")
+    return _serialize_member(membre)

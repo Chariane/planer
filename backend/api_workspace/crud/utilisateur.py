@@ -1,10 +1,21 @@
-from typing import List, Optional
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import joinedload
 from datetime import datetime
+from typing import List, Optional
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise
-from ..models import Membre, Workspace
+from ..models import (
+    AbsenceEtConge,
+    Canevas,
+    Checklist,
+    Espace,
+    Fichier,
+    Liste,
+    Membre,
+    Rapport,
+    Section,
+    Tache,
+    Workspace,
+)
 from ..schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
 
 
@@ -33,7 +44,10 @@ def get_workspaces_for_user(db: Session, user_id: str) -> List[Workspace]:
         .filter(
             or_(
                 Workspace.id_utilisateur == user_id,
-                Membre.id_utilisateur == user_id,
+                and_(
+                    Membre.id_utilisateur == user_id,
+                    Membre.statut == "Actif",
+                ),
             )
         )
         .distinct()
@@ -49,21 +63,18 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
         id_utilisateur=user_id,
     )
     db.add(workspace)
+
     try:
         db.flush()
 
-        createur_in = MembreCreate(
+        owner_member = Membre(
             id_utilisateur=user_id,
             id_workspace=workspace.id,
-            role="Créateur",
+            role="Administrateur",
             statut="Actif",
         )
-        createur_data = createur_in.model_dump(
-            exclude={"id_espace", "id_liste", "id_tache"},
-            exclude_none=True,
-        )
-        createur = Membre(**createur_data)
-        db.add(createur)
+        db.add(owner_member)
+
         commit_or_raise(
             db,
             detail="Impossible de creer le workspace a cause d'une contrainte d'integrite.",
@@ -72,46 +83,181 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
     except Exception:
         db.rollback()
         raise
+
     return workspace
 
 
 def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpdate) -> Optional[Workspace]:
     workspace = get_workspace_by_id(db, workspace_id)
-    if workspace:
-        update_data = workspace_in.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(workspace, key, value)
-        workspace.updated_at = datetime.utcnow()
-        commit_or_raise(
-            db,
-            detail="Impossible de mettre a jour le workspace a cause d'une contrainte d'integrite.",
-            refresh_instance=workspace,
-        )
+    if not workspace:
+        return None
+
+    update_data = workspace_in.model_dump(exclude_unset=True, exclude_none=True)
+    for key, value in update_data.items():
+        setattr(workspace, key, value)
+    workspace.updated_at = datetime.utcnow()
+
+    commit_or_raise(
+        db,
+        detail="Impossible de mettre a jour le workspace a cause d'une contrainte d'integrite.",
+        refresh_instance=workspace,
+    )
     return workspace
+
+
+def _collect_workspace_dependency_ids(db: Session, workspace_id: str) -> dict[str, list[str]]:
+    espace_ids = [
+        espace_id
+        for (espace_id,) in db.query(Espace.id).filter(Espace.id_workspace == workspace_id).all()
+    ]
+
+    liste_ids = [
+        liste_id
+        for (liste_id,) in (
+            db.query(Liste.id)
+            .filter(
+                or_(
+                    Liste.id_workspace == workspace_id,
+                    Liste.id_espace.in_(espace_ids),
+                )
+            )
+            .all()
+        )
+    ]
+
+    tache_ids = [
+        tache_id
+        for (tache_id,) in db.query(Tache.id).filter(Tache.id_liste.in_(liste_ids)).all()
+    ]
+
+    canevas_ids = [
+        canevas_id
+        for (canevas_id,) in db.query(Canevas.id).filter(Canevas.id_liste.in_(liste_ids)).all()
+    ]
+
+    section_ids = [
+        section_id
+        for (section_id,) in db.query(Section.id).filter(Section.id_canevas.in_(canevas_ids)).all()
+    ]
+
+    checklist_ids = [
+        checklist_id
+        for (checklist_id,) in (
+            db.query(Checklist.id)
+            .filter(
+                or_(
+                    Checklist.id_tache.in_(tache_ids),
+                    Checklist.id_section.in_(section_ids),
+                )
+            )
+            .all()
+        )
+    ]
+
+    membre_ids = [
+        membre_id
+        for (membre_id,) in (
+            db.query(Membre.id)
+            .filter(
+                or_(
+                    Membre.id_workspace == workspace_id,
+                    Membre.id_espace.in_(espace_ids),
+                    Membre.id_liste.in_(liste_ids),
+                    Membre.id_tache.in_(tache_ids),
+                )
+            )
+            .all()
+        )
+    ]
+
+    return {
+        "espace_ids": espace_ids,
+        "liste_ids": liste_ids,
+        "tache_ids": tache_ids,
+        "canevas_ids": canevas_ids,
+        "section_ids": section_ids,
+        "checklist_ids": checklist_ids,
+        "membre_ids": membre_ids,
+    }
 
 
 def delete_workspace(db: Session, workspace_id: str) -> bool:
     workspace = get_workspace_by_id(db, workspace_id)
-    if workspace:
-        db.query(Membre).filter(Membre.id_workspace == workspace_id).delete(synchronize_session=False)
-        db.delete(workspace)
-        commit_or_raise(
-            db,
-            detail="Impossible de supprimer le workspace a cause d'une contrainte d'integrite.",
+    if not workspace:
+        return False
+
+    dependency_ids = _collect_workspace_dependency_ids(db, workspace_id)
+
+    if dependency_ids["checklist_ids"]:
+        db.query(Checklist).filter(Checklist.id.in_(dependency_ids["checklist_ids"])).delete(
+            synchronize_session=False
         )
-        return True
-    return False
+
+    if dependency_ids["section_ids"]:
+        db.query(Section).filter(Section.id.in_(dependency_ids["section_ids"])).delete(
+            synchronize_session=False
+        )
+
+    if dependency_ids["canevas_ids"]:
+        db.query(Canevas).filter(Canevas.id.in_(dependency_ids["canevas_ids"])).delete(
+            synchronize_session=False
+        )
+
+    if dependency_ids["membre_ids"]:
+        db.query(Fichier).filter(Fichier.id_membre.in_(dependency_ids["membre_ids"])).delete(
+            synchronize_session=False
+        )
+        db.query(Rapport).filter(Rapport.id_membre.in_(dependency_ids["membre_ids"])).delete(
+            synchronize_session=False
+        )
+        db.query(AbsenceEtConge).filter(
+            AbsenceEtConge.id_membre.in_(dependency_ids["membre_ids"])
+        ).delete(synchronize_session=False)
+        db.query(Membre).filter(Membre.id.in_(dependency_ids["membre_ids"])).delete(
+            synchronize_session=False
+        )
+
+    if dependency_ids["tache_ids"]:
+        db.query(Tache).filter(Tache.id.in_(dependency_ids["tache_ids"])).delete(
+            synchronize_session=False
+        )
+
+    if dependency_ids["liste_ids"]:
+        db.query(Liste).filter(Liste.id.in_(dependency_ids["liste_ids"])).delete(
+            synchronize_session=False
+        )
+
+    if dependency_ids["espace_ids"]:
+        db.query(Espace).filter(Espace.id.in_(dependency_ids["espace_ids"])).delete(
+            synchronize_session=False
+        )
+
+    db.delete(workspace)
+    commit_or_raise(
+        db,
+        detail="Impossible de supprimer le workspace et ses dependances.",
+    )
+    return True
 
 
-def get_member(db: Session, workspace_id: str, user_id: str) -> Optional[Membre]:
-    return (
+def get_member(
+    db: Session,
+    workspace_id: str,
+    user_id: str,
+    *,
+    active_only: bool = False,
+) -> Optional[Membre]:
+    query = (
         db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
         .filter(
             Membre.id_workspace == workspace_id,
             Membre.id_utilisateur == user_id,
         )
-        .first()
     )
+    if active_only:
+        query = query.filter(Membre.statut == "Actif")
+    return query.first()
 
 
 def get_members_of_workspace(db: Session, workspace_id: str) -> List[Membre]:
@@ -124,20 +270,56 @@ def get_members_of_workspace(db: Session, workspace_id: str) -> List[Membre]:
     )
 
 
-def add_member_to_workspace(
-    db: Session,
-    workspace_id: str,
-    membre_in: MembreCreate,
-) -> Membre:
-    membre_data = membre_in.model_dump(exclude_none=True)
+def add_member_to_workspace(db: Session, workspace_id: str, membre_in: MembreCreate) -> Membre:
     membre = Membre(
-        **membre_data,
+        **membre_in.model_dump(exclude_none=True),
         id_workspace=workspace_id,
     )
     db.add(membre)
     commit_or_raise(
         db,
         detail="Impossible d'ajouter ce membre au workspace a cause d'une contrainte d'integrite.",
+        refresh_instance=membre,
+    )
+    return membre
+
+
+def invite_member_to_workspace(db: Session, workspace_id: str, user_id: str, role: str) -> Membre:
+    membre = get_member(db, workspace_id, user_id)
+    if membre:
+        membre.role = role
+        membre.statut = "En attente"
+        commit_or_raise(
+            db,
+            detail="Impossible de mettre cette invitation a jour.",
+            refresh_instance=membre,
+        )
+        return membre
+
+    return add_member_to_workspace(
+        db,
+        workspace_id,
+        MembreCreate(
+            id_utilisateur=user_id,
+            id_workspace=workspace_id,
+            role=role,
+            statut="En attente",
+        ),
+    )
+
+
+def accept_workspace_invitation(db: Session, workspace_id: str, user_id: str) -> Optional[Membre]:
+    membre = get_member(db, workspace_id, user_id)
+    if not membre:
+        return None
+
+    if membre.statut != "En attente":
+        return None
+
+    membre.statut = "Actif"
+    commit_or_raise(
+        db,
+        detail="Impossible d'accepter cette invitation au workspace.",
         refresh_instance=membre,
     )
     return membre
@@ -150,25 +332,34 @@ def update_member_role(
     membre_in: WorkspaceMemberUpdate,
 ) -> Optional[Membre]:
     membre = get_member(db, workspace_id, user_id)
-    if membre:
-        update_data = membre_in.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(membre, key, value)
-        commit_or_raise(
-            db,
-            detail="Impossible de mettre a jour ce membre a cause d'une contrainte d'integrite.",
-            refresh_instance=membre,
-        )
+    if not membre:
+        return None
+
+    update_data = membre_in.model_dump(exclude_unset=True, exclude_none=True)
+    for key, value in update_data.items():
+        setattr(membre, key, value)
+
+    commit_or_raise(
+        db,
+        detail="Impossible de mettre a jour ce membre a cause d'une contrainte d'integrite.",
+        refresh_instance=membre,
+    )
     return membre
 
 
 def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
     membre = get_member(db, workspace_id, user_id)
-    if membre:
-        db.delete(membre)
-        commit_or_raise(
-            db,
-            detail="Impossible de supprimer ce membre a cause d'une contrainte d'integrite.",
-        )
-        return True
-    return False
+    if not membre:
+        return False
+
+    db.query(Fichier).filter(Fichier.id_membre == membre.id).delete(synchronize_session=False)
+    db.query(Rapport).filter(Rapport.id_membre == membre.id).delete(synchronize_session=False)
+    db.query(AbsenceEtConge).filter(AbsenceEtConge.id_membre == membre.id).delete(
+        synchronize_session=False
+    )
+    db.delete(membre)
+    commit_or_raise(
+        db,
+        detail="Impossible de supprimer ce membre du workspace.",
+    )
+    return True

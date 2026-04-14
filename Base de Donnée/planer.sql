@@ -166,7 +166,7 @@ CREATE TABLE planer.tache (
 CREATE TABLE planer.membre (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    role VARCHAR(30) NOT NULL DEFAULT 'Membre',
+    role VARCHAR(30) NOT NULL DEFAULT 'Invité',
     statut VARCHAR(30) NOT NULL DEFAULT 'Actif',
     id_utilisateur VARCHAR(12) REFERENCES public.utilisateur(id) ON DELETE SET NULL,
     id_workspace VARCHAR(12) REFERENCES planer.workspace(id) ON DELETE SET NULL,
@@ -178,8 +178,8 @@ CREATE TABLE planer.membre (
     CONSTRAINT membre_id_espace_fkey FOREIGN KEY (id_espace) REFERENCES planer.espace(id) ON DELETE SET NULL,
     CONSTRAINT membre_id_liste_fkey FOREIGN KEY (id_liste) REFERENCES planer.liste(id) ON DELETE SET NULL,
     CONSTRAINT membre_id_tache_fkey FOREIGN KEY (id_tache) REFERENCES planer.tache(id) ON DELETE SET NULL,
-    CONSTRAINT membre_role_check CHECK (role IN ('Créateur', 'Administrateur', 'Membre', 'Invité')),
-    CONSTRAINT membre_statut_check CHECK (statut IN ('Actif', 'Suspendu', 'Quitté')),
+    CONSTRAINT membre_role_check CHECK (role IN ('Administrateur', 'Membre', 'Invité')),
+    CONSTRAINT membre_statut_check CHECK (statut IN ('Actif', 'En attente', 'Suspendu', 'Quitté')),
     CONSTRAINT membre_cible_unique_check CHECK (num_nonnulls(id_workspace, id_espace, id_liste, id_tache) = 1)
 );
 

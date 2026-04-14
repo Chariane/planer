@@ -1,27 +1,57 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from .utilisateur import (
-    add_member_to_workspace,
+    accept_workspace_invitation,
+    create_workspace,
+    delete_workspace,
     get_member,
     get_members_of_workspace,
-    get_owned_workspaces,
     get_workspace_by_id,
-    remove_member_from_workspace,
-    update_member_role,
+    get_workspaces_for_user,
+    invite_member_to_workspace,
+    update_workspace,
 )
 from ..models import Membre, Workspace
-from ..schemas import MembreUpdate, WorkspaceMemberInvite
-
-
-def get_entreprise_workspaces(db: Session, entreprise_user_id: str) -> List[Workspace]:
-    return get_owned_workspaces(db, entreprise_user_id)
+from ..schemas import WorkspaceCreate, WorkspaceUpdate
 
 
 def get_entreprise_workspace(db: Session, entreprise_user_id: str, workspace_id: str) -> Optional[Workspace]:
     workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace or workspace.id_utilisateur != entreprise_user_id:
+    if not workspace:
         return None
+
+    if workspace.id_utilisateur == entreprise_user_id:
+        return workspace
+
+    membre = get_member(db, workspace_id, entreprise_user_id, active_only=True)
+    if not membre:
+        return None
+
     return workspace
+
+
+def get_entreprise_workspaces(db: Session, entreprise_user_id: str) -> List[Workspace]:
+    return get_workspaces_for_user(db, entreprise_user_id)
+
+
+def create_entreprise_workspace(
+    db: Session,
+    workspace_in: WorkspaceCreate,
+    entreprise_user_id: str,
+) -> Workspace:
+    return create_workspace(db, workspace_in, entreprise_user_id)
+
+
+def update_entreprise_workspace(
+    db: Session,
+    workspace_id: str,
+    workspace_in: WorkspaceUpdate,
+) -> Optional[Workspace]:
+    return update_workspace(db, workspace_id, workspace_in)
+
+
+def delete_entreprise_workspace(db: Session, workspace_id: str) -> bool:
+    return delete_workspace(db, workspace_id)
 
 
 def get_entreprise_workspace_members(
@@ -37,48 +67,16 @@ def get_entreprise_workspace_members(
 
 def invite_member_for_entreprise_workspace(
     db: Session,
-    entreprise_user_id: str,
-    workspace_id: str,
-    membre_in: WorkspaceMemberInvite,
-) -> Optional[Membre]:
-    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
-    if not workspace:
-        return None
-    return add_member_to_workspace(db, workspace_id, membre_in)
-
-
-def update_member_for_entreprise_workspace(
-    db: Session,
-    entreprise_user_id: str,
     workspace_id: str,
     user_id: str,
-    membre_in: MembreUpdate,
-) -> Optional[Membre]:
-    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
-    if not workspace:
-        return None
-    return update_member_role(db, workspace_id, user_id, membre_in)
+    role: str,
+) -> Membre:
+    return invite_member_to_workspace(db, workspace_id, user_id, role)
 
 
-def remove_member_for_entreprise_workspace(
+def accept_entreprise_workspace_invitation(
     db: Session,
-    entreprise_user_id: str,
-    workspace_id: str,
-    user_id: str,
-) -> Optional[bool]:
-    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
-    if not workspace:
-        return None
-    return remove_member_from_workspace(db, workspace_id, user_id)
-
-
-def get_member_for_entreprise_workspace(
-    db: Session,
-    entreprise_user_id: str,
     workspace_id: str,
     user_id: str,
 ) -> Optional[Membre]:
-    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
-    if not workspace:
-        return None
-    return get_member(db, workspace_id, user_id)
+    return accept_workspace_invitation(db, workspace_id, user_id)

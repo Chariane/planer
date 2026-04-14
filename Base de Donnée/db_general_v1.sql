@@ -954,7 +954,7 @@ CREATE TABLE planer.membre (
     id_liste VARCHAR(12) REFERENCES planer.liste(id) ON DELETE SET NULL,
     id_tache VARCHAR(12) REFERENCES planer.tache(id) ON DELETE SET NULL,
     CONSTRAINT membre_role_check CHECK (role IN ('Créateur', 'Administrateur', 'Membre', 'Invité')),
-    CONSTRAINT membre_statut_check CHECK (statut IN ('Actif', 'Suspendu', 'Quitté')),
+    CONSTRAINT membre_statut_check CHECK (statut IN ('Actif', 'En attente', 'Suspendu', 'Quitté')),
     CONSTRAINT membre_cible_unique_check CHECK (num_nonnulls(id_workspace, id_espace, id_liste, id_tache) = 1)
 );
 

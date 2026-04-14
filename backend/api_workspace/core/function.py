@@ -84,7 +84,18 @@ def _serialize_workspace(workspace, membre=None, member_count=None):
             None,
         )
 
-    resolved_member_count = member_count if member_count is not None else len(workspace.membres or [])
+    resolved_member_count = (
+        member_count
+        if member_count is not None
+        else sum(1 for member in (workspace.membres or []) if member.statut == "Actif")
+    )
+
+    current_user_role = effective_member.role if effective_member else None
+    current_user_statut = effective_member.statut if effective_member else None
+
+    if current_user_role is None and workspace.id_utilisateur:
+        current_user_role = "Administrateur"
+        current_user_statut = "Actif"
 
     return {
         "id": workspace.id,
@@ -94,8 +105,8 @@ def _serialize_workspace(workspace, membre=None, member_count=None):
         "updated_at": workspace.updated_at,
         "id_utilisateur": workspace.id_utilisateur,
         "member_count": resolved_member_count,
-        "current_user_role": effective_member.role if effective_member else None,
-        "current_user_statut": effective_member.statut if effective_member else None,
+        "current_user_role": current_user_role,
+        "current_user_statut": current_user_statut,
     }
 
 
@@ -128,7 +139,7 @@ def _serialize_member(membre):
 def _get_member_or_403(db: Session, workspace_id: str, current_user_id: str):
     from ..crud.utilisateur import get_member
 
-    membre = get_member(db, workspace_id, current_user_id)
+    membre = get_member(db, workspace_id, current_user_id, active_only=True)
     if not membre:
         raise HTTPException(status_code=403, detail="Acces refuse")
     return membre
@@ -141,7 +152,7 @@ def _get_workspace_member_context(db: Session, workspace_id: str, current_user_i
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
 
-    membre = get_member(db, workspace_id, current_user_id)
+    membre = get_member(db, workspace_id, current_user_id, active_only=True)
     if membre:
         return workspace, membre
 
@@ -168,6 +179,15 @@ def _require_workspace_owner_access(db: Session, workspace_id: str, current_user
 
 
 def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str):
+    from ..crud.utilisateur import get_member, get_workspace_by_id
+
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+
+    if workspace.id_utilisateur == current_user_id:
+        return get_member(db, workspace_id, current_user_id)
+
     membre = _get_member_or_403(db, workspace_id, current_user_id)
     if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
         raise HTTPException(status_code=403, detail="Privileges insuffisants")

@@ -1546,7 +1546,7 @@ class Membre(Base):
     __table_args__ = (
         PrimaryKeyConstraint('id', name='membre_pkey'),
         CheckConstraint("role::text = ANY (ARRAY['Créateur'::character varying, 'Administrateur'::character varying, 'Membre'::character varying, 'Invité'::character varying]::text[])", name='membre_role_check'),
-        CheckConstraint("statut::text = ANY (ARRAY['Actif'::character varying, 'Suspendu'::character varying, 'Quitté'::character varying]::text[])", name='membre_statut_check'),
+        CheckConstraint("statut::text = ANY (ARRAY['Actif'::character varying, 'En attente'::character varying, 'Suspendu'::character varying, 'Quitté'::character varying]::text[])", name='membre_statut_check'),
         Index('idx_membre_utilisateur', 'id_utilisateur'),
         Index('idx_membre_workspace', 'id_workspace'),
         Index('idx_membre_espace', 'id_espace'),
