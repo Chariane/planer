@@ -30,19 +30,20 @@ def create_liste(db: Session, nom: str, description: str = None, id_espace: str 
         ) from exc
     return liste
 
-def update_liste(db: Session, liste_id: str, nom: str = None, description: str = None, id_espace: str = None, id_workspace: str = None) -> Liste:
+def update_liste(db: Session, liste_id: str, **kwargs) -> Liste:
     liste = get_liste_by_id(db, liste_id)
     if liste:
-        if nom is not None:
-            liste.nom = nom
-        if description is not None:
-            liste.description = description
-        if id_espace is not None:
-            liste.id_espace = id_espace
-        if id_workspace is not None:
-            liste.id_workspace = id_workspace
-        db.commit()
-        db.refresh(liste)
+        for key, value in kwargs.items():
+            setattr(liste, key, value)
+        try:
+            db.commit()
+            db.refresh(liste)
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Impossible de mettre a jour la liste a cause d'une contrainte d'integrite.",
+            ) from exc
     return liste
 
 def delete_liste(db: Session, liste_id: str) -> bool:

@@ -7,8 +7,8 @@ from dotenv import dotenv_values, load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 dotenv_path = os.path.join(BASE_DIR, ".env")
-# Charge le .env
 
+# Charge le .env
 load_dotenv(dotenv_path)
 
 config_data = dotenv_values(dotenv_path)

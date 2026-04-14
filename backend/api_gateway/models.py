@@ -1628,6 +1628,7 @@ class Liste(Base):
     __tablename__ = 'liste'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='liste_pkey'),
+        CheckConstraint("num_nonnulls(id_espace, id_workspace) = 1", name='liste_cible_unique_check'),
         Index('idx_liste_espace', 'id_espace'),
         Index('idx_liste_workspace', 'id_workspace'),
         {'schema': 'planer'}

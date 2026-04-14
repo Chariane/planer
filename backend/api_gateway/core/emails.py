@@ -1,8 +1,6 @@
 import os
-
+from schemas import EmailSchema
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from pydantic import BaseModel, EmailStr
-from typing import List
 from dotenv import load_dotenv
 
 from .database import config_data
@@ -13,10 +11,6 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
-
-
-class EmailSchema(BaseModel):
-    email: List[EmailStr]
 
 
 def _as_bool(value, default: bool = False) -> bool:

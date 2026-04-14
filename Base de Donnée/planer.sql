@@ -143,6 +143,7 @@ CREATE TABLE planer.liste (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     id_espace VARCHAR(12) REFERENCES planer.espace(id) ON DELETE SET NULL,
     id_workspace VARCHAR(12) REFERENCES planer.workspace(id) ON DELETE SET NULL,
+    CONSTRAINT liste_cible_unique_check CHECK (num_nonnulls(id_espace, id_workspace) = 1),
     CONSTRAINT liste_id_espace_fkey FOREIGN KEY (id_espace) REFERENCES planer.espace(id) ON DELETE SET NULL,
     CONSTRAINT liste_id_workspace_fkey FOREIGN KEY (id_workspace) REFERENCES planer.workspace(id) ON DELETE SET NULL
 );

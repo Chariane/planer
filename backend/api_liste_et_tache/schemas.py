@@ -427,6 +427,11 @@ class WorkspaceOut(WorkspaceBase):
     id_utilisateur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+class WorkspaceWithContextOut(WorkspaceOut):
+    member_count: int = 0
+    current_user_role: Optional[str] = None
+    current_user_statut: Optional[str] = None
+
 class WorkspaceDelete(BaseModel):
     id: str
 
@@ -464,11 +469,40 @@ class ListeCreate(ListeBase):
     id_espace: Optional[str] = None
     id_workspace: Optional[str] = None
 
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if (self.id_espace is None) == (self.id_workspace is None):
+            raise ValueError(
+                "Une liste doit etre rattachee soit a un espace, soit a un workspace, jamais aux deux."
+            )
+        return self
+
 class ListeUpdate(BaseModel):
     nom: Optional[str] = Field(None, min_length=1, max_length=150)
     description: Optional[str] = None
     id_espace: Optional[str] = None
     id_workspace: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_scope_update(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        has_id_espace = "id_espace" in data
+        has_id_workspace = "id_workspace" in data
+
+        if not has_id_espace and not has_id_workspace:
+            return data
+
+        id_espace = data.get("id_espace")
+        id_workspace = data.get("id_workspace")
+
+        if (id_espace is None) == (id_workspace is None):
+            raise ValueError(
+                "Pour modifier le rattachement d'une liste, fournissez soit id_espace, soit id_workspace, jamais les deux."
+            )
+        return data
 
 class ListeOut(ListeBase):
     id: str

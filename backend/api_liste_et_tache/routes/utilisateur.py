@@ -24,10 +24,54 @@ from ..crud.utilisateur import (
 router = APIRouter(prefix="/listes", tags=["Listes"])
 
 
+def get_workspace_id_for_liste(db: Session, liste: Liste) -> str:
+    if liste.id_workspace:
+        return liste.id_workspace
+
+    if liste.id_espace:
+        espace = db.query(Espace).filter(Espace.id == liste.id_espace).first()
+        if not espace:
+            raise HTTPException(status_code=404, detail="Espace rattache a la liste non trouve")
+        if not espace.id_workspace:
+            raise HTTPException(status_code=400, detail="L'espace rattache a la liste n'appartient a aucun workspace")
+        return espace.id_workspace
+
+    raise HTTPException(status_code=400, detail="Liste invalide: aucun workspace ou espace de rattachement")
+
+
+def validate_liste_scope_access(
+    db: Session,
+    current_user: UtilisateurOut,
+    *,
+    id_espace: str = None,
+    id_workspace: str = None,
+):
+    if (id_espace is None) == (id_workspace is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Une liste doit etre rattachee soit a un espace, soit a un workspace, jamais aux deux.",
+        )
+
+    if id_espace is not None:
+        espace = db.query(Espace).filter(Espace.id == id_espace).first()
+        if not espace:
+            raise HTTPException(status_code=404, detail="Espace non trouve")
+        if not espace.id_workspace:
+            raise HTTPException(status_code=400, detail="Cet espace n'appartient a aucun workspace")
+        if not check_workspace_role(db, current_user.id, espace.id_workspace):
+            raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
+        return {"id_espace": espace.id, "id_workspace": None}
+
+    if not check_workspace_role(db, current_user.id, id_workspace):
+        raise HTTPException(status_code=403, detail="Acces refuse au workspace")
+    return {"id_espace": None, "id_workspace": id_workspace}
+
+
 def verify_workspace_access_by_liste(db: Session, current_user: UtilisateurOut, liste: Liste):
     if not liste:
         raise HTTPException(status_code=404, detail="Liste non trouvée")
-    if not check_workspace_role(db, current_user.id, liste.id_workspace):
+    workspace_id = get_workspace_id_for_liste(db, liste)
+    if not check_workspace_role(db, current_user.id, workspace_id):
         raise HTTPException(status_code=403, detail="Accès refusé")
     return liste
 
@@ -67,11 +111,19 @@ def create_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    # Vérifier que l'utilisateur est membre du workspace
-    if not check_workspace_role(db, current_user.id, liste_in.id_workspace):
-        raise HTTPException(status_code=403, detail="Accès refusé au workspace")
-    
-    new_liste = create_liste(db, liste_in.nom, liste_in.description, liste_in.id_espace, liste_in.id_workspace)
+    scope = validate_liste_scope_access(
+        db,
+        current_user,
+        id_espace=liste_in.id_espace,
+        id_workspace=liste_in.id_workspace,
+    )
+    new_liste = create_liste(
+        db,
+        liste_in.nom,
+        liste_in.description,
+        scope["id_espace"],
+        scope["id_workspace"],
+    )
     return new_liste
 
 @router.get("", response_model=List[ListeOut])
@@ -81,6 +133,9 @@ def get_listes_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
+    if bool(espace_id) == bool(workspace_id):
+        raise HTTPException(status_code=400, detail="Specifiez soit espace_id, soit workspace_id")
+
     if espace_id:
         # Vérifier accès à l'espace (qui appartient à un workspace)
         espace = db.query(Espace).filter(Espace.id == espace_id).first()
@@ -106,8 +161,8 @@ def get_liste_endpoint(
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         raise HTTPException(status_code=404, detail="Liste non trouvée")
-    # Vérifier accès au workspace
-    if not check_workspace_role(db, current_user.id, liste.id_workspace):
+    workspace_id = get_workspace_id_for_liste(db, liste)
+    if not check_workspace_role(db, current_user.id, workspace_id):
         raise HTTPException(status_code=403, detail="Accès refusé")
     return liste
 
@@ -121,15 +176,28 @@ def update_liste_endpoint(
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         raise HTTPException(status_code=404, detail="Liste non trouvée")
-    # Vérifier accès au workspace actuel
-    if not check_workspace_role(db, current_user.id, liste.id_workspace):
+    current_workspace_id = get_workspace_id_for_liste(db, liste)
+    if not check_workspace_role(db, current_user.id, current_workspace_id):
         raise HTTPException(status_code=403, detail="Accès refusé")
-    # Si changement de workspace, vérifier accès au nouveau
-    if liste_in.id_workspace and liste_in.id_workspace != liste.id_workspace:
-        if not check_workspace_role(db, current_user.id, liste_in.id_workspace):
-            raise HTTPException(status_code=403, detail="Accès refusé au nouveau workspace")
-    
-    updated_liste = update_liste(db, liste_id, liste_in.nom, liste_in.description, liste_in.id_espace, liste_in.id_workspace)
+
+    update_data = liste_in.model_dump(exclude_unset=True)
+
+    if update_data.get("id_workspace") is not None and "id_espace" not in update_data:
+        update_data["id_espace"] = None
+    if update_data.get("id_espace") is not None and "id_workspace" not in update_data:
+        update_data["id_workspace"] = None
+
+    if "id_espace" in update_data or "id_workspace" in update_data:
+        scope = validate_liste_scope_access(
+            db,
+            current_user,
+            id_espace=update_data.get("id_espace"),
+            id_workspace=update_data.get("id_workspace"),
+        )
+        update_data["id_espace"] = scope["id_espace"]
+        update_data["id_workspace"] = scope["id_workspace"]
+
+    updated_liste = update_liste(db, liste_id, **update_data)
     return updated_liste
 
 @router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -141,7 +209,8 @@ def delete_liste_endpoint(
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         raise HTTPException(status_code=404, detail="Liste non trouvée")
-    if not check_workspace_role(db, current_user.id, liste.id_workspace):
+    workspace_id = get_workspace_id_for_liste(db, liste)
+    if not check_workspace_role(db, current_user.id, workspace_id):
         raise HTTPException(status_code=403, detail="Accès refusé")
     if not delete_liste(db, liste_id):
         raise HTTPException(status_code=404, detail="Liste non trouvée")
