@@ -1,4 +1,3 @@
-// frontend/src/pages/RegisterPage.tsx
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Lock, UserPlus, Eye, EyeOff } from 'lucide-react';
@@ -10,15 +9,14 @@ export default function RegisterPage() {
   const { register, isLoading } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ username: '', email: '', password: '', nom: '', prenoms: '' });
+  const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-      const { email, user, workspace } = await register(form);
-      // Rediriger vers la page de vérification d'email
+      const { email } = await register(form);
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur d’inscription');
@@ -34,20 +32,6 @@ export default function RegisterPage() {
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input type="text" value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} className="w-full pl-10 pr-3 py-2 border rounded-lg" />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Prénoms</label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input type="text" value={form.prenoms} onChange={e => setForm({...form, prenoms: e.target.value})} className="w-full pl-10 pr-3 py-2 border rounded-lg" />
-          </div>
-        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Nom d'utilisateur</label>
           <div className="relative">

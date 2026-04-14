@@ -1,4 +1,3 @@
-// frontend/src/services/auth.service.ts
 import { apiFetch } from './api';
 
 const AUTH_BASE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';

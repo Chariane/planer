@@ -1,4 +1,3 @@
-// frontend/src/services/workspace.service.ts
 import { apiFetch } from './api';
 
 const WORKSPACE_BASE_URL = import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003';
@@ -12,5 +11,4 @@ export const workspaceService = {
   getMembers: (id: string) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/members`),
   inviteMember: (id: string, email: string, role: string) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite`, { method: 'POST', body: JSON.stringify({ email, role }) }),
   removeMember: (workspaceId: string, memberId: string) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${memberId}`, { method: 'DELETE' }),
-  getUserWorkspaces: () => apiFetch(WORKSPACE_BASE_URL, '/workspaces/user/me'),
 };

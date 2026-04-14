@@ -1,4 +1,3 @@
-// frontend/src/contexts/AuthContext.tsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -14,22 +13,13 @@ interface User {
   is_utilisateur_verifie?: boolean;
 }
 
-interface Workspace {
-  id: string;
-  nom: string;
-  description?: string;
-  id_utilisateur: string;
-  created_at: string;
-}
-
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  userWorkspaces: Workspace[];
   login: (identifier: string, password: string) => Promise<{ requires2fa: boolean; challengeToken?: string }>;
   verify2FA: (challengeToken: string, code: string) => Promise<void>;
-  register: (data: any) => Promise<{ email: string; user: User; workspace: Workspace }>;
+  register: (data: any) => Promise<{ email: string }>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerificationCode: (email: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
@@ -39,7 +29,6 @@ interface AuthContextType {
   setup2FA: () => Promise<any>;
   enable2FA: (code: string) => Promise<void>;
   disable2FA: (currentPassword: string) => Promise<void>;
-  loadUserWorkspaces: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -49,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [userWorkspaces, setUserWorkspaces] = useState<Workspace[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const userData = await authService.getMe();
           setUser(userData);
-          await loadUserWorkspaces();
         } catch (error) {
           console.error('Erreur lors du chargement de l’utilisateur', error);
           localStorage.removeItem('access_token');
@@ -75,57 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, []);
 
-  const loadUserWorkspaces = async () => {
-    // Utiliser l'endpoint existant pour récupérer tous les workspaces
-    // Puis filtrer ceux de l'utilisateur
-    try {
-      // On utilise l'endpoint /workspaces existant
-      const response = await fetch(`${import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003'}/workspaces`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (response.ok) {
-        const allWorkspaces = await response.json();
-        // Filtrer les workspaces où l'utilisateur est propriétaire ou membre
-        // Le backend a déjà une logique pour ne retourner que les workspaces de l'utilisateur
-        setUserWorkspaces(allWorkspaces);
-      } else {
-        setUserWorkspaces([]);
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des workspaces', error);
-      setUserWorkspaces([]);
-    }
-  };
-
   const register = async (data: any) => {
-    const response = await authService.register(data);
-    // Stocker le token s'il est retourné
-    if (response.access_token) {
-      localStorage.setItem('access_token', response.access_token);
-      setToken(response.access_token);
-    }
-    setUser(response.user);
-    // Charger les workspaces après inscription
-    if (response.workspace) {
-      setUserWorkspaces([response.workspace]);
-    } else {
-      await loadUserWorkspaces();
-    }
-    return { 
-      email: data.email, 
-      user: response.user, 
-      workspace: response.workspace 
-    };
+    await authService.register(data);
+    return { email: data.email };
   };
 
   const verifyEmail = async (email: string, code: string) => {
     await authService.verifyEmail(email, code);
-    // Recharger l'utilisateur pour mettre à jour le statut de vérification
-    const userData = await authService.getMe();
-    setUser(userData);
   };
 
   const resendVerificationCode = async (email: string) => {
@@ -140,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('access_token', response.access_token);
     setToken(response.access_token);
     setUser(response.user);
-    await loadUserWorkspaces();
     return { requires2fa: false };
   };
 
@@ -149,7 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('access_token', response.access_token);
     setToken(response.access_token);
     setUser(response.user);
-    await loadUserWorkspaces();
   };
 
   const forgotPassword = async (email: string) => {
@@ -204,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('access_token');
     setToken(null);
     setUser(null);
-    setUserWorkspaces([]);
     navigate('/login');
   };
 
@@ -213,7 +153,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isLoading,
-      userWorkspaces,
       login,
       verify2FA,
       register,
@@ -226,7 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setup2FA,
       enable2FA,
       disable2FA,
-      loadUserWorkspaces,
       logout,
     }}>
       {children}
