@@ -1,9 +1,9 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from core.database import get_db
-from core.security import get_current_active_entreprise
-from crud.entreprise import (
+from ..core.database import get_db
+from ..core.security import get_current_active_entreprise
+from ..crud.entreprise import (
     get_entreprise_workspace,
     get_entreprise_workspace_members,
     get_entreprise_workspaces,
@@ -12,8 +12,8 @@ from crud.entreprise import (
     remove_member_for_entreprise_workspace,
     update_member_for_entreprise_workspace,
 )
-from models import Utilisateur
-from schemas import MembreCreate, MembreOut, MembreUpdate, UtilisateurOut, WorkspaceMemberInvite, WorkspaceOut
+from ..models import Utilisateur
+from ..schemas import MembreCreate, MembreOut, MembreUpdate, UtilisateurOut, WorkspaceMemberInvite, WorkspaceOut
 
 router = APIRouter(prefix="/entreprise/workspaces", tags=["Entreprise Workspaces"])
 

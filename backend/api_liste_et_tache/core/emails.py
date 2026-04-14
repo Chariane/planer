@@ -1,9 +1,9 @@
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from schemas import EmailSchema
-from backend.api_espace.core.security import config_data
+from ..schemas import EmailSchema
+from .security import config_data
 from dotenv import load_dotenv
 
-load_dotenv(".env")
+load_dotenv()
 
 
 conf = ConnectionConfig(

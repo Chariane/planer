@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from utilisateur import (
+from .utilisateur import (
     add_member_to_workspace,
     get_member,
     get_members_of_workspace,
@@ -9,8 +9,8 @@ from utilisateur import (
     remove_member_from_workspace,
     update_member_role,
 )
-from models import Membre, Workspace
-from schemas import MembreUpdate, WorkspaceMemberInvite
+from ..models import Membre, Workspace
+from ..schemas import MembreUpdate, WorkspaceMemberInvite
 
 
 def get_entreprise_workspaces(db: Session, entreprise_user_id: str) -> List[Workspace]:

@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from utilisateur import (
+from .utilisateur import (
     delete_workspace,
     get_all_workspaces,
     get_member,
@@ -9,8 +9,8 @@ from utilisateur import (
     remove_member_from_workspace,
     update_member_role,
 )
-from models import Membre, Workspace
-from schemas import MembreUpdate
+from ..models import Membre, Workspace
+from ..schemas import MembreUpdate
 
 
 def get_admin_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Workspace]:

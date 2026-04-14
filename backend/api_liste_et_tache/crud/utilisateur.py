@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
-from models import Liste, Tache, Canevas, Section, Checklist
+from ..models import Liste, Tache, Canevas, Section, Checklist
 
 # Liste CRUD
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
