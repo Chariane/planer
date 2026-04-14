@@ -1,4 +1,5 @@
-import { useState } from 'react';
+// frontend/src/components/layout/Sidebar.tsx
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, MessageSquare, Sparkles, Briefcase, Plus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,12 +12,25 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
-  const { user } = useAuth();
-  const { workspaces, loadWorkspaces } = useApp();
+  const { user, userWorkspaces, loadUserWorkspaces } = useAuth();
+  const { workspaces, loadWorkspaces, activeWorkspaceId, setActiveWorkspaceId } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleWorkspaceCreated = () => {
-    loadWorkspaces(); // Recharger la liste des workspaces
+  // Charger les workspaces au montage et quand l'utilisateur change
+  useEffect(() => {
+    if (user) {
+      loadUserWorkspaces();
+      loadWorkspaces();
+    }
+  }, [user]);
+
+  const handleWorkspaceCreated = async () => {
+    await loadUserWorkspaces();
+    await loadWorkspaces();
+  };
+
+  const handleWorkspaceClick = (workspaceId: string) => {
+    setActiveWorkspaceId(workspaceId);
   };
 
   // Version réduite (icônes seulement)
@@ -79,12 +93,29 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             </button>
           </div>
           <div className="space-y-1 px-3">
-            {workspaces.map((ws) => (
-              <Link key={ws.id} to={`/workspace/${ws.id}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/80 hover:bg-white/5">
-                <Briefcase className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{ws.nom}</span>
-              </Link>
-            ))}
+            {workspaces.length === 0 && userWorkspaces.length === 0 ? (
+              <p className="text-xs text-white/50 italic px-2 py-1">Aucun workspace disponible</p>
+            ) : (
+              (workspaces.length > 0 ? workspaces : userWorkspaces).map((ws) => (
+                <Link 
+                  key={ws.id} 
+                  to={`/workspace/${ws.id}`}
+                  onClick={() => handleWorkspaceClick(ws.id)}
+                >
+                  <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${
+                    activeWorkspaceId === ws.id 
+                      ? 'bg-secondary/20 text-white font-medium' 
+                      : 'text-white/80 hover:bg-white/5'
+                  }`}>
+                    <Briefcase className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{ws.nom}</span>
+                    {activeWorkspaceId === ws.id && (
+                      <span className="ml-auto text-xs text-white/50">✓</span>
+                    )}
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </div>
 

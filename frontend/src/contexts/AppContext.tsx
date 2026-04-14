@@ -1,9 +1,11 @@
+// frontend/src/contexts/AppContext.tsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
 import { listeService } from '../services/liste.service';
 import { tacheService } from '../services/tache.service';
+import { useAuth } from './AuthContext';
 import type { Member, Task, ChecklistItem, Period, List, Space, Workspace } from '../types';
 
 export type { Member, Task, ChecklistItem, Period, List, Space, Workspace };
@@ -46,15 +48,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [activeListId, setActiveListId] = useState<string | null>(null);
+  const { userWorkspaces, loadUserWorkspaces } = useAuth();
 
   const loadWorkspaces = async () => {
     try {
-      const data = await workspaceService.getAll();
-      setWorkspaces(data);
+      // Utiliser les workspaces du contexte d'authentification
+      if (userWorkspaces && userWorkspaces.length > 0) {
+        // Enrichir avec les données complètes si nécessaire
+        const enrichedWorkspaces = await Promise.all(
+          userWorkspaces.map(async (ws) => {
+            try {
+              const fullWorkspace = await workspaceService.getById(ws.id);
+              return { ...fullWorkspace, espaces: [] };
+            } catch {
+              return { ...ws, espaces: [] };
+            }
+          })
+        );
+        setWorkspaces(enrichedWorkspaces);
+      } else {
+        setWorkspaces([]);
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des workspaces', error);
+      setWorkspaces([]);
     }
   };
+
+  // Recharger quand les userWorkspaces changent
+  useEffect(() => {
+    loadWorkspaces();
+  }, [userWorkspaces]);
 
   const loadEspaces = async (workspaceId: string) => {
     try {
@@ -94,16 +118,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addWorkspace = async (data: { nom: string; description?: string }) => {
     const newWorkspace = await workspaceService.create(data);
-    setWorkspaces(prev => [newWorkspace, ...prev]);
+    // Recharger les workspaces de l'utilisateur
+    await loadUserWorkspaces();
+    setWorkspaces(prev => [{ ...newWorkspace, espaces: [] }, ...prev]);
+    setActiveWorkspaceId(newWorkspace.id);
   };
 
   const updateWorkspace = async (id: string, data: { nom?: string; description?: string }) => {
     const updated = await workspaceService.update(id, data);
-    setWorkspaces(prev => prev.map(ws => ws.id === id ? updated : ws));
+    setWorkspaces(prev => prev.map(ws => ws.id === id ? { ...updated, espaces: ws.espaces } : ws));
   };
 
   const deleteWorkspace = async (id: string) => {
     await workspaceService.delete(id);
+    await loadUserWorkspaces();
     setWorkspaces(prev => prev.filter(ws => ws.id !== id));
     if (activeWorkspaceId === id) setActiveWorkspaceId(null);
   };
@@ -207,10 +235,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleSubTask = (taskId: string, subTaskId: string) => {};
   const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => {};
   const addMember = (workspaceId: string, member: Member) => {};
-
-  useEffect(() => {
-    loadWorkspaces();
-  }, []);
 
   return (
     <AppContext.Provider value={{
