@@ -54,7 +54,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       // Utiliser les workspaces du contexte d'authentification
       if (userWorkspaces && userWorkspaces.length > 0) {
-        // Enrichir avec les données complètes si nécessaire
+        // Enrichir avec les données complètes des espaces si nécessaire
         const enrichedWorkspaces = await Promise.all(
           userWorkspaces.map(async (ws) => {
             try {
