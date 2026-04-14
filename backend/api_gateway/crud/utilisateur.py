@@ -8,13 +8,10 @@ from ..core.function import commit_or_raise
 
 
 def _build_default_workspace_name(user_data: dict) -> str:
-    full_name = " ".join(
-        part.strip()
-        for part in [user_data.get("prenoms"), user_data.get("nom")]
-        if isinstance(part, str) and part.strip()
-    )
-    owner_name = full_name or user_data.get("username") or "utilisateur"
-    return f"Workspace de {owner_name}"
+    username = user_data.get("username")
+    if isinstance(username, str) and username.strip():
+        return username.strip()[:100]
+    return "utilisateur"
 
 
 def create_utilisateur(db: Session, user_data: dict) -> tuple[Utilisateur, Workspace]:
