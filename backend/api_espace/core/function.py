@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
-from models import Espace, PlanerEntreprise, Utilisateur, Workspace
+from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace
 
 
 def is_premium_user(user: Optional[Utilisateur]) -> bool:

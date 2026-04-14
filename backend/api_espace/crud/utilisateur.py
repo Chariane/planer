@@ -2,8 +2,8 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from models import Espace, Membre
-from schemas import EspaceCreate, EspaceUpdate, MembreCreate, WorkspaceMemberUpdate
+from ..models import Espace, Membre
+from ..schemas import EspaceCreate, EspaceUpdate, MembreCreate, WorkspaceMemberUpdate
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:

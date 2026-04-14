@@ -1,7 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import sys
+from pathlib import Path
 
-from .routes.utilisateur import router as espaces_router
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from backend.api_espace.routes.utilisateur import router as espaces_router
+else:
+    from .routes.utilisateur import router as espaces_router
 
 app = FastAPI(
     title="Microservice Api Espace",
