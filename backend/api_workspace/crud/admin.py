@@ -6,15 +6,21 @@ from .utilisateur import (
     get_member,
     get_members_of_workspace,
     get_workspace_by_id,
+    get_workspaces_where_admin,
     remove_member_from_workspace,
     update_member_role,
 )
 from ..models import Membre, Workspace
-from ..schemas import MembreUpdate
+from ..schemas import MembreUpdate, WorkspaceMemberUpdate
 
 
 def get_admin_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Workspace]:
     return get_all_workspaces(db, skip=skip, limit=limit)
+
+
+def get_my_admin_workspaces(db: Session, user_id: str) -> List[Workspace]:
+    """Retourne les workspaces où l'utilisateur est administrateur (propriétaire ou rôle admin)."""
+    return get_workspaces_where_admin(db, user_id)
 
 
 def get_admin_workspace(db: Session, workspace_id: str) -> Optional[Workspace]:
@@ -32,7 +38,7 @@ def update_admin_workspace_member(
     db: Session,
     workspace_id: str,
     user_id: str,
-    membre_in: MembreUpdate,
+    membre_in: WorkspaceMemberUpdate,
 ) -> Optional[Membre]:
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:

@@ -192,3 +192,28 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
     if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
         raise HTTPException(status_code=403, detail="Privileges insuffisants")
     return membre
+
+
+def _require_workspace_admin_access(db: Session, workspace_id: str, current_user_id: str):
+    """Vérifie que l'utilisateur est administrateur (Créateur ou Administrateur) du workspace.
+
+    Retourne un tuple (workspace, membre).
+    Lève une 404 si le workspace n'existe pas,
+    une 403 si l'utilisateur n'a pas les droits d'administration.
+    """
+    from ..crud.utilisateur import get_member, get_workspace_by_id
+
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+
+    if workspace.id_utilisateur == current_user_id:
+        return workspace, get_member(db, workspace_id, current_user_id)
+
+    membre = get_member(db, workspace_id, current_user_id, active_only=True)
+    if not membre or membre.role not in WORKSPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Acces reserve aux administrateurs du workspace",
+        )
+    return workspace, membre

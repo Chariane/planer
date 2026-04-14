@@ -56,6 +56,28 @@ def get_workspaces_for_user(db: Session, user_id: str) -> List[Workspace]:
     )
 
 
+def get_workspaces_where_admin(db: Session, user_id: str) -> List[Workspace]:
+    """Retourne les workspaces où l'utilisateur est propriétaire ou Administrateur/Créateur actif."""
+    return (
+        db.query(Workspace)
+        .options(joinedload(Workspace.membres))
+        .outerjoin(Membre, Workspace.id == Membre.id_workspace)
+        .filter(
+            or_(
+                Workspace.id_utilisateur == user_id,
+                and_(
+                    Membre.id_utilisateur == user_id,
+                    Membre.role.in_(["Créateur", "Administrateur"]),
+                    Membre.statut == "Actif",
+                ),
+            )
+        )
+        .distinct()
+        .order_by(Workspace.created_at.desc())
+        .all()
+    )
+
+
 def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -> Workspace:
     workspace_data = workspace_in.model_dump(exclude={"id_utilisateur"}, exclude_none=True)
     workspace = Workspace(
@@ -363,3 +385,66 @@ def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -
         detail="Impossible de supprimer ce membre du workspace.",
     )
     return True
+
+
+def get_workspace_detail(db: Session, workspace_id: str, user_id: str) -> Optional[Workspace]:
+    """Retourne le workspace si l'utilisateur est membre actif ou propriétaire."""
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        return None
+    if workspace.id_utilisateur == user_id:
+        return workspace
+    membre = get_member(db, workspace_id, user_id, active_only=True)
+    if not membre:
+        return None
+    return workspace
+
+def leave_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
+    """Un membre actif quitte le workspace (ne s'applique pas au propriétaire)."""
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        return False
+    if workspace.id_utilisateur == user_id:
+        return False  # Le créateur ne peut pas quitter
+
+    membre = get_member(db, workspace_id, user_id, active_only=True)
+    if not membre:
+        return False
+
+    db.query(Fichier).filter(Fichier.id_membre == membre.id).delete(synchronize_session=False)
+    db.query(Rapport).filter(Rapport.id_membre == membre.id).delete(synchronize_session=False)
+    db.query(AbsenceEtConge).filter(AbsenceEtConge.id_membre == membre.id).delete(
+        synchronize_session=False
+    )
+    db.delete(membre)
+    commit_or_raise(db, detail="Impossible de quitter le workspace.")
+    return True
+
+
+def cancel_workspace_invitation(db: Session, workspace_id: str, user_id: str) -> Optional[bool]:
+    """L'administrateur annule une invitation en attente pour un utilisateur."""
+    membre = get_member(db, workspace_id, user_id)
+    if not membre:
+        return None
+    if membre.statut != "En attente":
+        return False  # Pas en attente, ne peut pas être annulée
+
+    db.delete(membre)
+    commit_or_raise(db, detail="Impossible d'annuler cette invitation.")
+    return True
+
+
+def get_pending_invitations(db: Session, user_id: str) -> List[Membre]:
+    """Retourne toutes les invitations en attente reçues par l'utilisateur."""
+    return (
+        db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "En attente",
+            Membre.id_workspace.isnot(None),
+        )
+        .order_by(Membre.created_at.desc())
+        .all()
+    )
+

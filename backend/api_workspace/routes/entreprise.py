@@ -22,14 +22,19 @@ from ..core.security import (
 )
 from ..crud.entreprise import (
     accept_entreprise_workspace_invitation,
+    cancel_entreprise_workspace_invitation,
     create_entreprise_workspace,
     delete_entreprise_workspace,
     get_entreprise_workspace,
     get_entreprise_workspaces,
+    get_entreprise_workspace_members,
     invite_member_for_entreprise_workspace,
+    leave_entreprise_workspace,
     update_entreprise_workspace,
+    update_entreprise_workspace_member,
+    remove_entreprise_workspace_member,
 )
-from ..crud.utilisateur import get_member
+from ..crud.utilisateur import get_member, get_pending_invitations, get_workspace_detail
 from ..models import Utilisateur
 from ..schemas import (
     EmailSchema,
@@ -38,6 +43,7 @@ from ..schemas import (
     WorkspaceInvitationAcceptRequest,
     WorkspaceMemberInvite,
     WorkspaceMemberOut,
+    WorkspaceMemberUpdate,
     WorkspaceUpdate,
     WorkspaceWithContextOut,
 )
@@ -144,7 +150,7 @@ def invite_member_entreprise_workspace_endpoint(
             "workspace_id": workspace_id,
             "scope": "workspace_invitation_accept",
         },
-        expires_delta=timedelta(days=7),
+        expires_delta=timedelta(days=4),
     )
     background_tasks.add_task(
         send_workspace_invitation_email,
@@ -184,3 +190,124 @@ def accept_entreprise_workspace_invitation_endpoint(
     if not membre:
         raise HTTPException(status_code=400, detail="Invitation introuvable ou deja traitee")
     return _serialize_member(membre)
+
+
+@router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberOut])
+def list_entreprise_workspace_members_endpoint(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    members = get_entreprise_workspace_members(db, current_entreprise.id, workspace_id)
+    if members is None:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+    return members
+
+
+@router.put("/{workspace_id}/members/{user_id}", response_model=WorkspaceMemberOut)
+def update_entreprise_workspace_member_endpoint(
+    workspace_id: str,
+    user_id: str,
+    membre_in: WorkspaceMemberUpdate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    target_member = get_member(db, workspace_id, user_id)
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+    
+    if target_member.role == "Créateur":
+        raise HTTPException(status_code=400, detail="Impossible de modifier le role du créateur")
+
+    updated = update_entreprise_workspace_member(
+        db, current_entreprise.id, workspace_id, user_id, membre_in
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Workspace ou membre introuvable")
+    return _serialize_member(updated)
+
+
+@router.delete("/{workspace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_entreprise_workspace_member_endpoint(
+    workspace_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    target_member = get_member(db, workspace_id, user_id)
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+    
+    if target_member.role == "Créateur":
+        raise HTTPException(status_code=403, detail="Impossible de supprimer le créateur du workspace")
+
+    success = remove_entreprise_workspace_member(
+        db, current_entreprise.id, workspace_id, user_id
+    )
+    if success is None:
+        raise HTTPException(status_code=404, detail="Workspace introuvable")
+    if not success:
+        raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")
+    return None
+
+
+@router.get("/invitations/pending", response_model=list[WorkspaceMemberOut])
+def list_pending_invitations_entreprise_endpoint(
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    """Liste toutes les invitations en attente reçues par le compte entreprise."""
+    membres = get_pending_invitations(db, current_entreprise.id)
+    return [_serialize_member(m) for m in membres]
+
+
+@router.get("/{workspace_id}", response_model=WorkspaceWithContextOut)
+def get_entreprise_workspace_detail_endpoint(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    """Récupère le détail d'un workspace entreprise."""
+    workspace = get_workspace_detail(db, workspace_id, current_entreprise.id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve ou acces refuse")
+    membre = get_member(db, workspace_id, current_entreprise.id)
+    return _serialize_workspace(workspace, membre=membre)
+
+
+@router.post("/{workspace_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+def leave_entreprise_workspace_endpoint(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    """Le compte entreprise quitte un workspace (interdit au créateur)."""
+    result = leave_entreprise_workspace(db, workspace_id, current_entreprise.id)
+    if result is False:
+        workspace = get_entreprise_workspace(db, current_entreprise.id, workspace_id)
+        if not workspace:
+            raise HTTPException(status_code=404, detail="Workspace non trouve")
+        raise HTTPException(status_code=403, detail="Le créateur ne peut pas quitter son workspace")
+    if not result:
+        raise HTTPException(status_code=404, detail="Vous n'êtes pas membre actif de ce workspace")
+    return None
+
+
+@router.delete("/{workspace_id}/invitations/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_entreprise_invitation_endpoint(
+    workspace_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    """L'administrateur entreprise annule une invitation en attente."""
+    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    result = cancel_entreprise_workspace_invitation(db, workspace_id, user_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Invitation introuvable")
+    if result is False:
+        raise HTTPException(status_code=400, detail="Cette invitation n'est pas en attente")
+    return None

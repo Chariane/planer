@@ -10,9 +10,11 @@ from .utilisateur import (
     get_workspaces_for_user,
     invite_member_to_workspace,
     update_workspace,
+    update_member_role,
+    remove_member_from_workspace,
 )
 from ..models import Membre, Workspace
-from ..schemas import WorkspaceCreate, WorkspaceUpdate
+from ..schemas import WorkspaceCreate, WorkspaceUpdate, WorkspaceMemberUpdate
 
 
 def get_entreprise_workspace(db: Session, entreprise_user_id: str, workspace_id: str) -> Optional[Workspace]:
@@ -80,3 +82,29 @@ def accept_entreprise_workspace_invitation(
     user_id: str,
 ) -> Optional[Membre]:
     return accept_workspace_invitation(db, workspace_id, user_id)
+
+
+def update_entreprise_workspace_member(
+    db: Session,
+    entreprise_user_id: str,
+    workspace_id: str,
+    user_id: str,
+    membre_in: WorkspaceMemberUpdate,
+) -> Optional[Membre]:
+    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
+    if not workspace:
+        return None
+    return update_member_role(db, workspace_id, user_id, membre_in)
+
+
+def remove_entreprise_workspace_member(
+    db: Session,
+    entreprise_user_id: str,
+    workspace_id: str,
+    user_id: str,
+) -> Optional[bool]:
+    workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
+    if not workspace:
+        return None
+    return remove_member_from_workspace(db, workspace_id, user_id)
+
