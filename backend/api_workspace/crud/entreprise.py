@@ -2,6 +2,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from .utilisateur import (
     accept_workspace_invitation,
+    cancel_workspace_invitation,
     create_workspace,
     delete_workspace,
     get_member,
@@ -9,6 +10,7 @@ from .utilisateur import (
     get_workspace_by_id,
     get_workspaces_for_user,
     invite_member_to_workspace,
+    leave_workspace,
     update_workspace,
     update_member_role,
     remove_member_from_workspace,
@@ -107,4 +109,23 @@ def remove_entreprise_workspace_member(
     if not workspace:
         return None
     return remove_member_from_workspace(db, workspace_id, user_id)
+
+
+def cancel_entreprise_workspace_invitation(
+    db: Session,
+    workspace_id: str,
+    user_id: str,
+) -> Optional[bool]:
+    return cancel_workspace_invitation(db, workspace_id, user_id)
+
+
+def leave_entreprise_workspace(
+    db: Session,
+    workspace_id: str,
+    user_id: str,
+) -> Optional[bool]:
+    workspace = get_entreprise_workspace(db, user_id, workspace_id)
+    if not workspace:
+        return None
+    return leave_workspace(db, workspace_id, user_id)
 

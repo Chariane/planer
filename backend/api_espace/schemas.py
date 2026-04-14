@@ -454,6 +454,9 @@ class EspaceOut(EspaceBase):
     id_workspace: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+class EspaceTreeOut(EspaceOut):
+    sous_espaces: List["EspaceTreeOut"] = []
+
 class EspaceDelete(BaseModel):
     id: str
 
@@ -544,6 +547,18 @@ class MembreDelete(BaseModel):
     id: str
 
 
+class EspaceMemberUserOut(BaseModel):
+    id: str
+    username: str
+    email: EmailStr
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+
+
+class EspaceMemberOut(MembreOut):
+    utilisateur: Optional[EspaceMemberUserOut] = None
+
+
 class WorkspaceMemberInvite(BaseModel):
     email: EmailStr
     role: str = Field(default="Membre")
@@ -591,6 +606,10 @@ class WorkspaceMemberUpdate(BaseModel):
             allowed = ", ".join(sorted(allowed_statuses))
             raise ValueError(f"Statut invalide. Valeurs autorisees: {allowed}.")
         return statut
+
+
+class EspaceInvitationAcceptRequest(BaseModel):
+    token: str
 
 # Fichier
 class FichierBase(BaseModel):
@@ -753,3 +772,5 @@ class ChecklistOut(ChecklistBase):
 
 class ChecklistDelete(BaseModel):
     id: str
+
+EspaceTreeOut.model_rebuild()

@@ -21,6 +21,7 @@ conf = ConnectionConfig(
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
+front_espace_invitation_url = config_data.get("FRONT_ESPACE_INVITATION_URL", "/espace-invitations/accept")
 
 
 async def send_verification_email(username: str, email: EmailSchema, token: str):
@@ -184,6 +185,58 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
         recipients=email,  # Liste des destinataires. Ici, un seul.
         body=template,
         subtype=MessageType.html
+    )
+
+    the_email = FastMail(conf)
+    await the_email.send_message(message=message)
+
+    return token
+
+
+async def send_espace_invitation_email(
+    inviter_username: str,
+    invited_username: str,
+    email: str,
+    espace_name: str,
+    role: str,
+    token: str,
+):
+    invitation_link = f"{front_base_url}{front_espace_invitation_url}?token={token}"
+    template = f"""
+        <!DOCTYPE html>
+            <html lang="fr">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Invitation Espace</title>
+            </head>
+            <body style="background-color:#faf4f4;font-family:Arial,sans-serif;">
+                <div style="max-width:600px;margin:auto;padding:20px;">
+                    <div style="background:#ffffff;border-radius:8px;padding:24px;box-shadow:0 0 10px rgba(0,0,0,0.08);">
+                        <h2 style="color:#264a67;">Invitation a rejoindre un espace</h2>
+                        <p>Bonjour <strong>{invited_username}</strong>,</p>
+                        <p><strong>{inviter_username}</strong> vous invite a rejoindre l'espace <strong>{espace_name}</strong> sur K-Planer.</p>
+                        <p>Role propose : <strong>{role}</strong>.</p>
+                        <p>Pour accepter l'invitation, cliquez sur le lien ci-dessous :</p>
+                        <p style="text-align:center;margin:30px 0;">
+                            <a href="{invitation_link}" style="background-color:#264a67;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">
+                                Accepter l'invitation
+                            </a>
+                        </p>
+                        <p style="font-size:0.9em;color:#666666;">Si le bouton ne fonctionne pas, vous pouvez copier ce lien : <br>{invitation_link}</p>
+                        <hr style="border:none;border-top:1px solid #eeeeee;margin:20px 0;">
+                        <p style="font-size:0.8em;color:#999999;">Ceci est un message automatique, merci de ne pas y repondre.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+    """
+
+    message = MessageSchema(
+        subject=f"K-Planer - Invitation dans l'espace {espace_name}",
+        recipients=[email],
+        body=template,
+        subtype=MessageType.html,
     )
 
     the_email = FastMail(conf)

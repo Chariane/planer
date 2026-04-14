@@ -8,13 +8,17 @@ if __package__ in {None, ""}:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from backend.api_espace.routes.utilisateur import router as espaces_router
+    from backend.api_espace.routes.admin import router as admin_router
+    from backend.api_espace.routes.entreprise import router as entreprise_router
+    from backend.api_espace.routes.utilisateur import router as utilisateur_router
 else:
-    from .routes.utilisateur import router as espaces_router
+    from .routes.admin import router as admin_router
+    from .routes.entreprise import router as entreprise_router
+    from .routes.utilisateur import router as utilisateur_router
 
 app = FastAPI(
     title="Microservice Api Espace",
-    description="API pour la gestion des espaces",
+    description="API pour la gestion des espaces et membres",
     version="1.0.0"
 )
 
@@ -27,7 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(espaces_router)
+app.include_router(utilisateur_router)
+app.include_router(entreprise_router)
+app.include_router(admin_router)
 
 @app.get("/")
 def root():
