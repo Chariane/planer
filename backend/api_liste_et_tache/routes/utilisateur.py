@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-
-from ..models import Espace, Liste, Canevas, Section, Checklist
-from ..core.security import get_current_user, check_workspace_role
-from ..core.database import get_db
-from ..schemas import (
+from models import Espace, Liste, Canevas, Section, Checklist
+from core.security import get_current_user, check_workspace_role
+from core.database import get_db
+from schemas import (
     ListeCreate, ListeOut, ListeUpdate,
     TacheCreate, TacheOut, TacheUpdate,
     CanevasCreate, CanevasOut, CanevasUpdate,
@@ -13,7 +12,7 @@ from ..schemas import (
     ChecklistCreate, ChecklistOut, ChecklistUpdate,
     UtilisateurOut
 )
-from ..crud.utilisateur import (
+from crud.utilisateur import (
     get_liste_by_id, get_listes_for_espace, get_listes_for_workspace, create_liste, update_liste, delete_liste,
     get_tache_by_id, get_taches_for_liste, create_tache, update_tache, delete_tache,
     get_canevas_by_id, get_canevas_for_liste, create_canevas, update_canevas, delete_canevas,

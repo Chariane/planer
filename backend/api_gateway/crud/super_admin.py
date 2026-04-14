@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from ..crud.entreprise import set_user_entreprise_flag
+from .entreprise import set_user_entreprise_flag
 from ..core.function import commit_or_raise
 from ..models import PlanerEntreprise, Utilisateur
 

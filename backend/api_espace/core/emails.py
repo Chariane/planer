@@ -1,6 +1,5 @@
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from pydantic import BaseModel, EmailStr
-from typing import List
+from schemas import EmailSchema
 from backend.api_espace.core.security import config_data
 from dotenv import load_dotenv
 
@@ -22,10 +21,6 @@ conf = ConnectionConfig(
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
-
-
-class EmailSchema(BaseModel):
-    email: List[EmailStr]
 
 
 async def send_verification_email(username: str, email: EmailSchema, token: str):

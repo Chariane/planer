@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import os
 import string
 import struct
 import time
@@ -14,17 +15,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from dotenv import dotenv_values
 from urllib.parse import quote
-from ..models import Utilisateur
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 
-lodotenv = dotenv_values(".env")
+from ..models import Utilisateur
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+lodotenv = dotenv_values(os.path.join(BASE_DIR, ".env"))
 
 # -----------------------------
 # Configuration
 # -----------------------------
-config_data = dotenv_values(".env")
+config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut

@@ -1,8 +1,6 @@
 from typing import List
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..crud.super_admin import (
     create_user_with_roles,
     delete_entreprise,
@@ -15,10 +13,11 @@ from ..crud.super_admin import (
     update_user_role_flags,
 )
 from ..core.database import get_db
-from ..core.emails import EmailSchema, send_verification_email
+from ..core.emails import send_verification_email
 from ..core.function import build_email_verification_metadata, ensure_unique_user_identity_fields
 from ..core.security import get_current_super_admin, get_password_hash
 from ..schemas import (
+    EmailSchema,
     EntrepriseOut,
     EntrepriseUpdate,
     RegisterResponse,

@@ -3,7 +3,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.emails import (
-    EmailSchema,
     resend_verification_email,
     send_reset_password_email,
     send_verification_email,
@@ -35,6 +34,7 @@ from ..core.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from ..schemas import (
+    EmailSchema,
     ChangePasswordRequest,
     EmailVerificationCodeRequest,
     EmailVerificationResendRequest,

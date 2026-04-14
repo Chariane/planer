@@ -1,14 +1,6 @@
-# Python
+.env
 __pycache__/
 *.pyc
-
-# Environnements
-.env
-venv/
-
-# VS Code / history
-.history/
-.lh/
-
-# OS
-.DS_Store
+core/__pycache__/
+crud/__pycache__/
+routes/__pycache__/

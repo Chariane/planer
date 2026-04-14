@@ -1,9 +1,9 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from ..core.database import get_db
-from ..core.security import get_current_admin
-from ..crud.admin import (
+from core.database import get_db
+from core.security import get_current_admin
+from crud.admin import (
     delete_admin_workspace,
     get_admin_workspace,
     get_admin_workspace_member,
@@ -12,7 +12,7 @@ from ..crud.admin import (
     remove_admin_workspace_member,
     update_admin_workspace_member,
 )
-from ..schemas import MembreOut, MembreUpdate, UtilisateurOut, WorkspaceOut
+from schemas import MembreOut, MembreUpdate, UtilisateurOut, WorkspaceOut
 
 router = APIRouter(prefix="/admin/workspaces", tags=["Admin Workspaces"])
 

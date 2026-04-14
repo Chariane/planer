@@ -3,9 +3,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from datetime import datetime
-from ..core.function import commit_or_raise
-from ..models import Membre, Workspace
-from ..schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
+from core.function import commit_or_raise
+from models import Membre, Workspace
+from schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
 
 
 def get_workspace_by_id(db: Session, workspace_id: str) -> Optional[Workspace]:

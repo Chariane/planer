@@ -1,32 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from ..core.database import get_db
-from ..core.function import can_create_workspace
-from ..schemas import (
-    MembreCreate,
-    WorkspaceCreate,
-    WorkspaceMemberInvite,
-    WorkspaceMemberOut,
-    WorkspaceMemberUpdate,
-    WorkspaceUpdate,
-    WorkspaceWithContextOut,
-    UtilisateurOut,
+from core.database import get_db
+from core.function import can_create_workspace
+from schemas import (
+    MembreCreate,WorkspaceCreate,WorkspaceMemberInvite,WorkspaceMemberOut,
+    WorkspaceMemberUpdate,WorkspaceUpdate,WorkspaceWithContextOut,UtilisateurOut,
 )
-from ..core.security import get_current_user
-from ..crud.utilisateur import (
-    get_owned_workspaces,
-    get_workspaces_for_user,
-    create_workspace,
-    update_workspace,
-    delete_workspace,
-    get_member,
-    get_members_of_workspace,
-    add_member_to_workspace,
-    update_member_role,
-    remove_member_from_workspace
+from core.security import get_current_user
+from crud.utilisateur import (
+    get_owned_workspaces,get_workspaces_for_user,create_workspace,
+    update_workspace,delete_workspace,get_member,get_members_of_workspace,add_member_to_workspace,
+    update_member_role,remove_member_from_workspace
 )
-from ..core.function import (
+from core.function import (
     _serialize_member,
     _serialize_workspace,
     _get_workspace_member_context,

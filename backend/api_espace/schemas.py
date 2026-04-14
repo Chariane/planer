@@ -161,6 +161,8 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: Optional[str] = None
 
+class EmailSchema(BaseModel):
+    email: List[EmailStr]
 
 class EmailVerificationCodeRequest(BaseModel):
     email: EmailStr

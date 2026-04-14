@@ -1,7 +1,7 @@
-import sys
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import sys
+from pathlib import Path
 
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[2]

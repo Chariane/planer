@@ -1,4 +1,5 @@
 import logging
+import os
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -6,15 +7,17 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from dotenv import dotenv_values
+from typing import Optional
+
 from ..models import Utilisateur
 from ..schemas import UtilisateurOut
 from .database import get_db
-from typing import Optional
 
 # -----------------------------
 # Configuration
 # -----------------------------
-config_data = dotenv_values(".env")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut

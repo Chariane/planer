@@ -1,8 +1,9 @@
 import os
-from schemas import EmailSchema
+
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from dotenv import load_dotenv
 
+from ..schemas import EmailSchema
 from .database import config_data
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))

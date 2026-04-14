@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from ..core.database import get_db
-from ..core.emails import EmailSchema, send_verification_email
+from ..core.emails import send_verification_email
 from ..core.function import (
     build_email_verification_metadata,
     email_has_changed,
@@ -10,7 +10,7 @@ from ..core.function import (
     validate_admin_password_update,
 )
 from ..core.security import get_password_hash, get_current_admin
-from ..schemas import UtilisateurOut, UtilisateurUpdate, UserRolesUpdate
+from ..schemas import EmailSchema, UtilisateurOut, UtilisateurUpdate, UserRolesUpdate
 from ..crud.utilisateur import (
     get_all_utilisateurs,
     get_utilisateur_by_id,
@@ -129,4 +129,3 @@ def deactivate_user(
     
     updated_user = update_utilisateur(db, user_id, {"is_active": False, "statut": "Suspendu"})
     return updated_user
-

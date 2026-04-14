@@ -3,7 +3,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace
+from models import Espace, PlanerEntreprise, Utilisateur, Workspace
 
 WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
 
