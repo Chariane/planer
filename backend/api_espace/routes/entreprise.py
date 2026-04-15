@@ -66,12 +66,6 @@ def create_entreprise_espace_endpoint(
     workspace = _get_workspace_or_404(db, workspace_id)
     _require_workspace_management_access(db, workspace_id, current_entreprise.id)
 
-    if workspace.id_utilisateur and not can_create_espace(db, workspace.id_utilisateur):
-        raise HTTPException(
-            status_code=403,
-            detail="Compte non premium: vous avez droit a un seul workspace et un seul espace.",
-        )
-
     espace_payload = espace_in.model_copy(update={"id_workspace": workspace_id, "id_espace_parent": None})
     return create_entreprise_espace(db, espace_payload, current_entreprise.id)
 
