@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import Card from '../components/ui/Card';
+import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import { Shield, Copy, Check, Edit2 } from 'lucide-react';
@@ -103,7 +103,7 @@ export default function ProfilePage() {
       </div>
 
       {activeTab === 'profile' && (
-        <Card className="p-6">
+        <GlassCard className="p-6">
           <div className="space-y-4">
             <div><label className="block text-sm font-medium text-gray-700">Nom d'utilisateur</label><p className="mt-1">{user?.username}</p></div>
             <div><label className="block text-sm font-medium text-gray-700">Email</label><p className="mt-1">{user?.email}</p></div>
@@ -123,12 +123,12 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-        </Card>
+        </GlassCard>
       )}
 
       {activeTab === 'security' && (
         <div className="space-y-6">
-          <Card className="p-6">
+          <GlassCard className="p-6">
             <h2 className="text-xl font-semibold mb-4">Authentification à deux facteurs</h2>
             {user?.is_2fa_enabled ? (
               <div>
@@ -139,9 +139,9 @@ export default function ProfilePage() {
             ) : (
               <Button onClick={handleSetup2FA}><Shield className="h-4 w-4 mr-2" /> Activer 2FA</Button>
             )}
-          </Card>
+          </GlassCard>
 
-          <Card className="p-6">
+          <GlassCard className="p-6">
             <h2 className="text-xl font-semibold mb-4">Changer le mot de passe</h2>
             <div className="space-y-3 max-w-md">
               <input type="password" placeholder="Mot de passe actuel" value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full border rounded p-2" />
@@ -149,7 +149,7 @@ export default function ProfilePage() {
               <input type="password" placeholder="Confirmer" value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full border rounded p-2" />
               <Button onClick={handleChangePassword}>Modifier le mot de passe</Button>
             </div>
-          </Card>
+          </GlassCard>
         </div>
       )}
 

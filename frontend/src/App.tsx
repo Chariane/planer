@@ -16,6 +16,8 @@ import UsersPage from './pages/UsersPage';
 import AbsencesPage from './pages/AbsencesPage';
 import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
+import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
+
 
 function App() {
   return (
@@ -32,6 +34,7 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<AppView />} />
+              <Route path="/workspaces" element={<WorkspaceDashboard />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/users" element={<UsersPage />} />

@@ -1,3 +1,4 @@
+// frontend/src/pages/app/components/KanbanCard.tsx
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';

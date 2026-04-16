@@ -1,3 +1,4 @@
+// frontend/src/pages/app/components/KanbanView.tsx
 import { useState } from 'react';
 import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';

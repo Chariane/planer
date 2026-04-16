@@ -1,40 +1,37 @@
-import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Plus, Filter, Search, ChevronDown, ChevronRight, Clock, AlertCircle, CheckCircle, Ban, Archive, Circle, MoreVertical, Edit, Trash } from 'lucide-react';
+// frontend/src/pages/app/CenterContent.tsx
+import { useState } from 'react';
+import { Plus, Search, Filter, ChevronDown, ChevronRight, MoreVertical, Edit, Trash, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { useApp } from '../../contexts/AppContext';
-import type { Task, Member } from '../../contexts/AppContext';
 import { Button } from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
+import { GlassCard } from '../../components/ui/GlassCard';
 import Modal from '../../components/ui/Modal';
 import KanbanView from './components/KanbanView';
 import GanttView from './components/GanttView';
+import type { Task, Member } from '../../types';
 
-const statusLabels = {
-  en_cours: 'En cours',
-  en_attente: 'En attente',
-  terminee: 'Terminées',
-  bloquee: 'Bloquées',
-  archivee: 'Archivées',
+// Helper pour créer un membre avec un rôle strict
+const createMember = (id: string, name: string, email: string, role: 'admin' | 'member'): Member => ({ id, name, email, role });
+
+// Données mockées
+const initialTasks: Task[] = [
+  { id: '1', title: 'Rédaction de cahier de charges', description: '', status: 'en_cours', priority: 'elevee', dueDate: '2025-12-05', assignees: [createMember('u1', 'Thomas D.', '', 'member')], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '2', title: 'Conception de l\'architecture', description: '', status: 'en_cours', priority: 'elevee', dueDate: '2025-12-05', assignees: [createMember('u2', 'Alice M.', '', 'member')], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '3', title: 'Conception Frontend', description: '', status: 'en_cours', priority: 'normale', dueDate: '2025-12-06', assignees: [createMember('u3', 'Lucas B.', '', 'member')], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '4', title: 'Conception Backend', description: '', status: 'en_cours', priority: 'normale', dueDate: '2025-12-06', assignees: [createMember('u4', 'Emma P.', '', 'member')], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '5', title: 'Conception de BD', description: '', status: 'en_cours', priority: 'faible', dueDate: '2025-12-07', assignees: [createMember('u1', 'Thomas D.', '', 'member')], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '6', title: 'Tests unitaires', description: '', status: 'en_attente', priority: 'normale', dueDate: '2025-12-10', assignees: [], listId: 'l1', createdAt: new Date(), subTasks: [] },
+  { id: '7', title: 'Déploiement', description: '', status: 'terminee', priority: 'elevee', dueDate: '2025-12-01', assignees: [], listId: 'l1', createdAt: new Date(), subTasks: [] },
+];
+
+const statusLabels: Record<string, string> = {
+  en_cours: 'Tâches en cours',
+  en_attente: 'Tâches en attente',
+  terminee: 'Tâches terminées',
+  bloquee: 'Tâches bloquées',
+  archivee: 'Tâches archivées',
 };
 
-const statusIcons = {
-  en_cours: Clock,
-  en_attente: AlertCircle,
-  terminee: CheckCircle,
-  bloquee: Ban,
-  archivee: Archive,
-};
-
-const statusColors = {
-  en_cours: 'text-blue-600',
-  en_attente: 'text-yellow-600',
-  terminee: 'text-green-600',
-  bloquee: 'text-red-600',
-  archivee: 'text-gray-500',
-};
-
-const priorityLabels = {
+const priorityLabels: Record<string, string> = {
   tres_elevee: 'Très élevée',
   elevee: 'Élevée',
   normale: 'Normale',
@@ -42,7 +39,7 @@ const priorityLabels = {
   tres_faible: 'Très faible',
 };
 
-const priorityColors = {
+const priorityColors: Record<string, string> = {
   tres_elevee: 'bg-red-100 text-red-800',
   elevee: 'bg-orange-100 text-orange-800',
   normale: 'bg-blue-100 text-blue-800',
@@ -50,72 +47,77 @@ const priorityColors = {
   tres_faible: 'bg-gray-100 text-gray-800',
 };
 
+// Données mockées pour les membres
+const mockMembers: Member[] = [
+  createMember('1', 'Thomas D.', 'thomas@example.com', 'admin'),
+  createMember('2', 'Alice M.', 'alice@example.com', 'member'),
+  createMember('3', 'Lucas B.', 'lucas@example.com', 'member'),
+  createMember('4', 'Emma P.', 'emma@example.com', 'member'),
+];
+
 export default function CenterContent() {
-  const { workspaceId, spaceId, listId } = useParams();
-  const { workspaces, updateTask, addTask, deleteTask, toggleSubTask, addMember } = useApp();
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres'>('liste');
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     en_cours: true,
-    en_attente: true,
-    terminee: true,
-    bloquee: true,
-    archivee: true,
+    en_attente: false,
+    terminee: false,
+    bloquee: false,
+    archivee: false,
   });
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [taskForm, setTaskForm] = useState({
     title: '',
-    description: '',
+    assigneeName: '',
     priority: 'normale' as Task['priority'],
     dueDate: '',
-    assigneeId: '',
   });
-  const [memberForm, setMemberForm] = useState({
-    name: '',
-    email: '',
-    role: 'member' as 'admin' | 'member',
-  });
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const findList = (espaces: any[], listId: string): any => {
-    for (const espace of espaces) {
-      const list = espace.listes?.find((l: any) => l.id === listId);
-      if (list) return list;
-      if (espace.sous_espaces) {
-        const found = findList(espace.sous_espaces, listId);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  const workspace = workspaces.find(w => w.id === workspaceId);
-  const list = workspace ? findList(workspace.espaces || [], listId || '') : null;
-  const tasks: Task[] = list?.taches || [];
-
-  const toggleTaskExpand = (taskId: string) => {
-    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  // Fonctions de gestion des tâches
+  const updateTask = (updatedTask: Task) => {
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
   };
 
-  const toggleStatus = (status: string) => {
-    setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
+  const addTask = (task: Omit<Task, 'id' | 'createdAt'>) => {
+    const newTask: Task = {
+      ...task,
+      id: Date.now().toString(),
+      createdAt: new Date(),
+      assignees: task.assignees || [],
+      subTasks: [],
+    };
+    setTasks(prev => [...prev, newTask]);
   };
 
-  const groupedTasks = tasks.reduce<Record<string, Task[]>>((acc, task) => {
+  const deleteTask = (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  // Regroupement par statut
+  const groupedTasks = tasks.reduce((acc, task) => {
     if (!acc[task.status]) acc[task.status] = [];
     acc[task.status].push(task);
     return acc;
-  }, {});
+  }, {} as Record<string, Task[]>);
 
   const pieData = Object.entries(groupedTasks).map(([status, tasks]) => ({
-    name: statusLabels[status as keyof typeof statusLabels] || status,
+    name: statusLabels[status] || status,
     value: tasks.length,
-    color: status === 'en_cours' ? '#3b82f6' : status === 'en_attente' ? '#eab308' : status === 'bloquee' ? '#ef4444' : status === 'terminee' ? '#10b981' : '#6b7280',
+    color:
+      status === 'en_cours' ? '#3b82f6'
+      : status === 'en_attente' ? '#eab308'
+      : status === 'terminee' ? '#10b981'
+      : status === 'bloquee' ? '#ef4444'
+      : '#6b7280',
   })).filter(d => d.value > 0);
 
   const openCreateTask = () => {
     setEditingTask(null);
-    setTaskForm({ title: '', description: '', priority: 'normale', dueDate: '', assigneeId: '' });
+    setTaskForm({ title: '', assigneeName: '', priority: 'normale', dueDate: '' });
     setIsTaskModalOpen(true);
   };
 
@@ -123,67 +125,71 @@ export default function CenterContent() {
     setEditingTask(task);
     setTaskForm({
       title: task.title,
-      description: task.description || '',
+      assigneeName: task.assignees[0]?.name || '',
       priority: task.priority,
       dueDate: task.dueDate,
-      assigneeId: task.assignees[0]?.id || '',
     });
     setIsTaskModalOpen(true);
   };
 
   const handleTaskSubmit = () => {
-    if (!taskForm.title.trim() || !listId) return;
-    const assignee = workspace?.membres.find(m => m.id === taskForm.assigneeId);
-    const task: Task = {
-      id: editingTask?.id || Date.now().toString(),
-      title: taskForm.title,
-      description: taskForm.description,
-      status: editingTask?.status || 'en_cours',
-      priority: taskForm.priority,
-      dueDate: taskForm.dueDate,
-      assignees: assignee ? [assignee] : [],
-      listId: listId,
-      createdAt: editingTask?.createdAt || new Date(),
-      subTasks: editingTask?.subTasks || [],
-    };
+    if (!taskForm.title.trim()) return;
+    const assignee = taskForm.assigneeName ? [createMember(Date.now().toString(), taskForm.assigneeName, '', 'member')] : [];
     if (editingTask) {
-      updateTask(task);
+      updateTask({
+        ...editingTask,
+        title: taskForm.title,
+        assignees: assignee,
+        priority: taskForm.priority,
+        dueDate: taskForm.dueDate,
+      });
     } else {
-      addTask(listId, task);
+      addTask({
+        title: taskForm.title,
+        description: '',
+        status: 'en_cours',
+        priority: taskForm.priority,
+        dueDate: taskForm.dueDate,
+        assignees: assignee,
+        listId: 'l1',
+      });
     }
     setIsTaskModalOpen(false);
   };
 
   const handleDeleteTask = (taskId: string) => {
-    if (window.confirm('Supprimer cette tâche ?')) {
-      deleteTask(listId!, taskId);
-    }
+    if (window.confirm('Supprimer cette tâche ?')) deleteTask(taskId);
   };
 
-  const handleAddMember = () => {
-    if (!memberForm.name.trim() || !memberForm.email.trim() || !workspaceId) return;
-    const newMember: Member = {
-      id: Date.now().toString(),
-      name: memberForm.name,
-      email: memberForm.email,
-      role: memberForm.role,
-    };
-    addMember(workspaceId, newMember);
-    setIsMemberModalOpen(false);
-    setMemberForm({ name: '', email: '', role: 'member' });
+  const handleInviteMember = () => {
+    if (!inviteEmail.trim()) return;
+    alert(`Invitation envoyée à ${inviteEmail}`);
+    setInviteEmail('');
+    setIsInviteModalOpen(false);
   };
+
+  const toggleStatus = (status: string) => {
+    setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
+  };
+
+  const filteredTasks = tasks.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4 md:p-6 bg-gray-50">
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+    <div className="p-6">
+      {/* Onglets */}
+      <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
         {(['liste', 'kanban', 'gantt', 'membres'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 md:px-4 md:py-2 text-sm font-medium rounded-lg transition whitespace-nowrap ${
-              activeTab === tab ? 'bg-secondary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
+              activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
+            {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
+            {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
+            {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
+            {tab === 'membres' && <Users className="w-4 h-4" />}
             {tab === 'liste' && 'Vue liste'}
             {tab === 'kanban' && 'Vue Kanban'}
             {tab === 'gantt' && 'Diagramme de Gantt'}
@@ -192,145 +198,174 @@ export default function CenterContent() {
         ))}
       </div>
 
+      {/* Vue Liste */}
       {activeTab === 'liste' && (
         <>
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mt-4">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="primary" size="sm" onClick={openCreateTask}><Plus className="h-4 w-4 mr-1" /> Ajouter tâche</Button>
-              <Button variant="outline" size="sm" onClick={() => setIsMemberModalOpen(true)}><Plus className="h-4 w-4 mr-1" /> Ajouter membre</Button>
+          <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+            <div className="flex gap-2">
+              <Button variant="primary" size="sm" onClick={openCreateTask}>
+                <Plus className="h-4 w-4 mr-1" /> Ajouter nouvelle tâche
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsInviteModalOpen(true)}>
+                <UserPlus className="h-4 w-4 mr-1" /> Ajouter nouveau membre
+              </Button>
             </div>
             <div className="flex gap-2">
-              <div className="relative flex-1 sm:flex-initial">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input type="text" placeholder="Rechercher..." className="w-full sm:w-64 pl-8 pr-2 py-1 border rounded-lg text-sm" />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Rechercher..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-64"
+                />
               </div>
-              <button className="p-1 rounded hover:bg-gray-100"><Filter className="h-5 w-5 text-gray-500" /></button>
+              <button className="p-2 rounded-lg hover:bg-gray-100"><Filter className="h-5 w-5 text-gray-500" /></button>
             </div>
           </div>
 
-          <div className="mt-6 space-y-4">
-            {Object.keys(groupedTasks).length === 0 && <Card className="p-8 text-center text-gray-500">Aucune tâche. Cliquez sur "Ajouter tâche" pour commencer.</Card>}
-            {Object.entries(groupedTasks).map(([status, tasks]) => {
-              const Icon = statusIcons[status as keyof typeof statusIcons] || Clock;
-              const colorClass = statusColors[status as keyof typeof statusColors] || 'text-gray-600';
+          <div className="space-y-4">
+            {Object.entries(statusLabels).map(([status, label]) => {
+              const statusTasks = groupedTasks[status] || [];
+              const count = statusTasks.length;
+              const filtered = statusTasks.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase()));
               return (
-                <Card key={status} className="p-4 hover:shadow-md transition">
-                  <button onClick={() => toggleStatus(status)} className="w-full flex justify-between items-center">
-                    <div className="flex items-center gap-2"><Icon className={`h-5 w-5 ${colorClass}`} /><h3 className="font-semibold text-gray-800">{statusLabels[status as keyof typeof statusLabels] || status}</h3><span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{tasks.length}</span></div>
-                    {expandedStatus[status] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <GlassCard key={status} className="overflow-hidden">
+                  <button onClick={() => toggleStatus(status)} className="w-full flex justify-between items-center p-4 bg-white/50 hover:bg-gray-50 transition">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-800">{label}</span>
+                      <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{count}</span>
+                    </div>
+                    {expandedStatus[status] ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
                   </button>
                   {expandedStatus[status] && (
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="min-w-[600px] md:min-w-full text-sm">
-                        <thead className="text-gray-500 border-b">
-                          <tr><th className="text-left py-2">#</th><th className="text-left py-2">Titre</th><th className="text-left py-2">Membres</th><th className="text-left py-2">Priorité</th><th className="text-left py-2">Date fin</th><th className="text-left py-2">Actions</th></tr>
-                        </thead>
-                        <tbody>
-                          {tasks.map(task => (
-                            <React.Fragment key={task.id}>
-                              <tr className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="py-2">{task.id}</td>
-                                <td className="py-2 font-medium">
-                                  <button onClick={() => toggleTaskExpand(task.id)} className="flex items-center gap-1 hover:text-secondary">
-                                    {expandedTasks[task.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                    {task.title}
-                                  </button>
-                                </td>
-                                <td className="py-2">
-                                  <div className="flex -space-x-2">
-                                    {task.assignees.map(a => (
-                                      <div key={a.id} className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold border-2 border-white">
-                                        {a.name.charAt(0)}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </td>
-                                <td className="py-2">
+                    <div className="p-4 border-t border-gray-100">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-[700px] w-full text-sm">
+                          <thead className="text-gray-500 border-b border-gray-100">
+                            <tr>
+                              <th className="text-left py-3">#</th>
+                              <th className="text-left py-3">Titre</th>
+                              <th className="text-left py-3">Membres</th>
+                              <th className="text-left py-3">Priorité</th>
+                              <th className="text-left py-3">Date fin prévue</th>
+                              <th className="text-left py-3"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtered.map((task, idx) => (
+                              <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
+                                <td className="py-3 w-12">{idx + 1}</td>
+                                <td className="py-3 font-medium">{task.title}</td>
+                                <td className="py-3">{task.assignees.map(a => a.name).join(', ') || '—'}</td>
+                                <td className="py-3">
                                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>
                                     {priorityLabels[task.priority]}
                                   </span>
                                 </td>
-                                <td className="py-2 text-gray-500">{task.dueDate}</td>
-                                <td className="py-2">
+                                <td className="py-3 text-gray-500">{task.dueDate}</td>
+                                <td className="py-3">
                                   <div className="relative group">
-                                    <button className="text-gray-400 hover:text-gray-600"><MoreVertical className="h-4 w-4" /></button>
-                                    <div className="absolute right-0 top-6 z-10 hidden group-hover:flex flex-col bg-white shadow-lg rounded-lg w-32">
-                                      <button onClick={() => openEditTask(task)} className="px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"><Edit className="h-3 w-3" /> Modifier</button>
-                                      <button onClick={() => handleDeleteTask(task.id)} className="px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"><Trash className="h-3 w-3" /> Supprimer</button>
+                                    <button className="p-1 rounded-lg hover:bg-gray-100"><MoreVertical className="h-4 w-4 text-gray-400" /></button>
+                                    <div className="absolute right-0 top-8 z-10 hidden group-hover:flex flex-col bg-white shadow-lg rounded-lg w-32 border">
+                                      <button onClick={() => openEditTask(task)} className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"><Edit className="h-3 w-3" /> Modifier</button>
+                                      <button onClick={() => handleDeleteTask(task.id)} className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash className="h-3 w-3" /> Supprimer</button>
                                     </div>
                                   </div>
                                 </td>
                               </tr>
-                              {expandedTasks[task.id] && task.subTasks && task.subTasks.length > 0 && (
-                                <tr className="bg-gray-50">
-                                  <td colSpan={6} className="py-2 pl-8">
-                                    <div className="space-y-1">
-                                      {task.subTasks.map(sub => (
-                                        <div key={sub.id} className="flex items-center gap-2 cursor-pointer group" onClick={() => toggleSubTask(task.id, sub.id)}>
-                                          {sub.completed ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Circle className="h-4 w-4 text-gray-300 group-hover:text-gray-400" />}
-                                          <span className={`text-xs ${sub.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{sub.text}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
+                            ))}
+                            {filtered.length === 0 && (
+                              <tr>
+                                <td colSpan={6} className="py-8 text-center text-gray-500">Aucune tâche</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
-                </Card>
+                </GlassCard>
               );
             })}
           </div>
 
           {pieData.length > 0 && (
-            <Card className="mt-6 p-4">
+            <GlassCard className="mt-6 p-5">
               <h3 className="font-semibold text-gray-800 mb-3">Répartition des tâches</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{pieData.map((entry, idx) => <Cell key={`cell-${idx}`} fill={entry.color} />)}</Pie><Tooltip /></PieChart>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    {pieData.map((entry, idx) => <Cell key={`cell-${idx}`} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
               </ResponsiveContainer>
-            </Card>
+            </GlassCard>
           )}
         </>
       )}
 
+      {/* Vue Kanban */}
       {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={updateTask} />}
+
+      {/* Vue Gantt */}
       {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+
+      {/* Vue Membres */}
       {activeTab === 'membres' && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {workspace?.membres.map(m => <Card key={m.id} className="flex items-center gap-3 p-4"><div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center font-bold">{m.name.charAt(0)}</div><div><p className="font-medium">{m.name}</p><p className="text-sm text-gray-500">{m.email}</p><p className="text-xs text-gray-400">Rôle : {m.role}</p></div></Card>)}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800">Membres de l'espace</h3>
+            <Button variant="outline" size="sm" onClick={() => setIsInviteModalOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Inviter un membre
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {mockMembers.map(member => (
+              <GlassCard key={member.id} className="flex items-center gap-4 p-4 hover:shadow-md transition">
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-lg">
+                  {member.name.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">{member.name}</p>
+                  <p className="text-sm text-gray-500">{member.email}</p>
+                  <p className="text-xs text-gray-400 mt-1">Rôle : {member.role === 'admin' ? 'Administrateur' : 'Membre'}</p>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Modale de tâche */}
-      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? "Modifier la tâche" : "Ajouter une nouvelle tâche"} size="lg">
+      {/* Modales */}
+      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? "Modifier la tâche" : "Nouvelle tâche"} size="lg">
         <div className="space-y-4">
           <input type="text" placeholder="Titre" value={taskForm.title} onChange={e => setTaskForm({...taskForm, title: e.target.value})} className="w-full p-2 border rounded-lg" />
-          <textarea placeholder="Description" value={taskForm.description} onChange={e => setTaskForm({...taskForm, description: e.target.value})} rows={3} className="w-full p-2 border rounded-lg" />
+          <input type="text" placeholder="Membre assigné" value={taskForm.assigneeName} onChange={e => setTaskForm({...taskForm, assigneeName: e.target.value})} className="w-full p-2 border rounded-lg" />
           <select value={taskForm.priority} onChange={e => setTaskForm({...taskForm, priority: e.target.value as Task['priority']})} className="w-full p-2 border rounded-lg">
-            <option value="tres_elevee">Très élevée</option><option value="elevee">Élevée</option><option value="normale">Normale</option><option value="faible">Faible</option><option value="tres_faible">Très faible</option>
+            <option value="tres_elevee">Très élevée</option>
+            <option value="elevee">Élevée</option>
+            <option value="normale">Normale</option>
+            <option value="faible">Faible</option>
+            <option value="tres_faible">Très faible</option>
           </select>
           <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})} className="w-full p-2 border rounded-lg" />
-          <select value={taskForm.assigneeId} onChange={e => setTaskForm({...taskForm, assigneeId: e.target.value})} className="w-full p-2 border rounded-lg">
-            <option value="">Non assigné</option>
-            {workspace?.membres.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setIsTaskModalOpen(false)}>Annuler</Button><Button onClick={handleTaskSubmit}>{editingTask ? "Enregistrer" : "Créer"}</Button></div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsTaskModalOpen(false)}>Annuler</Button>
+            <Button onClick={handleTaskSubmit}>{editingTask ? "Enregistrer" : "Créer"}</Button>
+          </div>
         </div>
       </Modal>
 
-      {/* Modale d'ajout de membre */}
-      <Modal isOpen={isMemberModalOpen} onClose={() => setIsMemberModalOpen(false)} title="Ajouter un membre" size="md">
+      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom complet" value={memberForm.name} onChange={e => setMemberForm({...memberForm, name: e.target.value})} className="w-full p-2 border rounded-lg" />
-          <input type="email" placeholder="Email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value})} className="w-full p-2 border rounded-lg" />
-          <select value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value as 'admin' | 'member'})} className="w-full p-2 border rounded-lg">
-            <option value="member">Membre</option><option value="admin">Administrateur</option>
-          </select>
-          <div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setIsMemberModalOpen(false)}>Annuler</Button><Button onClick={handleAddMember}>Ajouter</Button></div>
+          <input type="email" placeholder="Email du membre" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="w-full p-2 border rounded-lg" />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
+            <Button onClick={handleInviteMember}>Inviter</Button>
+          </div>
         </div>
       </Modal>
     </div>

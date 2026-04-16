@@ -1,3 +1,4 @@
+// frontend/src/pages/app/components/KanbanColumn.tsx
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import KanbanCard from './KanbanCard';
