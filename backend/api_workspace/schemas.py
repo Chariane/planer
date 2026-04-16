@@ -9,6 +9,9 @@ NAME_REGEX = r"^[a-zA-ZÀ-ÿ\s'-]+$"
 USERNAME_REGEX = r"^[a-zA-Z0-9_.-]+$"
 WORKSPACE_ASSIGNABLE_ROLES = {"Administrateur", "Membre", "Invité"}
 
+TACHE_STATUSES = {"en attente", "en cours", "terminé", "bloqué"}
+TACHE_PRIORITIES = {"basse", "moyenne", "haute", "critique"}
+
 # ----------------------------------------
 # 🔐 UTILISATEURS
 # ----------------------------------------
@@ -311,6 +314,17 @@ class LoginResponse(MessageResponse):
     token_type: Optional[str] = None
     user: Optional[UtilisateurOut] = None
     challenge_token: Optional[str] = None
+    setup_required: bool = False
+    google_authenticator_secret: Optional[str] = None
+    google_authenticator_otpauth_url: Optional[str] = None
+
+
+class LoginChallengeResponse(MessageResponse):
+    requires_2fa: bool = True
+    challenge_token: str
+    setup_required: bool = False
+    google_authenticator_secret: Optional[str] = None
+    google_authenticator_otpauth_url: Optional[str] = None
 
 
 class TwoFactorVerifyRequest(BaseModel):
@@ -506,6 +520,12 @@ class WorkspaceWithContextOut(WorkspaceOut):
     current_user_statut: Optional[str] = None
 
 
+class RegisterWithWorkspaceResponse(BaseModel):
+    message: str
+    user: UtilisateurOut
+    workspace: WorkspaceOut
+
+
 class WorkspaceDelete(BaseModel):
     id: str
 
@@ -531,6 +551,11 @@ class EspaceOut(EspaceBase):
     id_workspace: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+
+class EspaceTreeOut(EspaceOut):
+    sous_espaces: List["EspaceTreeOut"] = []
+
+
 class EspaceDelete(BaseModel):
     id: str
 
@@ -543,11 +568,40 @@ class ListeCreate(ListeBase):
     id_espace: Optional[str] = None
     id_workspace: Optional[str] = None
 
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if (self.id_espace is None) == (self.id_workspace is None):
+            raise ValueError(
+                "Une liste doit etre rattachee soit a un espace, soit a un workspace, jamais aux deux."
+            )
+        return self
+
 class ListeUpdate(BaseModel):
     nom: Optional[str] = Field(None, min_length=1, max_length=150)
     description: Optional[str] = None
     id_espace: Optional[str] = None
     id_workspace: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_scope_update(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        has_id_espace = "id_espace" in data
+        has_id_workspace = "id_workspace" in data
+
+        if not has_id_espace and not has_id_workspace:
+            return data
+
+        id_espace = data.get("id_espace")
+        id_workspace = data.get("id_workspace")
+
+        if (id_espace is None) == (id_workspace is None):
+            raise ValueError(
+                "Pour modifier le rattachement d'une liste, fournissez soit id_espace, soit id_workspace, jamais les deux."
+            )
+        return data
 
 class ListeOut(ListeBase):
     id: str
@@ -565,9 +619,25 @@ class TacheBase(BaseModel):
     description: Optional[str] = None
     date_debut: Optional[datetime] = None
     date_fin_prevue: Optional[datetime] = None
-    statut: Optional[str] = None
-    priorite: Optional[str] = None
+    statut: str = Field(default="en attente")
+    priorite: str = Field(default="moyenne")
     ordre_affichage: Optional[int] = Field(None, ge=0)
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut(cls, v: str) -> str:
+        if v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite(cls, v: str) -> str:
+        if v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
 
 class TacheCreate(TacheBase):
     id_liste: Optional[str] = None
@@ -581,6 +651,22 @@ class TacheUpdate(BaseModel):
     priorite: Optional[str] = None
     ordre_affichage: Optional[int] = Field(None, ge=0)
     id_liste: Optional[str] = None
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
 
 class TacheOut(TacheBase):
     id: str
@@ -628,6 +714,18 @@ class WorkspaceMemberUserOut(BaseModel):
 
 class WorkspaceMemberOut(MembreOut):
     utilisateur: Optional[WorkspaceMemberUserOut] = None
+
+
+class EspaceMemberUserOut(BaseModel):
+    id: str
+    username: str
+    email: EmailStr
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+
+
+class EspaceMemberOut(MembreOut):
+    utilisateur: Optional[EspaceMemberUserOut] = None
 
 
 class MembreDelete(BaseModel):
@@ -694,6 +792,10 @@ class WorkspaceMemberUpdate(BaseModel):
 
 
 class WorkspaceInvitationAcceptRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+
+
+class EspaceInvitationAcceptRequest(BaseModel):
     token: str = Field(..., min_length=10)
 
 # Fichier
@@ -857,3 +959,5 @@ class ChecklistOut(ChecklistBase):
 
 class ChecklistDelete(BaseModel):
     id: str
+
+EspaceTreeOut.model_rebuild()

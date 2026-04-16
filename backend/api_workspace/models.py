@@ -1559,7 +1559,7 @@ class Membre(Base):
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
-    role: Mapped[str] = mapped_column(String(30), server_default=text("'Invité'::character varying"))
+    role: Mapped[str] = mapped_column(String(30), server_default=text("'Membre'::character varying"))
     statut: Mapped[str] = mapped_column(String(30), server_default=text("'Actif'::character varying"))
     id_utilisateur: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     id_workspace: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.workspace.id', ondelete='SET NULL'))

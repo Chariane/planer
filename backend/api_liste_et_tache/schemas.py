@@ -80,6 +80,23 @@ class UtilisateurCreate(UtilisateurBase):
             raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
         return value
 
+
+class SuperAdminUtilisateurCreate(UtilisateurBase):
+    password: str
+    is_active: bool = True
+    is_user: bool = True
+    is_admin: bool = False
+    is_super_admin: bool = False
+    is_livreur: bool = False
+    is_entreprise: bool = False
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères.")
+        return value
+
 class UtilisateurUpdate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
@@ -207,6 +224,43 @@ class RegisterResponse(BaseModel):
     user: UtilisateurOut
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=8)
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_email(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("email"):
+            data["email"] = str(data["email"]).strip().lower()
+        return data
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code de reinitialisation doit contenir exactement 6 chiffres.")
+        return code
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8)
+
+
 class GoogleAuthenticatorSetupResponse(MessageResponse):
     setup_required: bool = True
     is_2fa_enabled: bool = False
@@ -219,6 +273,22 @@ class GoogleAuthenticatorStatusResponse(MessageResponse):
     setup_required: bool
     is_2fa_enabled: bool
     google_auth_configured_at: Optional[datetime] = None
+
+
+class TwoFactorEnableRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = "".join(char for char in value if char.isdigit())
+        if len(code) != 6:
+            raise ValueError("Le code Google Authenticator doit contenir exactement 6 chiffres.")
+        return code
+
+
+class TwoFactorDisableRequest(BaseModel):
+    current_password: str = Field(..., min_length=8)
 
 
 class LoginRequest(BaseModel):
@@ -236,6 +306,17 @@ class LoginRequest(BaseModel):
                     normalized_identifier = normalized_identifier.lower()
                 data["identifier"] = normalized_identifier
         return data
+
+
+class LoginResponse(MessageResponse):
+    requires_2fa: bool = False
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    user: Optional[UtilisateurOut] = None
+    challenge_token: Optional[str] = None
+    setup_required: bool = False
+    google_authenticator_secret: Optional[str] = None
+    google_authenticator_otpauth_url: Optional[str] = None
 
 
 class LoginChallengeResponse(MessageResponse):
@@ -432,10 +513,18 @@ class WorkspaceOut(WorkspaceBase):
     id_utilisateur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+
 class WorkspaceWithContextOut(WorkspaceOut):
     member_count: int = 0
     current_user_role: Optional[str] = None
     current_user_statut: Optional[str] = None
+
+
+class RegisterWithWorkspaceResponse(BaseModel):
+    message: str
+    user: UtilisateurOut
+    workspace: WorkspaceOut
+
 
 class WorkspaceDelete(BaseModel):
     id: str
@@ -461,6 +550,11 @@ class EspaceOut(EspaceBase):
     id_espace_parent: Optional[str] = None
     id_workspace: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class EspaceTreeOut(EspaceOut):
+    sous_espaces: List["EspaceTreeOut"] = []
+
 
 class EspaceDelete(BaseModel):
     id: str
@@ -609,20 +703,55 @@ class MembreOut(MembreBase):
     id_tache: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+
+class WorkspaceMemberUserOut(BaseModel):
+    id: str
+    username: str
+    email: EmailStr
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+
+
+class WorkspaceMemberOut(MembreOut):
+    utilisateur: Optional[WorkspaceMemberUserOut] = None
+
+
+class EspaceMemberUserOut(BaseModel):
+    id: str
+    username: str
+    email: EmailStr
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+
+
+class EspaceMemberOut(MembreOut):
+    utilisateur: Optional[EspaceMemberUserOut] = None
+
+
 class MembreDelete(BaseModel):
     id: str
 
 
 class WorkspaceMemberInvite(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
     role: str = Field(default="Membre")
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_email(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("email"):
-            data["email"] = str(data["email"]).strip().lower()
+    def normalize_invitation_target(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if data.get("email"):
+                data["email"] = str(data["email"]).strip().lower()
+            if data.get("username"):
+                data["username"] = str(data["username"]).strip()
         return data
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if not self.email and not self.username:
+            raise ValueError("Fournissez l'email ou le username de l'utilisateur a inviter.")
+        return self
 
     @field_validator("role")
     @classmethod
@@ -652,7 +781,7 @@ class WorkspaceMemberUpdate(BaseModel):
     @field_validator("statut")
     @classmethod
     def validate_statut(cls, value: Optional[str]) -> Optional[str]:
-        allowed_statuses = {"Actif", "Suspendu", "Quitté"}
+        allowed_statuses = {"Actif", "En attente", "Suspendu", "Quitté"}
         if value is None:
             return value
         statut = value.strip()
@@ -660,6 +789,14 @@ class WorkspaceMemberUpdate(BaseModel):
             allowed = ", ".join(sorted(allowed_statuses))
             raise ValueError(f"Statut invalide. Valeurs autorisees: {allowed}.")
         return statut
+
+
+class WorkspaceInvitationAcceptRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+
+
+class EspaceInvitationAcceptRequest(BaseModel):
+    token: str = Field(..., min_length=10)
 
 # Fichier
 class FichierBase(BaseModel):
@@ -822,3 +959,5 @@ class ChecklistOut(ChecklistBase):
 
 class ChecklistDelete(BaseModel):
     id: str
+
+EspaceTreeOut.model_rebuild()
