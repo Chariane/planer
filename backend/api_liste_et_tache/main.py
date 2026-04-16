@@ -8,9 +8,11 @@ if __package__ in {None, ""}:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from backend.api_liste_et_tache.routes.utilisateur import router as listes_router
+    from backend.api_liste_et_tache.routes.utilisateur import router as utilisateur_router
+    from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
 else:
-    from .routes.utilisateur import router as listes_router
+    from .routes.utilisateur import router as utilisateur_router
+    from .routes.entreprise import router as entreprise_router
 
 app = FastAPI(
     title="Microservice Api Liste",
@@ -27,7 +29,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(listes_router)
+app.include_router(utilisateur_router)
+app.include_router(entreprise_router)
 
 @app.get("/")
 def root():

@@ -9,6 +9,9 @@ NAME_REGEX = r"^[a-zA-ZÀ-ÿ\s'-]+$"
 USERNAME_REGEX = r"^[a-zA-Z0-9_.-]+$"
 WORKSPACE_ASSIGNABLE_ROLES = {"Administrateur", "Membre", "Invité"}
 
+TACHE_STATUSES = {"en attente", "en cours", "terminé", "bloqué"}
+TACHE_PRIORITIES = {"basse", "moyenne", "haute", "critique"}
+
 # ----------------------------------------
 # 🔐 UTILISATEURS
 # ----------------------------------------
@@ -522,9 +525,25 @@ class TacheBase(BaseModel):
     description: Optional[str] = None
     date_debut: Optional[datetime] = None
     date_fin_prevue: Optional[datetime] = None
-    statut: Optional[str] = None
-    priorite: Optional[str] = None
+    statut: str = Field(default="en attente")
+    priorite: str = Field(default="moyenne")
     ordre_affichage: Optional[int] = Field(None, ge=0)
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut(cls, v: str) -> str:
+        if v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite(cls, v: str) -> str:
+        if v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
 
 class TacheCreate(TacheBase):
     id_liste: Optional[str] = None
@@ -538,6 +557,22 @@ class TacheUpdate(BaseModel):
     priorite: Optional[str] = None
     ordre_affichage: Optional[int] = Field(None, ge=0)
     id_liste: Optional[str] = None
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
 
 class TacheOut(TacheBase):
     id: str
