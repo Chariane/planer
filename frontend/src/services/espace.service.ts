@@ -4,12 +4,27 @@ import { apiFetch } from './api';
 const ESPACE_BASE_URL = import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001';
 
 export const espaceService = {
-  // Correction : utiliser le bon endpoint avec workspace_id dans l'URL
   getByWorkspace: (workspaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/workspaces/${workspaceId}/espaces`),
   
-  create: (data: { nom: string; description?: string; id_workspace: string; id_espace_parent?: string }) => 
-    apiFetch(ESPACE_BASE_URL, `/workspaces/${data.id_workspace}/espaces`, { method: 'POST', body: JSON.stringify(data) }),
+  getTree: (workspaceId: string) => 
+    apiFetch(ESPACE_BASE_URL, `/workspaces/${workspaceId}/espaces/tree`),
+  
+  create: async (data: { nom: string; description?: string; id_workspace: string; id_espace_parent?: string }) => {
+    if (data.id_espace_parent) {
+      // Création d'un sous-espace
+      return apiFetch(ESPACE_BASE_URL, `/espaces/${data.id_espace_parent}/sous-espaces`, {
+        method: 'POST',
+        body: JSON.stringify({ nom: data.nom, description: data.description }),
+      });
+    } else {
+      // Création d'un espace racine
+      return apiFetch(ESPACE_BASE_URL, `/workspaces/${data.id_workspace}/espaces`, {
+        method: 'POST',
+        body: JSON.stringify({ nom: data.nom, description: data.description }),
+      });
+    }
+  },
   
   update: (id: string, data: { nom?: string; description?: string; id_espace_parent?: string }) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
