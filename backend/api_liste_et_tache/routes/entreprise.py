@@ -29,13 +29,17 @@ from ..crud.tache import (
     update_tache,
     assign_member_to_tache,
     unassign_member_from_tache,
-    get_tache_members
+    get_tache_members,
+    get_taches_kanban,
+    update_taches_bulk
 )
+from ..models import Tache
 
 from ..schemas import (
     ListeCreate, ListeOut, ListeUpdate,
     TacheCreate, TacheOut, TacheUpdate,
-    MembreOut, UtilisateurOut
+    MembreOut, UtilisateurOut,
+    TacheFullOut, TacheKanbanOut, TacheBulkUpdate, MessageResponse
 )
 
 router = APIRouter(prefix="/entreprise/listes", tags=["Entreprise Listes & Tâches"])
@@ -125,14 +129,26 @@ def create_entreprise_tache_endpoint(
     _require_list_access(db, liste_id, current_entreprise.id)
     return create_tache(db, **tache_in.model_dump(), id_liste=liste_id)
 
-@router.get("/{liste_id}/taches", response_model=List[TacheOut])
+@router.get("/{liste_id}/taches", response_model=List[TacheFullOut])
 def get_entreprise_taches_endpoint(
     liste_id: str,
+    statut: Optional[str] = None,
+    priorite: Optional[str] = None,
+    membre_id: Optional[str] = None,
+    sort_by: str = "ordre_affichage",
+    order: str = "asc",
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
     _require_list_access(db, liste_id, current_entreprise.id)
-    return get_taches_for_liste(db, liste_id)
+    return get_taches_for_liste(
+        db, liste_id, 
+        statut=statut, 
+        priorite=priorite, 
+        membre_id=membre_id, 
+        sort_by=sort_by, 
+        order=order
+    )
 
 @router.put("/taches/{tache_id}", response_model=TacheOut)
 def update_entreprise_tache_endpoint(
@@ -155,6 +171,66 @@ def delete_entreprise_tache_endpoint(
     _require_list_access(db, tache.id_liste, current_entreprise.id)
     delete_tache(db, tache_id)
     return None
+
+# --- VUES ---
+
+@router.get("/{liste_id}/vues/kanban", response_model=TacheKanbanOut)
+def get_entreprise_kanban_view_endpoint(
+    liste_id: str, 
+    db: Session = Depends(get_db), 
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    return {"columns": get_taches_kanban(db, liste_id)}
+
+@router.get("/{liste_id}/vues/gantt", response_model=List[TacheFullOut])
+def get_entreprise_gantt_view_endpoint(
+    liste_id: str, 
+    db: Session = Depends(get_db), 
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    # Tri chronologique pour le diagramme de Gantt
+    return get_taches_for_liste(db, liste_id, sort_by="date_debut", order="asc")
+
+@router.get("/{liste_id}/vues/tableau", response_model=List[TacheFullOut])
+def get_entreprise_tableau_view_endpoint(
+    liste_id: str, 
+    statut: Optional[str] = None,
+    priorite: Optional[str] = None,
+    membre_id: Optional[str] = None,
+    sort_by: str = "ordre_affichage",
+    order: str = "asc",
+    db: Session = Depends(get_db), 
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    return get_taches_for_liste(
+        db, liste_id, 
+        statut=statut, 
+        priorite=priorite, 
+        membre_id=membre_id, 
+        sort_by=sort_by, 
+        order=order
+    )
+
+@router.patch("/taches/bulk", response_model=MessageResponse)
+def bulk_update_entreprise_taches_endpoint(
+    bulk_in: TacheBulkUpdate, 
+    db: Session = Depends(get_db), 
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    if not bulk_in.items:
+        return {"message": "Aucune modification fournie"}
+    
+    # Sécurité : On vérifie l'accès sur la première tâche du lot
+    first_tache = _get_tache_or_404(db, bulk_in.items[0].id)
+    _require_list_access(db, first_tache.id_liste, current_entreprise.id)
+    
+    if update_taches_bulk(db, [it.model_dump(exclude_unset=True) for it in bulk_in.items]):
+        return {"message": "Mise à jour groupée réussie"}
+    else:
+        raise HTTPException(status_code=400, detail="Échec de la mise à jour groupée")
 
 # --- Assignations ---
 

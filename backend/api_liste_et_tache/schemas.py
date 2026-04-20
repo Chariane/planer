@@ -675,8 +675,24 @@ class TacheOut(TacheBase):
     id_liste: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+class TacheFullOut(TacheOut):
+    membres: List["WorkspaceMemberUserOut"] = []
+
 class TacheDelete(BaseModel):
     id: str
+
+# --- VUES SPÉCIALISÉES ---
+
+class TacheKanbanOut(BaseModel):
+    columns: dict[str, List[TacheFullOut]]
+
+class TacheBulkUpdateItem(BaseModel):
+    id: str
+    statut: Optional[str] = None
+    ordre_affichage: Optional[int] = None
+
+class TacheBulkUpdate(BaseModel):
+    items: List[TacheBulkUpdateItem]
 
 # Membre
 class MembreBase(BaseModel):

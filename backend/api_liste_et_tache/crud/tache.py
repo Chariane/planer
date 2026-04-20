@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy import asc, desc
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -9,8 +10,39 @@ def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
 
 
-def get_taches_for_liste(db: Session, liste_id: str) -> List[Tache]:
-    return db.query(Tache).filter(Tache.id_liste == liste_id).order_by(Tache.ordre_affichage).all()
+def get_taches_for_liste(
+    db: Session, 
+    liste_id: str,
+    statut: Optional[str] = None,
+    priorite: Optional[str] = None,
+    membre_id: Optional[str] = None,
+    sort_by: str = "ordre_affichage",
+    order: str = "asc"
+) -> List[Tache]:
+    query = db.query(Tache).filter(Tache.id_liste == liste_id)
+    
+    # Eager loading des membres et de leurs profils utilisateur
+    query = query.options(
+        selectinload(Tache.membres).joinedload(Membre.utilisateur)
+    )
+    
+    # Filtres
+    if statut:
+        query = query.filter(Tache.statut == statut)
+    if priorite:
+        query = query.filter(Tache.priorite == priorite)
+    if membre_id:
+        # On fait une jointure pour filtrer par utilisateur assigné
+        query = query.join(Tache.membres).filter(Membre.id_utilisateur == membre_id)
+        
+    # Tri dynamique
+    order_func = asc if order == "asc" else desc
+    if hasattr(Tache, sort_by):
+        query = query.order_by(order_func(getattr(Tache, sort_by)))
+    else:
+        query = query.order_by(Tache.ordre_affichage.asc())
+        
+    return query.all()
 
 
 def create_tache(
@@ -134,3 +166,51 @@ def unassign_member_from_tache(db: Session, tache_id: str, utilisateur_id: str) 
 def get_tache_members(db: Session, tache_id: str) -> List[Membre]:
     """Récupère tous les membres assignés à une tâche."""
     return db.query(Membre).filter(Membre.id_tache == tache_id).all()
+
+
+def get_taches_kanban(db: Session, liste_id: str) -> dict:
+    """Récupère les tâches d'une liste et les regroupe par colonnes de statut."""
+    taches = db.query(Tache).filter(Tache.id_liste == liste_id)\
+        .options(selectinload(Tache.membres).joinedload(Membre.utilisateur))\
+        .order_by(Tache.ordre_affichage).all()
+    
+    # On initialise les colonnes avec les statuts officiels
+    kanban = {
+        "en attente": [],
+        "en cours": [],
+        "terminé": [],
+        "bloqué": []
+    }
+    
+    for t in taches:
+        status = t.statut if t.statut in kanban else "en attente" # Sécurité
+        kanban[status].append(t)
+        
+    return kanban
+
+
+def update_taches_bulk(db: Session, items: List[dict]) -> bool:
+    """Met à jour plusieurs tâches (statut, ordre) dans une seule transaction."""
+    try:
+        for item in items:
+            tache_id = item.get("id")
+            if not tache_id:
+                continue
+                
+            tache = db.query(Tache).filter(Tache.id == tache_id).first()
+            if not tache:
+                continue
+            
+            # Mise à jour des champs si fournis
+            if "statut" in item and item["statut"] != tache.statut:
+                tache.statut = item["statut"]
+                tache.statut_date = datetime.now()
+            
+            if "ordre_affichage" in item:
+                tache.ordre_affichage = item["ordre_affichage"]
+                
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        return False
