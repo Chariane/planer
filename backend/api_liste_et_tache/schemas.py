@@ -673,10 +673,12 @@ class TacheOut(TacheBase):
     statut_date: Optional[datetime] = None
     created_at: datetime
     id_liste: Optional[str] = None
+    progression: float = 0.0
     model_config = ConfigDict(from_attributes=True)
 
 class TacheFullOut(TacheOut):
     membres: List["WorkspaceMemberUserOut"] = []
+    checklists: List["ChecklistOut"] = []
 
 class TacheDelete(BaseModel):
     id: str

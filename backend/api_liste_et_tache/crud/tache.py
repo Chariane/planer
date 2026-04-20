@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
-from ..models import Tache, Membre
+from ..models import Tache, Membre, Checklist
 
 def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
@@ -21,9 +21,10 @@ def get_taches_for_liste(
 ) -> List[Tache]:
     query = db.query(Tache).filter(Tache.id_liste == liste_id)
     
-    # Eager loading des membres et de leurs profils utilisateur
+    # Eager loading des membres, profils et checklists
     query = query.options(
-        selectinload(Tache.membres).joinedload(Membre.utilisateur)
+        selectinload(Tache.membres).joinedload(Membre.utilisateur),
+        selectinload(Tache.checklists)
     )
     
     # Filtres
@@ -42,7 +43,18 @@ def get_taches_for_liste(
     else:
         query = query.order_by(Tache.ordre_affichage.asc())
         
-    return query.all()
+    taches = query.all()
+    
+    # Calcul de la progression pour chaque tâche
+    for t in taches:
+        total = len(t.checklists)
+        if total > 0:
+            checked = len([c for c in t.checklists if c.is_checked])
+            t.progression = round((checked / total) * 100, 2)
+        else:
+            t.progression = 0.0
+            
+    return taches
 
 
 def create_tache(
@@ -171,7 +183,10 @@ def get_tache_members(db: Session, tache_id: str) -> List[Membre]:
 def get_taches_kanban(db: Session, liste_id: str) -> dict:
     """Récupère les tâches d'une liste et les regroupe par colonnes de statut."""
     taches = db.query(Tache).filter(Tache.id_liste == liste_id)\
-        .options(selectinload(Tache.membres).joinedload(Membre.utilisateur))\
+        .options(
+            selectinload(Tache.membres).joinedload(Membre.utilisateur),
+            selectinload(Tache.checklists)
+        )\
         .order_by(Tache.ordre_affichage).all()
     
     # On initialise les colonnes avec les statuts officiels
@@ -183,6 +198,14 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
     }
     
     for t in taches:
+        # Calcul progression
+        total = len(t.checklists)
+        if total > 0:
+            checked = len([c for c in t.checklists if c.is_checked])
+            t.progression = round((checked / total) * 100, 2)
+        else:
+            t.progression = 0.0
+            
         status = t.statut if t.statut in kanban else "en attente" # Sécurité
         kanban[status].append(t)
         

@@ -35,8 +35,7 @@ from ..crud.tache import (
     get_taches_kanban,
     update_taches_bulk
 )
-# Pour Canevas, Section, Checklist, on garde temporairement crud/utilisateur.py ou on les déplacera plus tard
-from ..crud.utilisateur import (
+from ..crud.checklist_canevas import (
     create_canevas, get_canevas_for_liste, update_canevas, delete_canevas, get_canevas_by_id,
     create_section, get_sections_for_canevas, update_section, delete_section, get_section_by_id,
     create_checklist, get_checklists_for_section, get_checklists_for_tache, update_checklist, delete_checklist, get_checklist_by_id
@@ -55,12 +54,9 @@ from ..schemas import (
     TacheBulkUpdate,
     MessageResponse,
     MembreOut,
-    CanevasOut,
-    CanevasCreate,
-    SectionOut,
-    SectionCreate,
-    ChecklistOut,
-    ChecklistCreate
+    CanevasOut, CanevasCreate, CanevasUpdate,
+    SectionOut, SectionCreate, SectionUpdate,
+    ChecklistOut, ChecklistCreate, ChecklistUpdate
 )
 from ..models import Tache
 
@@ -154,7 +150,7 @@ def create_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     _require_list_access(db, liste_id, current_user.id)
-    return create_tache(db, **tache_in.model_dump(), id_liste=liste_id)
+    return create_tache(db, **tache_in.model_dump(exclude={"id_liste"}), id_liste=liste_id)
 
 @router.get("/{liste_id}/taches", response_model=List[TacheFullOut])
 def get_taches_endpoint(
@@ -340,3 +336,70 @@ def create_checklist_endpoint(parent_id: str, checklist_in: ChecklistCreate, db:
         _require_list_access(db, can.id_liste, current_user.id)
     
     return create_checklist(db, **checklist_in.model_dump())
+@router.get("/checklists/tache/{tache_id}", response_model=List[ChecklistOut])
+def get_checklists_for_tache_endpoint(tache_id: str, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    tache = _get_tache_or_404(db, tache_id)
+    _require_list_access(db, tache.id_liste, current_user.id)
+    return get_checklists_for_tache(db, tache_id)
+
+@router.put("/checklists/{checklist_id}", response_model=ChecklistOut)
+def update_checklist_endpoint(checklist_id: str, checklist_in: ChecklistUpdate, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    chk = get_checklist_by_id(db, checklist_id)
+    if not chk: raise HTTPException(404, "Checklist non trouvee")
+    
+    if chk.id_tache:
+        tache = _get_tache_or_404(db, chk.id_tache)
+        _require_list_access(db, tache.id_liste, current_user.id)
+    elif chk.id_section:
+        sec = get_section_by_id(db, chk.id_section)
+        can = get_canevas_by_id(db, sec.id_canevas)
+        _require_list_access(db, can.id_liste, current_user.id)
+        
+    return update_checklist(db, checklist_id, **checklist_in.model_dump(exclude_unset=True))
+
+@router.delete("/checklists/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_checklist_endpoint(checklist_id: str, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    chk = get_checklist_by_id(db, checklist_id)
+    if not chk: raise HTTPException(404, "Checklist non trouvee")
+    
+    if chk.id_tache:
+        tache = _get_tache_or_404(db, chk.id_tache)
+        _require_list_access(db, tache.id_liste, current_user.id)
+    elif chk.id_section:
+        sec = get_section_by_id(db, chk.id_section)
+        can = get_canevas_by_id(db, sec.id_canevas)
+        _require_list_access(db, can.id_liste, current_user.id)
+        
+    delete_checklist(db, checklist_id)
+    return None
+
+@router.get("/sections/{canevas_id}", response_model=List[SectionOut])
+def get_sections_endpoint(canevas_id: str, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    can = get_canevas_by_id(db, canevas_id)
+    if not can: raise HTTPException(404, "Canevas non trouve")
+    _require_list_access(db, can.id_liste, current_user.id)
+    return get_sections_for_canevas(db, canevas_id)
+
+@router.put("/sections/{section_id}", response_model=SectionOut)
+def update_section_endpoint(section_id: str, section_in: SectionUpdate, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    sec = get_section_by_id(db, section_id)
+    if not sec: raise HTTPException(404, "Section non trouvee")
+    can = get_canevas_by_id(db, sec.id_canevas)
+    _require_list_access(db, can.id_liste, current_user.id)
+    return update_section(db, section_id, **section_in.model_dump(exclude_unset=True))
+
+@router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_section_endpoint(section_id: str, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    sec = get_section_by_id(db, section_id)
+    if not sec: raise HTTPException(404, "Section non trouvee")
+    can = get_canevas_by_id(db, sec.id_canevas)
+    _require_list_access(db, can.id_liste, current_user.id)
+    delete_section(db, section_id)
+    return None
+
+@router.put("/canevas/{canevas_id}", response_model=CanevasOut)
+def update_canevas_endpoint(canevas_id: str, canevas_in: CanevasUpdate, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
+    can = get_canevas_by_id(db, canevas_id)
+    if not can: raise HTTPException(404, "Canevas non trouve")
+    _require_list_access(db, can.id_liste, current_user.id)
+    return update_canevas(db, canevas_id, **canevas_in.model_dump(exclude_unset=True))
