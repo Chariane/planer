@@ -49,7 +49,7 @@ from ..schemas import (
 
 router = APIRouter(tags=["Espaces"])
 
-
+#creer un espace rattaché à un workspace
 @router.post("/workspaces/{workspace_id}/espaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
 def create_espace_endpoint(
     workspace_id: str,
@@ -64,7 +64,7 @@ def create_espace_endpoint(
     espace_payload = espace_in.model_copy(update={"id_workspace": workspace_id, "id_espace_parent": None})
     return create_espace(db, espace_payload, current_user.id)
 
-
+#creer un espace rattaché à un espace parent (sous-espace)
 @router.post("/espaces/{espace_id}/sous-espaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
 def create_sous_espace_endpoint(
     espace_id: str,
@@ -85,7 +85,7 @@ def create_sous_espace_endpoint(
     })
     return create_espace(db, espace_payload, current_user.id)
 
-
+# Récupérer l'arborescence complète des espaces d'un workspace
 @router.get("/workspaces/{workspace_id}/espaces", response_model=List[EspaceOut])
 def list_workspaces_espaces(
     workspace_id: str,
@@ -97,7 +97,7 @@ def list_workspaces_espaces(
     _get_workspace_member_or_403(db, workspace_id, current_user.id)
     return get_espaces_for_workspace(db, workspace_id)
 
-
+# Récupérer uniquement les espaces de premier niveau (sans parent) d'un workspace
 @router.get("/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
 def list_workspace_root_espaces(
     workspace_id: str,
@@ -109,7 +109,7 @@ def list_workspace_root_espaces(
     _get_workspace_member_or_403(db, workspace_id, current_user.id)
     return get_root_espaces_for_workspace(db, workspace_id)
 
-
+# Récupérer les sous-espaces directs d'un espace parent
 @router.get("/espaces/{espace_id}/children", response_model=List[EspaceOut])
 def list_espace_children(
     espace_id: str,
@@ -121,7 +121,7 @@ def list_espace_children(
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return get_sub_espaces_for_parent(db, espace_id)
 
-
+# Récupérer l'arborescence complète des espaces d'un workspace (avec sous-espaces imbriqués)
 @router.get("/workspaces/{workspace_id}/espaces/tree", response_model=List[EspaceTreeOut])
 def get_workspace_espaces_tree_endpoint(
     workspace_id: str,
@@ -133,7 +133,7 @@ def get_workspace_espaces_tree_endpoint(
     _get_workspace_member_or_403(db, workspace_id, current_user.id)
     return get_workspace_espaces_tree(db, workspace_id)
 
-
+# Récupérer les espaces où l'utilisateur est admin
 @router.get("/espaces/{espace_id}", response_model=EspaceOut)
 def get_espace_endpoint(
     espace_id: str,
@@ -146,7 +146,7 @@ def get_espace_endpoint(
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return espace
 
-
+# Modifier les espaces où l'utilisateur est admin
 @router.put("/espaces/{espace_id}", response_model=EspaceOut)
 def update_espace_endpoint(
     espace_id: str,
@@ -176,7 +176,7 @@ def update_espace_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve")
     return updated
 
-
+# Supprimer un espace (et ses sous-espaces) si l'utilisateur est admin
 @router.delete("/espaces/{espace_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_espace_endpoint(
     espace_id: str,
@@ -191,7 +191,7 @@ def delete_espace_endpoint(
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression de l'espace")
     return None
 
-
+# Liste les membres d'un espace
 @router.get("/espaces/{espace_id}/members", response_model=List[EspaceMemberOut])
 def list_espace_members(
     espace_id: str,
@@ -204,7 +204,7 @@ def list_espace_members(
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return [_serialize_member(m) for m in get_espace_members(db, espace_id)]
 
-
+# Inviter un membre dans un espace
 @router.post("/espaces/{espace_id}/members", response_model=EspaceMemberOut, status_code=status.HTTP_201_CREATED)
 def invite_espace_member(
     espace_id: str,
@@ -249,7 +249,7 @@ def invite_espace_member(
 
     return _serialize_member(membre)
 
-
+#Accepter une invitation à un espace via token
 @router.post("/espaces/invitations/accept", response_model=EspaceMemberOut)
 def accept_espace_invitation_endpoint(
     invitation_in: EspaceInvitationAcceptRequest,
@@ -280,7 +280,7 @@ def accept_espace_invitation_endpoint(
 
     return _serialize_member(membre)
 
-
+# Modifier le rôle d'un membre dans un espace
 @router.put("/espaces/{espace_id}/members/{user_id}", response_model=EspaceMemberOut)
 def update_espace_member_endpoint(
     espace_id: str,
@@ -305,7 +305,7 @@ def update_espace_member_endpoint(
         raise HTTPException(status_code=404, detail="Membre non trouve")
     return _serialize_member(updated)
 
-
+# Supprimer un membre d'un espace ou retirer son accès si l'utilisateur est admin
 @router.delete("/espaces/{espace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_espace_member_endpoint(
     espace_id: str,

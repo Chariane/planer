@@ -45,7 +45,7 @@ from ..schemas import (
 
 router = APIRouter(prefix="/workspaces", tags=["Utilisateur Workspaces"])
 
-
+# Créer un workspace, automatiquement associé à l'utilisateur connecté en tant que créateur et membre actif
 @router.post("", response_model=WorkspaceWithContextOut, status_code=status.HTTP_201_CREATED)
 def create_workspace_endpoint(
     workspace_in: WorkspaceCreate,
@@ -56,7 +56,7 @@ def create_workspace_endpoint(
     membre = get_member(db, workspace.id, current_user.id)
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
-
+# Lister les workspaces dont l'utilisateur est membre actif ou créateur, avec le contexte de son rôle dans chaque workspace
 @router.get("", response_model=list[WorkspaceWithContextOut])
 def list_my_and_joined_workspaces_endpoint(
     db: Session = Depends(get_db),
@@ -71,7 +71,7 @@ def list_my_and_joined_workspaces_endpoint(
         for workspace in workspaces
     ]
 
-
+#Modifier un workspace, uniquement si l'utilisateur est le créateur du workspace (propriétaire)
 @router.put("/{workspace_id}", response_model=WorkspaceWithContextOut)
 def update_workspace_endpoint(
     workspace_id: str,
@@ -85,7 +85,7 @@ def update_workspace_endpoint(
         raise HTTPException(status_code=404, detail="Workspace non trouve")
     return _serialize_workspace(workspace, membre=membre)
 
-
+#Supprimer un workspace, uniquement si l'utilisateur est le créateur du workspace (propriétaire)
 @router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workspace_endpoint(
     workspace_id: str,
@@ -97,7 +97,7 @@ def delete_workspace_endpoint(
         raise HTTPException(status_code=404, detail="Workspace non trouve")
     return None
 
-
+#Inviter un membre dans un workspace, uniquement si l'utilisateur est administrateur du workspace
 @router.post("/{workspace_id}/invite", response_model=WorkspaceMemberOut, status_code=status.HTTP_201_CREATED)
 def invite_member_endpoint(
     workspace_id: str,
@@ -158,7 +158,7 @@ def invite_member_endpoint(
     )
     return _serialize_member(membre)
 
-
+# Accepter une invitation à rejoindre un workspace via un token d'invitation, uniquement si l'utilisateur connecté correspond à l'utilisateur invité dans le token
 @router.post("/invitations/accept", response_model=WorkspaceMemberOut)
 def accept_workspace_invitation_endpoint(
     invitation_in: WorkspaceInvitationAcceptRequest,
@@ -186,7 +186,7 @@ def accept_workspace_invitation_endpoint(
         raise HTTPException(status_code=400, detail="Invitation introuvable ou deja traitee")
     return _serialize_member(membre)
 
-
+# liste des membres d'un workspace, uniquement si l'utilisateur est membre actif ou créateur du workspace
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberOut])
 def list_workspace_members_endpoint(
     workspace_id: str,
@@ -196,7 +196,7 @@ def list_workspace_members_endpoint(
     _require_workspace_management_access(db, workspace_id, current_user.id)
     return get_members_of_workspace(db, workspace_id)
 
-
+#Modifier le rôle ou le statut d'un membre du workspace, uniquement si l'utilisateur est administrateur du workspace (et interdit de modifier le rôle du créateur)
 @router.put("/{workspace_id}/members/{user_id}", response_model=WorkspaceMemberOut)
 def update_workspace_member_endpoint(
     workspace_id: str,
@@ -218,7 +218,7 @@ def update_workspace_member_endpoint(
         raise HTTPException(status_code=400, detail="Erreur lors de la mise à jour")
     return _serialize_member(updated)
 
-
+#Supprimer ou retirer un membre d'un workspace, uniquement si l'utilisateur est administrateur du workspace (et interdit de supprimer le créateur)
 @router.delete("/{workspace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_workspace_member_endpoint(
     workspace_id: str,
@@ -239,7 +239,7 @@ def remove_workspace_member_endpoint(
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression")
     return None
 
-
+#Liste des invitations en attente reçues par l'utilisateur connecté, avec les détails du workspace et de l'expéditeur de l'invitation
 @router.get("/invitations/pending", response_model=list[WorkspaceMemberOut])
 def list_pending_invitations_endpoint(
     db: Session = Depends(get_db),
@@ -249,7 +249,7 @@ def list_pending_invitations_endpoint(
     membres = get_pending_invitations(db, current_user.id)
     return [_serialize_member(m) for m in membres]
 
-
+#Recuperer le détail d'un workspace avec le contexte de l'utilisateur connecté (rôle dans le workspace), uniquement si l'utilisateur est membre actif ou créateur du workspace
 @router.get("/{workspace_id}", response_model=WorkspaceWithContextOut)
 def get_workspace_detail_endpoint(
     workspace_id: str,
@@ -263,7 +263,7 @@ def get_workspace_detail_endpoint(
     membre = get_member(db, workspace_id, current_user.id)
     return _serialize_workspace(workspace, membre=membre)
 
-
+#L'utilisateur connecté quitte un workspace, uniquement si il est membre actif du workspace et interdit au créateur de quitter son propre workspace
 @router.post("/{workspace_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
 def leave_workspace_endpoint(
     workspace_id: str,
@@ -281,7 +281,7 @@ def leave_workspace_endpoint(
         raise HTTPException(status_code=404, detail="Vous n'etes pas membre actif de ce workspace")
     return None
 
-
+#Supprimer ou annuler une invitation en attente, uniquement si l'utilisateur est administrateur du workspace
 @router.delete("/{workspace_id}/invitations/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def cancel_invitation_endpoint(
     workspace_id: str,

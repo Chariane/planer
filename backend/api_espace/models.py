@@ -1768,9 +1768,3 @@ class Checklist(Base):
     # Relations
     section: Mapped[Optional['Section']] = relationship('Section', back_populates='checklists')
     tache: Mapped[Optional['Tache']] = relationship('Tache', back_populates='checklists')
-
-
-
-
-
-

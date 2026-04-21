@@ -142,6 +142,7 @@ def delete_liste_endpoint(
 # TACHES
 # -----------------------------------------------------------------------------
 
+# Créer une tâche dans une liste, uniquement si l'utilisateur a accès à la liste
 @router.post("/{liste_id}/taches", response_model=TacheOut, status_code=status.HTTP_201_CREATED)
 def create_tache_endpoint(
     liste_id: str,
@@ -152,6 +153,7 @@ def create_tache_endpoint(
     _require_list_access(db, liste_id, current_user.id)
     return create_tache(db, **tache_in.model_dump(exclude={"id_liste"}), id_liste=liste_id)
 
+# Lister les tâches d'une liste, uniquement si l'utilisateur a accès à la liste
 @router.get("/{liste_id}/taches", response_model=List[TacheFullOut])
 def get_taches_endpoint(
     liste_id: str,
@@ -173,6 +175,7 @@ def get_taches_endpoint(
         order=order
     )
 
+# Récupérer les détails d'une tâche, uniquement si l'utilisateur a accès à la liste parente
 @router.get("/taches/{tache_id}", response_model=TacheOut)
 def get_tache_endpoint(
     tache_id: str,
@@ -183,6 +186,7 @@ def get_tache_endpoint(
     _require_list_access(db, tache.id_liste, current_user.id)
     return tache
 
+# Modifier une tâche, uniquement si l'utilisateur a accès à la liste parente
 @router.put("/taches/{tache_id}", response_model=TacheOut)
 def update_tache_endpoint(
     tache_id: str,
@@ -194,6 +198,7 @@ def update_tache_endpoint(
     _require_list_access(db, tache.id_liste, current_user.id)
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
+# Supprimer une tâche, uniquement si l'utilisateur a accès à la liste parente
 @router.delete("/taches/{tache_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tache_endpoint(
     tache_id: str,
@@ -205,8 +210,11 @@ def delete_tache_endpoint(
     delete_tache(db, tache_id)
     return None
 
-# --- VUES ---
 
+
+# Des endpoints dédiés pour récupérer les tâches d'une liste dans des formats adaptés à différentes vues (Kanban, Gantt, Tableau), avec les mêmes vérifications d'accès que pour les tâches classiques.
+
+#vue kanban : colonnes avec leurs tâches
 @router.get("/{liste_id}/vues/kanban", response_model=TacheKanbanOut)
 def get_kanban_view_endpoint(
     liste_id: str, 
@@ -216,6 +224,7 @@ def get_kanban_view_endpoint(
     _require_list_access(db, liste_id, current_user.id)
     return {"columns": get_taches_kanban(db, liste_id)}
 
+#vue gantt : liste des tâches triées par date de début
 @router.get("/{liste_id}/vues/gantt", response_model=List[TacheFullOut])
 def get_gantt_view_endpoint(
     liste_id: str, 
@@ -226,6 +235,7 @@ def get_gantt_view_endpoint(
     # Tri chronologique pour le diagramme de Gantt
     return get_taches_for_liste(db, liste_id, sort_by="date_debut", order="asc")
 
+#vue tableau : liste des tâches avec possibilité de filtrer et trier par différents champs
 @router.get("/{liste_id}/vues/tableau", response_model=List[TacheFullOut])
 def get_tableau_view_endpoint(
     liste_id: str, 
@@ -247,6 +257,8 @@ def get_tableau_view_endpoint(
         order=order
     )
 
+
+# Mise à jour groupée de tâches (ex: pour réordonner les tâches d'une liste), uniquement si l'utilisateur a accès à la liste parente de la première tâche du lot
 @router.patch("/taches/bulk", response_model=MessageResponse)
 def bulk_update_taches_endpoint(
     bulk_in: TacheBulkUpdate, 
@@ -265,8 +277,8 @@ def bulk_update_taches_endpoint(
     else:
         raise HTTPException(status_code=400, detail="Échec de la mise à jour groupée")
 
-# --- Assignations ---
 
+#Assigner une tâche à un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
 @router.post("/taches/{tache_id}/assign/{utilisateur_id}", response_model=MembreOut)
 def assign_tache_endpoint(
     tache_id: str,
@@ -278,6 +290,7 @@ def assign_tache_endpoint(
     _require_list_access(db, tache.id_liste, current_user.id)
     return assign_member_to_tache(db, tache_id, utilisateur_id)
 
+#Désassigner une tâche d'un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
 @router.delete("/taches/{tache_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
 def unassign_tache_endpoint(
     tache_id: str,

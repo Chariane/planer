@@ -50,7 +50,7 @@ from ..schemas import (
 
 router = APIRouter(tags=["Entreprise Espaces"])
 
-
+#creer un espace dans un workspace entreprise, uniquement si l'utilisateur est admin du workspace
 @router.post(
     "/entreprise/workspaces/{workspace_id}/espaces",
     response_model=EspaceOut,
@@ -69,7 +69,7 @@ def create_entreprise_espace_endpoint(
     espace_payload = espace_in.model_copy(update={"id_workspace": workspace_id, "id_espace_parent": None})
     return create_entreprise_espace(db, espace_payload, current_entreprise.id)
 
-
+#creer un sous-espace dans un espace entreprise, uniquement si l'utilisateur est admin de l'espace parent
 @router.post(
     "/entreprise/espaces/{espace_id}/sous-espaces",
     response_model=EspaceOut,
@@ -94,7 +94,7 @@ def create_entreprise_sous_espace_endpoint(
     })
     return create_entreprise_espace(db, espace_payload, current_entreprise.id)
 
-
+# Récupérer l'arborescence complète des espaces d'un workspace entreprise
 @router.get("/entreprise/workspaces/{workspace_id}/espaces", response_model=List[EspaceOut])
 def list_entreprise_espaces_endpoint(
     workspace_id: str,
@@ -106,7 +106,7 @@ def list_entreprise_espaces_endpoint(
     _require_workspace_management_access(db, workspace_id, current_entreprise.id)
     return get_entreprise_espaces(db, current_entreprise.id, workspace_id)
 
-
+# Récupérer uniquement les espaces de niveau 1 d'un workspace entreprise
 @router.get("/entreprise/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
 def list_entreprise_workspace_root_espaces(
     workspace_id: str,
@@ -118,7 +118,7 @@ def list_entreprise_workspace_root_espaces(
     _require_workspace_management_access(db, workspace_id, current_entreprise.id)
     return get_root_espaces_for_workspace(db, workspace_id)
 
-
+# Récupérer les sous-espaces directs d'un espace entreprise
 @router.get("/entreprise/espaces/{espace_id}/children", response_model=List[EspaceOut])
 def list_entreprise_espace_children(
     espace_id: str,
@@ -132,7 +132,7 @@ def list_entreprise_espace_children(
     _require_espace_access(db, espace_id, espace.id_workspace, current_entreprise.id)
     return get_sub_espaces_for_parent(db, espace_id)
 
-
+# Récupérer les détails d'un espace entreprise dans un workspace, uniquement si l'utilisateur est membre de l'espace
 @router.get("/entreprise/workspaces/{workspace_id}/espaces/tree", response_model=List[EspaceTreeOut])
 def get_entreprise_workspace_espaces_tree(
     workspace_id: str,
@@ -144,7 +144,7 @@ def get_entreprise_workspace_espaces_tree(
     _require_workspace_management_access(db, workspace_id, current_entreprise.id)
     return get_workspace_espaces_tree(db, workspace_id)
 
-
+# Récupérer les détails d'un espace entreprise dans un workspace, uniquement si l'utilisateur est membre de l'espace
 @router.get("/entreprise/espaces/{espace_id}", response_model=EspaceOut)
 def get_entreprise_espace_detail_endpoint(
     espace_id: str,
@@ -156,7 +156,7 @@ def get_entreprise_espace_detail_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
     return espace
 
-
+# Modifier un espace entreprise, uniquement si l'utilisateur est admin de l'espace
 @router.put("/entreprise/espaces/{espace_id}", response_model=EspaceOut)
 def update_entreprise_espace_endpoint(
     espace_id: str,
@@ -186,7 +186,7 @@ def update_entreprise_espace_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve")
     return updated
 
-
+#Supprimer un espace entreprise (et ses sous-espaces), uniquement si l'utilisateur est admin de l'espace
 @router.delete("/entreprise/espaces/{espace_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_entreprise_espace_endpoint(
     espace_id: str,
@@ -201,7 +201,7 @@ def delete_entreprise_espace_endpoint(
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression de l'espace")
     return None
 
-
+# Liste les membres d'un espace entreprise
 @router.get("/entreprise/espaces/{espace_id}/members", response_model=List[EspaceMemberOut])
 def list_entreprise_espace_members_endpoint(
     espace_id: str,
@@ -213,7 +213,7 @@ def list_entreprise_espace_members_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve")
     return [_serialize_member(m) for m in members]
 
-
+# Inviter un membre dans un espace entreprise
 @router.post("/entreprise/espaces/{espace_id}/members", response_model=EspaceMemberOut, status_code=status.HTTP_201_CREATED)
 def invite_entreprise_espace_member_endpoint(
     espace_id: str,
@@ -258,7 +258,7 @@ def invite_entreprise_espace_member_endpoint(
 
     return _serialize_member(membre)
 
-
+#Accepter une invitation à un espace entreprise via token
 @router.post("/entreprise/espaces/invitations/accept", response_model=EspaceMemberOut)
 def accept_entreprise_espace_invitation_endpoint(
     invitation_in: EspaceInvitationAcceptRequest,
@@ -289,7 +289,7 @@ def accept_entreprise_espace_invitation_endpoint(
 
     return _serialize_member(membre)
 
-
+#Modifier le rôle d'un membre dans un espace entreprise, uniquement si l'utilisateur est admin de l'espace
 @router.put("/entreprise/espaces/{espace_id}/members/{user_id}", response_model=EspaceMemberOut)
 def update_entreprise_espace_member_endpoint(
     espace_id: str,
@@ -314,7 +314,7 @@ def update_entreprise_espace_member_endpoint(
         raise HTTPException(status_code=404, detail="Espace ou membre introuvable")
     return _serialize_member(updated)
 
-
+# Supprimer un membre d'un espace ou retirer son accès si l'utilisateur est admin de l'espace entreprise
 @router.delete("/entreprise/espaces/{espace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_entreprise_espace_member_endpoint(
     espace_id: str,
