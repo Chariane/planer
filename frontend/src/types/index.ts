@@ -15,9 +15,11 @@ export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: 'en_cours' | 'en_attente' | 'terminee' | 'bloquee' | 'archivee';
-  priority: 'tres_elevee' | 'elevee' | 'normale' | 'faible' | 'tres_faible';
+  status: 'en attente' | 'en cours' | 'terminé' | 'bloqué'; // valeurs backend
+  priority: 'basse' | 'moyenne' | 'haute' | 'critique';     // valeurs backend
   dueDate: string;
+  startDate?: string;
+  order?: number;
   assignees: Member[];
   listId: string;
   createdAt: Date;

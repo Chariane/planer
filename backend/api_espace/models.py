@@ -1701,7 +1701,7 @@ class Tache(Base):
     priorite: Mapped[Optional[str]] = mapped_column(String(50))
     ordre_affichage: Mapped[Optional[int]] = mapped_column(SmallInteger)
     id_liste: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.liste.id', ondelete='SET NULL'))
-    
+   
     # Relations
     liste: Mapped[Optional['Liste']] = relationship('Liste', back_populates='taches')
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='tache')
@@ -1768,3 +1768,9 @@ class Checklist(Base):
     # Relations
     section: Mapped[Optional['Section']] = relationship('Section', back_populates='checklists')
     tache: Mapped[Optional['Tache']] = relationship('Tache', back_populates='checklists')
+
+
+
+
+
+

@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { LayoutDashboard, Briefcase, Plus, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,10 +15,15 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const { workspaceId } = useParams();
   const { user } = useAuth();
   const { workspaces, loadWorkspaces } = useApp();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     loadWorkspaces();
   }, []);
+
+  const handleWorkspaceCreated = () => {
+    loadWorkspaces(); // Recharger la liste
+  };
 
   // Version réduite (icônes seulement)
   if (!isOpen) {
@@ -74,13 +80,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         </Link>
       </nav>
 
-      {/* Workspaces (uniquement les workspaces, pas les espaces) */}
+      {/* Workspaces */}
       <div className="mt-4 pt-3 border-t border-white/10">
         <div className="flex items-center justify-between px-3 mb-2">
           <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">Workspaces</h3>
-          <Link to="/workspaces/new" className="p-1 rounded-lg bg-white/10 hover:bg-secondary transition-colors">
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="p-1 rounded-lg bg-white/10 hover:bg-secondary transition-colors"
+          >
             <Plus className="h-3 w-3 text-white" />
-          </Link>
+          </button>
         </div>
         <div className="space-y-0.5 px-2">
           {workspaces.map((ws) => (
@@ -111,6 +120,13 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         </button>
         <p className="text-center text-xs text-white/30 mt-3">v1.0 K-Planner</p>
       </div>
+
+      {/* Modale de création */}
+      <CreateWorkspaceModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleWorkspaceCreated}
+      />
     </div>
   );
 }

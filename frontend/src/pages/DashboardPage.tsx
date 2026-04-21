@@ -9,11 +9,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { GlassCard } from '../components/ui/GlassCard';
-import { workspaceService } from '../services/workspace.service';
-import { espaceService } from '../services/espace.service';
+import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
 export default function DashboardPage() {
-  const { workspaces, loadWorkspaces } = useApp();
+  const { workspaces, loadWorkspaces, addWorkspace } = useApp();
   const [stats, setStats] = useState({
     totalTasks: 0,
     pendingTasks: 0,
@@ -22,6 +21,7 @@ export default function DashboardPage() {
     recentActivities: [] as any[]
   });
   const [loading, setLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     loadWorkspaces();
@@ -52,6 +52,10 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWorkspaceCreated = () => {
+    loadWorkspaces(); // Recharger la liste des workspaces
   };
 
   const statCards = [
@@ -109,13 +113,13 @@ export default function DashboardPage() {
             Bienvenue ! Voici ce qui se passe aujourd'hui.
           </p>
         </div>
-        <Link 
-          to="/workspaces/new" 
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-xl hover:bg-secondary/90 transition-colors shadow-sm"
         >
           <PlusCircle className="w-5 h-5" />
           Nouveau workspace
-        </Link>
+        </button>
       </div>
 
       {/* Cartes statistiques */}
@@ -216,6 +220,13 @@ export default function DashboardPage() {
           </GlassCard>
         </div>
       </div>
+
+      {/* Modale de création de workspace */}
+      <CreateWorkspaceModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleWorkspaceCreated}
+      />
     </div>
   );
 }
