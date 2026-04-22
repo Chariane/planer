@@ -1,15 +1,12 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..core.function import (
     _get_workspace_or_404,
     _require_workspace_management_access,
-    _require_workspace_member,
     _get_workspace_member_or_403,
-    _get_espace_or_404,
     _require_espace_access,
     _get_liste_or_404,
     _require_list_access,
@@ -18,7 +15,6 @@ from ..core.function import (
 from ..crud.liste import (
     create_liste,
     delete_liste,
-    get_liste_by_id,
     get_listes_for_espace,
     get_listes_for_workspace,
     update_liste
@@ -26,7 +22,6 @@ from ..crud.liste import (
 from ..crud.tache import (
     create_tache,
     delete_tache,
-    get_tache_by_id,
     get_taches_for_liste,
     update_tache,
     assign_member_to_tache,
@@ -36,9 +31,9 @@ from ..crud.tache import (
     update_taches_bulk
 )
 from ..crud.checklist_canevas import (
-    create_canevas, get_canevas_for_liste, update_canevas, delete_canevas, get_canevas_by_id,
+    create_canevas, get_canevas_for_liste, update_canevas, get_canevas_by_id,
     create_section, get_sections_for_canevas, update_section, delete_section, get_section_by_id,
-    create_checklist, get_checklists_for_section, get_checklists_for_tache, update_checklist, delete_checklist, get_checklist_by_id
+    create_checklist, get_checklists_for_tache, update_checklist, delete_checklist, get_checklist_by_id
 )
 
 from ..schemas import (
@@ -58,7 +53,6 @@ from ..schemas import (
     SectionOut, SectionCreate, SectionUpdate,
     ChecklistOut, ChecklistCreate, ChecklistUpdate
 )
-from ..models import Tache
 
 router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
 
@@ -66,7 +60,7 @@ router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
 # LISTES
 # -----------------------------------------------------------------------------
 
-@router.post("", response_model=ListeOut, status_code=status.HTTP_201_CREATED)
+@router.post("/create_liste", response_model=ListeOut, status_code=status.HTTP_201_CREATED)
 def create_liste_endpoint(
     liste_in: ListeCreate,
     db: Session = Depends(get_db),
@@ -87,7 +81,7 @@ def create_liste_endpoint(
         id_workspace=liste_in.id_workspace
     )
 
-@router.get("", response_model=List[ListeOut])
+@router.get("/list_projets", response_model=List[ListeOut])
 def get_listes_endpoint(
     workspace_id: Optional[str] = None,
     espace_id: Optional[str] = None,
@@ -105,7 +99,7 @@ def get_listes_endpoint(
         _require_espace_access(db, espace_id, current_user.id)
         return get_listes_for_espace(db, espace_id)
 
-@router.get("/{liste_id}", response_model=ListeOut)
+@router.get("/{liste_id}/get_liste", response_model=ListeOut)
 def get_liste_endpoint(
     liste_id: str,
     db: Session = Depends(get_db),
@@ -114,7 +108,7 @@ def get_liste_endpoint(
     _require_list_access(db, liste_id, current_user.id)
     return _get_liste_or_404(db, liste_id)
 
-@router.put("/{liste_id}", response_model=ListeOut)
+@router.put("/{liste_id}/update_liste", response_model=ListeOut)
 def update_liste_endpoint(
     liste_id: str,
     liste_in: ListeUpdate,
@@ -127,7 +121,7 @@ def update_liste_endpoint(
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return upd
 
-@router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{liste_id}/delete_liste", status_code=status.HTTP_204_NO_CONTENT)
 def delete_liste_endpoint(
     liste_id: str,
     db: Session = Depends(get_db),
@@ -143,7 +137,7 @@ def delete_liste_endpoint(
 # -----------------------------------------------------------------------------
 
 # Créer une tâche dans une liste, uniquement si l'utilisateur a accès à la liste
-@router.post("/{liste_id}/taches", response_model=TacheOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{liste_id}/create_tache", response_model=TacheOut, status_code=status.HTTP_201_CREATED)
 def create_tache_endpoint(
     liste_id: str,
     tache_in: TacheCreate,
@@ -154,7 +148,7 @@ def create_tache_endpoint(
     return create_tache(db, **tache_in.model_dump(exclude={"id_liste"}), id_liste=liste_id)
 
 # Lister les tâches d'une liste, uniquement si l'utilisateur a accès à la liste
-@router.get("/{liste_id}/taches", response_model=List[TacheFullOut])
+@router.get("/{liste_id}/list_taches", response_model=List[TacheFullOut])
 def get_taches_endpoint(
     liste_id: str,
     statut: Optional[str] = None,
@@ -176,7 +170,7 @@ def get_taches_endpoint(
     )
 
 # Récupérer les détails d'une tâche, uniquement si l'utilisateur a accès à la liste parente
-@router.get("/taches/{tache_id}", response_model=TacheOut)
+@router.get("/taches/{tache_id}/get_tache", response_model=TacheOut)
 def get_tache_endpoint(
     tache_id: str,
     db: Session = Depends(get_db),
@@ -187,7 +181,7 @@ def get_tache_endpoint(
     return tache
 
 # Modifier une tâche, uniquement si l'utilisateur a accès à la liste parente
-@router.put("/taches/{tache_id}", response_model=TacheOut)
+@router.put("/taches/{tache_id}/update_tache", response_model=TacheOut)
 def update_tache_endpoint(
     tache_id: str,
     tache_in: TacheUpdate,
@@ -199,7 +193,7 @@ def update_tache_endpoint(
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
 # Supprimer une tâche, uniquement si l'utilisateur a accès à la liste parente
-@router.delete("/taches/{tache_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/taches/{tache_id}/delete_tache", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tache_endpoint(
     tache_id: str,
     db: Session = Depends(get_db),
@@ -259,7 +253,7 @@ def get_tableau_view_endpoint(
 
 
 # Mise à jour groupée de tâches (ex: pour réordonner les tâches d'une liste), uniquement si l'utilisateur a accès à la liste parente de la première tâche du lot
-@router.patch("/taches/bulk", response_model=MessageResponse)
+@router.patch("/taches/bulk_update_taches", response_model=MessageResponse)
 def bulk_update_taches_endpoint(
     bulk_in: TacheBulkUpdate, 
     db: Session = Depends(get_db), 
@@ -279,7 +273,7 @@ def bulk_update_taches_endpoint(
 
 
 #Assigner une tâche à un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
-@router.post("/taches/{tache_id}/assign/{utilisateur_id}", response_model=MembreOut)
+@router.post("/taches/{tache_id}/assign/{utilisateur_id}/assign_tache", response_model=MembreOut)
 def assign_tache_endpoint(
     tache_id: str,
     utilisateur_id: str,
@@ -291,7 +285,7 @@ def assign_tache_endpoint(
     return assign_member_to_tache(db, tache_id, utilisateur_id)
 
 #Désassigner une tâche d'un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
-@router.delete("/taches/{tache_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/taches/{tache_id}/unassign/{utilisateur_id}/unassign_tache", status_code=status.HTTP_204_NO_CONTENT)
 def unassign_tache_endpoint(
     tache_id: str,
     utilisateur_id: str,
@@ -303,7 +297,7 @@ def unassign_tache_endpoint(
     unassign_member_from_tache(db, tache_id, utilisateur_id)
     return None
 
-@router.get("/taches/{tache_id}/members", response_model=List[MembreOut])
+@router.get("/taches/{tache_id}/list_members_tache", response_model=List[MembreOut])
 def get_tache_members_endpoint(
     tache_id: str,
     db: Session = Depends(get_db),

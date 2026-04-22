@@ -798,6 +798,14 @@ class WorkspaceInvitationAcceptRequest(BaseModel):
 class EspaceInvitationAcceptRequest(BaseModel):
     token: str = Field(..., min_length=10)
 
+class EspaceInvitationResponse(BaseModel):
+    status: str # "existing_user" or "guest_invitation"
+    message: str
+    email: str
+    membre: Optional[EspaceMemberOut] = None
+    token: Optional[str] = None
+
+
 # Fichier
 class FichierBase(BaseModel):
     nom: str = Field(..., min_length=1, max_length=255)

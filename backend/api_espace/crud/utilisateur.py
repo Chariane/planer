@@ -4,8 +4,15 @@ from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise
-from ..models import Espace, Membre
-from ..schemas import EspaceCreate, EspaceUpdate, MembreCreate, WorkspaceMemberUpdate
+from ..core.security import create_access_token, decode_invitation_token
+from ..models import Espace, Membre, Utilisateur
+from ..schemas import (
+    EspaceCreate,
+    EspaceUpdate,
+    MembreCreate,
+    WorkspaceMemberUpdate,
+    WorkspaceMemberInvite,
+)
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:
@@ -225,41 +232,122 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
     )
     return True
 
-def invite_member_to_espace(db: Session, espace_id: str, user_id: str, role: str) -> Membre:
-    """Crée ou met à jour un membre avec le statut 'En attente'."""
-    membre = get_espace_member(db, espace_id, user_id)
-    if membre:
-        membre.role = role
-        membre.statut = "En attente"
+def invite_member_to_espace(
+    db: Session,
+    espace_id: str,
+    membre_in: WorkspaceMemberInvite,
+) -> dict:
+    """Invite un membre dans un espace (existant ou guest via JWT)."""
+    # 1. Rechercher l'utilisateur par email ou username
+    query = db.query(Utilisateur)
+    if membre_in.email:
+        query = query.filter(Utilisateur.email == membre_in.email)
+    else:
+        query = query.filter(Utilisateur.username == membre_in.username)
+    
+    target_user = query.first()
+
+    if target_user:
+        # CAS 1 : L'utilisateur existe déjà
+        membre = get_espace_member(db, espace_id, target_user.id)
+        if membre:
+            membre.role = membre_in.role
+            membre.statut = "En attente"
+        else:
+            membre = Membre(
+                id_utilisateur=target_user.id,
+                id_espace=espace_id,
+                role=membre_in.role,
+                statut="En attente",
+            )
+            db.add(membre)
+        
         commit_or_raise(
             db,
-            detail="Impossible de mettre cette invitation a jour.",
+            detail="Impossible d'inviter cet utilisateur a l'espace.",
+            refresh_instance=membre,
+        )
+        
+        # Générer un token d'acceptation classique pour l'email
+        from datetime import timedelta
+        token = create_access_token(
+            {
+                "sub": target_user.id,
+                "espace_id": espace_id,
+                "scope": "espace_invitation_accept",
+            },
+            expires_delta=timedelta(days=7),
+        )
+        return {"membre": membre, "invitation_token": token}
+    
+    else:
+        # CAS 2 : L'utilisateur n'existe pas encore -> Invitation par JWT
+        if not membre_in.email:
+            raise HTTPException(
+                status_code=404, 
+                detail="Utilisateur non trouve. Fournissez un email pour inviter un nouvel utilisateur."
+            )
+            
+        from datetime import timedelta
+        token = create_access_token(
+            {
+                "email": membre_in.email,
+                "espace_id": espace_id,
+                "role": membre_in.role,
+                "type": "espace_invitation",
+            },
+            expires_delta=timedelta(days=4),
+        )
+        return {"token": token}
+
+
+def accept_espace_invitation(
+    db: Session, 
+    espace_id: str, 
+    user_id: str,
+    invitation_token: str = None,
+) -> Optional[Membre]:
+    """Accepte une invitation (classique ou via JWT guest)."""
+    
+    # CAS 1 : Invitation classique (déjà en base)
+    membre = get_espace_member(db, espace_id, user_id)
+    
+    if membre:
+        if membre.statut != "En attente":
+            return None
+        
+        membre.statut = "Actif"
+        commit_or_raise(
+            db,
+            detail="Impossible d'accepter cette invitation a l'espace.",
             refresh_instance=membre,
         )
         return membre
 
+    # CAS 2 : Invitation via token JWT (pour un utilisateur qui vient de s'inscrire)
+    if not invitation_token:
+        return None
+
+    payload = decode_invitation_token(invitation_token)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expiré.")
+
+    if payload.get("espace_id") != espace_id:
+        raise HTTPException(status_code=403, detail="Ce token ne correspond pas à cet espace.")
+
+    # Vérifier que l'email du token correspond bien à l'utilisateur connecté
+    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+    if not user or user.email != payload.get("email"):
+        raise HTTPException(status_code=403, detail="Ce token ne vous est pas destiné.")
+
+    # Créer le membre directement comme Actif
     return add_member_to_espace(
         db,
         espace_id,
         MembreCreate(
             id_utilisateur=user_id,
             id_espace=espace_id,
-            role=role,
-            statut="En attente",
+            role=payload.get("role") or "Membre",
+            statut="Actif",
         ),
     )
-
-
-def accept_espace_invitation(db: Session, espace_id: str, user_id: str) -> Optional[Membre]:
-    """Passe le statut d'une invitation de 'En attente' à 'Actif'."""
-    membre = get_espace_member(db, espace_id, user_id)
-    if not membre or membre.statut != "En attente":
-        return None
-
-    membre.statut = "Actif"
-    commit_or_raise(
-        db,
-        detail="Impossible d'accepter cette invitation a l'espace.",
-        refresh_instance=membre,
-    )
-    return membre

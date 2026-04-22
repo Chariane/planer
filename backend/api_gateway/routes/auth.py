@@ -79,11 +79,12 @@ def register(
     # Préparer les données
     user_data = user.model_dump()
     password = user_data.pop("password")
+    invitation_token = user_data.pop("invitation_token", None)
     user_data["mot_de_passe"] = get_password_hash(password)
     user_data.update(build_email_verification_metadata())
 
     # Créer l'utilisateur
-    new_user, default_workspace = create_utilisateur(db, user_data)
+    new_user, default_workspace = create_utilisateur(db, user_data, invitation_token=invitation_token)
 
     background_tasks.add_task(
         send_verification_email,

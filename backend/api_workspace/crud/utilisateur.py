@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
+from fastapi import HTTPException
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise
@@ -14,8 +15,10 @@ from ..models import (
     Rapport,
     Section,
     Tache,
+    Utilisateur,
     Workspace,
 )
+from ..core.security import create_access_token, decode_invitation_token
 from ..schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
 
 
@@ -306,45 +309,104 @@ def add_member_to_workspace(db: Session, workspace_id: str, membre_in: MembreCre
     return membre
 
 
-def invite_member_to_workspace(db: Session, workspace_id: str, user_id: str, role: str) -> Membre:
+def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role: str) -> dict:
+    """Invite un membre : s'il existe on l'ajoute, sinon on génère un token JWT."""
+    # Recherche de l'utilisateur par email dans le schéma public
+    user = db.query(Utilisateur).filter(Utilisateur.email == email).first()
+    
+    if user:
+        membre = get_member(db, workspace_id, user.id)
+        if membre:
+            membre.role = role
+            membre.statut = "En attente"
+            commit_or_raise(
+                db,
+                detail="Impossible de mettre cette invitation a jour.",
+                refresh_instance=membre,
+            )
+            return {"status": "existing_user", "membre": membre}
+
+        new_membre = add_member_to_workspace(
+            db,
+            workspace_id,
+            MembreCreate(
+                id_utilisateur=user.id,
+                id_workspace=workspace_id,
+                role=role,
+                statut="En attente",
+            ),
+        )
+        return {"status": "existing_user", "membre": new_membre}
+
+    # Cas 2 : Utilisateur inexistant -> Token JWT
+    invitation_token = create_access_token(
+        {
+            "email": email,
+            "workspace_id": workspace_id,
+            "role": role,
+            "type": "workspace_invitation",
+        },
+        expires_delta=timedelta(days=2), # 48h
+    )
+    
+    return {
+        "status": "guest_invitation",
+        "email": email,
+        "token": invitation_token
+    }
+
+
+def accept_workspace_invitation(
+    db: Session, 
+    workspace_id: str, 
+    user_id: str,
+    invitation_token: str = None
+) -> Optional[Membre]:
+    """Accepte une invitation : soit classique (en base), soit via JWT (nouveau)."""
+    
+    # CAS 1 : Invitation classique (utilisateur existait déjà lors de l'invitation)
     membre = get_member(db, workspace_id, user_id)
+
     if membre:
-        membre.role = role
-        membre.statut = "En attente"
+        if membre.statut != "En attente":
+            return None
+
+        membre.statut = "Actif"
         commit_or_raise(
             db,
-            detail="Impossible de mettre cette invitation a jour.",
+            detail="Impossible d'accepter cette invitation au workspace.",
             refresh_instance=membre,
         )
         return membre
 
+    # CAS 2 : Invitation via token JWT (utilisateur n'existait pas lors de l'invitation)
+    if not invitation_token:
+        return None
+
+    payload = decode_invitation_token(invitation_token)
+
+    if not payload:
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expiré.")
+
+    if payload.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=403, detail="Ce token ne correspond pas à ce workspace.")
+
+    # Vérifier que l'email du token correspond bien à l'utilisateur connecté
+    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+    if not user or user.email != payload.get("email"):
+        raise HTTPException(status_code=403, detail="Ce token ne vous est pas destiné.")
+
+    # Créer le membre directement comme Actif
     return add_member_to_workspace(
         db,
         workspace_id,
         MembreCreate(
             id_utilisateur=user_id,
             id_workspace=workspace_id,
-            role=role,
-            statut="En attente",
+            role=payload.get("role") or "Membre",
+            statut="Actif",
         ),
     )
-
-
-def accept_workspace_invitation(db: Session, workspace_id: str, user_id: str) -> Optional[Membre]:
-    membre = get_member(db, workspace_id, user_id)
-    if not membre:
-        return None
-
-    if membre.statut != "En attente":
-        return None
-
-    membre.statut = "Actif"
-    commit_or_raise(
-        db,
-        detail="Impossible d'accepter cette invitation au workspace.",
-        refresh_instance=membre,
-    )
-    return membre
 
 
 def update_member_role(

@@ -72,6 +72,7 @@ class UtilisateurCreate(UtilisateurBase):
     is_super_admin: Optional[bool] = False
     is_livreur: Optional[bool] = False
     is_entreprise: Optional[bool] = False
+    invitation_token: Optional[str] = None
 
     @field_validator("password")
     @classmethod

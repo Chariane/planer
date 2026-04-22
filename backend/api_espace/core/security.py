@@ -20,7 +20,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut
+ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/routers/auth/token")
@@ -44,12 +44,9 @@ def is_token_blacklisted(token: str) -> bool:
 
 def cleanup_expired_tokens():
     """Nettoie périodiquement la blacklist (optionnel)"""
-    # Cette fonction peut être appelée périodiquement pour nettoyer les anciens tokens
-    # Pour l'instant, nous gardons une blacklist simple en mémoire
     pass
 
 # ----------------------------
-
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
@@ -67,6 +64,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def decode_invitation_token(token: str) -> Optional[dict]:
+    """Décode et valide un token d'invitation (workspace ou espace)."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # On vérifie que c'est bien une invitation
+        if payload.get("type") not in ["workspace_invitation", "espace_invitation"]:
+            return None
+        return payload
+    except JWTError:
+        return None
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UtilisateurOut:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -74,7 +83,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Vérifie si le token est blacklisté
     if is_token_blacklisted(token):
         logger.warning(f"Tentative d'utilisation d'un token blacklisté")
         raise HTTPException(
@@ -89,7 +97,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         if user_id is None:
             raise credentials_exception
             
-        # Vérifie si le token a expiré
         exp = payload.get("exp")
         if exp and datetime.utcnow() > datetime.fromtimestamp(exp):
             raise HTTPException(
@@ -108,16 +115,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
     return UtilisateurOut.from_orm(user)
 
+
 async def get_current_active_user(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
-    """
-    Vérifie que l'utilisateur est authentifié ET actif.
-    """
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Utilisateur inactif. Veuillez contacter un administrateur."
         )
     return current_user
+
 
 async def get_current_admin(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_admin:
@@ -127,7 +133,7 @@ async def get_current_admin(current_user: UtilisateurOut = Depends(get_current_u
         )
     return current_user
 
-# Dépendance unique pour livreur
+
 async def get_current_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_livreur:
         raise HTTPException(
@@ -136,10 +142,8 @@ async def get_current_livreur(current_user: UtilisateurOut = Depends(get_current
         )
     return current_user
 
+
 async def get_current_active_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
-    """
-    Vérifie que l'utilisateur est authentifié, actif ET a le rôle livreur.
-    """
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -152,7 +156,7 @@ async def get_current_active_livreur(current_user: UtilisateurOut = Depends(get_
         )
     return current_user
 
-# Dépendance unique pour entreprise
+
 async def get_current_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_entreprise:
         raise HTTPException(
@@ -160,10 +164,9 @@ async def get_current_entreprise(current_user: UtilisateurOut = Depends(get_curr
             detail="Opération non autorisée. Nécessite le statut de gérant d'entreprise."
         )
     return current_user
+
+
 async def get_current_active_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
-    """
-    Vérifie que l'utilisateur est authentifié, actif ET a le statut de gérant d'entreprise.
-    """
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -175,6 +178,7 @@ async def get_current_active_entreprise(current_user: UtilisateurOut = Depends(g
             detail="Opération non autorisée. Nécessite le statut de gérant d'entreprise."
         )
     return current_user
+
 
 async def logout_user(token: str):
     """Déconnecte un utilisateur en blacklistant son token"""

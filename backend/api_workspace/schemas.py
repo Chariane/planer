@@ -736,7 +736,8 @@ class WorkspaceMemberInvite(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
     role: str = Field(default="Membre")
-
+ 
+ 
     @model_validator(mode="before")
     @classmethod
     def normalize_invitation_target(cls, data: Any) -> Any:
@@ -761,6 +762,14 @@ class WorkspaceMemberInvite(BaseModel):
             allowed_roles = ", ".join(sorted(WORKSPACE_ASSIGNABLE_ROLES))
             raise ValueError(f"Role invalide. Valeurs autorisees: {allowed_roles}.")
         return role
+ 
+ 
+class WorkspaceInvitationResponse(BaseModel):
+    status: str 
+    message: str
+    email: str
+    membre: Optional[WorkspaceMemberOut] = None
+    token: Optional[str] = None
 
 
 class WorkspaceMemberUpdate(BaseModel):

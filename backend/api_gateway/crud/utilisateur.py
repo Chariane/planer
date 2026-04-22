@@ -5,6 +5,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from ..models import Membre, Motdepasseoublie, Utilisateur, Workspace
 from ..core.function import commit_or_raise
+from ..core.security import SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 
 
 def _build_default_workspace_name(user_data: dict) -> str:
@@ -14,8 +16,8 @@ def _build_default_workspace_name(user_data: dict) -> str:
     return "utilisateur"
 
 
-def create_utilisateur(db: Session, user_data: dict) -> tuple[Utilisateur, Workspace]:
-    """Cree un utilisateur avec son workspace personnel par defaut."""
+def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[str] = None) -> tuple[Utilisateur, Workspace]:
+    """Cree un utilisateur avec son workspace personnel par defaut et gere les invitations."""
     new_user = Utilisateur(**user_data)
     db.add(new_user)
 
@@ -37,6 +39,39 @@ def create_utilisateur(db: Session, user_data: dict) -> tuple[Utilisateur, Works
             statut="Actif",
         )
         db.add(workspace_creator)
+        db.flush()
+
+        # Traitement de l'invitation optionnelle
+        if invitation_token:
+            try:
+                payload = jwt.decode(invitation_token, SECRET_KEY, algorithms=[ALGORITHM])
+                token_type = payload.get("type")
+                target_email = payload.get("email")
+                
+                if target_email and target_email.lower() == new_user.email.lower():
+                    target_role = payload.get("role") or "Membre"
+                    
+                    if token_type == "workspace_invitation":
+                        target_workspace_id = payload.get("workspace_id")
+                        guest_member = Membre(
+                            id_utilisateur=new_user.id,
+                            id_workspace=target_workspace_id,
+                            role=target_role,
+                            statut="Actif",
+                        )
+                        db.add(guest_member)
+                    elif token_type == "espace_invitation":
+                        target_espace_id = payload.get("espace_id")
+                        guest_member = Membre(
+                            id_utilisateur=new_user.id,
+                            id_espace=target_espace_id,
+                            role=target_role,
+                            statut="Actif",
+                        )
+                        db.add(guest_member)
+            except JWTError:
+                # On ne bloque pas l'inscription si le token d'invitation est invalide
+                pass
 
         db.commit()
         db.refresh(new_user)

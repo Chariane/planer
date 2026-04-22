@@ -21,6 +21,7 @@ conf = ConnectionConfig(
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
+front_register_url = config_data.get("FRONT_REGISTER_URL", "/register")
 front_workspace_invitation_url = config_data.get("FRONT_WORKSPACE_INVITATION_URL", "/workspace-invitations/accept")
 
 
@@ -203,8 +204,13 @@ async def send_workspace_invitation_email(
     workspace_name: str,
     role: str,
     token: str,
+    is_guest: bool = False,
 ):
-    invitation_link = f"{front_base_url}{front_workspace_invitation_url}?token={token}"
+    if is_guest:
+        invitation_link = f"{front_base_url}{front_register_url}?invitation_token={token}"
+    else:
+        invitation_link = f"{front_base_url}{front_workspace_invitation_url}?token={token}"
+    
     template = f"""
         <!DOCTYPE html>
             <html lang="fr">

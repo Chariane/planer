@@ -1,7 +1,6 @@
-from typing import List, Optional
-from datetime import timedelta
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from jose import JWTError, jwt
+from jose import jwt
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
@@ -11,13 +10,11 @@ from ..core.function import (
     _require_espace_access,
     _require_espace_management_access,
     _require_workspace_management_access,
-    _serialize_member,
-    can_create_espace,
+    _serialize_member
 )
-from ..core.security import get_current_user, create_access_token, SECRET_KEY, ALGORITHM
+from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM
 from ..core.emails import send_espace_invitation_email
 from ..crud.utilisateur import (
-    add_member_to_espace,
     create_espace,
     delete_espace,
     get_espace_by_id,
@@ -33,7 +30,6 @@ from ..crud.utilisateur import (
     update_espace,
     update_espace_member,
 )
-from ..models import Utilisateur
 from ..schemas import (
     EspaceCreate,
     EspaceOut,
@@ -41,16 +37,16 @@ from ..schemas import (
     EspaceUpdate,
     EspaceMemberOut,
     EspaceInvitationAcceptRequest,
-    MembreCreate,
+    EspaceInvitationResponse,
     UtilisateurOut,
     WorkspaceMemberInvite,
-    WorkspaceMemberUpdate,
+    WorkspaceMemberUpdate
 )
 
 router = APIRouter(tags=["Espaces"])
 
 #creer un espace rattaché à un workspace
-@router.post("/workspaces/{workspace_id}/espaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
+@router.post("/workspaces/{workspace_id}/create_espace", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
 def create_espace_endpoint(
     workspace_id: str,
     espace_in: EspaceCreate,
@@ -65,7 +61,7 @@ def create_espace_endpoint(
     return create_espace(db, espace_payload, current_user.id)
 
 #creer un espace rattaché à un espace parent (sous-espace)
-@router.post("/espaces/{espace_id}/sous-espaces", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
+@router.post("/espaces/{espace_id}/create_sous_espace", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
 def create_sous_espace_endpoint(
     espace_id: str,
     espace_in: EspaceCreate,
@@ -86,7 +82,7 @@ def create_sous_espace_endpoint(
     return create_espace(db, espace_payload, current_user.id)
 
 # Récupérer l'arborescence complète des espaces d'un workspace
-@router.get("/workspaces/{workspace_id}/espaces", response_model=List[EspaceOut])
+@router.get("/workspaces/{workspace_id}/list_workspace_espaces", response_model=List[EspaceOut])
 def list_workspaces_espaces(
     workspace_id: str,
     db: Session = Depends(get_db),
@@ -134,7 +130,7 @@ def get_workspace_espaces_tree_endpoint(
     return get_workspace_espaces_tree(db, workspace_id)
 
 # Récupérer les espaces où l'utilisateur est admin
-@router.get("/espaces/{espace_id}", response_model=EspaceOut)
+@router.get("/espaces/{espace_id}/get_espace", response_model=EspaceOut)
 def get_espace_endpoint(
     espace_id: str,
     db: Session = Depends(get_db),
@@ -147,7 +143,7 @@ def get_espace_endpoint(
     return espace
 
 # Modifier les espaces où l'utilisateur est admin
-@router.put("/espaces/{espace_id}", response_model=EspaceOut)
+@router.put("/espaces/{espace_id}/update_espace", response_model=EspaceOut)
 def update_espace_endpoint(
     espace_id: str,
     espace_in: EspaceUpdate,
@@ -177,7 +173,7 @@ def update_espace_endpoint(
     return updated
 
 # Supprimer un espace (et ses sous-espaces) si l'utilisateur est admin
-@router.delete("/espaces/{espace_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/espaces/{espace_id}/delete_espace", status_code=status.HTTP_204_NO_CONTENT)
 def delete_espace_endpoint(
     espace_id: str,
     db: Session = Depends(get_db),
@@ -192,7 +188,7 @@ def delete_espace_endpoint(
     return None
 
 # Liste les membres d'un espace
-@router.get("/espaces/{espace_id}/members", response_model=List[EspaceMemberOut])
+@router.get("/espaces/{espace_id}/list_members_espace", response_model=List[EspaceMemberOut])
 def list_espace_members(
     espace_id: str,
     db: Session = Depends(get_db),
@@ -205,7 +201,7 @@ def list_espace_members(
     return [_serialize_member(m) for m in get_espace_members(db, espace_id)]
 
 # Inviter un membre dans un espace
-@router.post("/espaces/{espace_id}/members", response_model=EspaceMemberOut, status_code=status.HTTP_201_CREATED)
+@router.post("/espaces/{espace_id}/invite_member_espace", response_model=EspaceInvitationResponse, status_code=status.HTTP_201_CREATED)
 def invite_espace_member(
     espace_id: str,
     membre_in: WorkspaceMemberInvite,
@@ -213,41 +209,58 @@ def invite_espace_member(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Invite un utilisateur dans un espace via email et token (comme workspace)."""
+    """Invite un utilisateur dans un espace via email et token (existant ou guest)."""
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
     _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
-    target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Utilisateur invite non trouve")
+    email_target = membre_in.email or membre_in.username # Fallback simple
 
-    # Création du membre en statut 'En attente'
-    membre = invite_member_to_espace(db, espace_id, target_user.id, membre_in.role)
-
-    # Génération du token d'invitation
-    invitation_token = create_access_token(
-        {
-            "sub": target_user.id,
-            "espace_id": espace_id,
-            "scope": "espace_invitation_accept",
-        },
-        expires_delta=timedelta(days=7),
-    )
-
-    # Envoi de l'email
-    background_tasks.add_task(
-        send_espace_invitation_email,
-        current_user.username,
-        target_user.username,
-        target_user.email,
-        espace.nom,
-        membre_in.role,
-        invitation_token,
-    )
-
-    return _serialize_member(membre)
+    result = invite_member_to_espace(db, espace_id, membre_in)
+    
+    if "membre" in result:
+        # Cas utilisateur existant
+        membre = result["membre"]
+        token = result["invitation_token"]
+        
+        target_username = membre.utilisateur.username if membre.utilisateur else email_target
+        
+        background_tasks.add_task(
+            send_espace_invitation_email,
+            current_user.username,
+            target_username,
+            email_target,
+            espace.nom,
+            membre_in.role,
+            token,
+            is_guest=False,
+        )
+        return {
+            "status": "existing_user",
+            "message": "Invitation envoyee a l'utilisateur existant.",
+            "email": email_target,
+            "membre": _serialize_member(membre)
+        }
+    else:
+        # Cas guest_invitation
+        token = result["token"]
+        background_tasks.add_task(
+            send_espace_invitation_email,
+            current_user.username,
+            email_target,
+            email_target,
+            espace.nom,
+            membre_in.role,
+            token,
+            is_guest=True,
+        )
+        return {
+            "status": "guest_invitation",
+            "message": "Invitation envoyee par lien (utilisateur non inscrit).",
+            "email": email_target,
+            "token": token
+        }
 
 #Accepter une invitation à un espace via token
 @router.post("/espaces/invitations/accept", response_model=EspaceMemberOut)
@@ -256,32 +269,47 @@ def accept_espace_invitation_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Accepte une invitation a un espace en utilisant un token JWT."""
+    """Accepte une invitation a un espace (classique ou JWT guest)."""
+    # On délègue la logique de validation (JWT ou base) au CRUD
+    membre = accept_espace_invitation(
+        db, 
+        espace_id=None, # Sera extrait du token si nécessaire
+        user_id=current_user.id,
+        invitation_token=invitation_in.token
+    )
+    
+    # Note: comme nous avons besoin de l'espace_id pour le CRUD classique mais qu'il est 
+    # dans le token pour le guest, nous devons peut-être l'extraire ici si ce n'est pas un guest.
+    
+    # RE-LOGIQUE pour supporter les deux cas proprement :
     try:
-        payload = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invitation invalide ou expiree")
-
-    if payload.get("scope") != "espace_invitation_accept":
+        payload = decode_invitation_token(invitation_in.token)
+        if payload:
+            espace_id = payload.get("espace_id")
+        else:
+            # Essayer de décoder pour le format classique (sub/espace_id/scope)
+            payload_classic = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
+            espace_id = payload_classic.get("espace_id")
+    except Exception:
         raise HTTPException(status_code=400, detail="Token d'invitation invalide")
 
-    invited_user_id = payload.get("sub")
-    espace_id = payload.get("espace_id")
+    if not espace_id:
+        raise HTTPException(status_code=400, detail="ID d'espace manquant dans le token")
 
-    if not invited_user_id or not espace_id:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    if invited_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Vous ne pouvez pas accepter cette invitation")
-
-    membre = accept_espace_invitation(db, espace_id, invited_user_id)
+    membre = accept_espace_invitation(
+        db, 
+        espace_id=espace_id, 
+        user_id=current_user.id,
+        invitation_token=invitation_in.token
+    )
+    
     if not membre:
         raise HTTPException(status_code=404, detail="Invitation non trouvee ou deja acceptee")
 
     return _serialize_member(membre)
 
 # Modifier le rôle d'un membre dans un espace
-@router.put("/espaces/{espace_id}/members/{user_id}", response_model=EspaceMemberOut)
+@router.put("/espaces/{espace_id}/members/{user_id}/update_member_espace", response_model=EspaceMemberOut)
 def update_espace_member_endpoint(
     espace_id: str,
     user_id: str,
@@ -306,7 +334,7 @@ def update_espace_member_endpoint(
     return _serialize_member(updated)
 
 # Supprimer un membre d'un espace ou retirer son accès si l'utilisateur est admin
-@router.delete("/espaces/{espace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/espaces/{espace_id}/members/{user_id}/remove_member_espace", status_code=status.HTTP_204_NO_CONTENT)
 def remove_espace_member_endpoint(
     espace_id: str,
     user_id: str,
