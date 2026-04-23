@@ -1554,6 +1554,10 @@ class Membre(Base):
         Index('idx_membre_tache', 'id_tache'),
         Index('idx_membre_role', 'role'),
         Index('idx_membre_statut', 'statut'),
+        Index('idx_membre_workspace_unique', 'id_utilisateur', 'id_workspace', unique=True, postgresql_where=text('id_workspace IS NOT NULL')),
+        Index('idx_membre_espace_unique', 'id_utilisateur', 'id_espace', unique=True, postgresql_where=text('id_espace IS NOT NULL')),
+        Index('idx_membre_liste_unique', 'id_utilisateur', 'id_liste', unique=True, postgresql_where=text('id_liste IS NOT NULL')),
+        Index('idx_membre_tache_unique', 'id_utilisateur', 'id_tache', unique=True, postgresql_where=text('id_tache IS NOT NULL')),
         {'schema': 'planer'}
     )
 

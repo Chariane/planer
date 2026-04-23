@@ -13,6 +13,7 @@ from ..schemas import (
     WorkspaceMemberUpdate,
     WorkspaceMemberInvite,
 )
+from datetime import timedelta
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:
@@ -288,7 +289,7 @@ def invite_member_to_espace(
                 detail="Utilisateur non trouve. Fournissez un email pour inviter un nouvel utilisateur."
             )
             
-        from datetime import timedelta
+
         token = create_access_token(
             {
                 "email": membre_in.email,
