@@ -20,7 +20,6 @@ from ..crud.utilisateur import (
     get_espace_by_id,
     get_espace_member,
     get_espace_members,
-    get_espaces_for_user,
     get_espaces_for_workspace,
     get_root_espaces_for_workspace,
     get_sub_espaces_for_parent,

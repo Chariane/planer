@@ -1,7 +1,4 @@
-from datetime import timedelta
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from ..core.emails import send_workspace_invitation_email
@@ -11,8 +8,9 @@ from ..core.function import (
     _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
+    get_all_user_resources
 )
-from ..core.security import ALGORITHM, SECRET_KEY, create_access_token, get_current_user
+from ..core.security import get_current_user
 from ..crud.utilisateur import (
     accept_workspace_invitation,
     cancel_workspace_invitation,
@@ -23,12 +21,11 @@ from ..crud.utilisateur import (
     get_pending_invitations,
     get_workspace_by_id,
     get_workspace_detail,
-    get_workspaces_for_user,
     invite_member_to_workspace,
     leave_workspace,
     update_member_role,
     update_workspace,
-    remove_member_from_workspace,
+    remove_member_from_workspace
 )
 from ..models import Utilisateur
 from ..schemas import (
@@ -41,7 +38,7 @@ from ..schemas import (
     WorkspaceMemberOut,
     WorkspaceMemberUpdate,
     WorkspaceUpdate,
-    WorkspaceWithContextOut,
+    WorkspaceWithContextOut
 )
 
 router = APIRouter(prefix="/workspaces", tags=["Utilisateur Workspaces"])
@@ -57,6 +54,7 @@ def create_workspace_endpoint(
     membre = get_member(db, workspace.id, current_user.id)
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
+#Récupérer une vue globale de toutes les ressources de l'utilisateur (Workspaces possédés,Workspaces rejoints, Espaces, Projets et Tâches)
 @router.get("/all_resources", response_model=dict)
 def get_all_user_resources_endpoint(
     db: Session = Depends(get_db),
@@ -66,7 +64,6 @@ def get_all_user_resources_endpoint(
     Récupère une vue globale de toutes les ressources de l'utilisateur
     (Workspaces possédés, Workspaces rejoints, Espaces, Projets et Tâches).
     """
-    from ..core.function import get_all_user_resources
     return get_all_user_resources(db, current_user.id)
 
 
