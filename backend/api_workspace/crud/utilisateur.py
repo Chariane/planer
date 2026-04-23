@@ -5,18 +5,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise
 from ..models import (
-    AbsenceEtConge,
-    Canevas,
-    Checklist,
-    Espace,
-    Fichier,
-    Liste,
-    Membre,
-    Rapport,
-    Section,
-    Tache,
-    Utilisateur,
-    Workspace,
+    AbsenceEtConge,Canevas,Checklist,Espace,Fichier,Liste,Membre,Rapport,Section,Tache,Utilisateur,Workspace,
 )
 from ..core.security import create_access_token, decode_invitation_token
 from ..schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
@@ -37,26 +26,6 @@ def get_all_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Wor
 
 def get_owned_workspaces(db: Session, owner_user_id: str) -> List[Workspace]:
     return db.query(Workspace).filter(Workspace.id_utilisateur == owner_user_id).all()
-
-
-def get_workspaces_for_user(db: Session, user_id: str) -> List[Workspace]:
-    return (
-        db.query(Workspace)
-        .options(joinedload(Workspace.membres))
-        .outerjoin(Membre, Workspace.id == Membre.id_workspace)
-        .filter(
-            or_(
-                Workspace.id_utilisateur == user_id,
-                and_(
-                    Membre.id_utilisateur == user_id,
-                    Membre.statut == "Actif",
-                ),
-            )
-        )
-        .distinct()
-        .order_by(Workspace.created_at.desc())
-        .all()
-    )
 
 
 def get_workspaces_where_admin(db: Session, user_id: str) -> List[Workspace]:
@@ -310,99 +279,128 @@ def add_member_to_workspace(db: Session, workspace_id: str, membre_in: MembreCre
 
 
 def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role: str) -> dict:
-    """Invite un membre : s'il existe on l'ajoute, sinon on génère un token JWT."""
-    # Recherche de l'utilisateur par email dans le schéma public
+    """
+    Invite un membre : s'il existe on l'ajoute/met a jour, sinon on génère un token JWT.
+    """
+    # 1. Vérification de l'existence du workspace
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve.")
+
+    # 2. Recherche de l'utilisateur
     user = db.query(Utilisateur).filter(Utilisateur.email == email).first()
     
+    TOKEN_TYPE = "workspace_invitation"
+
     if user:
+        # CAS 1 : Utilisateur existant
         membre = get_member(db, workspace_id, user.id)
         if membre:
             membre.role = role
-            membre.statut = "En attente"
-            commit_or_raise(
-                db,
-                detail="Impossible de mettre cette invitation a jour.",
-                refresh_instance=membre,
-            )
-            return {"status": "existing_user", "membre": membre}
-
-        new_membre = add_member_to_workspace(
-            db,
-            workspace_id,
-            MembreCreate(
+            # Si déjà actif, on ne change pas le statut, sinon on repasse en attente
+            if membre.statut != "Actif":
+                membre.statut = "En attente"
+        else:
+            membre = Membre(
                 id_utilisateur=user.id,
                 id_workspace=workspace_id,
                 role=role,
                 statut="En attente",
-            ),
+            )
+            db.add(membre)
+        
+        commit_or_raise(db, detail="Impossible d'inviter cet utilisateur existant.")
+        
+        # Token d'acceptation sécurisé pour utilisateur existant
+        token = create_access_token(
+            data={
+                "sub": user.id,
+                "email": user.email,
+                "workspace_id": workspace_id,
+                "type": TOKEN_TYPE
+            },
+            expires_delta=timedelta(days=7),
         )
-        return {"status": "existing_user", "membre": new_membre}
+        return {"status": "existing_user", "membre": membre, "token": token}
 
-    # Cas 2 : Utilisateur inexistant -> Token JWT
-    invitation_token = create_access_token(
-        {
+    # CAS 2 : Invité externe (Guest) -> Token JWT complet
+    token = create_access_token(
+        data={
             "email": email,
             "workspace_id": workspace_id,
             "role": role,
-            "type": "workspace_invitation",
+            "type": TOKEN_TYPE,
         },
-        expires_delta=timedelta(days=2), # 48h
+        expires_delta=timedelta(days=4),
     )
     
     return {
         "status": "guest_invitation",
         "email": email,
-        "token": invitation_token
+        "token": token
     }
 
 
 def accept_workspace_invitation(
     db: Session, 
-    workspace_id: str, 
+    workspace_id: Optional[str], 
     user_id: str,
-    invitation_token: str = None
-) -> Optional[Membre]:
-    """Accepte une invitation : soit classique (en base), soit via JWT (nouveau)."""
+    invitation_token: str
+) -> Membre:
+    """
+    Accepte une invitation a un workspace via token JWT.
+    Verifie la validite, le type et l'appartenance du token.
+    """
+    # 1. Decodage et validation du token
+    payload = decode_invitation_token(invitation_token)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.")
+
+    # 2. Securisation du type de token
+    if payload.get("type") != "workspace_invitation":
+        raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
+
+    # 3. Extraction et verification des données
+    target_workspace_id = workspace_id or payload.get("workspace_id")
+    if not target_workspace_id:
+        raise HTTPException(status_code=400, detail="ID du workspace absent du token.")
+
+    # Verification existence workspace
+    ws = get_workspace_by_id(db, target_workspace_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Le workspace cible n'existe plus.")
+
+    # 4. Verification de l'utilisateur (Prevenir les fraudes)
+    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve.")
+
+    token_sub = payload.get("sub")
+    token_email = payload.get("email")
+
+    if token_sub and token_sub != user_id:
+        raise HTTPException(status_code=403, detail="Cette invitation appartient a un autre utilisateur.")
     
-    # CAS 1 : Invitation classique (utilisateur existait déjà lors de l'invitation)
-    membre = get_member(db, workspace_id, user_id)
+    if token_email and token_email.lower() != user.email.lower():
+        raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
+    # 5. Prevention des doublons
+    membre = get_member(db, target_workspace_id, user_id)
     if membre:
-        if membre.statut != "En attente":
-            return None
-
+        if membre.statut == "Actif":
+            return membre
+        
         membre.statut = "Actif"
-        commit_or_raise(
-            db,
-            detail="Impossible d'accepter cette invitation au workspace.",
-            refresh_instance=membre,
-        )
+        membre.role = payload.get("role") or membre.role
+        commit_or_raise(db, detail="Impossible d'activer votre statut de membre.")
         return membre
 
-    # CAS 2 : Invitation via token JWT (utilisateur n'existait pas lors de l'invitation)
-    if not invitation_token:
-        return None
-
-    payload = decode_invitation_token(invitation_token)
-
-    if not payload:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expiré.")
-
-    if payload.get("workspace_id") != workspace_id:
-        raise HTTPException(status_code=403, detail="Ce token ne correspond pas à ce workspace.")
-
-    # Vérifier que l'email du token correspond bien à l'utilisateur connecté
-    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
-    if not user or user.email != payload.get("email"):
-        raise HTTPException(status_code=403, detail="Ce token ne vous est pas destiné.")
-
-    # Créer le membre directement comme Actif
+    # 6. Creation du membre (nouveau)
     return add_member_to_workspace(
         db,
-        workspace_id,
+        target_workspace_id,
         MembreCreate(
             id_utilisateur=user_id,
-            id_workspace=workspace_id,
             role=payload.get("role") or "Membre",
             statut="Actif",
         ),

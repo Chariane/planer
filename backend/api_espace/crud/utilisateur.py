@@ -264,7 +264,6 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             membre = Membre(
                 id_utilisateur=target_user.id,
                 id_espace=espace_id,
-                id_workspace=espace.id_workspace,
                 role=membre_in.role,
                 statut="En attente",
             )
@@ -365,7 +364,6 @@ def accept_espace_invitation(
     # 6. Creation du nouveau membre (si inexistant en base)
     new_member = Membre(
         id_utilisateur=user_id,
-        id_workspace=espace.id_workspace,
         id_espace=target_espace_id,
         role=payload.get("role") or "Membre",
         statut="Actif"

@@ -57,20 +57,18 @@ def create_workspace_endpoint(
     membre = get_member(db, workspace.id, current_user.id)
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
-# Lister les workspaces dont l'utilisateur est membre actif ou créateur, avec le contexte de son rôle dans chaque workspace
-@router.get("/list_my_and_joined_workspaces", response_model=list[WorkspaceWithContextOut])
-def list_my_and_joined_workspaces_endpoint(
+@router.get("/all_resources", response_model=dict)
+def get_all_user_resources_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    workspaces = get_workspaces_for_user(db, current_user.id)
-    return [
-        _serialize_workspace(
-            workspace,
-            membre=get_member(db, workspace.id, current_user.id),
-        )
-        for workspace in workspaces
-    ]
+    """
+    Récupère une vue globale de toutes les ressources de l'utilisateur
+    (Workspaces possédés, Workspaces rejoints, Espaces, Projets et Tâches).
+    """
+    from ..core.function import get_all_user_resources
+    return get_all_user_resources(db, current_user.id)
+
 
 #Modifier un workspace, uniquement si l'utilisateur est le créateur du workspace (propriétaire)
 @router.put("/{workspace_id}/update_workspace", response_model=WorkspaceWithContextOut)
@@ -107,6 +105,8 @@ def invite_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
+    """Invite un utilisateur dans un workspace via email."""
+    # 0. Permission check
     admin_member = _require_workspace_management_access(db, workspace_id, current_user.id)
     if admin_member and admin_member.role != "Administrateur":
         raise HTTPException(
@@ -114,32 +114,28 @@ def invite_member_endpoint(
             detail="Seuls les administrateurs du workspace peuvent envoyer des invitations.",
         )
 
+    # 1. Verification existence workspace
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
 
+    # 2. Email target
     email_target = membre_in.email
     if not email_target and membre_in.username:
-        # Si seul le username est fourni, on doit trouver l'email
         user = db.query(Utilisateur).filter(func.lower(Utilisateur.username) == membre_in.username.lower()).first()
         if not user:
              raise HTTPException(status_code=404, detail="Utilisateur non trouve")
         email_target = user.email
 
+    if not email_target:
+        raise HTTPException(status_code=400, detail="Email ou username requis.")
+
+    # 3. Delegation au CRUD
     result = invite_member_to_workspace(db, workspace_id, email_target, membre_in.role)
     
     if result["status"] == "existing_user":
         membre = result["membre"]
-        # Générer le token d'acceptation pour utilisateur existant
-        invitation_token = create_access_token(
-            {
-                "sub": membre.id_utilisateur,
-                "workspace_id": workspace_id,
-                "scope": "workspace_invitation_accept",
-            },
-            expires_delta=timedelta(days=4),
-        )
-        
+        token = result["token"]
         target_username = membre.utilisateur.username if membre.utilisateur else email_target
         
         background_tasks.add_task(
@@ -149,7 +145,7 @@ def invite_member_endpoint(
             EmailSchema(email=[email_target]),
             workspace.nom,
             membre_in.role,
-            invitation_token,
+            token,
             is_guest=False,
         )
         return {
@@ -161,11 +157,10 @@ def invite_member_endpoint(
     else:
         # Cas guest_invitation
         token = result["token"]
-        # Ici on pourrait envoyer un email spécifique "Rejoignez K-Planer"
         background_tasks.add_task(
             send_workspace_invitation_email,
             current_user.username,
-            email_target, # Utiliser l'email comme nom par défaut
+            email_target, 
             EmailSchema(email=[email_target]),
             workspace.nom,
             membre_in.role,
@@ -179,44 +174,21 @@ def invite_member_endpoint(
             "token": token
         }
 
-# Accepter une invitation à rejoindre un workspace via un token d'invitation, uniquement si l'utilisateur connecté correspond à l'utilisateur invité dans le token
+
 @router.post("/invitations/accept_workspace_invitation", response_model=WorkspaceMemberOut)
 def accept_workspace_invitation_endpoint(
     invitation_in: WorkspaceInvitationAcceptRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    try:
-        payload = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError as exc:
-        raise HTTPException(status_code=400, detail="Invitation invalide ou expiree") from exc
-
-    # Support des deux types de tokens :
-    # 1. 'workspace_invitation_accept' (utilisateur existait déjà) -> sub est id_utilisateur
-    # 2. 'workspace_invitation' (invité via email) -> email est dans le token
-    
-    scope = payload.get("scope")
-    token_type = payload.get("type")
-    workspace_id = payload.get("workspace_id")
-    
-    if not workspace_id:
-         raise HTTPException(status_code=400, detail="Token d'invitation invalide (workspace_id manquant)")
-
-    if scope == "workspace_invitation_accept":
-        invited_user_id = payload.get("sub")
-        if not invited_user_id:
-            raise HTTPException(status_code=400, detail="Token d'invitation invalide (sub manquant)")
-        if invited_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Cette invitation ne vous est pas destinee")
-    elif token_type == "workspace_invitation":
-        # Pour les invités, le CRUD vérifiera la correspondance de l'email
-        pass
-    else:
-        raise HTTPException(status_code=400, detail="Type de token d'invitation inconnu")
-
-    membre = accept_workspace_invitation(db, workspace_id, current_user.id, invitation_token=invitation_in.token)
-    if not membre:
-        raise HTTPException(status_code=400, detail="Invitation introuvable ou deja traitee")
+    """Accepte une invitation a un workspace (JWT ou existant)."""
+    # Toute la logique est maintenant centralisée dans le CRUD
+    membre = accept_workspace_invitation(
+        db, 
+        workspace_id=None, # Sera extrait du token par le CRUD
+        user_id=current_user.id, 
+        invitation_token=invitation_in.token
+    )
     return _serialize_member(membre)
 
 # liste des membres d'un workspace, uniquement si l'utilisateur est membre actif ou créateur du workspace

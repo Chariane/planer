@@ -87,14 +87,13 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                 # Prevention doublon (Contrainte 5)
                 existing_m = db.query(Membre).filter(
                     Membre.id_utilisateur == new_user.id,
-                    Membre.id_workspace == target_workspace_id,
-                    Membre.id_espace == target_espace_id # None si workspace_invitation
+                    (Membre.id_workspace == target_workspace_id) if not target_espace_id else (Membre.id_espace == target_espace_id)
                 ).first()
 
                 if not existing_m:
                     db.add(Membre(
                         id_utilisateur=new_user.id,
-                        id_workspace=target_workspace_id,
+                        id_workspace=target_workspace_id if not target_espace_id else None,
                         id_espace=target_espace_id,
                         role=target_role,
                         statut="Actif",

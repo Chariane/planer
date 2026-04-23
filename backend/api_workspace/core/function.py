@@ -3,7 +3,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace
+from ..models import Espace, Liste, Membre, PlanerEntreprise, Tache, Utilisateur, Workspace
 
 WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
 
@@ -217,3 +217,80 @@ def _require_workspace_admin_access(db: Session, workspace_id: str, current_user
             detail="Acces reserve aux administrateurs du workspace",
         )
     return workspace, membre
+
+
+def get_all_user_resources(db: Session, user_id: str) -> dict:
+    """
+    Récupère TOUTES les ressources auxquelles l'utilisateur a accès via la table Membre 
+    ou en étant directement propriétaire du Workspace.
+    """
+    from sqlalchemy.orm import joinedload
+    
+    # 1. Workspaces dont l'utilisateur est PROPRIÉTAIRE (Admin direct)
+    owned_workspaces = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
+    
+    # 2. Toutes les adhésions ACTIVES
+    my_memberships = (
+        db.query(Membre)
+        .options(
+            joinedload(Membre.workspace),
+            joinedload(Membre.espace),
+            joinedload(Membre.liste),
+            joinedload(Membre.tache)
+        )
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif"
+        )
+        .all()
+    )
+    
+    workspaces_joined = []
+    espaces_joined = []
+    listes_joined = []
+    taches_joined = []
+    
+    # Éviter les doublons pour les workspaces
+    owned_ws_ids = {ws.id for ws in owned_workspaces}
+
+    for m in my_memberships:
+        if m.id_workspace:
+            if m.id_workspace not in owned_ws_ids:
+                workspaces_joined.append(_serialize_workspace(m.workspace, membre=m))
+        
+        elif m.id_espace:
+            espaces_joined.append({
+                "id": m.id_espace,
+                "nom": m.espace.nom if m.espace else "Espace inconnu",
+                "role": m.role,
+                "workspace_id": m.espace.id_workspace if m.espace else None,
+                "created_at": m.created_at
+            })
+            
+        elif m.id_liste:
+            listes_joined.append({
+                "id": m.id_liste,
+                "nom": m.liste.nom if m.liste else "Projet inconnu",
+                "role": m.role,
+                "id_workspace": m.liste.id_workspace if m.liste else None,
+                "id_espace": m.liste.id_espace if m.liste else None,
+                "created_at": m.created_at
+            })
+            
+        elif m.id_tache:
+            taches_joined.append({
+                "id": m.id_tache,
+                "nom": m.tache.nom if m.tache else "Tâche inconnue",
+                "role": m.role,
+                "id_liste": m.tache.id_liste if m.tache else None,
+                "created_at": m.created_at
+            })
+
+    return {
+        "workspaces": [_serialize_workspace(ws) for ws in owned_workspaces] + workspaces_joined,
+        "joined_resources": {
+            "espaces": espaces_joined,
+            "listes": listes_joined,
+            "taches": taches_joined
+        }
+    }

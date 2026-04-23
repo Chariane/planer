@@ -690,6 +690,17 @@ class MembreCreate(MembreBase):
     id_liste: Optional[str] = None
     id_tache: Optional[str] = None
 
+    @model_validator(mode="after")
+    def validate_single_target(self):
+        targets = [self.id_workspace, self.id_espace, self.id_liste, self.id_tache]
+        non_null_count = sum(1 for t in targets if t is not None)
+        if non_null_count != 1:
+            raise ValueError(
+                "Un membre doit etre rattache a exactement UNE ressource "
+                "(workspace, espace, liste ou tache)."
+            )
+        return self
+
 class MembreUpdate(BaseModel):
     role: Optional[str] = None
     statut: Optional[str] = None

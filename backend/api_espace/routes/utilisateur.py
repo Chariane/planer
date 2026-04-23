@@ -20,6 +20,7 @@ from ..crud.utilisateur import (
     get_espace_by_id,
     get_espace_member,
     get_espace_members,
+    get_espaces_for_user,
     get_espaces_for_workspace,
     get_root_espaces_for_workspace,
     get_sub_espaces_for_parent,
@@ -142,6 +143,7 @@ def get_espace_endpoint(
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return espace
 
+
 # Modifier les espaces où l'utilisateur est admin
 @router.put("/espaces/{espace_id}/update_espace", response_model=EspaceOut)
 def update_espace_endpoint(
@@ -213,53 +215,53 @@ def invite_espace_member(
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
+    
     _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
-    email_target = membre_in.email or membre_in.username # Fallback simple
-
+    # Delegation de la logique d'invitation au CRUD
     result = invite_member_to_espace(db, espace_id, membre_in)
-    
+    email_target = membre_in.email or membre_in.username 
+
     if "membre" in result:
         # Cas utilisateur existant
         membre = result["membre"]
         token = result["invitation_token"]
-        
-        target_username = str(membre.utilisateur.username) if (membre.utilisateur and membre.utilisateur.username) else str(email_target)
+        target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else email_target
         
         background_tasks.add_task(
             send_espace_invitation_email,
-            str(current_user.username),
-            target_username,
-            str(email_target),
-            str(espace.nom),
-            str(membre_in.role),
-            str(token),
-            is_guest=False,
+            current_user.username,
+            target_name,
+            email_target,
+            espace.nom,
+            membre_in.role,
+            token,
+            is_guest=False
         )
         return {
             "status": "existing_user",
             "message": "Invitation envoyee a l'utilisateur existant.",
-            "email": str(email_target),
+            "email": email_target,
             "membre": _serialize_member(membre)
         }
     else:
-        # Cas guest_invitation
+        # Cas invitation externe (Guest)
         token = result["token"]
         background_tasks.add_task(
             send_espace_invitation_email,
-            str(current_user.username),
-            str(email_target),
-            str(email_target),
-            str(espace.nom),
-            str(membre_in.role),
-            str(token),
-            is_guest=True,
+            current_user.username,
+            email_target,
+            email_target,
+            espace.nom,
+            membre_in.role,
+            token,
+            is_guest=True
         )
         return {
             "status": "guest_invitation",
             "message": "Invitation envoyee par lien (utilisateur non inscrit).",
-            "email": str(email_target),
-            "token": str(token)
+            "email": email_target,
+            "token": token
         }
 
 #Accepter une invitation à un espace via token
@@ -270,42 +272,13 @@ def accept_espace_invitation_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Accepte une invitation a un espace (classique ou JWT guest)."""
-    # On délègue la logique de validation (JWT ou base) au CRUD
+    # On délègue toute la logique de validation et de creation au CRUD
     membre = accept_espace_invitation(
         db, 
-        espace_id=None, # Sera extrait du token si nécessaire
+        espace_id=None, # Sera extrait du token par le CRUD
         user_id=current_user.id,
         invitation_token=invitation_in.token
     )
-    
-    # Note: comme nous avons besoin de l'espace_id pour le CRUD classique mais qu'il est 
-    # dans le token pour le guest, nous devons peut-être l'extraire ici si ce n'est pas un guest.
-    
-    # RE-LOGIQUE pour supporter les deux cas proprement :
-    try:
-        payload = decode_invitation_token(invitation_in.token)
-        if payload:
-            espace_id = payload.get("espace_id")
-        else:
-            # Essayer de décoder pour le format classique (sub/espace_id/scope)
-            payload_classic = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
-            espace_id = payload_classic.get("espace_id")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    if not espace_id:
-        raise HTTPException(status_code=400, detail="ID d'espace manquant dans le token")
-
-    membre = accept_espace_invitation(
-        db, 
-        espace_id=espace_id, 
-        user_id=current_user.id,
-        invitation_token=invitation_in.token
-    )
-    
-    if not membre:
-        raise HTTPException(status_code=404, detail="Invitation non trouvee ou deja acceptee")
-
     return _serialize_member(membre)
 
 # Modifier le rôle d'un membre dans un espace
