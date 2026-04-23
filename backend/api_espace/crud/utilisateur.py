@@ -290,9 +290,14 @@ def invite_member_to_espace(
             )
             
 
+        # On récupère le workspace_id de l'espace pour l'inclure dans le token
+        espace = get_espace_by_id(db, espace_id)
+        workspace_id = espace.id_workspace if espace else None
+
         token = create_access_token(
             {
-                "email": membre_in.email,
+                "email": str(membre_in.email),
+                "workspace_id": workspace_id,
                 "espace_id": espace_id,
                 "role": membre_in.role,
                 "type": "espace_invitation",

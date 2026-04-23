@@ -224,22 +224,22 @@ def invite_espace_member(
         membre = result["membre"]
         token = result["invitation_token"]
         
-        target_username = membre.utilisateur.username if membre.utilisateur else email_target
+        target_username = str(membre.utilisateur.username) if (membre.utilisateur and membre.utilisateur.username) else str(email_target)
         
         background_tasks.add_task(
             send_espace_invitation_email,
-            current_user.username,
+            str(current_user.username),
             target_username,
-            email_target,
-            espace.nom,
-            membre_in.role,
-            token,
+            str(email_target),
+            str(espace.nom),
+            str(membre_in.role),
+            str(token),
             is_guest=False,
         )
         return {
             "status": "existing_user",
             "message": "Invitation envoyee a l'utilisateur existant.",
-            "email": email_target,
+            "email": str(email_target),
             "membre": _serialize_member(membre)
         }
     else:
@@ -247,19 +247,19 @@ def invite_espace_member(
         token = result["token"]
         background_tasks.add_task(
             send_espace_invitation_email,
-            current_user.username,
-            email_target,
-            email_target,
-            espace.nom,
-            membre_in.role,
-            token,
+            str(current_user.username),
+            str(email_target),
+            str(email_target),
+            str(espace.nom),
+            str(membre_in.role),
+            str(token),
             is_guest=True,
         )
         return {
             "status": "guest_invitation",
             "message": "Invitation envoyee par lien (utilisateur non inscrit).",
-            "email": email_target,
-            "token": token
+            "email": str(email_target),
+            "token": str(token)
         }
 
 #Accepter une invitation à un espace via token

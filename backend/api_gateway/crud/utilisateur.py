@@ -62,8 +62,10 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                         db.add(guest_member)
                     elif token_type == "espace_invitation":
                         target_espace_id = payload.get("espace_id")
+                        target_workspace_id = payload.get("workspace_id")
                         guest_member = Membre(
                             id_utilisateur=new_user.id,
+                            id_workspace=target_workspace_id,
                             id_espace=target_espace_id,
                             role=target_role,
                             statut="Actif",

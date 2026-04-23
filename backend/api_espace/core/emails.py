@@ -10,19 +10,19 @@ conf = ConnectionConfig(
     MAIL_USERNAME=config_data.get("MAIL_USERNAME"),
     MAIL_PASSWORD=config_data.get("MAIL_PASSWORD"),
     MAIL_FROM=config_data.get("MAIL_FROM"),
-    MAIL_PORT=config_data.get("MAIL_PORT"),
+    MAIL_PORT=int(config_data.get("MAIL_PORT") or 587),
     MAIL_SERVER=config_data.get("MAIL_SERVER"),
-    MAIL_STARTTLS=config_data.get("MAIL_STARTTLS"),
-    MAIL_SSL_TLS=config_data.get("MAIL_SSL_TLS"),
-    USE_CREDENTIALS=config_data.get("USE_CREDENTIALS"),
-    VALIDATE_CERTS=config_data.get("VALIDATE_CERTS")
+    MAIL_STARTTLS=str(config_data.get("MAIL_STARTTLS")).lower() == "true",
+    MAIL_SSL_TLS=str(config_data.get("MAIL_SSL_TLS")).lower() == "true",
+    USE_CREDENTIALS=str(config_data.get("USE_CREDENTIALS")).lower() == "true",
+    VALIDATE_CERTS=str(config_data.get("VALIDATE_CERTS")).lower() == "true"
 )
 
-front_base_url = config_data.get("FRONT_BASE_URL")
-front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
-front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
-front_register_url = config_data.get("FRONT_REGISTER_URL", "/register")
-front_espace_invitation_url = config_data.get("FRONT_ESPACE_INVITATION_URL", "/espace-invitations/accept")
+front_base_url = str(config_data.get("FRONT_BASE_URL", "")).strip("'").strip('"').strip()
+front_account_verification_url = str(config_data.get("FRONT_ACCOUNT_VERIFICATION_URL", "")).strip("'").strip('"').strip()
+front_password_reset_url = str(config_data.get("FRONT_PASSWORD_RESET_URL", "")).strip("'").strip('"').strip()
+front_register_url = str(config_data.get("FRONT_REGISTER_URL", "/register")).strip("'").strip('"').strip()
+front_espace_invitation_url = str(config_data.get("FRONT_ESPACE_INVITATION_URL", "/espace-invitations/accept")).strip("'").strip('"').strip()
 
 
 async def send_verification_email(username: str, email: EmailSchema, token: str):
