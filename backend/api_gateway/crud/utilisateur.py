@@ -17,13 +17,45 @@ def _build_default_workspace_name(user_data: dict) -> str:
 
 
 def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[str] = None) -> tuple[Utilisateur, Workspace]:
-    """Cree un utilisateur avec son workspace personnel par defaut et gere les invitations."""
-    new_user = Utilisateur(**user_data)
-    db.add(new_user)
+    """
+    Cree un utilisateur avec son workspace personnel par defaut et gere les invitations (JWT).
+    Garantit l'integrite des donnees et la securite des invitations.
+    """
+    email = user_data.get("email", "").strip().lower()
+    username = user_data.get("username", "").strip()
 
+    # 1. Vérification utilisateur existant (Contrainte 1)
+    existing_user = get_utilisateur_by_email_or_username(db, email, username)
+    if existing_user:
+        detail = "Cet email est deja utilise." if existing_user.email.lower() == email else "Ce nom d'utilisateur est deja pris."
+        raise HTTPException(status_code=409, detail=detail)
+
+    payload = None
+    # 2. Gestion du token d'invitation (Contrainte 2 & 3)
+    if invitation_token:
+        try:
+            payload = jwt.decode(invitation_token, SECRET_KEY, algorithms=[ALGORITHM])
+            token_type = payload.get("type")
+            target_email = payload.get("email", "").strip().lower()
+
+            if token_type not in ["workspace_invitation", "espace_invitation"]:
+                raise HTTPException(status_code=400, detail="Type de token d'invitation invalide.")
+            
+            # Securite Email : On force l'email du token (Contrainte 3)
+            if email != target_email:
+                raise HTTPException(status_code=403, detail="Cet email n'est pas celui invite.")
+                
+        except JWTError as exc:
+            raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.") from exc
+
+    # Debut de la transaction
     try:
-        db.flush()
+        # 3. Creation de l'utilisateur
+        new_user = Utilisateur(**user_data)
+        db.add(new_user)
+        db.flush() # Pour obtenir l'ID de l'utilisateur
 
+        # 4. Creation du workspace par defaut (Contrainte 9)
         default_workspace = Workspace(
             nom=_build_default_workspace_name(user_data),
             description="Workspace personnel cree automatiquement a l'inscription.",
@@ -32,60 +64,63 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
         db.add(default_workspace)
         db.flush()
 
-        workspace_creator = Membre(
+        # 5. Admin de son propre workspace
+        db.add(Membre(
             id_utilisateur=new_user.id,
             id_workspace=default_workspace.id,
             role="Administrateur",
             statut="Actif",
-        )
-        db.add(workspace_creator)
-        db.flush()
+        ))
 
-        # Traitement de l'invitation optionnelle
-        if invitation_token:
-            try:
-                payload = jwt.decode(invitation_token, SECRET_KEY, algorithms=[ALGORITHM])
-                token_type = payload.get("type")
-                target_email = payload.get("email")
+        # 6. Traitement de l'invitation (Contrainte 2, 4, 5)
+        if payload:
+            target_role = payload.get("role") or "Membre"
+            target_workspace_id = payload.get("workspace_id")
+            target_espace_id = payload.get("espace_id")
+
+            # Verification existence Workspace (Contrainte 4)
+            if target_workspace_id:
+                ws_exists = db.query(Workspace).filter(Workspace.id == target_workspace_id).first()
+                if not ws_exists:
+                    raise HTTPException(status_code=404, detail="Le workspace de l'invitation n'existe plus.")
                 
-                if target_email and target_email.lower() == new_user.email.lower():
-                    target_role = payload.get("role") or "Membre"
-                    
-                    if token_type == "workspace_invitation":
-                        target_workspace_id = payload.get("workspace_id")
-                        guest_member = Membre(
-                            id_utilisateur=new_user.id,
-                            id_workspace=target_workspace_id,
-                            role=target_role,
-                            statut="Actif",
-                        )
-                        db.add(guest_member)
-                    elif token_type == "espace_invitation":
-                        target_espace_id = payload.get("espace_id")
-                        target_workspace_id = payload.get("workspace_id")
-                        guest_member = Membre(
-                            id_utilisateur=new_user.id,
-                            id_workspace=target_workspace_id,
-                            id_espace=target_espace_id,
-                            role=target_role,
-                            statut="Actif",
-                        )
-                        db.add(guest_member)
-            except JWTError:
-                # On ne bloque pas l'inscription si le token d'invitation est invalide
-                pass
+                # Prevention doublon (Contrainte 5)
+                existing_m = db.query(Membre).filter(
+                    Membre.id_utilisateur == new_user.id,
+                    Membre.id_workspace == target_workspace_id,
+                    Membre.id_espace == target_espace_id # None si workspace_invitation
+                ).first()
 
+                if not existing_m:
+                    db.add(Membre(
+                        id_utilisateur=new_user.id,
+                        id_workspace=target_workspace_id,
+                        id_espace=target_espace_id,
+                        role=target_role,
+                        statut="Actif",
+                    ))
+
+        # Finalisation
         db.commit()
         db.refresh(new_user)
         db.refresh(default_workspace)
+        return new_user, default_workspace
+
     except IntegrityError as exc:
         db.rollback()
+        # On log l'erreur pour le debug (Contrainte 10)
+        import logging
+        logging.error(f"Erreur d'integrite lors de l'inscription de {email}: {str(exc)}")
         raise HTTPException(
             status_code=409,
-            detail="Impossible de creer l'utilisateur et son workspace par defaut a cause d'une contrainte d'integrite.",
+            detail="Une erreur d'integrite est survenue lors de la creation de votre compte.",
         ) from exc
-
-    return new_user, default_workspace
+    except Exception as exc:
+        db.rollback()
+        if isinstance(exc, HTTPException):
+            raise exc
+        logging.error(f"Erreur inattendue lors de l'inscription: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur lors de l'inscription.") from exc
 
 def get_utilisateur_by_id(db: Session, user_id: str) -> Optional[Utilisateur]:
     return db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
