@@ -276,6 +276,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             data={
                 "sub": target_user.id,
                 "email": target_user.email,
+                "workspace_id": espace.id_workspace, # Ajouté pour cohérence
                 "espace_id": espace_id,
                 "type": TOKEN_TYPE
             },
@@ -349,11 +350,33 @@ def accept_espace_invitation(
     if token_email and token_email.lower() != user.email.lower():
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
-    # 5. Prevention des doublons (Contrainte 5)
+    # 5. Gestion de l'accès au Workspace parent (Indispensable pour le contexte frontend)
+    workspace_id = payload.get("workspace_id") or espace.id_workspace
+    if workspace_id:
+        # On vérifie si l'utilisateur est déjà membre du workspace
+        ws_member = db.query(Membre).filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == user_id
+        ).first()
+        
+        if not ws_member:
+            # On l'ajoute comme "Invité" au workspace pour qu'il puisse voir le nom et l'arborescence
+            new_ws_member = Membre(
+                id_utilisateur=user_id,
+                id_workspace=workspace_id,
+                role="Invité",
+                statut="Actif"
+            )
+            db.add(new_ws_member)
+            # Pas de commit immédiat, on laisse le commit global à la fin
+
+    # 6. Prevention des doublons sur l'Espace (Contrainte 5)
     existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
         if existing_member.statut == "Actif":
-            return existing_member # Deja membre actif, rien a faire
+            # On s'assure quand même que les changements workspace sont enregistrés si besoin
+            commit_or_raise(db, detail="Erreur lors de la mise a jour des acces workspace.")
+            return existing_member
         
         # Si en attente ou suspendu, on l'active
         existing_member.statut = "Actif"
@@ -361,7 +384,7 @@ def accept_espace_invitation(
         commit_or_raise(db, detail="Impossible d'activer votre statut de membre.")
         return existing_member
 
-    # 6. Creation du nouveau membre (si inexistant en base)
+    # 7. Creation du nouveau membre de l'Espace
     new_member = Membre(
         id_utilisateur=user_id,
         id_espace=target_espace_id,

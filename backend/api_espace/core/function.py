@@ -106,6 +106,13 @@ def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id
     from ..crud.utilisateur import get_espace_member as _unused  # noqa – force module init
     from ..models import Membre
 
+    import logging
+    import os
+    # Utiliser un fichier de log explicite
+    debug_log = "/tmp/api_espace_debug.log"
+    with open(debug_log, "a") as f:
+        f.write(f"DEBUG: Checking WS member. WS: {workspace_id}, User: {current_user_id}\n")
+
     membre = (
         db.query(Membre)
         .filter(
@@ -115,7 +122,20 @@ def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id
         )
         .first()
     )
+    
     if not membre:
+        # Fallback : vérifier si l'utilisateur est le créateur direct du workspace
+        from ..models import Workspace
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id, Workspace.id_utilisateur == current_user_id).first()
+        if ws:
+            with open(debug_log, "a") as f:
+                f.write(f"DEBUG: Found owner fallback for WS: {workspace_id}, User: {current_user_id}\n")
+            # Mock d'un membre pour le rôle Administrateur
+            return Membre(id_utilisateur=current_user_id, id_workspace=workspace_id, role="Administrateur", statut="Actif")
+            
+    if not membre:
+        with open(debug_log, "a") as f:
+            f.write(f"DEBUG: Membership not found for WS: {workspace_id}, User: {current_user_id}\n")
         raise HTTPException(status_code=403, detail="Acces refuse au workspace")
     return membre
 
