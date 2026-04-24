@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -220,80 +220,102 @@ def _require_workspace_admin_access(db: Session, workspace_id: str, current_user
     return workspace, membre
 
 
-def get_all_user_resources(db: Session, user_id: str) -> dict:
-    """
-    Récupère TOUTES les ressources auxquelles l'utilisateur a accès via la table Membre 
-    ou en étant directement propriétaire du Workspace.
-    """
-    from sqlalchemy.orm import joinedload
-    
-    # 1. Workspaces dont l'utilisateur est PROPRIÉTAIRE (Admin direct)
-    owned_workspaces = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
-    
-    # 2. Toutes les adhésions ACTIVES
-    my_memberships = (
-        db.query(Membre)
-        .options(
-            joinedload(Membre.workspace),
-            joinedload(Membre.espace),
-            joinedload(Membre.liste),
-            joinedload(Membre.tache)
-        )
-        .filter(
-            Membre.id_utilisateur == user_id,
-            Membre.statut == "Actif"
-        )
-        .all()
-    )
-    
-    workspaces_joined = []
-    espaces_joined = []
-    listes_joined = []
-    taches_joined = []
-    
-    # Éviter les doublons pour les workspaces
-    owned_ws_ids = {ws.id for ws in owned_workspaces}
 
-    for m in my_memberships:
-        if m.id_workspace:
-            if m.id_workspace not in owned_ws_ids:
-                workspaces_joined.append(_serialize_workspace(m.workspace, membre=m))
-        
-        elif m.id_espace:
-            espaces_joined.append({
-                "id": m.id_espace,
-                "nom": m.espace.nom if m.espace else "Espace inconnu",
-                "role": m.role,
-                "workspace_id": m.espace.id_workspace if m.espace else None,
-                "created_at": m.created_at
-            })
-            
-        elif m.id_liste:
-            listes_joined.append({
-                "id": m.id_liste,
-                "nom": m.liste.nom if m.liste else "Projet inconnu",
-                "role": m.role,
-                "id_workspace": m.liste.id_workspace if m.liste else None,
-                "id_espace": m.liste.id_espace if m.liste else None,
-                "created_at": m.created_at
-            })
-            
-        elif m.id_tache:
-            taches_joined.append({
-                "id": m.id_tache,
-                "nom": m.tache.nom if m.tache else "Tâche inconnue",
-                "role": m.role,
-                "id_liste": m.tache.id_liste if m.tache else None,
-                "created_at": m.created_at
-            })
+def get_owned_workspaces(db: Session, user_id: str) -> List[dict]:
+    """Liste des workspaces crees par l'utilisateur."""
+    workspaces = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
+    return [_serialize_workspace(ws) for ws in workspaces]
 
+
+def get_joined_workspaces(db: Session, user_id: str) -> List[dict]:
+    """Liste des workspaces ou l'utilisateur est invite (Role Membre/Invite)."""
+    owned_ids = db.query(Workspace.id).filter(Workspace.id_utilisateur == user_id).all()
+    owned_ids = {row[0] for row in owned_ids}
+    
+    memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_workspace.isnot(None),
+        Membre.statut == "Actif",
+        Membre.id_workspace.notin_(owned_ids) if owned_ids else True
+    ).all()
+    return [_serialize_workspace(m.workspace, membre=m) for m in memberships]
+
+
+def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
+    """Espaces rejoins directement."""
+    memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_espace.isnot(None),
+        Membre.statut == "Actif"
+    ).all()
+    
+    res = []
+    for m in memberships:
+        ws = m.espace.workspace if m.espace else None
+        res.append({
+            "id": m.id_espace,
+            "nom": m.espace.nom if m.espace else "Inconnu",
+            "role": m.role,
+            "workspace_id": ws.id if ws else None,
+            "workspace_nom": ws.nom if ws else None
+        })
+    return res
+
+
+def get_joined_listes(db: Session, user_id: str) -> List[dict]:
+    """Listes rejointes directement."""
+    memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_liste.isnot(None),
+        Membre.statut == "Actif"
+    ).all()
+    
+    res = []
+    for m in memberships:
+        ws = m.liste.workspace or (m.liste.espace.workspace if m.liste.espace else None)
+        res.append({
+            "id": m.id_liste,
+            "nom": m.liste.nom if m.liste else "Inconnu",
+            "role": m.role,
+            "workspace_id": ws.id if ws else None,
+            "workspace_nom": ws.nom if ws else None,
+            "id_espace": m.liste.id_espace
+        })
+    return res
+
+
+def get_joined_taches(db: Session, user_id: str) -> List[dict]:
+    """Taches rejointes directement."""
+    memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_tache.isnot(None),
+        Membre.statut == "Actif"
+    ).all()
+    
+    res = []
+    for m in memberships:
+        liste = m.tache.liste
+        ws = liste.workspace or (liste.espace.workspace if (liste and liste.espace) else None)
+        res.append({
+            "id": m.id_tache,
+            "nom": m.tache.titre if m.tache else "Inconnu",
+            "role": m.role,
+            "workspace_id": ws.id if ws else None,
+            "workspace_nom": ws.nom if ws else None,
+            "id_espace": liste.id_espace if liste else None,
+            "id_liste": m.tache.id_liste
+        })
+    return res
+
+
+def get_user_navigation_data(db: Session, user_id: str) -> dict:
+    """Structure aggregee utilisant les fonctions granulaires."""
     return {
-        "workspaces": [_serialize_workspace(ws) for ws in owned_workspaces] + workspaces_joined,
-        "joined_resources": {
-            "espaces": espaces_joined,
-            "listes": listes_joined,
-            "taches": taches_joined
-        }
+        "owned_workspaces": get_owned_workspaces(db, user_id),
+        "joined_workspaces": get_joined_workspaces(db, user_id),
+        "joined_espaces": get_joined_espaces(db, user_id),
+        "joined_listes": get_joined_listes(db, user_id),
+        "joined_taches": get_joined_taches(db, user_id)
     }
 
 
@@ -359,13 +381,24 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
         # Listes du workspace (directes ou via espace)
         elif m.id_liste and m.liste:
             if m.liste.id_workspace == workspace_id or (m.liste.espace and m.liste.espace.id_workspace == workspace_id):
-                listes.append({"id": m.id_liste, "nom": m.liste.nom, "role": m.role})
+                listes.append({
+                    "id": m.id_liste, 
+                    "nom": m.liste.nom, 
+                    "role": m.role,
+                    "id_espace": m.liste.id_espace
+                })
                 
         # Tâches du workspace (via liste)
         elif m.id_tache and m.tache:
             liste = m.tache.liste
             if liste and (liste.id_workspace == workspace_id or (liste.espace and liste.espace.id_workspace == workspace_id)):
-                taches.append({"id": m.id_tache, "nom": m.tache.titre, "role": m.role})
+                taches.append({
+                    "id": m.id_tache, 
+                    "nom": m.tache.titre, 
+                    "role": m.role,
+                    "id_liste": m.tache.id_liste,
+                    "id_espace": liste.id_espace if liste else None
+                })
 
     return {
         "workspace_id": workspace_id,

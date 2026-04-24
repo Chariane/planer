@@ -24,7 +24,7 @@ from ..core.function import (
     validate_self_password_update,
     verify_google_authenticator_code,
 )
-from backend.api_workspace.core.function import get_all_user_resources
+from backend.api_workspace.core.function import get_user_navigation_data
 from ..core.security import (
     get_password_hash,
     verify_password,
@@ -482,8 +482,8 @@ def get_me_resources(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    """Raccourci pour récupérer toutes les ressources de l'utilisateur connecté."""
-    return get_all_user_resources(db, current_user.id)
+    """Raccourci pour récupérer la structure de navigation complète."""
+    return get_user_navigation_data(db, current_user.id)
 
 
 @router.put("/me", response_model=UtilisateurOut)

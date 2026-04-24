@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -8,8 +9,13 @@ from ..core.function import (
     _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
-    get_all_user_resources,
+    get_user_navigation_data,
     get_user_workspaces_listing,
+    get_owned_workspaces,
+    get_joined_workspaces,
+    get_joined_espaces,
+    get_joined_listes,
+    get_joined_taches,
     get_workspace_local_resources
 )
 from ..core.security import get_current_user
@@ -57,13 +63,58 @@ def create_workspace_endpoint(
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
 #Récupérer une vue globale de toutes les ressources de l'utilisateur (Workspaces possédés,Workspaces rejoints, Espaces, Projets et Tâches)
-@router.get("/all_resources", response_model=dict)
-def get_all_user_resources_endpoint(
+@router.get("/my_navigation", response_model=dict)
+def get_my_navigation_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Vue OMNI-RESOURCES : Tout ce que l'utilisateur possède ou a rejoint."""
-    return get_all_user_resources(db, current_user.id)
+    """Vue GLOBAL NAVIGATION : Structure aggregee."""
+    return get_user_navigation_data(db, current_user.id)
+
+
+@router.get("/owned", response_model=List[dict])
+def get_owned_workspaces_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Workspaces possedes par l'utilisateur."""
+    return get_owned_workspaces(db, current_user.id)
+
+
+@router.get("/joined", response_model=List[dict])
+def get_joined_workspaces_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Workspaces rejoins par l'utilisateur."""
+    return get_joined_workspaces(db, current_user.id)
+
+
+@router.get("/joined_espaces", response_model=List[dict])
+def get_joined_espaces_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Espaces rejoins par l'utilisateur."""
+    return get_joined_espaces(db, current_user.id)
+
+
+@router.get("/joined_listes", response_model=List[dict])
+def get_joined_listes_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Listes rejointes par l'utilisateur."""
+    return get_joined_listes(db, current_user.id)
+
+
+@router.get("/joined_taches", response_model=List[dict])
+def get_joined_taches_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Taches rejointes par l'utilisateur."""
+    return get_joined_taches(db, current_user.id)
 
 
 @router.get("/my_access", response_model=dict)
