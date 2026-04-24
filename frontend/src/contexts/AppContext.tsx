@@ -52,7 +52,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
-  // Charger les workspaces (avec membres)
+  // Charger les workspaces
   const loadWorkspaces = async () => {
     try {
       const data = await workspaceService.getAll();
@@ -126,7 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // CRUD Espace
   const addEspace = async (workspaceId: string, data: { nom: string; description?: string; id_espace_parent?: string }) => {
-    const newEspace = await espaceService.create({ ...data, id_workspace: workspaceId });
+    await espaceService.create({ ...data, id_workspace: workspaceId });
     await loadEspacesTree(workspaceId);
   };
 
@@ -158,7 +158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // CRUD Tâche
   const addTask = async (listId: string, task: Omit<Task, 'id' | 'createdAt'>) => {
-    const newTask = await tacheService.create(listId, task);
+    await tacheService.create(listId, task);
     await loadTaches(listId);
   };
 
@@ -174,7 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Gestion des membres (workspace)
   const inviteMember = async (workspaceId: string, email: string, role: string) => {
-    await workspaceService.inviteMember(workspaceId, email, role);
+    await workspaceService.inviteMember(workspaceId, { email, role });
     await loadWorkspaces();
   };
 
@@ -193,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateEspaceMemberRole = async (espaceId: string, userId: string, role: string) => {
-    await espaceService.updateMember(espaceId, userId, role);
+    await espaceService.updateMemberRole(espaceId, userId, role);
   };
 
   const removeEspaceMember = async (espaceId: string, userId: string) => {

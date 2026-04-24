@@ -3,22 +3,20 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Task } from '../../../contexts/AppContext';
+import type { Task } from '../../../types'; // ← importer depuis types
 
-const priorityLabels = {
-  tres_elevee: 'Très élevée',
-  elevee: 'Élevée',
-  normale: 'Normale',
-  faible: 'Faible',
-  tres_faible: 'Très faible',
+const priorityLabels: Record<string, string> = {
+  basse: 'Basse',
+  moyenne: 'Moyenne',
+  haute: 'Haute',
+  critique: 'Critique',
 };
 
-const priorityColors = {
-  tres_elevee: 'bg-red-100 text-red-800',
-  elevee: 'bg-orange-100 text-orange-800',
-  normale: 'bg-blue-100 text-blue-800',
-  faible: 'bg-green-100 text-green-800',
-  tres_faible: 'bg-gray-100 text-gray-800',
+const priorityColors: Record<string, string> = {
+  basse: 'bg-green-100 text-green-800',
+  moyenne: 'bg-blue-100 text-blue-800',
+  haute: 'bg-orange-100 text-orange-800',
+  critique: 'bg-red-100 text-red-800',
 };
 
 export default function KanbanCard({ task, isOverlay = false }: { task: Task; isOverlay?: boolean }) {
@@ -38,7 +36,12 @@ export default function KanbanCard({ task, isOverlay = false }: { task: Task; is
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-800">{task.title}</p>
+          <p className="text-sm font-medium text-gray-800 line-clamp-2">{task.title}</p>
+          {task.dueDate && (
+            <p className="mt-1 text-xs text-gray-400">
+              📅 {new Date(task.dueDate).toLocaleDateString('fr-FR')}
+            </p>
+          )}
           <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[task.priority]}`}>
             {priorityLabels[task.priority]}
           </span>

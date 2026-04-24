@@ -62,6 +62,23 @@ export default function TopBar() {
     );
   }
 
+  // Fonction pour récupérer la hiérarchie complète d'un espace (parents jusqu'à la racine)
+  const getSpaceHierarchy = async (currentSpaceId: string, hierarchy: any[] = []): Promise<any[]> => {
+    try {
+      const space = await espaceService.getById(currentSpaceId);
+      hierarchy.unshift(space); // Ajouter au début du tableau
+      
+      if (space.id_espace_parent) {
+        // Récupérer le parent récursivement
+        return getSpaceHierarchy(space.id_espace_parent, hierarchy);
+      }
+      return hierarchy;
+    } catch (error) {
+      console.error('Erreur récupération hiérarchie espace', error);
+      return hierarchy;
+    }
+  };
+
   // Construire le breadcrumb dynamiquement
   useEffect(() => {
     const buildBreadcrumb = async () => {
@@ -77,9 +94,14 @@ export default function TopBar() {
           const liste = await listeService.getById(listId);
           
           if (liste.id_espace) {
-            // La liste est dans un espace
-            const espace = await espaceService.getById(liste.id_espace);
-            items.push({ name: espace.nom, path: `/workspace/${workspaceId}/${espace.id}` });
+            // La liste est dans un espace - récupérer toute la hiérarchie des espaces parents
+            const spaceHierarchy = await getSpaceHierarchy(liste.id_espace, []);
+            for (const space of spaceHierarchy) {
+              items.push({ 
+                name: space.nom, 
+                path: `/workspace/${workspaceId}/${space.id}` 
+              });
+            }
           }
           // Ajouter la liste
           const listPath = liste.id_espace 
@@ -88,9 +110,14 @@ export default function TopBar() {
           items.push({ name: liste.nom, path: listPath });
           
         } else if (spaceId) {
-          // Cas avec espace seulement
-          const espace = await espaceService.getById(spaceId);
-          items.push({ name: espace.nom, path: `/workspace/${workspaceId}/${spaceId}` });
+          // Cas avec espace - récupérer toute la hiérarchie des espaces parents
+          const spaceHierarchy = await getSpaceHierarchy(spaceId, []);
+          for (const space of spaceHierarchy) {
+            items.push({ 
+              name: space.nom, 
+              path: `/workspace/${workspaceId}/${space.id}` 
+            });
+          }
         }
         
         setBreadcrumb(items);

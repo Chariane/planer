@@ -1,21 +1,19 @@
 // frontend/src/pages/app/components/GanttView.tsx
-import type { Task } from '../../../contexts/AppContext';
+import type { Task } from '../../../types'; // ← importer depuis types
 import { GlassCard } from '../../../components/ui/GlassCard';
 
 const priorityLabels: Record<string, string> = {
-  tres_elevee: 'Très élevée',
-  elevee: 'Élevée',
-  normale: 'Normale',
-  faible: 'Faible',
-  tres_faible: 'Très faible',
+  basse: 'Basse',
+  moyenne: 'Moyenne',
+  haute: 'Haute',
+  critique: 'Critique',
 };
 
 const priorityColors: Record<string, string> = {
-  tres_elevee: 'bg-red-100 text-red-800',
-  elevee: 'bg-orange-100 text-orange-800',
-  normale: 'bg-blue-100 text-blue-800',
-  faible: 'bg-green-100 text-green-800',
-  tres_faible: 'bg-gray-100 text-gray-800',
+  basse: 'bg-green-100 text-green-800',
+  moyenne: 'bg-blue-100 text-blue-800',
+  haute: 'bg-orange-100 text-orange-800',
+  critique: 'bg-red-100 text-red-800',
 };
 
 interface GanttViewProps {
@@ -23,26 +21,30 @@ interface GanttViewProps {
 }
 
 export default function GanttView({ tasks }: GanttViewProps) {
-  if (tasks.length === 0) {
-    return <GlassCard className="p-8 text-center text-gray-500">Aucune tâche à afficher dans le diagramme de Gantt.</GlassCard>;
+  const validTasks = tasks.filter(t => t.dueDate);
+  
+  if (validTasks.length === 0) {
+    return <GlassCard className="p-8 text-center text-gray-500">Aucune tâche avec date de fin pour le diagramme de Gantt.</GlassCard>;
   }
 
   // Trier par date d'échéance
-  const sortedTasks = [...tasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  const sortedTasks = [...validTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   // Calculer la plage de dates pour l'échelle
-  const dates = sortedTasks.map(t => t.dueDate).filter(d => d);
-  if (dates.length === 0) return <GlassCard className="p-8 text-center text-gray-500">Aucune date définie</GlassCard>;
+  const dates = sortedTasks.map(t => t.dueDate);
   const minDate = new Date(Math.min(...dates.map(d => new Date(d).getTime())));
   const maxDate = new Date(Math.max(...dates.map(d => new Date(d).getTime())));
   const dayDiff = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const days = Array.from({ length: Math.min(dayDiff, 30) }, (_, i) => {
+  
+  // Limiter à 30 jours pour l'affichage
+  const daysToShow = Math.min(dayDiff, 30);
+  const days = Array.from({ length: daysToShow }, (_, i) => {
     const d = new Date(minDate);
     d.setDate(minDate.getDate() + i);
     return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
   });
 
-  const getTaskWidth = (dueDate: string) => {
+  const getTaskPosition = (dueDate: string) => {
     const due = new Date(dueDate);
     const diff = Math.ceil((due.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
     return `${(diff / dayDiff) * 100}%`;
@@ -64,11 +66,7 @@ export default function GanttView({ tasks }: GanttViewProps) {
         </div>
         {/* Lignes des tâches */}
         {sortedTasks.map(task => {
-          const due = task.dueDate ? new Date(task.dueDate) : null;
-          const start = minDate;
-          const totalDuration = dayDiff;
-          const position = due ? Math.ceil((due.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-          const widthPercent = (1 / totalDuration) * 100;
+          const position = getTaskPosition(task.dueDate);
           return (
             <div key={task.id} className="flex items-center py-2 border-b border-gray-100 hover:bg-gray-50">
               <div className="w-64 flex-shrink-0 pr-2">
@@ -78,18 +76,17 @@ export default function GanttView({ tasks }: GanttViewProps) {
                 </span>
               </div>
               <div className="flex-1 relative h-8 bg-gray-100 rounded">
-                {due && (
-                  <div
-                    className="absolute h-6 top-1 bg-secondary rounded-l-full rounded-r-full flex items-center justify-center text-xs text-white font-medium shadow-sm"
-                    style={{
-                      left: `${(position / totalDuration) * 100}%`,
-                      width: `${widthPercent * 2}%`,
-                      minWidth: '20px',
-                    }}
-                  >
-                    {task.dueDate.slice(5)}
-                  </div>
-                )}
+                <div
+                  className="absolute h-6 top-1 bg-secondary rounded-full flex items-center justify-center text-xs text-white font-medium shadow-sm px-2"
+                  style={{
+                    left: position,
+                    transform: 'translateX(-50%)',
+                    minWidth: '60px',
+                    maxWidth: '120px',
+                  }}
+                >
+                  {task.dueDate.slice(5)}
+                </div>
               </div>
             </div>
           );

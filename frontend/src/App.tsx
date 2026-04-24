@@ -1,3 +1,4 @@
+// frontend/src/App.tsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppProvider } from './contexts/AppContext';
@@ -17,7 +18,7 @@ import AbsencesPage from './pages/AbsencesPage';
 import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
-
+import InvitationAccept from './pages/InvitationAccept';
 
 function App() {
   return (
@@ -30,9 +31,12 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
           </Route>
+          {/* Route d'acceptation d'invitation (accessible sans authentification) */}
+          <Route path="/invitation/accept" element={<InvitationAccept />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/workspace/:workspaceId/list/:listId" element={<AppView />} />
               <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<AppView />} />
               <Route path="/workspaces" element={<WorkspaceDashboard />} />
               <Route path="/tasks" element={<TasksPage />} />

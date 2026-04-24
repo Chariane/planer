@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import type { Task } from '../../../contexts/AppContext';
+import type { Task } from '../../../types'; // ← importer depuis types
 import KanbanColumn from './KanbanColumn';
 import KanbanCard from './KanbanCard';
 import { motion } from 'framer-motion';
@@ -13,12 +13,12 @@ interface KanbanViewProps {
   onUpdateTask: (task: Task) => void;
 }
 
+// Colonnes avec les nouveaux statuts (valeurs backend)
 const columns = [
-  { id: 'en_cours', title: 'En cours', color: '#3b82f6' },
-  { id: 'en_attente', title: 'En attente', color: '#eab308' },
-  { id: 'terminee', title: 'Terminées', color: '#10b981' },
-  { id: 'bloquee', title: 'Bloquées', color: '#ef4444' },
-  { id: 'archivee', title: 'Archivées', color: '#6b7280' },
+  { id: 'en attente', title: 'En attente', color: '#eab308' },
+  { id: 'en cours', title: 'En cours', color: '#3b82f6' },
+  { id: 'terminé', title: 'Terminées', color: '#10b981' },
+  { id: 'bloqué', title: 'Bloquées', color: '#ef4444' },
 ];
 
 export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {

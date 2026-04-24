@@ -1,3 +1,4 @@
+// frontend/src/components/workspace/ManageMembersModal.tsx
 import { useState, useEffect } from 'react';
 import { X, UserPlus, Trash2, Crown } from 'lucide-react';
 import Modal from '../ui/Modal';
@@ -62,7 +63,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
-      await espaceService.updateMember(espaceId, userId, newRole);
+      await espaceService.updateMemberRole(espaceId, userId, newRole);
       await loadMembers();
     } catch (error) {
       console.error("Erreur mise à jour rôle", error);

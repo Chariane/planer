@@ -1,3 +1,4 @@
+// frontend/src/contexts/AuthContext.tsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +18,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<{ requires2fa: boolean; challengeToken?: string }>;
   verify2FA: (challengeToken: string, code: string) => Promise<void>;
   register: (data: any) => Promise<{ email: string }>;
@@ -39,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+
+  const isAuthenticated = !!token && !!user;
 
   useEffect(() => {
     const loadUser = async () => {
@@ -122,14 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const disable2FA = async (currentPassword: string) => {
-    console.log('Tentative de désactivation 2FA avec mot de passe:', currentPassword);
     try {
       await authService.disable2FA(currentPassword);
-      console.log('Appel API réussi');
       const userData = await authService.getMe();
-      console.log('Nouveau user data:', userData);
       setUser(userData);
-      console.log('2FA désactivée avec succès');
     } catch (error) {
       console.error('Erreur lors de la désactivation 2FA:', error);
       throw error;
@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isLoading,
+      isAuthenticated,
       login,
       verify2FA,
       register,

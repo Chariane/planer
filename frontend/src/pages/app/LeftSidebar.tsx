@@ -81,11 +81,47 @@ export default function LeftSidebar() {
 
   const workspace = workspaces.find(w => w.id === workspaceId);
 
+  // Fonction pour récupérer tous les espaces d'un arbre (récursif)
+  const getAllSpacesFromTree = (items: any[]): any[] => {
+    let result: any[] = [];
+    for (const item of items) {
+      result.push(item);
+      if (item.sous_espaces?.length > 0) {
+        result = result.concat(getAllSpacesFromTree(item.sous_espaces));
+      }
+    }
+    return result;
+  };
+
   useEffect(() => {
     if (workspaceId) {
       loadEspacesTree(workspaceId);
     }
   }, [workspaceId, loadEspacesTree]);
+
+  // Charger les listes pour tous les espaces au démarrage (pour que les chevrons apparaissent)
+  useEffect(() => {
+    if (!workspace?.espaces) return;
+    
+    const loadAllLists = async () => {
+      const allSpaces = getAllSpacesFromTree(workspace.espaces);
+      for (const space of allSpaces) {
+        if (!listsBySpace[space.id] && !loadingLists[space.id]) {
+          setLoadingLists(prev => ({ ...prev, [space.id]: true }));
+          try {
+            const lists = await listeService.getByEspace(space.id);
+            setListsBySpace(prev => ({ ...prev, [space.id]: lists }));
+          } catch (error) {
+            console.error(`Erreur chargement listes pour espace ${space.id}`, error);
+          } finally {
+            setLoadingLists(prev => ({ ...prev, [space.id]: false }));
+          }
+        }
+      }
+    };
+    
+    loadAllLists();
+  }, [workspace?.espaces]);
 
   const loadWorkspaceLists = async () => {
     if (!workspaceId) return;
@@ -338,7 +374,8 @@ export default function LeftSidebar() {
             >
               <Plus className="h-3 w-3" />
             </button>
-            {item.sous_espaces?.length > 0 && (
+            {/* Chevron : s'affiche si l'espace a des sous-espaces OU des listes */}
+            {(item.sous_espaces?.length > 0 || (listsBySpace[item.id]?.length ?? 0) > 0) && (
               <button onClick={() => toggleSpace(item.id)} className="p-1 text-gray-400">
                 {openSpaces[item.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </button>
@@ -446,7 +483,7 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* Chat - inchangé */}
+      {/* Chat */}
       <div className="mb-6">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Chat</h3>
         <div className="space-y-1">
@@ -465,7 +502,7 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* Gestion - inchangé */}
+      {/* Gestion */}
       <div>
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gestion</h3>
         <div className="space-y-1">
@@ -481,7 +518,7 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* Menus contextuels et modales inchangés */}
+      {/* Menus contextuels */}
       {contextMenu.visible && (
         <div
           ref={menuRef}
@@ -521,7 +558,7 @@ export default function LeftSidebar() {
         </div>
       )}
 
-      {/* Modales - inchangées */}
+      {/* Modales */}
       <Modal isOpen={isCreateSpaceModalOpen} onClose={() => setIsCreateSpaceModalOpen(false)} title={parentSpaceId ? "Créer un sous-espace" : "Créer un espace"} size="md">
         <div className="space-y-4">
           <input type="text" placeholder="Nom" value={newSpaceName} onChange={e => setNewSpaceName(e.target.value)} className="w-full p-2 border rounded-lg" autoFocus />

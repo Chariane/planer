@@ -1,8 +1,9 @@
+// frontend/src/types/index.ts
 export interface Member {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'member';
+  role: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
 }
 
 export interface ChecklistItem {
@@ -15,8 +16,8 @@ export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: 'en attente' | 'en cours' | 'terminé' | 'bloqué'; // valeurs backend
-  priority: 'basse' | 'moyenne' | 'haute' | 'critique';     // valeurs backend
+  status: 'en attente' | 'en cours' | 'terminé' | 'bloqué';
+  priority: 'basse' | 'moyenne' | 'haute' | 'critique';
   dueDate: string;
   startDate?: string;
   order?: number;
