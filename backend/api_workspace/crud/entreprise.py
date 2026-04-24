@@ -8,7 +8,6 @@ from .utilisateur import (
     get_member,
     get_members_of_workspace,
     get_workspace_by_id,
-    get_workspaces_for_user,
     invite_member_to_workspace,
     leave_workspace,
     update_workspace,
@@ -35,7 +34,15 @@ def get_entreprise_workspace(db: Session, entreprise_user_id: str, workspace_id:
 
 
 def get_entreprise_workspaces(db: Session, entreprise_user_id: str) -> List[Workspace]:
-    return get_workspaces_for_user(db, entreprise_user_id)
+    from ..core.function import _get_user_membership_data
+    owned, memberships = _get_user_membership_data(db, entreprise_user_id)
+    
+    # On combine les workspaces possédés et ceux rejoints
+    joined_ws = [m.workspace for m in memberships if m.id_workspace]
+    
+    # On évite les doublons par sécurité (bien que la DB soit claire)
+    all_ws = owned + [ws for ws in joined_ws if ws.id not in {o.id for o in owned}]
+    return all_ws
 
 
 def create_entreprise_workspace(
