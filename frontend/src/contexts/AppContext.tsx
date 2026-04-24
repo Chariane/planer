@@ -5,12 +5,43 @@ import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
 import { listeService } from '../services/liste.service';
 import { tacheService } from '../services/tache.service';
-import type { Member, Task, ChecklistItem, Period, List, Space, Workspace } from '../types';
+import type {
+  JoinedResource,
+  Member,
+  Task,
+  ChecklistItem,
+  Period,
+  List,
+  Space,
+  Workspace,
+  WorkspaceAccessListingResponse,
+  WorkspaceLocalResourcesResponse,
+  WorkspaceNavigationResponse,
+} from '../types';
 
 export type { Member, Task, ChecklistItem, Period, List, Space, Workspace };
 
+const EMPTY_JOINED_ITEMS: JoinedResource[] = [];
+
+const createEmptyLocalResources = (workspaceId: string): WorkspaceLocalResourcesResponse => ({
+  workspace_id: workspaceId,
+  workspace_nom: '',
+  my_workspace_role: null,
+  direct_access: {
+    espaces: [],
+    listes: [],
+    taches: [],
+  },
+});
+
 interface AppContextType {
   workspaces: Workspace[];
+  ownedWorkspaces: Workspace[];
+  joinedWorkspaces: Workspace[];
+  joinedEspaces: JoinedResource[];
+  joinedListes: JoinedResource[];
+  joinedTaches: JoinedResource[];
+  workspaceLocalResources: Record<string, WorkspaceLocalResourcesResponse>;
   activeWorkspaceId: string | null;
   activeSpaceId: string | null;
   activeListId: string | null;
@@ -18,6 +49,8 @@ interface AppContextType {
   setActiveSpaceId: (id: string | null) => void;
   setActiveListId: (id: string | null) => void;
   loadWorkspaces: () => Promise<void>;
+  loadNavigationData: () => Promise<void>;
+  loadWorkspaceLocalResources: (workspaceId: string) => Promise<void>;
   loadEspacesTree: (workspaceId: string) => Promise<void>;
   loadListes: (espaceId: string) => Promise<void>;
   loadTaches: (listeId: string) => Promise<void>;
@@ -48,27 +81,134 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [ownedWorkspaces, setOwnedWorkspaces] = useState<Workspace[]>([]);
+  const [joinedWorkspaces, setJoinedWorkspaces] = useState<Workspace[]>([]);
+  const [joinedEspaces, setJoinedEspaces] = useState<JoinedResource[]>(EMPTY_JOINED_ITEMS);
+  const [joinedListes, setJoinedListes] = useState<JoinedResource[]>(EMPTY_JOINED_ITEMS);
+  const [joinedTaches, setJoinedTaches] = useState<JoinedResource[]>(EMPTY_JOINED_ITEMS);
+  const [workspaceLocalResources, setWorkspaceLocalResources] = useState<Record<string, WorkspaceLocalResourcesResponse>>({});
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
-  // Charger les workspaces
+  const applyWorkspaceAccessListing = (data: WorkspaceAccessListingResponse) => {
+    const owned = Array.isArray(data.owned) ? data.owned : [];
+    const joined = Array.isArray(data.joined) ? data.joined : [];
+    setOwnedWorkspaces(owned);
+    setJoinedWorkspaces(joined);
+    setWorkspaces([...owned, ...joined]);
+  };
+
+  const applyNavigationData = (data: WorkspaceNavigationResponse) => {
+    const owned = Array.isArray(data.owned_workspaces) ? data.owned_workspaces : [];
+    const joined = Array.isArray(data.joined_workspaces) ? data.joined_workspaces : [];
+
+    // Identifier les workspaces "partiels" (ceux dont on a rejoint une ressource mais pas le workspace entier)
+    const allJoined = [
+      ...(Array.isArray(data.joined_espaces) ? data.joined_espaces : []),
+      ...(Array.isArray(data.joined_listes) ? data.joined_listes : []),
+      ...(Array.isArray(data.joined_taches) ? data.joined_taches : [])
+    ];
+
+    const existingIds = new Set([...owned, ...joined].map(ws => ws.id));
+    const partialWorkspaces: Workspace[] = [];
+
+    allJoined.forEach(res => {
+      const wsId = res.workspace_id || res.id_workspace;
+      if (wsId && !existingIds.has(wsId)) {
+        partialWorkspaces.push({
+          id: wsId,
+          nom: res.workspace_nom || 'Workspace',
+          description: '',
+          membres: [],
+          created_at: new Date().toISOString(),
+          id_utilisateur: '',
+          espaces: []
+        });
+        existingIds.add(wsId);
+      }
+    });
+
+    setOwnedWorkspaces(owned);
+    setJoinedWorkspaces(joined);
+    setWorkspaces([...owned, ...joined, ...partialWorkspaces]);
+    setJoinedEspaces(Array.isArray(data.joined_espaces) ? data.joined_espaces : EMPTY_JOINED_ITEMS);
+    setJoinedListes(Array.isArray(data.joined_listes) ? data.joined_listes : EMPTY_JOINED_ITEMS);
+    setJoinedTaches(Array.isArray(data.joined_taches) ? data.joined_taches : EMPTY_JOINED_ITEMS);
+  };
+
   const loadWorkspaces = async () => {
     try {
-      const data = await workspaceService.getAll();
-      setWorkspaces(data);
+      const data = await workspaceService.getMyAccess();
+      applyWorkspaceAccessListing(data);
     } catch (error) {
       console.error('Erreur chargement workspaces', error);
+      setOwnedWorkspaces([]);
+      setJoinedWorkspaces([]);
+      setWorkspaces([]);
     }
+  };
+
+  const loadNavigationData = async () => {
+    try {
+      const data = await workspaceService.getMyNavigation();
+      applyNavigationData(data);
+    } catch (error) {
+      console.error('Erreur chargement navigation utilisateur', error);
+      setOwnedWorkspaces([]);
+      setJoinedWorkspaces([]);
+      setWorkspaces([]);
+      setJoinedEspaces(EMPTY_JOINED_ITEMS);
+      setJoinedListes(EMPTY_JOINED_ITEMS);
+      setJoinedTaches(EMPTY_JOINED_ITEMS);
+    }
+  };
+
+  const loadWorkspaceLocalResources = async (workspaceId: string) => {
+    try {
+      const data = await workspaceService.getLocalResources(workspaceId);
+      const normalized =
+        data && data.workspace_id
+          ? data
+          : createEmptyLocalResources(workspaceId);
+
+      setWorkspaceLocalResources(prev => ({
+        ...prev,
+        [workspaceId]: normalized,
+      }));
+    } catch (error) {
+      console.error('Erreur chargement ressources locales', error);
+      setWorkspaceLocalResources(prev => ({
+        ...prev,
+        [workspaceId]: createEmptyLocalResources(workspaceId),
+      }));
+    }
+  };
+
+  const refreshAccessOverview = async () => {
+    await loadNavigationData();
   };
 
   // Charger l'arborescence des espaces d'un workspace
   const loadEspacesTree = async (workspaceId: string) => {
     try {
       const tree = await espaceService.getTree(workspaceId);
-      setWorkspaces(prev => prev.map(ws =>
-        ws.id === workspaceId ? { ...ws, espaces: tree } : ws
-      ));
+      setWorkspaces(prev => {
+        const exists = prev.find(ws => ws.id === workspaceId);
+        if (exists) {
+          return prev.map(ws => ws.id === workspaceId ? { ...ws, espaces: tree } : ws);
+        }
+        // Si le workspace n'est pas dans la liste (accès partiel), on l'ajoute
+        return [...prev, {
+          id: workspaceId,
+          nom: 'Workspace',
+          description: '',
+          membres: [],
+          created_at: new Date().toISOString(),
+          id_utilisateur: '',
+          espaces: tree
+        }];
+      });
     } catch (error) {
       console.error('Erreur chargement arborescence', error);
     }
@@ -109,18 +249,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // CRUD Workspace
   const addWorkspace = async (data: { nom: string; description?: string }) => {
-    const newWorkspace = await workspaceService.create(data);
-    setWorkspaces(prev => [...prev, newWorkspace]);
+    await workspaceService.create(data);
+    await refreshAccessOverview();
   };
 
   const updateWorkspace = async (id: string, data: { nom?: string; description?: string }) => {
-    const updated = await workspaceService.update(id, data);
-    setWorkspaces(prev => prev.map(ws => ws.id === id ? updated : ws));
+    await workspaceService.update(id, data);
+    await refreshAccessOverview();
   };
 
   const deleteWorkspace = async (id: string) => {
     await workspaceService.delete(id);
-    setWorkspaces(prev => prev.filter(ws => ws.id !== id));
+    await refreshAccessOverview();
     if (activeWorkspaceId === id) setActiveWorkspaceId(null);
   };
 
@@ -132,12 +272,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateEspace = async (id: string, data: { nom?: string; description?: string }) => {
     await espaceService.update(id, data);
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   const deleteEspace = async (id: string) => {
     await espaceService.delete(id);
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   // CRUD Liste
@@ -148,12 +288,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateListe = async (id: string, data: { nom?: string; description?: string }) => {
     await listeService.update(id, data);
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   const deleteListe = async (id: string) => {
     await listeService.delete(id);
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   // CRUD Tâche
@@ -175,12 +315,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Gestion des membres (workspace)
   const inviteMember = async (workspaceId: string, email: string, role: string) => {
     await workspaceService.inviteMember(workspaceId, { email, role });
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   const removeMember = async (workspaceId: string, memberId: string) => {
     await workspaceService.removeMember(workspaceId, memberId);
-    await loadWorkspaces();
+    await refreshAccessOverview();
   };
 
   // Gestion des membres d'espace
@@ -201,19 +341,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Fonctions vides
-  const toggleSubTask = (taskId: string, subTaskId: string) => {};
-  const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => {};
-  const addMember = (workspaceId: string, member: Member) => {};
+  const toggleSubTask = (taskId: string, subTaskId: string) => { };
+  const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => { };
+  const addMember = (workspaceId: string, member: Member) => { };
 
   // Chargement initial
   useEffect(() => {
-    loadWorkspaces();
+    refreshAccessOverview();
   }, []);
 
   return (
     <AppContext.Provider
       value={{
         workspaces,
+        ownedWorkspaces,
+        joinedWorkspaces,
+        joinedEspaces,
+        joinedListes,
+        joinedTaches,
+        workspaceLocalResources,
         activeWorkspaceId,
         activeSpaceId,
         activeListId,
@@ -221,6 +367,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActiveSpaceId,
         setActiveListId,
         loadWorkspaces,
+        loadNavigationData,
+        loadWorkspaceLocalResources,
         loadEspacesTree,
         loadListes,
         loadTaches,

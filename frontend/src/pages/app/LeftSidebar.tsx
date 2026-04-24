@@ -1,25 +1,28 @@
 // frontend/src/pages/app/LeftSidebar.tsx
 import { useState, useEffect, useRef } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { 
-  ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare, 
-  FileText, Calendar, Plus, Edit, Trash2, UserPlus, ListTodo, Settings 
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare,
+  FileText, Calendar, Plus, Edit, Trash2, UserPlus, ListTodo, Settings
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { listeService } from '../../services/liste.service';
+import { tacheService } from '../../services/tache.service';
 import Modal from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import type { WorkspaceDirectAccessItem } from '../../types';
 
 export default function LeftSidebar() {
+  const navigate = useNavigate();
   const { workspaceId, spaceId, listId } = useParams();
-  const { 
-    workspaces, loadEspacesTree, addEspace, updateEspace, deleteEspace, 
-    addListe, updateListe, deleteListe, inviteMemberToEspace 
+  const {
+    workspaces, workspaceLocalResources, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
+    addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
   const [openSpaces, setOpenSpaces] = useState<Record<string, boolean>>({});
   const [listsBySpace, setListsBySpace] = useState<Record<string, any[]>>({});
   const [loadingLists, setLoadingLists] = useState<Record<string, boolean>>({});
-  
+
   const [workspaceLists, setWorkspaceLists] = useState<any[]>([]);
   const [loadingWorkspaceLists, setLoadingWorkspaceLists] = useState(false);
 
@@ -80,7 +83,8 @@ export default function LeftSidebar() {
   const listMenuRef = useRef<HTMLDivElement>(null);
 
   const workspace = workspaces.find(w => w.id === workspaceId);
-
+  const localResources = workspaceId ? workspaceLocalResources[workspaceId] : undefined;
+  const hasWorkspaceAccess = !!workspace || !!localResources;
   // Fonction pour récupérer tous les espaces d'un arbre (récursif)
   const getAllSpacesFromTree = (items: any[]): any[] => {
     let result: any[] = [];
@@ -95,14 +99,20 @@ export default function LeftSidebar() {
 
   useEffect(() => {
     if (workspaceId) {
+      loadWorkspaceLocalResources(workspaceId);
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (workspaceId && hasWorkspaceAccess) {
       loadEspacesTree(workspaceId);
     }
-  }, [workspaceId, loadEspacesTree]);
+  }, [workspaceId, hasWorkspaceAccess, loadEspacesTree]);
 
   // Charger les listes pour tous les espaces au démarrage (pour que les chevrons apparaissent)
   useEffect(() => {
-    if (!workspace?.espaces) return;
-    
+    if (!hasWorkspaceAccess) return;
+
     const loadAllLists = async () => {
       const allSpaces = getAllSpacesFromTree(workspace.espaces);
       for (const space of allSpaces) {
@@ -119,9 +129,9 @@ export default function LeftSidebar() {
         }
       }
     };
-    
+
     loadAllLists();
-  }, [workspace?.espaces]);
+  }, [hasWorkspaceAccess, workspace?.espaces]);
 
   const loadWorkspaceLists = async () => {
     if (!workspaceId) return;
@@ -137,13 +147,13 @@ export default function LeftSidebar() {
   };
 
   useEffect(() => {
-    if (workspaceId) {
+    if (workspaceId && hasWorkspaceAccess) {
       loadWorkspaceLists();
     }
-  }, [workspaceId]);
+  }, [workspaceId, hasWorkspaceAccess]);
 
   useEffect(() => {
-    if (!workspace?.espaces) return;
+    if (!hasWorkspaceAccess || !workspace?.espaces) return;
     const fetchListsForOpenSpaces = async () => {
       for (const id of Object.keys(openSpaces)) {
         if (openSpaces[id] && !listsBySpace[id] && !loadingLists[id]) {
@@ -160,7 +170,7 @@ export default function LeftSidebar() {
       }
     };
     fetchListsForOpenSpaces();
-  }, [openSpaces, workspace?.espaces, listsBySpace, loadingLists]);
+  }, [hasWorkspaceAccess, openSpaces, workspace?.espaces, listsBySpace, loadingLists]);
 
   const refreshLists = async (espaceId: string) => {
     try {
@@ -352,9 +362,8 @@ export default function LeftSidebar() {
         >
           <Link
             to={`/workspace/${workspaceId}/${item.id}`}
-            className={`flex-1 flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-all ${
-              spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex-1 flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-all ${spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <FolderTree className="h-4 w-4 text-primary" />
             <span className="truncate">{item.nom}</span>
@@ -416,72 +425,82 @@ export default function LeftSidebar() {
     ));
   };
 
-  if (!workspace) return <div className="p-4 text-center text-gray-500">Sélectionnez un workspace</div>;
+
+
+
 
   return (
     <div className="p-3">
+
+
       {/* Section Espaces et listes hiérarchiques */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2 relative">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
-          <div className="relative" ref={createMenuRef}>
-            <button
-              onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-              className="p-1 rounded hover:bg-gray-100"
-            >
-              <Plus className="h-3.5 w-3.5 text-gray-500" />
-            </button>
-            {isCreateMenuOpen && (
-              <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
-                <button
-                  onClick={() => openCreateSpaceModal()}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+      {hasWorkspaceAccess && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2 relative">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
+            <div className="relative" ref={createMenuRef}>
+              <button
+                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                className="p-1 rounded hover:bg-gray-100"
+              >
+                <Plus className="h-3.5 w-3.5 text-gray-500" />
+              </button>
+              {isCreateMenuOpen && (
+                <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
+                  <button
+                    onClick={() => openCreateSpaceModal()}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <FolderTree className="h-4 w-4" />
+                    Espace
+                  </button>
+                  <button
+                    onClick={() => openCreateListModal(undefined, workspaceId)}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <ListTodo className="h-4 w-4" />
+                    Liste (projet)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {renderTree(workspace.espaces || [])}
+        </div>
+      )}
+
+      {/* Section Projets du workspace (listes sans espace) */}
+      {hasWorkspaceAccess && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Projets (workspace)</h3>
+          </div>
+          <div className="space-y-0.5">
+            {loadingWorkspaceLists && <div className="text-sm text-gray-400 pl-2">Chargement...</div>}
+            {workspaceLists.map(list => (
+              <div
+                key={list.id}
+                className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+              >
+                <Link
+                  to={`/workspace/${workspaceId}/list/${list.id}`}
+                  className="flex-1 flex items-center gap-2"
                 >
-                  <FolderTree className="h-4 w-4" />
-                  Espace
-                </button>
-                <button
-                  onClick={() => openCreateListModal(undefined, workspaceId)}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                >
-                  <ListTodo className="h-4 w-4" />
-                  Liste (projet)
-                </button>
+                  <ListTodo className="h-4 w-4 text-gray-500" />
+                  <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
+                    {list.nom}
+                  </span>
+                </Link>
               </div>
+            ))}
+            {!loadingWorkspaceLists && workspaceLists.length === 0 && (
+              <div className="text-sm text-gray-400 pl-2">Aucun projet</div>
             )}
           </div>
         </div>
-        {renderTree(workspace.espaces || [])}
-      </div>
+      )}
 
-      {/* Section Projets du workspace (listes sans espace) */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Projets (workspace)</h3>
-        </div>
-        <div className="space-y-0.5">
-          {loadingWorkspaceLists && <div className="text-sm text-gray-400 pl-2">Chargement...</div>}
-          {workspaceLists.map(list => (
-            <div
-              key={list.id}
-              className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
-            >
-              <Link
-                to={`/workspace/${workspaceId}/list/${list.id}`}
-                className="flex-1 flex items-center gap-2"
-              >
-                <ListTodo className="h-4 w-4 text-gray-500" />
-                <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
-                  {list.nom}
-                </span>
-              </Link>
-            </div>
-          ))}
-          {!loadingWorkspaceLists && workspaceLists.length === 0 && (
-            <div className="text-sm text-gray-400 pl-2">Aucun projet</div>
-          )}
-        </div>
-      </div>
+
 
       {/* Chat */}
       <div className="mb-6">

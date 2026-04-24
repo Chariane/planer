@@ -6,6 +6,7 @@ const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://loc
 export const tacheService = {
   // Tâches
   getByListe: (listeId: string) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/list_taches`),
+  getById: (tacheId: string) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/get_tache`),
   create: (listeId: string, data: any) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/create_tache`, { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: any) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${id}/update_tache`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${id}/delete_tache`, { method: 'DELETE' }),

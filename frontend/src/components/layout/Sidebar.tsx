@@ -1,7 +1,7 @@
 // frontend/src/components/layout/Sidebar.tsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Plus, LogOut } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, CheckSquare2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal';
@@ -13,13 +13,14 @@ interface SidebarProps {
 export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
   const { workspaceId } = useParams();
-  const { user } = useAuth();
-  const { workspaces, loadWorkspaces } = useApp();
+  const { user, logout } = useAuth();
+  const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes, joinedTaches, loadWorkspaces } = useApp();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  useEffect(() => {
-    loadWorkspaces();
-  }, []);
+  const [ownedOpen, setOwnedOpen] = useState(true);
+  const [joinedOpen, setJoinedOpen] = useState(true);
+  const [espacesOpen, setEspacesOpen] = useState(true);
+  const [listesOpen, setListesOpen] = useState(true);
+  const [tachesOpen, setTachesOpen] = useState(false);
 
   const handleWorkspaceCreated = () => {
     loadWorkspaces(); // Recharger la liste
@@ -69,51 +70,219 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       {/* Navigation principale */}
       <nav className="mt-4 px-3 space-y-1">
         <Link to="/dashboard">
-          <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${
-            location.pathname === '/dashboard' 
-              ? 'bg-secondary text-white shadow-md' 
-              : 'text-white/70 hover:bg-white/10 hover:text-white'
-          }`}>
+          <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${location.pathname === '/dashboard'
+            ? 'bg-secondary text-white shadow-md'
+            : 'text-white/70 hover:bg-white/10 hover:text-white'
+            }`}>
             <LayoutDashboard className="h-5 w-5" />
             <span>Tableau de bord</span>
           </div>
         </Link>
       </nav>
 
-      {/* Workspaces */}
+      {/* Mes Workspaces (owned) */}
       <div className="mt-4 pt-3 border-t border-white/10">
         <div className="flex items-center justify-between px-3 mb-2">
-          <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">Workspaces</h3>
-          <button 
+          <button
+            onClick={() => setOwnedOpen(!ownedOpen)}
+            className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+          >
+            {ownedOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Mes Workspaces
+          </button>
+          <button
             onClick={() => setIsCreateModalOpen(true)}
             className="p-1 rounded-lg bg-white/10 hover:bg-secondary transition-colors"
+            title="Créer un workspace"
           >
             <Plus className="h-3 w-3 text-white" />
           </button>
         </div>
-        <div className="space-y-0.5 px-2">
-          {workspaces.map((ws) => (
-            <Link 
-              key={ws.id} 
-              to={`/workspace/${ws.id}`}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${
-                workspaceId === ws.id 
-                  ? 'bg-secondary text-white' 
+        {ownedOpen && (
+          <div className="space-y-0.5 px-2">
+            {ownedWorkspaces.length === 0 && (
+              <p className="text-xs text-white/40 px-2 py-1">Aucun workspace créé</p>
+            )}
+            {ownedWorkspaces.map((ws) => (
+              <Link
+                key={ws.id}
+                to={`/workspace/${ws.id}`}
+                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${workspaceId === ws.id
+                  ? 'bg-secondary text-white'
                   : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <Briefcase className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">{ws.nom}</span>
-            </Link>
-          ))}
-        </div>
+                  }`}
+              >
+                <Crown className="h-4 w-4 flex-shrink-0 text-amber-400" />
+                <span className="truncate">{ws.nom}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Workspaces rejoints (joined) */}
+      {joinedWorkspaces.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <button
+              onClick={() => setJoinedOpen(!joinedOpen)}
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+            >
+              {joinedOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Rejoints
+            </button>
+          </div>
+          {joinedOpen && (
+            <div className="space-y-0.5 px-2">
+              {joinedWorkspaces.map((ws) => (
+                <Link
+                  key={ws.id}
+                  to={`/workspace/${ws.id}`}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${workspaceId === ws.id
+                    ? 'bg-secondary text-white'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                >
+                  <Users className="h-4 w-4 flex-shrink-0 text-sky-400" />
+                  <span className="truncate flex-1">{ws.nom}</span>
+                  {ws.current_user_role && (
+                    <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                      {ws.current_user_role}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Espaces rejoints */}
+      {joinedEspaces.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <button
+              onClick={() => setEspacesOpen(!espacesOpen)}
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+            >
+              {espacesOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Espaces rejoints
+            </button>
+          </div>
+          {espacesOpen && (
+            <div className="space-y-0.5 px-2">
+              {joinedEspaces.map((espace) => {
+                const href = espace.id_workspace
+                  ? `/workspace/${espace.id_workspace}/${espace.id}`
+                  : '#';
+                return (
+                  <Link
+                    key={`joined-espace-${espace.id}`}
+                    to={href}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                  >
+                    <FolderOpen className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+                    <span className="truncate flex-1">{espace.nom}</span>
+                    {espace.role && (
+                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                        {espace.role}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Listes rejointes */}
+      {joinedListes.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <button
+              onClick={() => setListesOpen(!listesOpen)}
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+            >
+              {listesOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Listes rejointes
+            </button>
+          </div>
+          {listesOpen && (
+            <div className="space-y-0.5 px-2">
+              {joinedListes.map((liste) => {
+                const href = liste.id_workspace
+                  ? liste.id_espace
+                    ? `/workspace/${liste.id_workspace}/${liste.id_espace}/${liste.id}`
+                    : `/workspace/${liste.id_workspace}/list/${liste.id}`
+                  : '#';
+                return (
+                  <Link
+                    key={`joined-liste-${liste.id}`}
+                    to={href}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                  >
+                    <ListTodo className="h-4 w-4 flex-shrink-0 text-violet-400" />
+                    <span className="truncate flex-1">{liste.nom}</span>
+                    {liste.role && (
+                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                        {liste.role}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tâches rejointes */}
+      {joinedTaches.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <button
+              onClick={() => setTachesOpen(!tachesOpen)}
+              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+            >
+              {tachesOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Tâches rejointes
+            </button>
+          </div>
+          {tachesOpen && (
+            <div className="space-y-0.5 px-2">
+              {joinedTaches.map((tache) => {
+                const href = tache.id_workspace && tache.id_liste
+                  ? tache.id_espace
+                    ? `/workspace/${tache.id_workspace}/${tache.id_espace}/${tache.id_liste}`
+                    : `/workspace/${tache.id_workspace}/list/${tache.id_liste}`
+                  : '#';
+                return (
+                  <Link
+                    key={`joined-tache-${tache.id}`}
+                    to={href}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                  >
+                    <CheckSquare2 className="h-4 w-4 flex-shrink-0 text-orange-400" />
+                    <span className="truncate flex-1">{tache.nom}</span>
+                    {tache.role && (
+                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                        {tache.role}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="mt-auto pt-4 pb-4 border-t border-white/10 px-3">
-        <button 
-          onClick={() => {/* TODO: déconnexion */}}
-          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 transition-colors"
+        <button
+          onClick={() => logout()}
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-colors"
         >
           <LogOut className="h-4 w-4" />
           <span>Déconnexion</span>

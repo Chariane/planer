@@ -1,18 +1,18 @@
 // frontend/src/pages/DashboardPage.tsx
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  FolderKanban, CheckSquare, Users, Calendar, 
-  ArrowRight, TrendingUp, Clock, Zap, 
+import {
+  FolderKanban, CheckSquare, Users,
+  ArrowRight, TrendingUp, Zap,
   Star, Briefcase, PlusCircle, Bell, ChevronRight,
-  Activity, Target, Award
+  Activity
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
 export default function DashboardPage() {
-  const { workspaces, loadWorkspaces, addWorkspace } = useApp();
+  const { workspaces, joinedEspaces, joinedTaches, loadWorkspaces, loadNavigationData } = useApp();
   const [stats, setStats] = useState({
     totalTasks: 0,
     pendingTasks: 0,
@@ -25,6 +25,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadWorkspaces();
+    loadNavigationData();
     loadDashboardStats();
   }, []);
 
@@ -35,7 +36,7 @@ export default function DashboardPage() {
       const pendingTasks = 15;
       const completedTasks = 27;
       const activeMembers = workspaces.reduce((acc, ws) => acc + (ws.membres?.length || 0), 0);
-      
+
       setStats({
         totalTasks,
         pendingTasks,
@@ -59,34 +60,34 @@ export default function DashboardPage() {
   };
 
   const statCards = [
-    { 
-      label: "Workspaces", 
-      value: workspaces.length, 
-      icon: <Briefcase className="w-6 h-6" />, 
+    {
+      label: "Workspaces",
+      value: workspaces.length,
+      icon: <Briefcase className="w-6 h-6" />,
       color: "bg-blue-100 text-primary",
       trend: "+12%",
       link: "/workspaces"
     },
-    { 
-      label: "Espaces", 
-      value: workspaces.reduce((acc, ws) => acc + (ws.espaces?.length || 0), 0), 
-      icon: <FolderKanban className="w-6 h-6" />, 
+    {
+      label: "Espaces",
+      value: workspaces.reduce((acc, ws) => acc + (ws.espaces?.length || 0), 0) + joinedEspaces.length,
+      icon: <FolderKanban className="w-6 h-6" />,
       color: "bg-orange-100 text-secondary",
       trend: "+8%",
       link: "#"
     },
-    { 
-      label: "Tâches totales", 
-      value: stats.totalTasks, 
-      icon: <CheckSquare className="w-6 h-6" />, 
+    {
+      label: "Tâches totales",
+      value: stats.totalTasks + joinedTaches.length,
+      icon: <CheckSquare className="w-6 h-6" />,
       color: "bg-emerald-100 text-emerald-600",
       trend: "+23%",
       link: "#"
     },
-    { 
-      label: "Membres actifs", 
-      value: stats.activeMembers, 
-      icon: <Users className="w-6 h-6" />, 
+    {
+      label: "Membres actifs",
+      value: stats.activeMembers,
+      icon: <Users className="w-6 h-6" />,
       color: "bg-purple-100 text-purple-600",
       trend: "+5%",
       link: "#"

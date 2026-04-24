@@ -57,8 +57,58 @@ export interface Space {
 export interface Workspace {
   id: string;
   nom: string;
-  description: string;
+  description: string | null;
   membres: Member[];
   espaces: Space[];
-  createdAt: Date;
+  createdAt?: Date;
+  created_at?: string;
+  updated_at?: string | null;
+  id_utilisateur?: string | null;
+  member_count?: number;
+  current_user_role?: string | null;
+  current_user_statut?: string | null;
+}
+
+export interface JoinedResource {
+  id: string;
+  nom: string;
+  role: string;
+  created_at?: string;
+  workspace_id?: string | null;
+  workspace_nom?: string | null;
+  id_workspace?: string | null;
+  id_espace?: string | null;
+  id_liste?: string | null;
+}
+
+export interface WorkspaceAccessListingResponse {
+  owned: Workspace[];
+  joined: Workspace[];
+}
+
+export interface WorkspaceDirectAccessItem {
+  id: string;
+  nom: string;
+  role: string;
+  id_espace?: string | null;
+  id_liste?: string | null;
+}
+
+export interface WorkspaceLocalResourcesResponse {
+  workspace_id: string;
+  workspace_nom: string;
+  my_workspace_role: string | null;
+  direct_access: {
+    espaces: WorkspaceDirectAccessItem[];
+    listes: WorkspaceDirectAccessItem[];
+    taches: WorkspaceDirectAccessItem[];
+  };
+}
+
+export interface WorkspaceNavigationResponse {
+  owned_workspaces: Workspace[];
+  joined_workspaces: Workspace[];
+  joined_espaces: JoinedResource[];
+  joined_listes: JoinedResource[];
+  joined_taches: JoinedResource[];
 }

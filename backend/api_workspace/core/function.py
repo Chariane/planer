@@ -243,20 +243,28 @@ def get_joined_workspaces(db: Session, user_id: str) -> List[dict]:
 
 def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
     """Espaces rejoins directement."""
+    owned_ids = db.query(Workspace.id).filter(Workspace.id_utilisateur == user_id).all()
+    owned_ids = {row[0] for row in owned_ids}
+
     memberships = db.query(Membre).filter(
         Membre.id_utilisateur == user_id,
         Membre.id_espace.isnot(None),
-        Membre.statut == "Actif"
+        Membre.statut == "Actif",
+        Membre.role.notin_(["Créateur", "Administrateur"])
     ).all()
     
     res = []
     for m in memberships:
         ws = m.espace.workspace if m.espace else None
+        if ws and ws.id in owned_ids:
+            continue
         res.append({
             "id": m.id_espace,
+            "id_espace": m.id_espace,
             "nom": m.espace.nom if m.espace else "Inconnu",
             "role": m.role,
             "workspace_id": ws.id if ws else None,
+            "id_workspace": ws.id if ws else None,
             "workspace_nom": ws.nom if ws else None
         })
     return res
@@ -264,43 +272,59 @@ def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
 
 def get_joined_listes(db: Session, user_id: str) -> List[dict]:
     """Listes rejointes directement."""
+    owned_ids = db.query(Workspace.id).filter(Workspace.id_utilisateur == user_id).all()
+    owned_ids = {row[0] for row in owned_ids}
+
     memberships = db.query(Membre).filter(
         Membre.id_utilisateur == user_id,
         Membre.id_liste.isnot(None),
-        Membre.statut == "Actif"
+        Membre.statut == "Actif",
+        Membre.role.notin_(["Créateur", "Administrateur"])
     ).all()
     
     res = []
     for m in memberships:
         ws = m.liste.workspace or (m.liste.espace.workspace if m.liste.espace else None)
+        if ws and ws.id in owned_ids:
+            continue
         res.append({
             "id": m.id_liste,
+            "id_liste": m.id_liste,
             "nom": m.liste.nom if m.liste else "Inconnu",
             "role": m.role,
             "workspace_id": ws.id if ws else None,
+            "id_workspace": ws.id if ws else None,
             "workspace_nom": ws.nom if ws else None,
-            "id_espace": m.liste.id_espace
+            "id_espace": m.liste.id_espace if m.liste else None
         })
     return res
 
 
 def get_joined_taches(db: Session, user_id: str) -> List[dict]:
     """Taches rejointes directement."""
+    owned_ids = db.query(Workspace.id).filter(Workspace.id_utilisateur == user_id).all()
+    owned_ids = {row[0] for row in owned_ids}
+
     memberships = db.query(Membre).filter(
         Membre.id_utilisateur == user_id,
         Membre.id_tache.isnot(None),
-        Membre.statut == "Actif"
+        Membre.statut == "Actif",
+        Membre.role.notin_(["Créateur", "Administrateur"])
     ).all()
     
     res = []
     for m in memberships:
         liste = m.tache.liste
         ws = liste.workspace or (liste.espace.workspace if (liste and liste.espace) else None)
+        if ws and ws.id in owned_ids:
+            continue
         res.append({
             "id": m.id_tache,
+            "id_tache": m.id_tache,
             "nom": m.tache.titre if m.tache else "Inconnu",
             "role": m.role,
             "workspace_id": ws.id if ws else None,
+            "id_workspace": ws.id if ws else None,
             "workspace_nom": ws.nom if ws else None,
             "id_espace": liste.id_espace if liste else None,
             "id_liste": m.tache.id_liste
