@@ -8,7 +8,9 @@ from ..core.function import (
     _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
-    get_all_user_resources
+    get_all_user_resources,
+    get_user_workspaces_listing,
+    get_workspace_local_resources
 )
 from ..core.security import get_current_user
 from ..crud.utilisateur import (
@@ -60,11 +62,27 @@ def get_all_user_resources_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """
-    Récupère une vue globale de toutes les ressources de l'utilisateur
-    (Workspaces possédés, Workspaces rejoints, Espaces, Projets et Tâches).
-    """
+    """Vue OMNI-RESOURCES : Tout ce que l'utilisateur possède ou a rejoint."""
     return get_all_user_resources(db, current_user.id)
+
+
+@router.get("/my_access", response_model=dict)
+def get_my_workspace_access_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Listing des workspaces : Possédés (Owned) vs Rejoints (Joined)."""
+    return get_user_workspaces_listing(db, current_user.id)
+
+
+@router.get("/{workspace_id}/local_resources", response_model=dict)
+def get_workspace_local_resources_endpoint(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Vue contextualisée : Ressources internes d'un workspace précis."""
+    return get_workspace_local_resources(db, workspace_id, current_user.id)
 
 
 #Modifier un workspace, uniquement si l'utilisateur est le créateur du workspace (propriétaire)

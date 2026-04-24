@@ -24,6 +24,7 @@ from ..core.function import (
     validate_self_password_update,
     verify_google_authenticator_code,
 )
+from backend.api_workspace.core.function import get_all_user_resources
 from ..core.security import (
     get_password_hash,
     verify_password,
@@ -474,6 +475,15 @@ def change_password(
 @router.get("/me", response_model=UtilisateurOut)
 def get_me(current_user: UtilisateurOut = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/me/resources", response_model=dict)
+def get_me_resources(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user)
+):
+    """Raccourci pour récupérer toutes les ressources de l'utilisateur connecté."""
+    return get_all_user_resources(db, current_user.id)
 
 
 @router.put("/me", response_model=UtilisateurOut)

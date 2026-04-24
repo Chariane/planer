@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from ..models import Espace, Liste, Membre, PlanerEntreprise, Tache, Utilisateur, Workspace
+from sqlalchemy import or_, and_
 
 WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
 
@@ -292,5 +293,84 @@ def get_all_user_resources(db: Session, user_id: str) -> dict:
             "espaces": espaces_joined,
             "listes": listes_joined,
             "taches": taches_joined
+        }
+    }
+
+
+def get_user_workspaces_listing(db: Session, user_id: str) -> dict:
+    """Récupère les workspaces possédés et rejoints séparément."""
+    owned = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
+    
+    joined_memberships = (
+        db.query(Membre)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.id_workspace.isnot(None),
+            Membre.statut == "Actif"
+        )
+        .all()
+    )
+    
+    owned_ids = {ws.id for ws in owned}
+    joined = [
+        _serialize_workspace(m.workspace, membre=m) 
+        for m in joined_memberships 
+        if m.id_workspace not in owned_ids
+    ]
+    
+    return {
+        "owned": [_serialize_workspace(ws) for ws in owned],
+        "joined": joined
+    }
+
+
+def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) -> dict:
+    """Récupère les ressources directes (Espaces, Listes, Tâches) au sein d'un workspace spécifique."""
+    # 1. Vérifier le rôle de l'utilisateur dans ce workspace
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        return {}
+    
+    ws_member = db.query(Membre).filter(
+        Membre.id_workspace == workspace_id,
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif"
+    ).first()
+    
+    # 2. Récupérer les ressources directes liées à ce workspace
+    # On cherche dans Membre les entrées liées à des objets dont le parent est ce workspace
+    all_memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif"
+    ).all()
+    
+    espaces = []
+    listes = []
+    taches = []
+    
+    for m in all_memberships:
+        # Espaces du workspace
+        if m.id_espace and m.espace and m.espace.id_workspace == workspace_id:
+            espaces.append({"id": m.id_espace, "nom": m.espace.nom, "role": m.role})
+            
+        # Listes du workspace (directes ou via espace)
+        elif m.id_liste and m.liste:
+            if m.liste.id_workspace == workspace_id or (m.liste.espace and m.liste.espace.id_workspace == workspace_id):
+                listes.append({"id": m.id_liste, "nom": m.liste.nom, "role": m.role})
+                
+        # Tâches du workspace (via liste)
+        elif m.id_tache and m.tache:
+            liste = m.tache.liste
+            if liste and (liste.id_workspace == workspace_id or (liste.espace and liste.espace.id_workspace == workspace_id)):
+                taches.append({"id": m.id_tache, "nom": m.tache.titre, "role": m.role})
+
+    return {
+        "workspace_id": workspace_id,
+        "workspace_nom": workspace.nom,
+        "my_workspace_role": ws_member.role if ws_member else ("Créateur" if workspace.id_utilisateur == user_id else None),
+        "direct_access": {
+            "espaces": espaces,
+            "listes": listes,
+            "taches": taches
         }
     }
