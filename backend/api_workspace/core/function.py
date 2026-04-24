@@ -338,10 +338,13 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
     ).first()
     
     # 2. Récupérer les ressources directes liées à ce workspace
-    # On cherche dans Membre les entrées liées à des objets dont le parent est ce workspace
+    # On ne prend que ce qui est 'Membre' ou 'Invité' (Accès directs)
+    DIRECT_ROLES = {"Membre", "Invité"}
+    
     all_memberships = db.query(Membre).filter(
         Membre.id_utilisateur == user_id,
-        Membre.statut == "Actif"
+        Membre.statut == "Actif",
+        Membre.role.in_(DIRECT_ROLES)
     ).all()
     
     espaces = []
