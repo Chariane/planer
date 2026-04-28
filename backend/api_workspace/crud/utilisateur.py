@@ -64,7 +64,7 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
         owner_member = Membre(
             id_utilisateur=user_id,
             id_workspace=workspace.id,
-            role="Administrateur",
+            role="Créateur",
             statut="Actif",
         )
         db.add(owner_member)
@@ -278,7 +278,150 @@ def add_member_to_workspace(db: Session, workspace_id: str, membre_in: MembreCre
     return membre
 
 
-def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role: str) -> dict:
+def _get_member_by_liste(db: Session, liste_id: str, user_id: str) -> Optional[Membre]:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.id_utilisateur == user_id,
+        )
+        .first()
+    )
+
+
+def _get_member_by_tache(db: Session, tache_id: str, user_id: str) -> Optional[Membre]:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_tache == tache_id,
+            Membre.id_utilisateur == user_id,
+        )
+        .first()
+    )
+
+
+def _validate_workspace_member_assignment(
+    db: Session,
+    workspace_id: str,
+    role: str,
+    id_liste: Optional[str] = None,
+    id_tache: Optional[str] = None,
+) -> dict[str, Optional[str]]:
+    assignment_count = int(id_liste is not None) + int(id_tache is not None)
+
+    if role == "Membre":
+        if assignment_count != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Une invitation avec le role 'Membre' doit cibler exactement une liste ou une tache du workspace.",
+            )
+    elif assignment_count != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Seul le role 'Membre' peut recevoir une affectation directe a une liste ou une tache.",
+        )
+
+    if id_liste:
+        liste = (
+            db.query(Liste)
+            .options(joinedload(Liste.espace), joinedload(Liste.workspace))
+            .filter(Liste.id == id_liste)
+            .first()
+        )
+        if not liste:
+            raise HTTPException(status_code=404, detail="Liste introuvable.")
+
+        liste_workspace_id = liste.id_workspace or (liste.espace.id_workspace if liste.espace else None)
+        if liste_workspace_id != workspace_id:
+            raise HTTPException(
+                status_code=400,
+                detail="La liste selectionnee n'appartient pas a ce workspace.",
+            )
+        return {"id_liste": liste.id, "id_tache": None}
+
+    if id_tache:
+        tache = (
+            db.query(Tache)
+            .options(
+                joinedload(Tache.liste).joinedload(Liste.espace),
+                joinedload(Tache.liste).joinedload(Liste.workspace),
+            )
+            .filter(Tache.id == id_tache)
+            .first()
+        )
+        if not tache:
+            raise HTTPException(status_code=404, detail="Tache introuvable.")
+        if not tache.liste:
+            raise HTTPException(
+                status_code=400,
+                detail="La tache selectionnee n'est rattachee a aucune liste exploitable.",
+            )
+
+        tache_workspace_id = tache.liste.id_workspace or (
+            tache.liste.espace.id_workspace if tache.liste.espace else None
+        )
+        if tache_workspace_id != workspace_id:
+            raise HTTPException(
+                status_code=400,
+                detail="La tache selectionnee n'appartient pas a ce workspace.",
+            )
+        return {"id_liste": None, "id_tache": tache.id}
+
+    return {"id_liste": None, "id_tache": None}
+
+
+def _sync_assignment_membership(
+    db: Session,
+    user_id: str,
+    assignment: dict[str, Optional[str]],
+    statut: str,
+) -> Optional[Membre]:
+    id_liste = assignment.get("id_liste")
+    id_tache = assignment.get("id_tache")
+
+    if not id_liste and not id_tache:
+        return None
+
+    membre = None
+    if id_liste:
+        membre = _get_member_by_liste(db, id_liste, user_id)
+        if not membre:
+            membre = Membre(
+                id_utilisateur=user_id,
+                id_liste=id_liste,
+                role="Membre",
+                statut=statut,
+            )
+            db.add(membre)
+            return membre
+
+    if id_tache:
+        membre = _get_member_by_tache(db, id_tache, user_id)
+        if not membre:
+            membre = Membre(
+                id_utilisateur=user_id,
+                id_tache=id_tache,
+                role="Membre",
+                statut=statut,
+            )
+            db.add(membre)
+            return membre
+
+    if membre:
+        membre.role = "Membre"
+        if statut == "Actif" or membre.statut != "Actif":
+            membre.statut = statut
+    return membre
+
+
+def invite_member_to_workspace(
+    db: Session,
+    workspace_id: str,
+    user_identifier: str,
+    role: str,
+    id_liste: Optional[str] = None,
+    id_tache: Optional[str] = None,
+) -> dict:
     """
     Invite un membre : s'il existe on l'ajoute/met a jour, sinon on génère un token JWT.
     """
@@ -287,8 +430,20 @@ def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role:
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve.")
 
+    assignment = _validate_workspace_member_assignment(
+        db,
+        workspace_id,
+        role,
+        id_liste=id_liste,
+        id_tache=id_tache,
+    )
+
     # 2. Recherche de l'utilisateur
-    user = db.query(Utilisateur).filter(Utilisateur.email == email).first()
+    normalized_identifier = user_identifier.strip()
+    if "@" in normalized_identifier:
+        user = db.query(Utilisateur).filter(Utilisateur.email == normalized_identifier.lower()).first()
+    else:
+        user = db.query(Utilisateur).filter(Utilisateur.id == normalized_identifier).first()
     
     TOKEN_TYPE = "workspace_invitation"
 
@@ -308,6 +463,8 @@ def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role:
                 statut="En attente",
             )
             db.add(membre)
+
+        _sync_assignment_membership(db, user.id, assignment, "En attente")
         
         commit_or_raise(db, detail="Impossible d'inviter cet utilisateur existant.")
         
@@ -317,6 +474,9 @@ def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role:
                 "sub": user.id,
                 "email": user.email,
                 "workspace_id": workspace_id,
+                "role": role,
+                "id_liste": assignment.get("id_liste"),
+                "id_tache": assignment.get("id_tache"),
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
@@ -326,9 +486,11 @@ def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role:
     # CAS 2 : Invité externe (Guest) -> Token JWT complet
     token = create_access_token(
         data={
-            "email": email,
+            "email": normalized_identifier.lower(),
             "workspace_id": workspace_id,
             "role": role,
+            "id_liste": assignment.get("id_liste"),
+            "id_tache": assignment.get("id_tache"),
             "type": TOKEN_TYPE,
         },
         expires_delta=timedelta(days=4),
@@ -336,7 +498,7 @@ def invite_member_to_workspace(db: Session, workspace_id: str, email: str, role:
     
     return {
         "status": "guest_invitation",
-        "email": email,
+        "email": normalized_identifier.lower(),
         "token": token
     }
 
@@ -384,27 +546,33 @@ def accept_workspace_invitation(
     if token_email and token_email.lower() != user.email.lower():
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
+    invited_role = payload.get("role") or "Membre"
+    assignment = _validate_workspace_member_assignment(
+        db,
+        target_workspace_id,
+        invited_role,
+        id_liste=payload.get("id_liste"),
+        id_tache=payload.get("id_tache"),
+    )
+
     # 5. Prevention des doublons
     membre = get_member(db, target_workspace_id, user_id)
     if membre:
-        if membre.statut == "Actif":
-            return membre
-        
-        membre.statut = "Actif"
-        membre.role = payload.get("role") or membre.role
-        commit_or_raise(db, detail="Impossible d'activer votre statut de membre.")
-        return membre
-
-    # 6. Creation du membre (nouveau)
-    return add_member_to_workspace(
-        db,
-        target_workspace_id,
-        MembreCreate(
+        membre.role = invited_role or membre.role
+        if membre.statut != "Actif":
+            membre.statut = "Actif"
+    else:
+        membre = Membre(
             id_utilisateur=user_id,
-            role=payload.get("role") or "Membre",
+            id_workspace=target_workspace_id,
+            role=invited_role,
             statut="Actif",
-        ),
-    )
+        )
+        db.add(membre)
+
+    _sync_assignment_membership(db, user_id, assignment, "Actif")
+    commit_or_raise(db, detail="Impossible d'activer votre statut de membre.", refresh_instance=membre)
+    return membre
 
 
 def update_member_role(
@@ -507,4 +675,3 @@ def get_pending_invitations(db: Session, user_id: str) -> List[Membre]:
         .order_by(Membre.created_at.desc())
         .all()
     )
-

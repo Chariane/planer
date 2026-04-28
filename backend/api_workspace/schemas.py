@@ -747,6 +747,8 @@ class WorkspaceMemberInvite(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
     role: str = Field(default="Membre")
+    id_liste: Optional[str] = Field(None, min_length=12, max_length=12)
+    id_tache: Optional[str] = Field(None, min_length=12, max_length=12)
  
  
     @model_validator(mode="before")
@@ -757,12 +759,26 @@ class WorkspaceMemberInvite(BaseModel):
                 data["email"] = str(data["email"]).strip().lower()
             if data.get("username"):
                 data["username"] = str(data["username"]).strip()
+            for field_name in ["id_liste", "id_tache"]:
+                if isinstance(data.get(field_name), str):
+                    cleaned_value = data[field_name].strip()
+                    data[field_name] = cleaned_value or None
         return data
 
     @model_validator(mode="after")
     def validate_target(self):
         if not self.email and not self.username:
             raise ValueError("Fournissez l'email ou le username de l'utilisateur a inviter.")
+        assignment_count = int(self.id_liste is not None) + int(self.id_tache is not None)
+        if self.role == "Membre":
+            if assignment_count != 1:
+                raise ValueError(
+                    "Une invitation avec le role 'Membre' doit cibler exactement une liste ou une tache du workspace."
+                )
+        elif assignment_count != 0:
+            raise ValueError(
+                "Seul le role 'Membre' peut etre invite avec une affectation directe a une liste ou une tache."
+            )
         return self
 
     @field_validator("role")

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
     _require_workspace_admin_access,
+    _require_workspace_member_management_access,
     _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
@@ -44,7 +45,7 @@ def get_admin_workspace_detail(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    workspace, membre = _require_workspace_admin_access(db, workspace_id, current_user.id)
+    workspace, membre, _ = _require_workspace_admin_access(db, workspace_id, current_user.id)
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -69,12 +70,12 @@ def update_admin_member(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_admin_access(db, workspace_id, current_user.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_user.id,
+        user_id,
+    )
 
     updated_member = update_admin_workspace_member(db, workspace_id, user_id, membre_in)
     if not updated_member:
@@ -89,12 +90,12 @@ def remove_admin_member(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_admin_access(db, workspace_id, current_user.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Le createur du workspace ne peut pas etre supprime")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_user.id,
+        user_id,
+    )
 
     removed = remove_admin_workspace_member(db, workspace_id, user_id)
     if removed is None:

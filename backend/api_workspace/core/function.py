@@ -6,7 +6,19 @@ from sqlalchemy.orm import Session
 from ..models import Espace, Liste, Membre, PlanerEntreprise, Tache, Utilisateur, Workspace
 from sqlalchemy import or_, and_
 
-WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
+WORKSPACE_OWNER_ROLE = "Créateur"
+WORKSPACE_ADMIN_ROLE = "Administrateur"
+WORKSPACE_MEMBER_ROLE = "Membre"
+WORKSPACE_GUEST_ROLE = "Invité"
+
+WORKSPACE_READ_ROLES = {
+    WORKSPACE_OWNER_ROLE,
+    WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_MEMBER_ROLE,
+    WORKSPACE_GUEST_ROLE,
+}
+WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
+WORKSPACE_ADMIN_MANAGEABLE_ROLES = {WORKSPACE_MEMBER_ROLE, WORKSPACE_GUEST_ROLE}
 
 def is_premium_user(user: Optional[Utilisateur]) -> bool:
     if not user:
@@ -73,6 +85,81 @@ def commit_or_raise(
         db.rollback()
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
+
+def _is_workspace_owner(workspace: Workspace, user_id: str) -> bool:
+    return workspace.id_utilisateur == user_id
+
+
+def _resolve_workspace_role(
+    workspace: Workspace,
+    membre: Optional[Membre],
+    current_user_id: str,
+) -> Optional[str]:
+    if _is_workspace_owner(workspace, current_user_id):
+        return WORKSPACE_OWNER_ROLE
+    if membre:
+        return membre.role
+    return None
+
+
+def _resolve_workspace_status(
+    workspace: Workspace,
+    membre: Optional[Membre],
+    current_user_id: str,
+) -> Optional[str]:
+    if _is_workspace_owner(workspace, current_user_id):
+        return "Actif"
+    if membre:
+        return membre.statut
+    return None
+
+
+def _get_workspace_actor_context(db: Session, workspace_id: str, current_user_id: str):
+    from ..crud.utilisateur import get_member, get_workspace_by_id
+
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve")
+
+    membre = get_member(db, workspace_id, current_user_id, active_only=True)
+    role = _resolve_workspace_role(workspace, membre, current_user_id)
+    statut = _resolve_workspace_status(workspace, membre, current_user_id)
+
+    if role is None or statut != "Actif":
+        raise HTTPException(status_code=403, detail="Acces refuse a ce workspace")
+
+    return workspace, membre, role
+
+
+def _validate_workspace_member_management_permissions(
+    workspace: Workspace,
+    actor_role: str,
+    target_user_id: str,
+    target_member: Optional[Membre],
+):
+    if workspace.id_utilisateur == target_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Le createur du workspace ne peut pas etre modifie ou retire.",
+        )
+
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    if actor_role == WORKSPACE_ADMIN_ROLE and target_member.role not in WORKSPACE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut gerer que les membres et invites du workspace.",
+        )
+
+
+def _validate_workspace_invitation_permissions(actor_role: str, invited_role: str):
+    if actor_role == WORKSPACE_ADMIN_ROLE and invited_role not in WORKSPACE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut inviter que des membres ou invites dans le workspace.",
+        )
+
 def _serialize_workspace(workspace, membre=None, member_count=None):
     effective_member = membre
     if effective_member is None:
@@ -91,11 +178,23 @@ def _serialize_workspace(workspace, membre=None, member_count=None):
         else sum(1 for member in (workspace.membres or []) if member.statut == "Actif")
     )
 
-    current_user_role = effective_member.role if effective_member else None
-    current_user_statut = effective_member.statut if effective_member else None
+    owner_user_id = workspace.id_utilisateur
+    current_user_role = None
+    current_user_statut = None
 
-    if current_user_role is None and workspace.id_utilisateur:
-        current_user_role = "Administrateur"
+    if effective_member:
+        current_user_role = (
+            WORKSPACE_OWNER_ROLE
+            if effective_member.id_utilisateur == owner_user_id
+            else effective_member.role
+        )
+        current_user_statut = (
+            "Actif"
+            if effective_member.id_utilisateur == owner_user_id
+            else effective_member.statut
+        )
+    elif owner_user_id:
+        current_user_role = WORKSPACE_OWNER_ROLE
         current_user_statut = "Actif"
 
     return {
@@ -147,77 +246,74 @@ def _get_member_or_403(db: Session, workspace_id: str, current_user_id: str):
 
 
 def _get_workspace_member_context(db: Session, workspace_id: str, current_user_id: str):
-    from ..crud.utilisateur import get_member, get_workspace_by_id
+    workspace, membre, _ = _get_workspace_actor_context(db, workspace_id, current_user_id)
+    return workspace, membre
 
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
 
-    membre = get_member(db, workspace_id, current_user_id, active_only=True)
-    if membre:
-        return workspace, membre
-
-    if workspace.id_utilisateur == current_user_id:
-        return workspace, None
-
-    raise HTTPException(status_code=403, detail="Acces refuse")
+def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
+    workspace, membre, role = _get_workspace_actor_context(db, workspace_id, current_user_id)
+    if role not in WORKSPACE_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Acces refuse a ce workspace")
+    return workspace, membre, role
 
 
 def _require_workspace_owner_access(db: Session, workspace_id: str, current_user_id: str):
-    from ..crud.utilisateur import get_member, get_workspace_by_id
-
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
-
-    if workspace.id_utilisateur != current_user_id:
+    workspace, membre, role = _get_workspace_actor_context(db, workspace_id, current_user_id)
+    if role != WORKSPACE_OWNER_ROLE:
         raise HTTPException(
             status_code=403,
-            detail="Seul le createur peut modifier ce workspace",
+            detail="Seul le createur du workspace peut effectuer cette action.",
         )
-
-    return workspace, get_member(db, workspace_id, current_user_id)
+    return workspace, membre, role
 
 
 def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str):
-    from ..crud.utilisateur import get_member, get_workspace_by_id
-
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
-
-    if workspace.id_utilisateur == current_user_id:
-        return get_member(db, workspace_id, current_user_id)
-
-    membre = _get_member_or_403(db, workspace_id, current_user_id)
-    if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
-        raise HTTPException(status_code=403, detail="Privileges insuffisants")
-    return membre
+    workspace, membre, role = _get_workspace_actor_context(db, workspace_id, current_user_id)
+    if role not in WORKSPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Seuls le createur et les administrateurs du workspace peuvent effectuer cette action.",
+        )
+    return workspace, membre, role
 
 
 def _require_workspace_admin_access(db: Session, workspace_id: str, current_user_id: str):
-    """Vérifie que l'utilisateur est administrateur (Créateur ou Administrateur) du workspace.
+    """Alias explicite pour l'acces d'administration du workspace."""
+    return _require_workspace_management_access(db, workspace_id, current_user_id)
 
-    Retourne un tuple (workspace, membre).
-    Lève une 404 si le workspace n'existe pas,
-    une 403 si l'utilisateur n'a pas les droits d'administration.
-    """
-    from ..crud.utilisateur import get_member, get_workspace_by_id
 
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve")
+def _require_workspace_member_management_access(
+    db: Session,
+    workspace_id: str,
+    current_user_id: str,
+    target_user_id: str,
+):
+    from ..crud.utilisateur import get_member
 
-    if workspace.id_utilisateur == current_user_id:
-        return workspace, get_member(db, workspace_id, current_user_id)
+    workspace, membre, actor_role = _require_workspace_management_access(
+        db, workspace_id, current_user_id
+    )
+    target_member = get_member(db, workspace_id, target_user_id)
+    _validate_workspace_member_management_permissions(
+        workspace,
+        actor_role,
+        target_user_id,
+        target_member,
+    )
+    return workspace, membre, actor_role, target_member
 
-    membre = get_member(db, workspace_id, current_user_id, active_only=True)
-    if not membre or membre.role not in WORKSPACE_MANAGEMENT_ROLES:
-        raise HTTPException(
-            status_code=403,
-            detail="Acces reserve aux administrateurs du workspace",
-        )
-    return workspace, membre
+
+def _require_workspace_invitation_access(
+    db: Session,
+    workspace_id: str,
+    current_user_id: str,
+    invited_role: str,
+):
+    workspace, membre, actor_role = _require_workspace_management_access(
+        db, workspace_id, current_user_id
+    )
+    _validate_workspace_invitation_permissions(actor_role, invited_role)
+    return workspace, membre, actor_role
 
 
 
@@ -250,7 +346,7 @@ def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
         Membre.id_utilisateur == user_id,
         Membre.id_espace.isnot(None),
         Membre.statut == "Actif",
-        Membre.role.notin_(["Créateur", "Administrateur"])
+        Membre.role.notin_([WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE])
     ).all()
     
     res = []
@@ -279,7 +375,7 @@ def get_joined_listes(db: Session, user_id: str) -> List[dict]:
         Membre.id_utilisateur == user_id,
         Membre.id_liste.isnot(None),
         Membre.statut == "Actif",
-        Membre.role.notin_(["Créateur", "Administrateur"])
+        Membre.role.notin_([WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE])
     ).all()
     
     res = []
@@ -309,7 +405,7 @@ def get_joined_taches(db: Session, user_id: str) -> List[dict]:
         Membre.id_utilisateur == user_id,
         Membre.id_tache.isnot(None),
         Membre.statut == "Actif",
-        Membre.role.notin_(["Créateur", "Administrateur"])
+        Membre.role.notin_([WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE])
     ).all()
     
     res = []
@@ -343,6 +439,20 @@ def get_user_navigation_data(db: Session, user_id: str) -> dict:
     }
 
 
+def _get_user_membership_data(db: Session, user_id: str):
+    owned = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
+    memberships = (
+        db.query(Membre)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.id_workspace.isnot(None),
+            Membre.statut == "Actif",
+        )
+        .all()
+    )
+    return owned, memberships
+
+
 def get_user_workspaces_listing(db: Session, user_id: str) -> dict:
     """Récupère les workspaces possédés et rejoints séparément."""
     owned = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
@@ -372,20 +482,11 @@ def get_user_workspaces_listing(db: Session, user_id: str) -> dict:
 
 def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) -> dict:
     """Récupère les ressources directes (Espaces, Listes, Tâches) au sein d'un workspace spécifique."""
-    # 1. Vérifier le rôle de l'utilisateur dans ce workspace
-    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-    if not workspace:
-        return {}
-    
-    ws_member = db.query(Membre).filter(
-        Membre.id_workspace == workspace_id,
-        Membre.id_utilisateur == user_id,
-        Membre.statut == "Actif"
-    ).first()
+    workspace, ws_member, actor_role = _require_workspace_read_access(db, workspace_id, user_id)
     
     # 2. Récupérer les ressources directes liées à ce workspace
     # On ne prend que ce qui est 'Membre' ou 'Invité' (Accès directs)
-    DIRECT_ROLES = {"Membre", "Invité"}
+    DIRECT_ROLES = {WORKSPACE_MEMBER_ROLE, WORKSPACE_GUEST_ROLE}
     
     all_memberships = db.query(Membre).filter(
         Membre.id_utilisateur == user_id,
@@ -427,7 +528,7 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
     return {
         "workspace_id": workspace_id,
         "workspace_nom": workspace.nom,
-        "my_workspace_role": ws_member.role if ws_member else ("Créateur" if workspace.id_utilisateur == user_id else None),
+        "my_workspace_role": actor_role,
         "direct_access": {
             "espaces": espaces,
             "listes": listes,

@@ -5,7 +5,9 @@ from sqlalchemy import func
 from ..core.emails import send_workspace_invitation_email
 from ..core.database import get_db
 from ..core.function import (
-    _require_workspace_management_access,
+    _require_workspace_read_access,
+    _require_workspace_invitation_access,
+    _require_workspace_member_management_access,
     _require_workspace_owner_access,
     _serialize_member,
     _serialize_workspace,
@@ -28,7 +30,6 @@ from ..crud.utilisateur import (
     get_members_of_workspace,
     get_pending_invitations,
     get_workspace_by_id,
-    get_workspace_detail,
     invite_member_to_workspace,
     leave_workspace,
     update_member_role,
@@ -144,7 +145,7 @@ def update_workspace_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _, membre = _require_workspace_owner_access(db, workspace_id, current_user.id)
+    _, membre, _ = _require_workspace_owner_access(db, workspace_id, current_user.id)
     workspace = update_workspace(db, workspace_id, workspace_in)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
@@ -172,13 +173,12 @@ def invite_member_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Invite un utilisateur dans un workspace via email."""
-    # 0. Permission check
-    admin_member = _require_workspace_management_access(db, workspace_id, current_user.id)
-    if admin_member and admin_member.role != "Administrateur":
-        raise HTTPException(
-            status_code=403,
-            detail="Seuls les administrateurs du workspace peuvent envoyer des invitations.",
-        )
+    _require_workspace_invitation_access(
+        db,
+        workspace_id,
+        current_user.id,
+        membre_in.role,
+    )
 
     # 1. Verification existence workspace
     workspace = get_workspace_by_id(db, workspace_id)
@@ -197,7 +197,14 @@ def invite_member_endpoint(
         raise HTTPException(status_code=400, detail="Email ou username requis.")
 
     # 3. Delegation au CRUD
-    result = invite_member_to_workspace(db, workspace_id, email_target, membre_in.role)
+    result = invite_member_to_workspace(
+        db,
+        workspace_id,
+        email_target,
+        membre_in.role,
+        id_liste=membre_in.id_liste,
+        id_tache=membre_in.id_tache,
+    )
     
     if result["status"] == "existing_user":
         membre = result["membre"]
@@ -264,7 +271,7 @@ def list_workspace_members_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_read_access(db, workspace_id, current_user.id)
     return get_members_of_workspace(db, workspace_id)
 
 #Modifier le rôle ou le statut d'un membre du workspace, uniquement si l'utilisateur est administrateur du workspace (et interdit de modifier le rôle du créateur)
@@ -276,13 +283,12 @@ def update_workspace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_management_access(db, workspace_id, current_user.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre introuvable")
-    
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du créateur")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_user.id,
+        user_id,
+    )
 
     updated = update_member_role(db, workspace_id, user_id, membre_in)
     if not updated:
@@ -297,13 +303,12 @@ def remove_workspace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_management_access(db, workspace_id, current_user.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre introuvable")
-    
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Impossible de supprimer le créateur du workspace")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_user.id,
+        user_id,
+    )
 
     success = remove_member_from_workspace(db, workspace_id, user_id)
     if not success:
@@ -328,10 +333,7 @@ def get_workspace_detail_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Récupère le détail d'un workspace (accessible si membre actif ou propriétaire)."""
-    workspace = get_workspace_detail(db, workspace_id, current_user.id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve ou acces refuse")
-    membre = get_member(db, workspace_id, current_user.id)
+    workspace, membre, _ = _require_workspace_read_access(db, workspace_id, current_user.id)
     return _serialize_workspace(workspace, membre=membre)
 
 #L'utilisateur connecté quitte un workspace, uniquement si il est membre actif du workspace et interdit au créateur de quitter son propre workspace
@@ -361,7 +363,12 @@ def cancel_invitation_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """L'administrateur annule une invitation en attente."""
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_user.id,
+        user_id,
+    )
     result = cancel_workspace_invitation(db, workspace_id, user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Invitation introuvable")

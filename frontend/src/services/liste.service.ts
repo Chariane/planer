@@ -16,4 +16,10 @@ export const listeService = {
   update: (id: string, data: { nom?: string; description?: string; id_espace?: string; id_workspace?: string }) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${id}/update_liste`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/${id}/delete_liste`, { method: 'DELETE' }),
+  assignMember: (listeId: string, utilisateurId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/assign/${utilisateurId}/assign_liste`, { method: 'POST' }),
+  unassignMember: (listeId: string, utilisateurId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/unassign/${utilisateurId}/unassign_liste`, { method: 'DELETE' }),
+  getMembers: (listeId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/list_members_liste`),
 };

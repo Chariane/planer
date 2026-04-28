@@ -21,7 +21,16 @@ export const workspaceService = {
   update: (id: string, data: { nom?: string; description?: string }) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/update_workspace`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/delete_workspace`, { method: 'DELETE' }),
   getMembers: (id: string) => apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/list_workspace_members`),
-  inviteMember: (id: string, data: { email: string; role: string }) =>
+  inviteMember: (
+    id: string,
+    data: {
+      email?: string;
+      username?: string;
+      role: string;
+      id_liste?: string;
+      id_tache?: string;
+    },
+  ) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite_member`, { method: 'POST', body: JSON.stringify(data) }),
   updateMemberRole: (workspaceId: string, userId: string, role: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${userId}/update_workspace_member`, { method: 'PUT', body: JSON.stringify({ role }) }),

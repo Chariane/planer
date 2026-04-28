@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from ..models import Liste
+from ..models import Liste, Membre
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
     return db.query(Liste).filter(Liste.id == liste_id).first()
@@ -72,3 +72,115 @@ def delete_liste(db: Session, liste_id: str) -> bool:
             detail="Erreur lors de la suppression de la liste.",
         )
     return True
+
+
+def _get_liste_with_scope(db: Session, liste_id: str) -> Optional[Liste]:
+    return (
+        db.query(Liste)
+        .options(joinedload(Liste.espace), joinedload(Liste.workspace))
+        .filter(Liste.id == liste_id)
+        .first()
+    )
+
+
+def _resolve_workspace_id_from_liste(liste: Liste) -> Optional[str]:
+    return liste.id_workspace or (liste.espace.id_workspace if liste.espace else None)
+
+
+def _promote_active_workspace_guest_to_member(
+    db: Session,
+    workspace_id: Optional[str],
+    utilisateur_id: str,
+) -> bool:
+    if not workspace_id:
+        return False
+
+    workspace_member = (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == utilisateur_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+    if not workspace_member or workspace_member.role != "Invité":
+        return False
+
+    workspace_member.role = "Membre"
+    return True
+
+
+def assign_member_to_liste(db: Session, liste_id: str, utilisateur_id: str) -> Membre:
+    """Assigne un utilisateur a une liste et promeut un invite actif en membre si necessaire."""
+    liste = _get_liste_with_scope(db, liste_id)
+    if not liste:
+        raise HTTPException(status_code=404, detail="Liste introuvable.")
+
+    workspace_id = _resolve_workspace_id_from_liste(liste)
+    promoted_guest = _promote_active_workspace_guest_to_member(db, workspace_id, utilisateur_id)
+
+    existing = (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.id_utilisateur == utilisateur_id,
+        )
+        .first()
+    )
+
+    if existing:
+        if promoted_guest:
+            try:
+                db.commit()
+                db.refresh(existing)
+            except IntegrityError as exc:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400,
+                    detail="Erreur lors de la mise a jour du role du membre assigne a la liste.",
+                ) from exc
+        return existing
+
+    assignation = Membre(
+        id_liste=liste_id,
+        id_utilisateur=utilisateur_id,
+        role="Membre",
+        statut="Actif",
+    )
+    db.add(assignation)
+    try:
+        db.commit()
+        db.refresh(assignation)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Erreur lors de l'assignation du membre a la liste.",
+        ) from exc
+    return assignation
+
+
+def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) -> bool:
+    """Retire l'assignation directe d'un membre sur une liste."""
+    assignation = (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.id_utilisateur == utilisateur_id,
+        )
+        .first()
+    )
+
+    if not assignation:
+        return False
+
+    db.delete(assignation)
+    db.commit()
+    return True
+
+
+def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
+    """Recupere tous les membres assignes directement a une liste."""
+    return db.query(Membre).filter(Membre.id_liste == liste_id).all()

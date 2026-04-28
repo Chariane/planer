@@ -15,11 +15,14 @@ from ..core.function import (
     _get_tache_or_404
 )
 from ..crud.liste import (
+    assign_member_to_liste,
     create_liste,
     delete_liste,
     get_liste_by_id,
+    get_liste_members,
     get_listes_for_espace,
     get_listes_for_workspace,
+    unassign_member_from_liste,
     update_liste
 )
 from ..crud.tache import (
@@ -123,6 +126,39 @@ def delete_entreprise_liste_endpoint(
     _require_list_access(db, liste_id, current_entreprise.id)
     delete_liste(db, liste_id)
     return None
+
+
+@router.post("/{liste_id}/assign/{utilisateur_id}", response_model=MembreOut)
+def assign_entreprise_liste_endpoint(
+    liste_id: str,
+    utilisateur_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    return assign_member_to_liste(db, liste_id, utilisateur_id)
+
+
+@router.delete("/{liste_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unassign_entreprise_liste_endpoint(
+    liste_id: str,
+    utilisateur_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    unassign_member_from_liste(db, liste_id, utilisateur_id)
+    return None
+
+
+@router.get("/{liste_id}/members", response_model=List[MembreOut])
+def get_entreprise_liste_members_endpoint(
+    liste_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+):
+    _require_list_access(db, liste_id, current_entreprise.id)
+    return get_liste_members(db, liste_id)
 
 # -----------------------------------------------------------------------------
 # TACHES

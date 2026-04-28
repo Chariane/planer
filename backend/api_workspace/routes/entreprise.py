@@ -1,40 +1,40 @@
-from datetime import timedelta
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from jose import JWTError, jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..core.emails import send_workspace_invitation_email
 from ..core.function import (
+    _require_workspace_invitation_access,
     _require_workspace_management_access,
+    _require_workspace_member_management_access,
     _require_workspace_owner_access,
+    _require_workspace_read_access,
     _serialize_member,
     _serialize_workspace,
 )
 from ..core.security import (
-    ALGORITHM,
-    SECRET_KEY,
-    create_access_token,
     get_current_active_entreprise,
     get_current_user,
 )
 from ..crud.entreprise import (
-    accept_entreprise_workspace_invitation,
     cancel_entreprise_workspace_invitation,
     create_entreprise_workspace,
     delete_entreprise_workspace,
     get_entreprise_workspace,
     get_entreprise_workspaces,
     get_entreprise_workspace_members,
-    invite_member_for_entreprise_workspace,
     leave_entreprise_workspace,
     update_entreprise_workspace,
     update_entreprise_workspace_member,
     remove_entreprise_workspace_member,
 )
-from ..crud.utilisateur import get_member, get_pending_invitations, get_workspace_detail
+from ..crud.utilisateur import (
+    accept_workspace_invitation,
+    get_member,
+    get_pending_invitations,
+    invite_member_to_workspace,
+)
 from ..models import Utilisateur
 from ..schemas import (
     EmailSchema,
@@ -84,7 +84,7 @@ def update_entreprise_workspace_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    _, membre = _require_workspace_owner_access(db, workspace_id, current_entreprise.id)
+    _, membre, _ = _require_workspace_owner_access(db, workspace_id, current_entreprise.id)
     workspace = update_entreprise_workspace(db, workspace_id, workspace_in)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
@@ -111,12 +111,12 @@ def invite_member_entreprise_workspace_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    admin_member = _require_workspace_management_access(db, workspace_id, current_entreprise.id)
-    if admin_member and admin_member.role != "Administrateur":
-        raise HTTPException(
-            status_code=403,
-            detail="Seuls les administrateurs du workspace peuvent envoyer des invitations.",
-        )
+    _require_workspace_invitation_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+        membre_in.role,
+    )
 
     target_user = None
     if membre_in.email:
@@ -139,19 +139,16 @@ def invite_member_entreprise_workspace_endpoint(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
 
-    existing_member = get_member(db, workspace_id, target_user.id)
-    if existing_member and existing_member.statut == "Actif":
-        raise HTTPException(status_code=400, detail="L'utilisateur est deja membre actif de ce workspace")
-
-    membre = invite_member_for_entreprise_workspace(db, workspace_id, target_user.id, membre_in.role)
-    invitation_token = create_access_token(
-        {
-            "sub": target_user.id,
-            "workspace_id": workspace_id,
-            "scope": "workspace_invitation_accept",
-        },
-        expires_delta=timedelta(days=4),
+    result = invite_member_to_workspace(
+        db,
+        workspace_id,
+        target_user.email,
+        membre_in.role,
+        id_liste=membre_in.id_liste,
+        id_tache=membre_in.id_tache,
     )
+    membre = result["membre"]
+    invitation_token = result["token"]
     background_tasks.add_task(
         send_workspace_invitation_email,
         current_entreprise.username,
@@ -170,25 +167,12 @@ def accept_entreprise_workspace_invitation_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    try:
-        payload = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError as exc:
-        raise HTTPException(status_code=400, detail="Invitation invalide ou expiree") from exc
-
-    if payload.get("scope") != "workspace_invitation_accept":
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    invited_user_id = payload.get("sub")
-    workspace_id = payload.get("workspace_id")
-    if not invited_user_id or not workspace_id:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    if invited_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Cette invitation ne vous est pas destinee")
-
-    membre = accept_entreprise_workspace_invitation(db, workspace_id, current_user.id)
-    if not membre:
-        raise HTTPException(status_code=400, detail="Invitation introuvable ou deja traitee")
+    membre = accept_workspace_invitation(
+        db,
+        workspace_id=None,
+        user_id=current_user.id,
+        invitation_token=invitation_in.token,
+    )
     return _serialize_member(membre)
 
 
@@ -213,13 +197,12 @@ def update_entreprise_workspace_member_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre introuvable")
-    
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du créateur")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+        user_id,
+    )
 
     updated = update_entreprise_workspace_member(
         db, current_entreprise.id, workspace_id, user_id, membre_in
@@ -236,13 +219,12 @@ def remove_entreprise_workspace_member_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
-    target_member = get_member(db, workspace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre introuvable")
-    
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Impossible de supprimer le créateur du workspace")
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+        user_id,
+    )
 
     success = remove_entreprise_workspace_member(
         db, current_entreprise.id, workspace_id, user_id
@@ -271,10 +253,11 @@ def get_entreprise_workspace_detail_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
     """Récupère le détail d'un workspace entreprise."""
-    workspace = get_workspace_detail(db, workspace_id, current_entreprise.id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouve ou acces refuse")
-    membre = get_member(db, workspace_id, current_entreprise.id)
+    workspace, membre, _ = _require_workspace_read_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+    )
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -304,7 +287,12 @@ def cancel_entreprise_invitation_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
     """L'administrateur entreprise annule une invitation en attente."""
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    _require_workspace_member_management_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+        user_id,
+    )
     result = cancel_entreprise_workspace_invitation(db, workspace_id, user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Invitation introuvable")

@@ -79,10 +79,23 @@ def get_entreprise_workspace_members(
 def invite_member_for_entreprise_workspace(
     db: Session,
     workspace_id: str,
-    user_id: str,
+    user_identifier: str,
     role: str,
+    id_liste: Optional[str] = None,
+    id_tache: Optional[str] = None,
 ) -> Membre:
-    return invite_member_to_workspace(db, workspace_id, user_id, role)
+    result = invite_member_to_workspace(
+        db,
+        workspace_id,
+        user_identifier,
+        role,
+        id_liste=id_liste,
+        id_tache=id_tache,
+    )
+    membre = result.get("membre")
+    if not membre:
+        raise ValueError("L'invitation entreprise doit cibler un utilisateur existant.")
+    return membre
 
 
 def accept_entreprise_workspace_invitation(
@@ -135,4 +148,3 @@ def leave_entreprise_workspace(
     if not workspace:
         return None
     return leave_workspace(db, workspace_id, user_id)
-

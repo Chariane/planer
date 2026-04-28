@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
-from ..models import Tache, Membre, Checklist
+from ..models import Tache, Membre, Checklist, Liste
 
 def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
@@ -135,8 +135,59 @@ def delete_tache(db: Session, tache_id: str) -> bool:
 
 # --- Assignation de membres ---
 
+def _get_tache_with_scope(db: Session, tache_id: str) -> Optional[Tache]:
+    return (
+        db.query(Tache)
+        .options(
+            joinedload(Tache.liste).joinedload(Liste.espace),
+            joinedload(Tache.liste).joinedload(Liste.workspace),
+        )
+        .filter(Tache.id == tache_id)
+        .first()
+    )
+
+
+def _resolve_workspace_id_from_tache(tache: Tache) -> Optional[str]:
+    if not tache.liste:
+        return None
+    return tache.liste.id_workspace or (
+        tache.liste.espace.id_workspace if tache.liste.espace else None
+    )
+
+
+def _promote_active_workspace_guest_to_member(
+    db: Session,
+    workspace_id: Optional[str],
+    utilisateur_id: str,
+) -> bool:
+    if not workspace_id:
+        return False
+
+    workspace_member = (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == utilisateur_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+    if not workspace_member or workspace_member.role != "Invité":
+        return False
+
+    workspace_member.role = "Membre"
+    return True
+
 def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> Membre:
     """Assigne un utilisateur à une tâche en créant une entrée spécifique dans Membre."""
+    tache = _get_tache_with_scope(db, tache_id)
+    if not tache:
+        raise HTTPException(status_code=404, detail="Tache introuvable.")
+
+    workspace_id = _resolve_workspace_id_from_tache(tache)
+    promoted_guest = _promote_active_workspace_guest_to_member(db, workspace_id, utilisateur_id)
+
     # On vérifie si l'assignation existe déjà pour éviter les doublons
     existing = db.query(Membre).filter(
         Membre.id_tache == tache_id,
@@ -144,6 +195,16 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
     ).first()
     
     if existing:
+        if promoted_guest:
+            try:
+                db.commit()
+                db.refresh(existing)
+            except IntegrityError:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400,
+                    detail="Erreur lors de la mise a jour du role du membre assigne.",
+                )
         return existing
         
     assignation = Membre(

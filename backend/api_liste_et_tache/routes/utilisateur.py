@@ -13,10 +13,13 @@ from ..core.function import (
     _get_tache_or_404
 )
 from ..crud.liste import (
+    assign_member_to_liste,
     create_liste,
     delete_liste,
+    get_liste_members,
     get_listes_for_espace,
     get_listes_for_workspace,
+    unassign_member_from_liste,
     update_liste
 )
 from ..crud.tache import (
@@ -131,6 +134,39 @@ def delete_liste_endpoint(
     if not delete_liste(db, liste_id):
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return None
+
+
+@router.post("/{liste_id}/assign/{utilisateur_id}/assign_liste", response_model=MembreOut)
+def assign_liste_endpoint(
+    liste_id: str,
+    utilisateur_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user)
+):
+    _require_list_access(db, liste_id, current_user.id)
+    return assign_member_to_liste(db, liste_id, utilisateur_id)
+
+
+@router.delete("/{liste_id}/unassign/{utilisateur_id}/unassign_liste", status_code=status.HTTP_204_NO_CONTENT)
+def unassign_liste_endpoint(
+    liste_id: str,
+    utilisateur_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user)
+):
+    _require_list_access(db, liste_id, current_user.id)
+    unassign_member_from_liste(db, liste_id, utilisateur_id)
+    return None
+
+
+@router.get("/{liste_id}/list_members_liste", response_model=List[MembreOut])
+def get_liste_members_endpoint(
+    liste_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user)
+):
+    _require_list_access(db, liste_id, current_user.id)
+    return get_liste_members(db, liste_id)
 
 # -----------------------------------------------------------------------------
 # TACHES
