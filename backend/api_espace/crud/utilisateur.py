@@ -313,15 +313,22 @@ def accept_espace_invitation(
 ) -> Membre:
     """
     Accepte une invitation a un espace via token JWT.
-    Verifie la validite, le type et l'appartenance du token.
+    Supporte deux familles de token :
+    - token d'invitation "guest" / standard avec type="espace_invitation"
+    - ancien token d'utilisateur existant avec scope="espace_invitation_accept"
     """
     # 1. Decodage et validation du token
     payload = decode_invitation_token(invitation_token)
     if not payload:
         raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.")
 
-    # 2. Securisation du type de token (Contrainte 3)
-    if payload.get("type") != "espace_invitation":
+    # 2. Support des deux formats de token
+    token_type = payload.get("type")
+    token_scope = payload.get("scope")
+    is_standard_invitation = token_type == "espace_invitation"
+    is_existing_user_legacy_invitation = token_scope == "espace_invitation_accept"
+
+    if not is_standard_invitation and not is_existing_user_legacy_invitation:
         raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
 
     # 3. Extraction et verification des donnees du payload
@@ -378,6 +385,7 @@ def accept_espace_invitation(
     # 6. Prevention des doublons sur l'Espace (Contrainte 5)
     existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
+        # Les anciens tokens "scope" ne transportent pas toujours le role.
         existing_member.role = payload.get("role") or existing_member.role
         if existing_member.statut != "Actif":
             existing_member.statut = "Actif"
