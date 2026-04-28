@@ -22,7 +22,7 @@ front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
 front_register_url = config_data.get("FRONT_REGISTER_URL", "/register")
-front_workspace_invitation_url = config_data.get("FRONT_WORKSPACE_INVITATION_URL", "/workspace-invitations/accept")
+front_workspace_invitation_url = config_data.get("FRONT_WORKSPACE_INVITATION_URL", "/invitation/accept")
 
 
 
