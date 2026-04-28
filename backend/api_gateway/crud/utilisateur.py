@@ -68,7 +68,7 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
         db.add(Membre(
             id_utilisateur=new_user.id,
             id_workspace=default_workspace.id,
-            role="Administrateur",
+            role="Créateur",
             statut="Actif",
         ))
 
