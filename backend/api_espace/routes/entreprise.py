@@ -1,7 +1,5 @@
 from typing import List, Optional
-from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
@@ -12,7 +10,7 @@ from ..core.function import (
     _serialize_member,
     can_create_espace,
 )
-from ..core.security import get_current_user, get_current_active_entreprise, create_access_token, SECRET_KEY, ALGORITHM
+from ..core.security import get_current_user, get_current_active_entreprise
 from ..core.emails import send_espace_invitation_email
 from ..crud.entreprise import (
     create_entreprise_espace,
@@ -20,7 +18,6 @@ from ..crud.entreprise import (
     get_entreprise_espace,
     get_entreprise_espace_members,
     get_entreprise_espaces,
-    add_member_for_entreprise_espace,
     remove_entreprise_espace_member,
     update_entreprise_espace,
     update_entreprise_espace_member,
@@ -228,29 +225,25 @@ def invite_entreprise_espace_member_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
     _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
 
-    target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Utilisateur invite non trouve")
+    result = invite_member_to_espace(db, espace_id, membre_in)
+    email_target = membre_in.email or membre_in.username
 
-    # Création du membre en statut 'En attente'
-    membre = invite_member_to_espace(db, espace_id, target_user.id, membre_in.role)
+    if "membre" not in result:
+        raise HTTPException(
+            status_code=400,
+            detail="Le flux entreprise requiert un utilisateur deja existant.",
+        )
 
-    # Génération du token
-    invitation_token = create_access_token(
-        {
-            "sub": target_user.id,
-            "espace_id": espace_id,
-            "scope": "espace_invitation_accept",
-        },
-        expires_delta=timedelta(days=7),
-    )
+    membre = result["membre"]
+    invitation_token = result["invitation_token"]
+    target_user = membre.utilisateur
 
     # Envoi de l'email
     background_tasks.add_task(
         send_espace_invitation_email,
         current_entreprise.username,
-        target_user.username,
-        target_user.email,
+        target_user.username if target_user and target_user.username else email_target,
+        target_user.email if target_user and target_user.email else email_target,
         espace.nom,
         membre_in.role,
         invitation_token,
@@ -265,28 +258,13 @@ def accept_entreprise_espace_invitation_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Accepte une invitation (contexte entreprise/utilisateur) via token JWT."""
-    try:
-        payload = jwt.decode(invitation_in.token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invitation invalide ou expiree")
-
-    if payload.get("scope") != "espace_invitation_accept":
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    invited_user_id = payload.get("sub")
-    espace_id = payload.get("espace_id")
-
-    if not invited_user_id or not espace_id:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide")
-
-    if invited_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Vous ne pouvez pas accepter cette invitation")
-
-    membre = accept_espace_invitation(db, espace_id, invited_user_id)
-    if not membre:
-        raise HTTPException(status_code=404, detail="Invitation non trouvee ou deja acceptee")
-
+    """Accepte une invitation espace via le meme flux securise que l'API utilisateur."""
+    membre = accept_espace_invitation(
+        db,
+        espace_id=None,
+        user_id=current_user.id,
+        invitation_token=invitation_in.token,
+    )
     return _serialize_member(membre)
 
 #Modifier le rôle d'un membre dans un espace entreprise, uniquement si l'utilisateur est admin de l'espace

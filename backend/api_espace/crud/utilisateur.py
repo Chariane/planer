@@ -359,7 +359,12 @@ def accept_espace_invitation(
             Membre.id_utilisateur == user_id
         ).first()
         
-        if not ws_member:
+        if ws_member:
+            if ws_member.statut != "Actif":
+                ws_member.statut = "Actif"
+            if not ws_member.role:
+                ws_member.role = "Invité"
+        else:
             # On l'ajoute comme "Invité" au workspace pour qu'il puisse voir le nom et l'arborescence
             new_ws_member = Membre(
                 id_utilisateur=user_id,
@@ -373,15 +378,14 @@ def accept_espace_invitation(
     # 6. Prevention des doublons sur l'Espace (Contrainte 5)
     existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
-        if existing_member.statut == "Actif":
-            # On s'assure quand même que les changements workspace sont enregistrés si besoin
-            commit_or_raise(db, detail="Erreur lors de la mise a jour des acces workspace.")
-            return existing_member
-        
-        # Si en attente ou suspendu, on l'active
-        existing_member.statut = "Actif"
         existing_member.role = payload.get("role") or existing_member.role
-        commit_or_raise(db, detail="Impossible d'activer votre statut de membre.")
+        if existing_member.statut != "Actif":
+            existing_member.statut = "Actif"
+        commit_or_raise(
+            db,
+            detail="Impossible d'activer votre statut de membre.",
+            refresh_instance=existing_member,
+        )
         return existing_member
 
     # 7. Creation du nouveau membre de l'Espace
