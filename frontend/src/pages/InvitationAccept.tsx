@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 export default function InvitationAccept() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invitationType, setInvitationType] = useState<'workspace' | 'espace' | null>(null);
@@ -24,16 +24,38 @@ export default function InvitationAccept() {
         return;
       }
 
+      if (authLoading) {
+        return;
+      }
+
       console.log('🔑 Token reçu:', token);
       console.log('🔐 Utilisateur authentifié:', isAuthenticated);
 
-      // Sauvegarder le token pour une utilisation ultérieure (inscription)
+      // Sauvegarder le token pour une utilisation ultérieure (connexion/inscription)
       sessionStorage.setItem('pendingInvitation', token);
 
-      // Si l'utilisateur n'est pas connecté, rediriger vers l'inscription
+      let payload: Record<string, unknown> | null = null;
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        payload = JSON.parse(atob(base64));
+      } catch (decodeErr) {
+        console.error('Erreur de décodage du token d’invitation', decodeErr);
+      }
+
+      const isExistingUserInvitation = Boolean(payload?.sub);
+
+      // Si l'utilisateur n'est pas connecté, on distingue les deux cas :
+      // - utilisateur existant -> connexion
+      // - utilisateur non inscrit -> inscription
       if (!isAuthenticated) {
-        console.log('🔄 Utilisateur non connecté, redirection vers inscription');
-        navigate(`/register?invitation_token=${encodeURIComponent(token)}`);
+        if (isExistingUserInvitation) {
+          console.log('🔄 Invitation pour utilisateur existant, redirection vers connexion');
+          navigate(`/login?invitation_token=${encodeURIComponent(token)}`);
+        } else {
+          console.log('🔄 Invitation guest, redirection vers inscription');
+          navigate(`/register?invitation_token=${encodeURIComponent(token)}`);
+        }
         return;
       }
 
@@ -85,7 +107,7 @@ export default function InvitationAccept() {
     };
 
     handleInvitation();
-  }, [token, navigate, isAuthenticated]);
+  }, [token, navigate, isAuthenticated, authLoading]);
 
   if (loading) {
     return (

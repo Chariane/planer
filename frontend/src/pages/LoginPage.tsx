@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, LogIn, Eye, EyeOff, Shield } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 
 export default function LoginPage() {
   const { login, verify2FA, isLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [requires2fa, setRequires2fa] = useState(false);
   const [challengeToken, setChallengeToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const invitationToken = searchParams.get('invitation_token') || sessionStorage.getItem('pendingInvitation');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +27,11 @@ export default function LoginPage() {
         setRequires2fa(true);
         setChallengeToken(result.challengeToken!);
       } else {
-        navigate('/dashboard');
+        if (invitationToken) {
+          navigate(`/invitation/accept?token=${encodeURIComponent(invitationToken)}`);
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur de connexion';
@@ -45,7 +51,11 @@ export default function LoginPage() {
     setError('');
     try {
       await verify2FA(challengeToken, twoFactorCode);
-      navigate('/dashboard');
+      if (invitationToken) {
+        navigate(`/invitation/accept?token=${encodeURIComponent(invitationToken)}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Code 2FA invalide');
     }
@@ -80,6 +90,11 @@ export default function LoginPage() {
         <div className="h-12 w-12 rounded-xl bg-secondary flex items-center justify-center font-bold text-white text-xl mx-auto mb-4">KP</div>
         <h1 className="text-2xl font-bold text-gray-800">Connexion</h1>
         <p className="text-gray-500 mt-1">Accédez à votre espace de travail</p>
+        {invitationToken && (
+          <div className="mt-3 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+            Invitation détectée : connectez-vous pour finaliser votre adhésion.
+          </div>
+        )}
       </div>
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
