@@ -102,11 +102,25 @@ def get_checklists_for_tache(db: Session, tache_id: str) -> List[Checklist]:
     return db.query(Checklist).filter(Checklist.id_tache == tache_id).all()
 
 def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:
-    checklist = Checklist(texte=texte, is_checked=is_checked, id_section=id_section, id_tache=id_tache)
+    now = datetime.now()
+    checklist = Checklist(
+        texte=texte, 
+        is_checked=is_checked, 
+        id_section=id_section, 
+        id_tache=id_tache,
+        created_at=now,
+        updated_at=now
+    )
     db.add(checklist)
     try:
         db.commit()
         db.refresh(checklist)
+        
+        # Mettre à jour le statut de la tâche si nécessaire
+        if id_tache:
+            from ..crud.tache import update_tache_status_based_on_checklists
+            update_tache_status_based_on_checklists(db, id_tache)
+            
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -115,14 +129,22 @@ def create_checklist(db: Session, texte: str, is_checked: bool = False, id_secti
         ) from exc
     return checklist
 
+
 def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Checklist]:
     checklist = get_checklist_by_id(db, checklist_id)
     if not checklist:
         return None
+    
     for key, value in kwargs.items():
         if hasattr(checklist, key) and value is not None:
             setattr(checklist, key, value)
     checklist.updated_at = datetime.now()
+    
+    # Vérifier si la checklist appartient à une tâche et mettre à jour le statut
+    if checklist.id_tache:
+        from ..crud.tache import update_tache_status_based_on_checklists
+        update_tache_status_based_on_checklists(db, checklist.id_tache)
+    
     db.commit()
     db.refresh(checklist)
     return checklist
@@ -130,8 +152,15 @@ def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Check
 def delete_checklist(db: Session, checklist_id: str) -> bool:
     checklist = get_checklist_by_id(db, checklist_id)
     if checklist:
+        tache_id = checklist.id_tache
         db.delete(checklist)
         db.commit()
+        
+        # Mettre à jour le statut de la tâche si nécessaire
+        if tache_id:
+            from ..crud.tache import update_tache_status_based_on_checklists
+            update_tache_status_based_on_checklists(db, tache_id)
+            
         return True
     return False
 

@@ -23,6 +23,7 @@ front_account_verification_url = str(config_data.get("FRONT_ACCOUNT_VERIFICATION
 front_password_reset_url = str(config_data.get("FRONT_PASSWORD_RESET_URL", "")).strip("'").strip('"').strip()
 front_register_url = str(config_data.get("FRONT_REGISTER_URL", "/register")).strip("'").strip('"').strip()
 front_espace_invitation_url = str(config_data.get("FRONT_ESPACE_INVITATION_URL", "/invitation/accept")).strip("'").strip('"').strip()
+back_base_url = str(config_data.get("BACK_BASE_URL", "http://localhost:8001")).strip("'").strip('"').strip()
 
 
 async def send_verification_email(username: str, email: EmailSchema, token: str):
@@ -206,7 +207,7 @@ async def send_espace_invitation_email(
     if is_guest:
         invitation_link = f"{front_base_url}{front_register_url}?invitation_token={token}"
     else:
-        invitation_link = f"{front_base_url}{front_espace_invitation_url}?token={token}"
+        invitation_link = f"{back_base_url}/espaces/invitations/accept-from-email?token={token}"
     
     template = f"""
         <!DOCTYPE html>

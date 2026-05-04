@@ -1,6 +1,7 @@
 // frontend/src/pages/app/TopBar.tsx
 import { ArrowLeft, ArrowRight, Menu, ChevronRight } from 'lucide-react';
-import { useParams, useLocation, Link } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
+import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { useApp } from '../../contexts/AppContext';
 import { useState, useEffect } from 'react';
 import { listeService } from '../../services/liste.service';
@@ -13,7 +14,7 @@ interface BreadcrumbItem {
 
 export default function TopBar() {
   const location = useLocation();
-  const { workspaceId, spaceId, listId } = useParams();
+  const { workspaceId, spaceId, listId } = useActiveResource();
   const { workspaces } = useApp();
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,14 +68,14 @@ export default function TopBar() {
     try {
       const space = await espaceService.getById(currentSpaceId);
       hierarchy.unshift(space); // Ajouter au début du tableau
-      
+
       if (space.id_espace_parent) {
         // Récupérer le parent récursivement
         return getSpaceHierarchy(space.id_espace_parent, hierarchy);
       }
       return hierarchy;
     } catch (error) {
-      console.error('Erreur récupération hiérarchie espace', error);
+      // Ignorer l'erreur silencieusement (l'utilisateur n'a simplement pas accès à ce parent)
       return hierarchy;
     }
   };
@@ -85,41 +86,41 @@ export default function TopBar() {
       setLoading(true);
       try {
         const items: BreadcrumbItem[] = [];
-        
+
         // 1. Workspace
         items.push({ name: workspaceName, path: `/workspace/${workspaceId}` });
 
         if (listId) {
           // Cas avec liste (peut être dans espace ou workspace)
           const liste = await listeService.getById(listId);
-          
+
           if (liste.id_espace) {
             // La liste est dans un espace - récupérer toute la hiérarchie des espaces parents
             const spaceHierarchy = await getSpaceHierarchy(liste.id_espace, []);
             for (const space of spaceHierarchy) {
-              items.push({ 
-                name: space.nom, 
-                path: `/workspace/${workspaceId}/${space.id}` 
+              items.push({
+                name: space.nom,
+                path: `/workspace/${workspaceId}/${space.id}`
               });
             }
           }
           // Ajouter la liste
-          const listPath = liste.id_espace 
+          const listPath = liste.id_espace
             ? `/workspace/${workspaceId}/${liste.id_espace}/${liste.id}`
             : `/workspace/${workspaceId}/list/${liste.id}`;
           items.push({ name: liste.nom, path: listPath });
-          
+
         } else if (spaceId) {
           // Cas avec espace - récupérer toute la hiérarchie des espaces parents
           const spaceHierarchy = await getSpaceHierarchy(spaceId, []);
           for (const space of spaceHierarchy) {
-            items.push({ 
-              name: space.nom, 
-              path: `/workspace/${workspaceId}/${space.id}` 
+            items.push({
+              name: space.nom,
+              path: `/workspace/${workspaceId}/${space.id}`
             });
           }
         }
-        
+
         setBreadcrumb(items);
       } catch (error) {
         console.error('Erreur chargement breadcrumb', error);

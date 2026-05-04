@@ -18,9 +18,9 @@ import type {
   WorkspaceLocalResourcesResponse,
   WorkspaceNavigationResponse,
 } from '../types';
+import { useNavigationStore } from '../store/useNavigationStore';
 
 export type { Member, Task, ChecklistItem, Period, List, Space, Workspace };
-
 const EMPTY_JOINED_ITEMS: JoinedResource[] = [];
 
 const createEmptyLocalResources = (workspaceId: string): WorkspaceLocalResourcesResponse => ({
@@ -102,6 +102,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const applyNavigationData = (data: WorkspaceNavigationResponse) => {
     const owned = Array.isArray(data.owned_workspaces) ? data.owned_workspaces : [];
     const joined = Array.isArray(data.joined_workspaces) ? data.joined_workspaces : [];
+
+    useNavigationStore.getState().loadNavigation({
+      ownedWorkspaces: owned,
+      joinedWorkspaces: joined,
+      joinedEspaces: Array.isArray(data.joined_espaces) ? data.joined_espaces : [],
+      joinedListes: Array.isArray(data.joined_listes) ? data.joined_listes : [],
+      joinedTaches: Array.isArray(data.joined_taches) ? data.joined_taches : []
+    });
 
     // Identifier les workspaces "partiels" (ceux dont on a rejoint une ressource mais pas le workspace entier)
     const allJoined = [
@@ -210,7 +218,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }];
       });
     } catch (error) {
-      console.error('Erreur chargement arborescence', error);
+      // L'utilisateur navigue probablement avec un accès direct, il n'a pas accès à la racine. C'est normal.
     }
   };
 

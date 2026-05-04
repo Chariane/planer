@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
-    _require_workspace_admin_access,
+    _require_workspace_management_access,
     _require_workspace_member_management_access,
     _require_workspace_owner_access,
     _serialize_member,
@@ -45,7 +45,7 @@ def get_admin_workspace_detail(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    workspace, membre, _ = _require_workspace_admin_access(db, workspace_id, current_user.id)
+    workspace, membre, _ = _require_workspace_management_access(db, workspace_id, current_user.id)
     return _serialize_workspace(workspace, membre=membre)
 
 
@@ -55,7 +55,7 @@ def list_admin_workspace_members(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    _require_workspace_admin_access(db, workspace_id, current_user.id)
+    _require_workspace_management_access(db, workspace_id, current_user.id)
     members = get_admin_workspace_members(db, workspace_id)
     if members is None:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
@@ -75,6 +75,7 @@ def update_admin_member(
         workspace_id,
         current_user.id,
         user_id,
+        membre_in.role,
     )
 
     updated_member = update_admin_workspace_member(db, workspace_id, user_id, membre_in)

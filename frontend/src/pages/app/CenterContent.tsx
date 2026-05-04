@@ -1,9 +1,10 @@
 // frontend/src/pages/app/CenterContent.tsx
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import {
   Plus, Search, Filter, ChevronDown, ChevronRight, MoreVertical,
-  Edit, Trash, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, FolderTree
+  Edit, Trash, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, FolderTree,
+  CheckCircle, Circle, X, Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Button } from '../../components/ui/Button';
@@ -61,8 +62,17 @@ const roleLabels: Record<string, string> = {
   Invité: 'Invité',
 };
 
+// Type pour les checklists dans les tâches (UI)
+interface TaskChecklist {
+  id: string;
+  texte: string;
+  is_checked: boolean;
+}
+
 // Transformer une tâche de l'API vers le format interne
 function transformTask(apiTask: any): Task {
+  if (!apiTask) return {} as Task;
+
   return {
     id: apiTask.id,
     title: apiTask.titre,
@@ -76,6 +86,12 @@ function transformTask(apiTask: any): Task {
     listId: apiTask.id_liste,
     createdAt: new Date(apiTask.created_at),
     subTasks: [],
+    checklists: (apiTask.checklists || []).map((c: any) => ({
+      id: c.id,
+      texte: c.texte,
+      is_checked: c.is_checked,
+    })),
+    progression: apiTask.progression || 0,
   };
 }
 
@@ -105,7 +121,8 @@ const getTodayDate = () => {
 };
 
 export default function CenterContent() {
-  const { workspaceId, spaceId, listId } = useParams<{ workspaceId: string; spaceId?: string; listId: string }>();
+  const { workspaceId, spaceId, listId } = useActiveResource();
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +140,15 @@ export default function CenterContent() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Membre');
+
+  // États pour les checklists de la tâche en cours d'édition
+  const [taskChecklists, setTaskChecklists] = useState<TaskChecklist[]>([]);
+  const [newChecklistText, setNewChecklistText] = useState('');
+  const [isAddingChecklist, setIsAddingChecklist] = useState(false);
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistText, setEditingChecklistText] = useState('');
+  const [checklistLoading, setChecklistLoading] = useState<string | null>(null);
+
   const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
@@ -156,7 +182,9 @@ export default function CenterContent() {
           }));
           setMembers(formattedMembers);
         })
-        .catch(err => console.error('Erreur chargement membres espace', err));
+        .catch(() => {
+          setMembers([]);
+        });
     } else {
       setMembers([]);
     }
@@ -175,8 +203,14 @@ export default function CenterContent() {
       setError(null);
       try {
         const data = await tacheService.getByListe(listId);
+
+        if (!data) {
+          setTasks([]);
+          return;
+        }
+
         const transformed = (Array.isArray(data) ? data : []).map(transformTask);
-        
+
         const tasksWithMembers = await Promise.all(
           transformed.map(async (task) => {
             try {
@@ -193,7 +227,7 @@ export default function CenterContent() {
             }
           })
         );
-        
+
         setTasks(tasksWithMembers);
       } catch (err) {
         console.error('Erreur chargement tâches:', err);
@@ -205,6 +239,21 @@ export default function CenterContent() {
     fetchTasks();
   }, [listId]);
 
+  // Charger les checklists d'une tâche spécifique
+  const loadTaskChecklists = async (tacheId: string): Promise<TaskChecklist[]> => {
+    try {
+      const checklists = await tacheService.getChecklistsByTache(tacheId);
+      return checklists.map((c: any) => ({
+        id: c.id,
+        texte: c.texte,
+        is_checked: c.is_checked,
+      }));
+    } catch (err) {
+      console.error('Erreur chargement checklists:', err);
+      return [];
+    }
+  };
+
   // Synchronisation des assignations
   const syncAssignments = async (taskId: string, newMemberIds: string[]) => {
     try {
@@ -212,12 +261,12 @@ export default function CenterContent() {
       const currentIds = currentMembers.map((m: any) => m.id_utilisateur || m.id);
       const toAdd = newMemberIds.filter(id => !currentIds.includes(id));
       const toRemove = currentIds.filter(id => !newMemberIds.includes(id));
-      
+
       await Promise.all([
         ...toAdd.map(id => tacheService.assignMember(taskId, id)),
         ...toRemove.map(id => tacheService.unassignMember(taskId, id)),
       ]);
-      
+
       const updatedMembers = await tacheService.getMembers(taskId);
       const formattedMembers = updatedMembers.map((m: any) => ({
         id: m.id_utilisateur || m.id,
@@ -225,8 +274,8 @@ export default function CenterContent() {
         email: m.utilisateur?.email || '',
         role: m.role || 'Membre',
       }));
-      
-      setTasks(prev => prev.map(t => 
+
+      setTasks(prev => prev.map(t =>
         t.id === taskId ? { ...t, assignees: formattedMembers } : t
       ));
     } catch (err) {
@@ -234,35 +283,227 @@ export default function CenterContent() {
     }
   };
 
-  // CRUD
-  const addTask = async (newTask: Omit<Task, 'id' | 'createdAt'>) => {
+  // CRUD Checklist
+  const addChecklistToTask = async (taskId: string, texte: string) => {
+    if (!texte.trim()) return;
+    setChecklistLoading('add');
+    try {
+      const newChecklist = await tacheService.createChecklistInTache(taskId, { texte, is_checked: false });
+      const newTaskChecklist: TaskChecklist = {
+        id: newChecklist.id,
+        texte: newChecklist.texte,
+        is_checked: newChecklist.is_checked,
+      };
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, checklists: [...(t.checklists || []), newTaskChecklist] }
+          : t
+      ));
+      if (editingTask?.id === taskId) {
+        setTaskChecklists(prev => [...prev, newTaskChecklist]);
+      }
+      return newChecklist;
+    } catch (err) {
+      console.error('Erreur ajout checklist:', err);
+      alert('Erreur lors de l\'ajout de l\'élément');
+    } finally {
+      setChecklistLoading(null);
+    }
+  };
+
+  const toggleChecklist = async (taskId: string, checklistId: string, currentChecked: boolean) => {
+    setChecklistLoading(checklistId);
+    try {
+      const updated = await tacheService.updateChecklist(checklistId, { is_checked: !currentChecked });
+      const updatedTaskChecklist: TaskChecklist = {
+        id: updated.id,
+        texte: updated.texte,
+        is_checked: updated.is_checked,
+      };
+      
+      // Recharger la tâche pour avoir le statut mis à jour
+      const updatedTask = await tacheService.getById(taskId);
+      
+      setTasks(prev => prev.map(t => 
+        t.id === taskId 
+          ? { 
+              ...t, 
+              checklists: (t.checklists || []).map(c => c.id === checklistId ? updatedTaskChecklist : c),
+              status: updatedTask.statut,
+              progression: updatedTask.progression
+            }
+          : t
+      ));
+      
+      if (editingTask?.id === taskId) {
+        setTaskChecklists(prev => prev.map(c => c.id === checklistId ? updatedTaskChecklist : c));
+      }
+    } catch (err) {
+      console.error('Erreur mise à jour checklist:', err);
+    } finally {
+      setChecklistLoading(null);
+    }
+  };
+
+  const updateChecklistText = async (taskId: string, checklistId: string, newText: string) => {
+    if (!newText.trim()) return;
+    setChecklistLoading(`edit-${checklistId}`);
+    try {
+      const updated = await tacheService.updateChecklist(checklistId, { texte: newText });
+      const updatedTaskChecklist: TaskChecklist = {
+        id: updated.id,
+        texte: updated.texte,
+        is_checked: updated.is_checked,
+      };
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, checklists: (t.checklists || []).map(c => c.id === checklistId ? updatedTaskChecklist : c) }
+          : t
+      ));
+      if (editingTask?.id === taskId) {
+        setTaskChecklists(prev => prev.map(c => c.id === checklistId ? updatedTaskChecklist : c));
+      }
+      setEditingChecklistId(null);
+      setEditingChecklistText('');
+    } catch (err) {
+      console.error('Erreur modification checklist:', err);
+      alert('Erreur lors de la modification');
+    } finally {
+      setChecklistLoading(null);
+    }
+  };
+
+  const deleteChecklistFromTask = async (taskId: string, checklistId: string) => {
+    if (!confirm('Supprimer cet élément de la checklist ?')) return;
+    setChecklistLoading(`delete-${checklistId}`);
+    try {
+      await tacheService.deleteChecklist(checklistId);
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, checklists: (t.checklists || []).filter(c => c.id !== checklistId) }
+          : t
+      ));
+      if (editingTask?.id === taskId) {
+        setTaskChecklists(prev => prev.filter(c => c.id !== checklistId));
+      }
+    } catch (err) {
+      console.error('Erreur suppression checklist:', err);
+      alert('Erreur lors de la suppression');
+    } finally {
+      setChecklistLoading(null);
+    }
+  };
+
+  // CRUD Tâche avec gestion des checklists
+  const addTask = async (newTask: Omit<Task, 'id' | 'createdAt' | 'checklists' | 'progression'>) => {
     if (!listId) return;
+
     try {
       const apiTask = toApiTask({ ...newTask, listId });
-      console.log('📤 Données envoyées à l\'API:', apiTask);
       const created = await tacheService.create(listId, apiTask);
-      const fullTask = transformTask(created);
-      setTasks(prev => [...prev, fullTask]);
-      
-      if (newTask.assignees.length > 0) {
-        await syncAssignments(fullTask.id, newTask.assignees.map(a => a.id));
+
+      if (!created || !created.id) {
+        alert('Erreur: La tâche a été créée mais l\'identifiant est manquant');
+        return;
       }
-      
-      return fullTask;
+
+      // Recharger toutes les tâches
+      const refreshedTasks = await tacheService.getByListe(listId);
+      const transformed = (Array.isArray(refreshedTasks) ? refreshedTasks : []).map(transformTask);
+
+      // Ajouter les checklists si présentes
+      if (taskChecklists.length > 0) {
+        for (const checklist of taskChecklists) {
+          try {
+            await tacheService.createChecklistInTache(created.id, {
+              texte: checklist.texte,
+              is_checked: checklist.is_checked
+            });
+          } catch (err) {
+            console.error('Erreur ajout checklist:', err);
+          }
+        }
+      }
+
+      // Recharger les membres
+      const tasksWithMembers = await Promise.all(
+        transformed.map(async (task) => {
+          try {
+            const taskMembers = await tacheService.getMembers(task.id);
+            const assignees = taskMembers.map((m: any) => ({
+              id: m.id_utilisateur || m.id,
+              name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
+              email: m.utilisateur?.email || '',
+              role: m.role || 'Membre',
+            }));
+            return { ...task, assignees };
+          } catch {
+            return task;
+          }
+        })
+      );
+
+      setTasks(tasksWithMembers);
+
+      // Assigner les membres si nécessaire
+      if (newTask.assignees.length > 0) {
+        await syncAssignments(created.id, newTask.assignees.map(a => a.id));
+      }
+
+      // Vider les checklists pour la prochaine création
+      setTaskChecklists([]);
+      return created;
+
     } catch (err: any) {
-      console.error('❌ Erreur création tâche:', err);
-      alert(`Erreur détaillée :\n${err.message}`);
+      console.error('Erreur création tâche:', err);
+      alert(`Erreur: ${err.message || 'Impossible de créer la tâche'}`);
     }
   };
 
   const updateTask = async (updatedTask: Task) => {
+    if (!updatedTask.id) {
+      alert('Erreur: Impossible de mettre à jour une tâche sans identifiant');
+      return;
+    }
+
     try {
       const apiTask = toApiTask(updatedTask);
       await tacheService.update(updatedTask.id, apiTask);
-      setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-      
+
+      // Synchroniser les checklists
+      const currentChecklists = await tacheService.getChecklistsByTache(updatedTask.id);
+      const currentIds = currentChecklists.map((c: any) => c.id);
+      const newIds = (updatedTask.checklists || []).map(c => c.id).filter(id => id);
+
+      const toDelete = currentIds.filter(id => !newIds.includes(id));
+      for (const id of toDelete) {
+        await tacheService.deleteChecklist(id);
+      }
+
+      for (const checklist of (updatedTask.checklists || [])) {
+        if (checklist.id && currentIds.includes(checklist.id)) {
+          await tacheService.updateChecklist(checklist.id, {
+            texte: checklist.texte,
+            is_checked: checklist.is_checked
+          });
+        } else if (checklist.texte) {
+          await tacheService.createChecklistInTache(updatedTask.id, {
+            texte: checklist.texte,
+            is_checked: checklist.is_checked
+          });
+        }
+      }
+
+      // Rafraîchir la liste des tâches
+      if (listId) {
+        const refreshedTasks = await tacheService.getByListe(listId);
+        const transformed = (Array.isArray(refreshedTasks) ? refreshedTasks : []).map(transformTask);
+        setTasks(transformed);
+      }
+
       const newMemberIds = updatedTask.assignees.map(a => a.id);
       await syncAssignments(updatedTask.id, newMemberIds);
+
     } catch (err) {
       console.error('Erreur mise à jour tâche:', err);
       alert('Erreur lors de la mise à jour');
@@ -270,9 +511,20 @@ export default function CenterContent() {
   };
 
   const deleteTask = async (taskId: string) => {
+    if (!taskId) return;
+
     try {
       await tacheService.delete(taskId);
-      setTasks(prev => prev.filter(t => t.id !== taskId));
+
+      // Rafraîchir la liste
+      if (listId) {
+        const refreshedTasks = await tacheService.getByListe(listId);
+        const transformed = (Array.isArray(refreshedTasks) ? refreshedTasks : []).map(transformTask);
+        setTasks(transformed);
+      } else {
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+      }
+
     } catch (err) {
       console.error('Erreur suppression tâche:', err);
       alert('Erreur lors de la suppression');
@@ -312,10 +564,10 @@ export default function CenterContent() {
     value: tasks.length,
     color:
       status === 'en cours' ? '#3b82f6'
-      : status === 'en attente' ? '#eab308'
-      : status === 'terminé' ? '#10b981'
-      : status === 'bloqué' ? '#ef4444'
-      : '#6b7280',
+        : status === 'en attente' ? '#eab308'
+          : status === 'terminé' ? '#10b981'
+            : status === 'bloqué' ? '#ef4444'
+              : '#6b7280',
   })).filter(d => d.value > 0);
 
   const openCreateTask = () => {
@@ -329,26 +581,39 @@ export default function CenterContent() {
       priority: 'moyenne',
       assignedMemberIds: [],
     });
+    setTaskChecklists([]);
+    setNewChecklistText('');
+    setIsAddingChecklist(false);
+    setEditingChecklistId(null);
     setIsTaskModalOpen(true);
   };
 
-  const openEditTask = (task: Task) => {
+  const openEditTask = async (task: Task) => {
     setEditingTask(task);
     setTaskForm({
       title: task.title,
-      description: task.description,
+      description: task.description || '',
       startDate: task.startDate || getTodayDate(),
       dueDate: task.dueDate || '',
       status: task.status,
       priority: task.priority,
       assignedMemberIds: task.assignees.map(a => a.id),
     });
+
+    // Charger les checklists de la tâche
+    const checklists = await loadTaskChecklists(task.id);
+    setTaskChecklists(checklists);
+    setNewChecklistText('');
+    setIsAddingChecklist(false);
+    setEditingChecklistId(null);
     setIsTaskModalOpen(true);
   };
 
   const handleTaskSubmit = async () => {
     if (!taskForm.title.trim()) return;
+
     const assigneeMembers = members.filter(m => taskForm.assignedMemberIds.includes(m.id));
+
     if (editingTask) {
       await updateTask({
         ...editingTask,
@@ -359,6 +624,7 @@ export default function CenterContent() {
         status: taskForm.status,
         priority: taskForm.priority,
         assignees: assigneeMembers,
+        checklists: taskChecklists,
       });
     } else {
       if (!listId) return;
@@ -377,15 +643,25 @@ export default function CenterContent() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (window.confirm('Supprimer cette tâche ?')) await deleteTask(taskId);
+    if (window.confirm('Supprimer cette tâche ?')) {
+      await deleteTask(taskId);
+    }
   };
 
   const toggleStatus = (status: string) => {
     setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
   };
 
+  // Calculer la progression d'une tâche depuis ses checklists
+  const getTaskProgress = (task: Task): number => {
+    const checklists = task.checklists || [];
+    if (checklists.length === 0) return 0;
+    const checked = checklists.filter(c => c.is_checked).length;
+    return Math.round((checked / checklists.length) * 100);
+  };
+
   // ========== CONDITIONS D'AFFICHAGE ==========
-  
+
   // Cas 1: Une liste est sélectionnée → afficher les tâches
   if (listId) {
     if (loading) return <div className="p-6 flex justify-center">Chargement des tâches...</div>;
@@ -399,9 +675,8 @@ export default function CenterContent() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
-                activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+                }`}
             >
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
               {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
@@ -468,71 +743,88 @@ export default function CenterContent() {
                                 <th className="text-left py-3">Titre</th>
                                 <th className="text-left py-3">Membres</th>
                                 <th className="text-left py-3">Priorité</th>
+                                <th className="text-left py-3">Progression</th>
                                 <th className="text-left py-3">Date de fin</th>
                                 <th className="text-left py-3"></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {filtered.map((task, idx) => (
-                                <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                                  <td className="py-3 w-12">{idx + 1}</td>
-                                  <td className="py-3 font-medium">{task.title}</td>
-                                  <td className="py-3">
-                                    {task.assignees.map(a => a.name).join(', ') || '—'}
-                                    {task.assignees.length > 0 && (
-                                      <span className="ml-1 text-xs text-gray-400">
-                                        ({task.assignees.map(a => roleLabels[a.role] || a.role).join(', ')})
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>
-                                      {priorityLabels[task.priority]}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 text-gray-500">{task.dueDate || '—'}</td>
-                                  <td className="py-3">
-                                    <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuId(openMenuId === task.id ? null : task.id);
-                                        }}
-                                        className="p-1 rounded-lg hover:bg-gray-100"
-                                      >
-                                        <MoreVertical className="h-4 w-4 text-gray-400" />
-                                      </button>
-                                      {openMenuId === task.id && (
-                                        <div className="absolute right-0 top-8 z-10 flex flex-col bg-white shadow-lg rounded-lg w-32 border">
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              openEditTask(task);
-                                              setOpenMenuId(null);
-                                            }}
-                                            className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                          >
-                                            <Edit className="h-3 w-3" /> Modifier
-                                          </button>
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDeleteTask(task.id);
-                                              setOpenMenuId(null);
-                                            }}
-                                            className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
-                                          >
-                                            <Trash className="h-3 w-3" /> Supprimer
-                                          </button>
-                                        </div>
+                              {filtered.map((task, idx) => {
+                                const progress = getTaskProgress(task);
+                                return (
+                                  <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
+                                    <td className="py-3 w-12">{idx + 1}</td>
+                                    <td className="py-3 font-medium">{task.title}</td>
+                                    <td className="py-3">
+                                      {task.assignees.map(a => a.name).join(', ') || '—'}
+                                      {task.assignees.length > 0 && (
+                                        <span className="ml-1 text-xs text-gray-400">
+                                          ({task.assignees.map(a => roleLabels[a.role] || a.role).join(', ')})
+                                        </span>
                                       )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
+                                    </td>
+                                    <td className="py-3">
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[task.priority]}`}>
+                                        {priorityLabels[task.priority]}
+                                      </span>
+                                    </td>
+                                    <td className="py-3">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                                          <div className="bg-secondary h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                                        </div>
+                                        <span className="text-xs text-gray-500">{progress}%</span>
+                                        {(task.checklists?.length || 0) > 0 && (
+                                          <span className="text-xs text-gray-400">
+                                            ({task.checklists?.filter(c => c.is_checked).length}/{task.checklists?.length})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 text-gray-500">{task.dueDate || '—'}</td>
+                                    <td className="py-3">
+                                      <div className="relative">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuId(openMenuId === task.id ? null : task.id);
+                                          }}
+                                          className="p-1 rounded-lg hover:bg-gray-100"
+                                        >
+                                          <MoreVertical className="h-4 w-4 text-gray-400" />
+                                        </button>
+                                        {openMenuId === task.id && (
+                                          <div className="absolute right-0 top-8 z-10 flex flex-col bg-white shadow-lg rounded-lg w-32 border">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openEditTask(task);
+                                                setOpenMenuId(null);
+                                              }}
+                                              className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                            >
+                                              <Edit className="h-3 w-3" /> Modifier
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteTask(task.id);
+                                                setOpenMenuId(null);
+                                              }}
+                                              className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
+                                            >
+                                              <Trash className="h-3 w-3" /> Supprimer
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                               {filtered.length === 0 && (
                                 <tr>
-                                  <td colSpan={6} className="py-8 text-center text-gray-500">Aucune tâche</td>
+                                  <td colSpan={7} className="py-8 text-center text-gray-500">Aucune tâche</td>
                                 </tr>
                               )}
                             </tbody>
@@ -580,9 +872,9 @@ export default function CenterContent() {
           )
         )}
 
-        {/* Modale de création/édition de tâche */}
+        {/* Modale de création/édition de tâche avec Checklist */}
         <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? "Modifier la tâche" : "Nouvelle tâche"} size="lg">
-          <div className="space-y-5">
+          <div className="space-y-5 max-h-[70vh] overflow-y-auto px-1">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Titre <span className="text-red-500">*</span>
@@ -591,7 +883,7 @@ export default function CenterContent() {
                 type="text"
                 placeholder="Ex: Implémenter l'authentification"
                 value={taskForm.title}
-                onChange={e => setTaskForm({...taskForm, title: e.target.value})}
+                onChange={e => setTaskForm({ ...taskForm, title: e.target.value })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
                 autoFocus
               />
@@ -605,7 +897,7 @@ export default function CenterContent() {
                 placeholder="Décrivez la tâche en détail..."
                 rows={3}
                 value={taskForm.description}
-                onChange={e => setTaskForm({...taskForm, description: e.target.value})}
+                onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
               />
             </div>
@@ -618,10 +910,10 @@ export default function CenterContent() {
                 <input
                   type="date"
                   value={taskForm.startDate}
-                  onChange={e => setTaskForm({...taskForm, startDate: e.target.value})}
+                  onChange={e => setTaskForm({ ...taskForm, startDate: e.target.value })}
                   className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
                 />
-                <p className="text-xs text-gray-400 mt-1">Par défaut : aujourd'hui</p>
+                <p className="text-xs text-gray-400 mt-1">Format: AAAA-MM-JJ</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -630,7 +922,7 @@ export default function CenterContent() {
                 <input
                   type="date"
                   value={taskForm.dueDate}
-                  onChange={e => setTaskForm({...taskForm, dueDate: e.target.value})}
+                  onChange={e => setTaskForm({ ...taskForm, dueDate: e.target.value })}
                   className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
                 />
               </div>
@@ -643,7 +935,7 @@ export default function CenterContent() {
                 </label>
                 <select
                   value={taskForm.status}
-                  onChange={e => setTaskForm({...taskForm, status: e.target.value as Task['status']})}
+                  onChange={e => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
                   className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
                 >
                   {statusOptions.map(opt => (
@@ -660,19 +952,13 @@ export default function CenterContent() {
               </label>
               <select
                 value={taskForm.priority}
-                onChange={e => setTaskForm({...taskForm, priority: e.target.value as Task['priority']})}
+                onChange={e => setTaskForm({ ...taskForm, priority: e.target.value as Task['priority'] })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
               >
                 {priorityOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-              <p className="text-xs text-gray-400 mt-1">
-                {taskForm.priority === 'critique' && '⚠️ Priorité critique : à traiter en urgence'}
-                {taskForm.priority === 'haute' && '🔴 Priorité haute : important'}
-                {taskForm.priority === 'moyenne' && '🟡 Priorité moyenne'}
-                {taskForm.priority === 'basse' && '🟢 Priorité basse'}
-              </p>
             </div>
 
             <div>
@@ -697,6 +983,137 @@ export default function CenterContent() {
               <p className="text-xs text-gray-400 mt-1">
                 Maintenez Ctrl (ou Cmd) pour sélectionner plusieurs membres
               </p>
+            </div>
+
+            {/* Section Checklist */}
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-gray-700">
+                  Checklist
+                </label>
+                <span className="text-xs text-gray-400">
+                  {taskChecklists.filter(c => c.is_checked).length}/{taskChecklists.length} complétés
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {taskChecklists.map((checklist) => (
+                  <div key={checklist.id} className="flex items-center gap-2 group">
+                    <button
+                      onClick={() => editingTask && toggleChecklist(editingTask.id, checklist.id, checklist.is_checked)}
+                      disabled={!editingTask || checklistLoading === checklist.id}
+                      className="flex-shrink-0"
+                    >
+                      {checklistLoading === checklist.id ? (
+                        <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                      ) : checklist.is_checked ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-gray-300 hover:text-gray-400" />
+                      )}
+                    </button>
+
+                    {editingChecklistId === checklist.id ? (
+                      <input
+                        type="text"
+                        value={editingChecklistText}
+                        onChange={(e) => setEditingChecklistText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && editingTask && updateChecklistText(editingTask.id, checklist.id, editingChecklistText)}
+                        className="flex-1 text-sm border rounded px-2 py-1 focus:ring-1 focus:ring-secondary"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className={`text-sm flex-1 ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                        {checklist.texte}
+                      </span>
+                    )}
+
+                    {editingTask && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        {editingChecklistId !== checklist.id && (
+                          <button
+                            onClick={() => {
+                              setEditingChecklistId(checklist.id);
+                              setEditingChecklistText(checklist.texte);
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </button>
+                        )}
+                        {editingChecklistId === checklist.id && (
+                          <button
+                            onClick={() => editingTask && updateChecklistText(editingTask.id, checklist.id, editingChecklistText)}
+                            disabled={checklistLoading === `edit-${checklist.id}`}
+                            className="p-1 text-green-500 hover:text-green-600"
+                          >
+                            {checklistLoading === `edit-${checklist.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> :
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            }
+                          </button>
+                        )}
+                        <button
+                          onClick={() => editingTask && deleteChecklistFromTask(editingTask.id, checklist.id)}
+                          disabled={checklistLoading === `delete-${checklist.id}`}
+                          className="p-1 text-gray-400 hover:text-red-500"
+                        >
+                          {checklistLoading === `delete-${checklist.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {isAddingChecklist ? (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Circle className="h-4 w-4 text-gray-300" />
+                    <input
+                      type="text"
+                      placeholder="Nouvel élément de checklist..."
+                      value={newChecklistText}
+                      onChange={(e) => setNewChecklistText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && editingTask && addChecklistToTask(editingTask.id, newChecklistText).then(() => {
+                        setNewChecklistText('');
+                        setIsAddingChecklist(false);
+                      })}
+                      className="flex-1 text-sm border-b border-gray-200 focus:border-secondary outline-none py-1"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => editingTask && addChecklistToTask(editingTask.id, newChecklistText).then(() => {
+                        setNewChecklistText('');
+                        setIsAddingChecklist(false);
+                      })}
+                      disabled={checklistLoading === 'add'}
+                      className="text-secondary text-xs hover:underline"
+                    >
+                      {checklistLoading === 'add' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsAddingChecklist(false);
+                        setNewChecklistText('');
+                      }}
+                      className="text-gray-400 text-xs hover:text-gray-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsAddingChecklist(true)}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-secondary transition mt-2"
+                  >
+                    <Plus className="h-3 w-3" /> Ajouter un élément à la checklist
+                  </button>
+                )}
+
+                <p className="text-xs text-gray-400 mt-2">
+                  La progression de la tâche sera automatiquement calculée à partir des éléments cochés.
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -734,6 +1151,7 @@ export default function CenterContent() {
                 onChange={e => setInviteRole(e.target.value)}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
               >
+                <option value="Invité">Invité</option>
                 <option value="Membre">Membre</option>
                 <option value="Administrateur">Administrateur</option>
               </select>
@@ -752,9 +1170,8 @@ export default function CenterContent() {
   if (spaceId && spaceId !== 'list') {
     return (
       <div className="p-6">
-        <SpaceDashboard 
-          spaceId={spaceId} 
-          workspaceId={workspaceId!}
+        <SpaceDashboard
+          spaceId={spaceId}
         />
       </div>
     );

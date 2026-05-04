@@ -1,9 +1,10 @@
 // frontend/src/components/workspace/ManageMembersModal.tsx
 import { useState, useEffect } from 'react';
-import { X, UserPlus, Trash2, Crown } from 'lucide-react';
+import { UserPlus, Trash2, Crown } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { espaceService } from '../../services/espace.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Member {
   id: string;
@@ -21,18 +22,32 @@ interface ManageMembersModalProps {
 }
 
 export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersModalProps) {
+  const { user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Membre');
   const [inviting, setInviting] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+
+  const canManageMembers = currentUserRole === 'Créateur' || currentUserRole === 'Administrateur';
 
   const loadMembers = async () => {
     if (!espaceId) return;
     setLoading(true);
     try {
       const data = await espaceService.getMembers(espaceId);
-      setMembers(data);
+      const normalizedMembers: Member[] = data.map((m: any) => ({
+        id: m.id,
+        user_id: m.id_utilisateur || m.id,
+        username: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
+        email: m.utilisateur?.email || '',
+        role: m.role,
+        statut: m.statut,
+      }));
+      setMembers(normalizedMembers);
+      const currentMember = normalizedMembers.find(m => m.user_id === user?.id);
+      setCurrentUserRole(currentMember?.role || null);
     } catch (error) {
       console.error("Erreur chargement membres", error);
     } finally {
@@ -47,7 +62,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
   }, [isOpen, espaceId]);
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !canManageMembers) return;
     setInviting(true);
     try {
       await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
@@ -62,6 +77,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
   };
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
+    if (!canManageMembers) return;
     try {
       await espaceService.updateMemberRole(espaceId, userId, newRole);
       await loadMembers();
@@ -71,6 +87,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
   };
 
   const handleRemoveMember = async (userId: string) => {
+    if (!canManageMembers) return;
     if (!confirm("Retirer ce membre de l'espace ?")) return;
     try {
       await espaceService.removeMember(espaceId, userId);
@@ -93,19 +110,25 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               className="flex-1 p-2 border rounded-lg"
+              disabled={!canManageMembers}
             />
             <select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
               className="p-2 border rounded-lg bg-white"
+              disabled={!canManageMembers}
             >
+              <option value="Invité">Invité</option>
               <option value="Membre">Membre</option>
               <option value="Administrateur">Administrateur</option>
             </select>
-            <Button onClick={handleInvite} loading={inviting} size="sm">
+            <Button onClick={handleInvite} loading={inviting} size="sm" disabled={!canManageMembers}>
               <UserPlus className="h-4 w-4 mr-1" /> Inviter
             </Button>
           </div>
+          {!canManageMembers && (
+            <p className="text-sm text-gray-500 mt-2">Vous n'avez pas les permissions pour gérer les membres.</p>
+          )}
         </div>
 
         {/* Liste des membres */}
@@ -129,12 +152,13 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
                       value={member.role}
                       onChange={(e) => handleUpdateRole(member.user_id, e.target.value)}
                       className="text-sm border rounded px-2 py-1"
-                      disabled={member.role === 'Créateur'}
+                      disabled={member.role === 'Créateur' || !canManageMembers}
                     >
+                      <option value="Invité">Invité</option>
                       <option value="Membre">Membre</option>
                       <option value="Administrateur">Administrateur</option>
                     </select>
-                    {member.role !== 'Créateur' && (
+                    {member.role !== 'Créateur' && canManageMembers && (
                       <button
                         onClick={() => handleRemoveMember(member.user_id)}
                         className="p-1 text-red-500 hover:bg-red-50 rounded"

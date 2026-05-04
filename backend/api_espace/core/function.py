@@ -1,12 +1,40 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace
+from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace, Membre
+from .utils import commit_or_raise
 
-WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
-ESPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
+
+# Rôles Workspace
+WORKSPACE_OWNER_ROLE = "Créateur"
+WORKSPACE_ADMIN_ROLE = "Administrateur"
+WORKSPACE_MEMBER_ROLE = "Membre"
+WORKSPACE_GUEST_ROLE = "Invité"
+
+WORKSPACE_READ_ROLES = {
+    WORKSPACE_OWNER_ROLE,
+    WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_MEMBER_ROLE,
+    WORKSPACE_GUEST_ROLE,
+}
+WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
+
+# Rôles Espace
+ESPACE_OWNER_ROLE = "Créateur"
+ESPACE_ADMIN_ROLE = "Administrateur"
+ESPACE_MEMBER_ROLE = "Membre"
+ESPACE_GUEST_ROLE = "Invité"
+
+ESPACE_READ_ROLES = {
+    ESPACE_OWNER_ROLE,
+    ESPACE_ADMIN_ROLE,
+    ESPACE_MEMBER_ROLE,
+    ESPACE_GUEST_ROLE,
+}
+ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
+ESPACE_ADMIN_MANAGEABLE_ROLES = {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}
 
 
 def is_premium_user(user: Optional[Utilisateur]) -> bool:
@@ -43,22 +71,6 @@ def can_create_espace(db: Session, user_id: str) -> bool:
     if user_has_premium_workspace_access(db, user_id):
         return True
     return get_espace_count_for_owner(db, user_id) < 1
-
-
-def commit_or_raise(
-    db: Session,
-    *,
-    detail: str,
-    status_code: int = 409,
-    refresh_instance: Any | None = None,
-) -> None:
-    try:
-        db.commit()
-        if refresh_instance is not None:
-            db.refresh(refresh_instance)
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 # -----------------------------------------------
@@ -103,15 +115,6 @@ def _get_workspace_or_404(db: Session, workspace_id: str) -> Workspace:
 
 
 def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str):
-    from ..crud.utilisateur import get_espace_member as _unused  # noqa – force module init
-    from ..models import Membre
-
-    import logging
-    import os
-    # Utiliser un fichier de log explicite
-    debug_log = "/tmp/api_espace_debug.log"
-    with open(debug_log, "a") as f:
-        f.write(f"DEBUG: Checking WS member. WS: {workspace_id}, User: {current_user_id}\n")
 
     membre = (
         db.query(Membre)
@@ -122,22 +125,24 @@ def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id
         )
         .first()
     )
-    
-    if not membre:
-        # Fallback : vérifier si l'utilisateur est le créateur direct du workspace
-        from ..models import Workspace
-        ws = db.query(Workspace).filter(Workspace.id == workspace_id, Workspace.id_utilisateur == current_user_id).first()
-        if ws:
-            with open(debug_log, "a") as f:
-                f.write(f"DEBUG: Found owner fallback for WS: {workspace_id}, User: {current_user_id}\n")
-            # Mock d'un membre pour le rôle Administrateur
-            return Membre(id_utilisateur=current_user_id, id_workspace=workspace_id, role="Administrateur", statut="Actif")
-            
-    if not membre:
-        with open(debug_log, "a") as f:
-            f.write(f"DEBUG: Membership not found for WS: {workspace_id}, User: {current_user_id}\n")
-        raise HTTPException(status_code=403, detail="Acces refuse au workspace")
-    return membre
+
+    if membre:
+        return membre
+
+    # Fallback : le créateur du workspace a toujours accès (rôle Créateur)
+    ws = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.id_utilisateur == current_user_id
+    ).first()
+    if ws:
+        return Membre(
+            id_utilisateur=current_user_id,
+            id_workspace=workspace_id,
+            role=WORKSPACE_OWNER_ROLE,
+            statut="Actif",
+        )
+
+    raise HTTPException(status_code=403, detail="Acces refuse au workspace")
 
 
 def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str):
@@ -145,6 +150,101 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
     if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
         raise HTTPException(status_code=403, detail="Privileges insuffisants sur le workspace")
     return membre
+
+
+def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
+    """
+    Donne l'accès si l'utilisateur :
+    1. Est membre (ou créateur) du workspace
+    2. OU est membre d'au moins un espace dans ce workspace
+    """
+
+    # 1. Vérifier membre workspace
+    try:
+        return _get_workspace_member_or_403(db, workspace_id, current_user_id)
+    except HTTPException:
+        pass
+
+    # 2. Vérifier si membre d'un espace du workspace
+    has_espace_access = db.query(Membre).join(Espace, Membre.id_espace == Espace.id).filter(
+        Espace.id_workspace == workspace_id,
+        Membre.id_utilisateur == current_user_id,
+        Membre.statut == "Actif"
+    ).first()
+
+    if has_espace_access:
+        # Retourne un membre fictif avec accès limité (Invité)
+        return Membre(role=WORKSPACE_GUEST_ROLE, statut="Actif")
+
+    raise HTTPException(status_code=403, detail="Acces refuse au workspace (aucun acces detecte)")
+
+
+def _resolve_espace_role(
+    espace: Espace,
+    membre: Optional[Membre],
+    current_user_id: str,
+) -> Optional[str]:
+    if membre:
+        return membre.role
+    return None
+
+
+def _resolve_espace_status(
+    espace: Espace,
+    membre: Optional[Membre],
+    current_user_id: str,
+) -> Optional[str]:
+    if membre:
+        return membre.statut
+    return None
+
+
+def _get_espace_actor_context(db: Session, espace_id: str, current_user_id: str):
+
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
+
+    membre = get_espace_member(db, espace_id, current_user_id)
+    role = _resolve_espace_role(espace, membre, current_user_id)
+    statut = _resolve_espace_status(espace, membre, current_user_id)
+
+    if role is None or statut != "Actif":
+        raise HTTPException(status_code=403, detail="Acces refuse a cet espace")
+
+    return espace, membre, role
+
+
+def _validate_espace_member_management_permissions(
+    espace: Espace,
+    actor_role: str,
+    target_user_id: str,
+    target_member: Optional[Membre],
+    new_role: Optional[str] = None,
+):
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    # REGLE 1 : Un Admin ne peut pas modifier un autre Admin ou le Créateur
+    if actor_role == ESPACE_ADMIN_ROLE and target_member.role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul le créateur peut modifier ce membre.",
+        )
+
+    # REGLE 2 : Un Admin ne peut pas promouvoir quelqu'un à un rôle supérieur (Admin ou Créateur)
+    if actor_role == ESPACE_ADMIN_ROLE and new_role and new_role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="En tant qu'administrateur, vous ne pouvez pas promouvoir un membre à ce rôle.",
+        )
+
+    # REGLE 3 : Seul un manager (Admin/Créateur) peut accéder à cette fonction
+    if actor_role not in ESPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Permissions insuffisantes pour gerer les membres de cet espace.",
+        )
 
 
 # -----------------------------------------------
@@ -170,14 +270,50 @@ def _require_espace_access(db: Session, espace_id: str, workspace_id: str, curre
     return _get_workspace_member_or_403(db, workspace_id, current_user_id)
 
 
-def _require_espace_management_access(db: Session, espace_id: str, workspace_id: str, current_user_id: str):
-    """Vérifie l'accès de gestion à un espace (admin/créateur espace OU admin/créateur workspace)."""
+def _require_espace_management_access(db: Session, espace_id: str, workspace_id: Optional[str], current_user_id: str):
+    """Vérifie l'accès de gestion à un espace.
+    
+    Donne l'accès si l'utilisateur est :
+    1. Le propriétaire du Workspace parent (maître)
+    2. Un membre de l'espace avec rôle 'Créateur' ou 'Administrateur'
+    3. Un administrateur du Workspace parent
+    """
     from ..crud.utilisateur import get_espace_member
+    from ..models import Workspace, Espace
 
+    # 1. Résolution du workspace_id si manquant
+    if not workspace_id:
+        espace = db.query(Espace).filter(Espace.id == espace_id).first()
+        if espace:
+            workspace_id = espace.id_workspace
+
+    # 2. Vérification PROPRIÉTAIRE DU WORKSPACE (Le Maître)
+    if workspace_id:
+        ws = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.id_utilisateur == current_user_id
+        ).first()
+        if ws:
+            # Le créateur du workspace a tous les droits
+            return Membre(role=WORKSPACE_OWNER_ROLE, statut="Actif")
+
+    # 3. Vérification MEMBRE DIRECT DE L'ESPACE
     espace_member = get_espace_member(db, espace_id, current_user_id)
     if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
         return espace_member
-    return _require_workspace_management_access(db, workspace_id, current_user_id)
+
+    # 4. Vérification ADMINISTRATEUR DU WORKSPACE
+    if workspace_id:
+        ws_admin = db.query(Membre).filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.role == WORKSPACE_ADMIN_ROLE,
+            Membre.statut == "Actif"
+        ).first()
+        if ws_admin:
+            return ws_admin
+
+    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
 
 
 def _require_espace_admin_access(db: Session, espace_id: str, current_user_id: str):

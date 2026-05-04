@@ -69,9 +69,11 @@ def decode_invitation_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         # On vérifie que c'est bien une invitation
-        if payload.get("type") not in ["workspace_invitation", "espace_invitation"]:
-            return None
-        return payload
+        if payload.get("type") in ["workspace_invitation", "espace_invitation"]:
+            return payload
+        if payload.get("scope") in ["workspace_invitation_accept", "espace_invitation_accept"]:
+            return payload
+        return None
     except JWTError:
         return None
 

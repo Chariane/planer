@@ -298,6 +298,7 @@ def update_workspace_member_endpoint(
         workspace_id,
         current_user.id,
         user_id,
+        membre_in.role
     )
 
     updated = update_member_role(db, workspace_id, user_id, membre_in)

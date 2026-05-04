@@ -10,11 +10,10 @@ import type { Member } from '../../../types';
 
 interface SpaceDashboardProps {
   spaceId: string;
-  workspaceId: string;
   onMemberInvited?: () => void;
 }
 
-export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }: SpaceDashboardProps) {
+export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashboardProps) {
   const [stats, setStats] = useState({
     subSpacesCount: 0,
     listsCount: 0,
@@ -34,36 +33,46 @@ export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }
       const spaceData = await espaceService.getById(spaceId);
       setSpaceName(spaceData.nom);
 
-      // 2. Charger les membres
-      const membersData = await espaceService.getMembers(spaceId);
-      const formattedMembers = membersData.map((m: any) => ({
-        id: m.id,
-        name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-        email: m.utilisateur?.email || '',
-        role: m.role,
-      }));
+      // 2. Charger les membres (peut échouer si accès partiel)
+      let formattedMembers: Member[] = [];
+      try {
+        const membersData = await espaceService.getMembers(spaceId);
+        formattedMembers = membersData.map((m: any) => ({
+          id: m.id,
+          name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
+          email: m.utilisateur?.email || '',
+          role: m.role,
+        }));
+      } catch {
+        // Accès partiel : l'utilisateur n'a pas les droits pour voir les membres
+      }
       setMembers(formattedMembers);
 
-      // 3. Charger les listes
-      const lists = await listeService.getByEspace(spaceId);
-      
+      // 3. Charger les listes (peut échouer si accès partiel)
+      let listsCount = 0;
+      try {
+        const lists = await listeService.getByEspace(spaceId);
+        listsCount = lists.length;
+      } catch {
+        // Accès partiel
+      }
+
       // 4. Charger les sous-espaces (enfants directs)
       let subSpacesCount = 0;
       try {
         const subSpaces = await espaceService.getSubSpaces(spaceId);
         subSpacesCount = subSpaces.length;
-      } catch (error) {
-        console.error('Erreur chargement sous-espaces', error);
+      } catch {
         subSpacesCount = 0;
       }
 
       setStats({
         subSpacesCount,
-        listsCount: lists.length,
+        listsCount,
         membersCount: formattedMembers.length,
       });
     } catch (err) {
-      console.error('Erreur chargement dashboard espace', err);
+      // L'espace lui-même est inaccessible
     } finally {
       setLoading(false);
     }
@@ -83,8 +92,12 @@ export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }
       await loadData();
       onMemberInvited?.();
     } catch (err: any) {
-      console.error('Erreur invitation', err);
-      alert(err.message || 'Erreur lors de l\'invitation');
+      const msg = err?.message || '';
+      if (msg.includes('refuse')) {
+        alert('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cet espace.');
+      } else {
+        alert(msg || 'Erreur lors de l\'invitation');
+      }
     }
   };
 
@@ -104,10 +117,12 @@ export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }
           <h1 className="text-2xl font-bold text-gray-800">{spaceName}</h1>
           <p className="text-gray-500 mt-1">Tableau de bord de l'espace</p>
         </div>
-        <Button onClick={() => setIsInviteModalOpen(true)}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Inviter un membre
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setIsInviteModalOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Inviter un membre
+          </Button>
+        </div>
       </div>
 
       {/* Cartes de statistiques */}
@@ -162,11 +177,10 @@ export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }
                 <p className="font-medium text-gray-800">{member.name}</p>
                 <p className="text-sm text-gray-500">{member.email}</p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700' :
-                member.role === 'Créateur' ? 'bg-purple-100 text-purple-700' :
-                'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`text-xs px-2 py-1 rounded-full ${member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700' :
+                  member.role === 'Créateur' ? 'bg-purple-100 text-purple-700' :
+                    'bg-gray-100 text-gray-600'
+                }`}>
                 {member.role}
               </span>
             </GlassCard>
@@ -241,6 +255,7 @@ export default function SpaceDashboard({ spaceId, workspaceId, onMemberInvited }
               onChange={e => setInviteRole(e.target.value)}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
             >
+              <option value="Invité">Invité</option>
               <option value="Membre">Membre</option>
               <option value="Administrateur">Administrateur</option>
             </select>

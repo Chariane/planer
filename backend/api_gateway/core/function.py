@@ -109,6 +109,15 @@ def build_email_not_verified_detail(email: str) -> dict[str, Any]:
         },
     }
 
+def get_user_navigation_data(db: Session, user_id: str) -> dict:
+    """Structure aggregee utilisant les fonctions granulaires."""
+    return {
+        "owned_workspaces": get_owned_workspaces(db, user_id),
+        "joined_workspaces": get_joined_workspaces(db, user_id),
+        "joined_espaces": get_joined_espaces(db, user_id),
+        "joined_listes": get_joined_listes(db, user_id),
+        "joined_taches": get_joined_taches(db, user_id)
+    }
 
 def generate_email_verification_code(length: int = 6) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))

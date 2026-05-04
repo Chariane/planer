@@ -61,45 +61,69 @@ export default function InvitationAccept() {
 
       // Si connecté, accepter l'invitation
       setLoading(true);
+      const isWorkspaceToken = payload?.type === 'workspace_invitation' || payload?.scope === 'workspace_invitation_accept';
+      const isEspaceToken = payload?.type === 'espace_invitation' || payload?.scope === 'espace_invitation_accept';
+
       try {
-        // Essayer d'abord avec workspace
-        console.log('📤 Tentative d\'acceptation workspace...');
-        const result = await workspaceService.acceptInvitation(token);
-        console.log('✅ Invitation workspace acceptée:', result);
-        setInvitationType('workspace');
-        sessionStorage.removeItem('pendingInvitation');
-        
-        // Redirection vers le workspace
-        const workspaceId = result.membre?.id_workspace || result.workspace_id || result.id_workspace;
-        if (workspaceId) {
-          navigate(`/workspace/${workspaceId}`);
-        } else {
-          navigate('/dashboard');
-        }
-      } catch (workspaceErr) {
-        console.log('❌ Échec workspace, tentative espace...');
-        try {
+        if (isWorkspaceToken) {
+          console.log('📤 Acceptation workspace via token workspace...');
+          const result = await workspaceService.acceptInvitation(token);
+          console.log('✅ Invitation workspace acceptée:', result);
+          setInvitationType('workspace');
+          sessionStorage.removeItem('pendingInvitation');
+          // Le résultat peut être enveloppé dans .membre ou directement plat
+          const workspaceId = result.id_workspace || result.membre?.id_workspace || result.workspace_id;
+          if (workspaceId) {
+            navigate(`/workspace/${workspaceId}`);
+          } else {
+            navigate('/dashboard');
+          }
+        } else if (isEspaceToken) {
+          console.log('📤 Acceptation espace via token espace...');
           const result = await espaceService.acceptInvitation(token);
           console.log('✅ Invitation espace acceptée:', result);
           setInvitationType('espace');
           sessionStorage.removeItem('pendingInvitation');
-          
-          // Redirection vers l'espace
-          const workspaceId = result.membre?.id_workspace || result.workspace_id;
-          const espaceId = result.membre?.id_espace || result.espace_id || result.id_espace;
-          if (workspaceId && espaceId) {
-            navigate(`/workspace/${workspaceId}/${espaceId}`);
+          // Réponse API = objet Membre plat avec id_espace, id_workspace etc.
+          const espaceId = result.id_espace || result.membre?.id_espace || result.espace_id;
+          if (espaceId) {
+            navigate(`/espace/${espaceId}`);
           } else {
             navigate('/dashboard');
           }
-        } catch (espaceErr: any) {
-          console.error('❌ Échec des deux tentatives:', espaceErr);
-          // Message d'erreur plus clair
-          if (espaceErr.message?.includes('Token d\'invitation invalide')) {
-            setError('Le lien d\'invitation est invalide ou a expiré.');
-          } else {
-            setError('Invitation invalide ou expirée');
+        } else {
+          console.log('❌ Type de token inconnu, tentative workspace puis espace...');
+          try {
+            const result = await workspaceService.acceptInvitation(token);
+            console.log('✅ Invitation workspace acceptée:', result);
+            setInvitationType('workspace');
+            sessionStorage.removeItem('pendingInvitation');
+            const workspaceId = result.id_workspace || result.membre?.id_workspace || result.workspace_id;
+            if (workspaceId) {
+              navigate(`/workspace/${workspaceId}`);
+            } else {
+              navigate('/dashboard');
+            }
+          } catch (workspaceErr) {
+            console.log('❌ Échec workspace, tentative espace...');
+            const result = await espaceService.acceptInvitation(token);
+            console.log('✅ Invitation espace acceptée:', result);
+            setInvitationType('espace');
+            sessionStorage.removeItem('pendingInvitation');
+            const espaceId = result.id_espace || result.membre?.id_espace || result.espace_id;
+            if (espaceId) {
+              navigate(`/espace/${espaceId}`);
+            } else {
+              navigate('/dashboard');
+            }
           }
+        }
+      } catch (inviteErr: any) {
+        console.error('❌ Erreur acceptation invitation :', inviteErr);
+        if (inviteErr.message?.includes('Token d\'invitation invalide')) {
+          setError('Le lien d\'invitation est invalide ou a expiré.');
+        } else {
+          setError(inviteErr.message || 'Invitation invalide ou expirée');
         }
       } finally {
         setLoading(false);

@@ -19,6 +19,8 @@ import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
 import InvitationAccept from './pages/InvitationAccept';
+import ResourceGuard from './components/guards/ResourceGuard';
+import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
 
 function App() {
   return (
@@ -36,8 +38,15 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/workspace/:workspaceId/list/:listId" element={<AppView />} />
-              <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<AppView />} />
+              <Route path="/workspace/:id" element={<ResourceGuard type="workspace"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
+              <Route path="/espace/:id" element={<ResourceGuard type="espace"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
+              <Route path="/liste/:id" element={<ResourceGuard type="liste"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
+              <Route path="/tache/:id" element={<ResourceGuard type="tache"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
+
+              {/* Fallback support for old links if needed */}
+              <Route path="/workspace/:workspaceId/list/:listId" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
+              <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
+
               <Route path="/workspaces" element={<WorkspaceDashboard />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/kanban" element={<KanbanPage />} />

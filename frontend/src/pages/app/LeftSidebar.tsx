@@ -1,20 +1,19 @@
 // frontend/src/pages/app/LeftSidebar.tsx
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare,
   FileText, Calendar, Plus, Edit, Trash2, UserPlus, ListTodo, Settings
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { listeService } from '../../services/liste.service';
-import { tacheService } from '../../services/tache.service';
 import Modal from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import type { WorkspaceDirectAccessItem } from '../../types';
+
 
 export default function LeftSidebar() {
-  const navigate = useNavigate();
-  const { workspaceId, spaceId, listId } = useParams();
+  const { workspaceId, spaceId, listId } = useActiveResource();
   const {
     workspaces, workspaceLocalResources, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
     addListe, updateListe, deleteListe, inviteMemberToEspace
@@ -86,7 +85,8 @@ export default function LeftSidebar() {
   const localResources = workspaceId ? workspaceLocalResources[workspaceId] : undefined;
   const hasWorkspaceAccess = !!workspace || !!localResources;
   // Fonction pour récupérer tous les espaces d'un arbre (récursif)
-  const getAllSpacesFromTree = (items: any[]): any[] => {
+  const getAllSpacesFromTree = (items: any[] | undefined): any[] => {
+    if (!items) return [];
     let result: any[] = [];
     for (const item of items) {
       result.push(item);
@@ -105,7 +105,9 @@ export default function LeftSidebar() {
 
   useEffect(() => {
     if (workspaceId && hasWorkspaceAccess) {
-      loadEspacesTree(workspaceId);
+      loadEspacesTree(workspaceId).catch(() => {
+        // Accès partiel au workspace — l'arbre n'est pas disponible
+      });
     }
   }, [workspaceId, hasWorkspaceAccess, loadEspacesTree]);
 
@@ -114,7 +116,7 @@ export default function LeftSidebar() {
     if (!hasWorkspaceAccess) return;
 
     const loadAllLists = async () => {
-      const allSpaces = getAllSpacesFromTree(workspace.espaces);
+      const allSpaces = getAllSpacesFromTree(workspace?.espaces || []);
       for (const space of allSpaces) {
         if (!listsBySpace[space.id] && !loadingLists[space.id]) {
           setLoadingLists(prev => ({ ...prev, [space.id]: true }));
@@ -139,8 +141,9 @@ export default function LeftSidebar() {
     try {
       const lists = await listeService.getByWorkspace(workspaceId);
       setWorkspaceLists(lists);
-    } catch (error) {
-      console.error('Erreur chargement listes du workspace', error);
+    } catch {
+      // Accès partiel au workspace — les listes directes ne sont pas disponibles
+      setWorkspaceLists([]);
     } finally {
       setLoadingWorkspaceLists(false);
     }
@@ -465,7 +468,7 @@ export default function LeftSidebar() {
               )}
             </div>
           </div>
-          {renderTree(workspace.espaces || [])}
+          {renderTree(workspace?.espaces || [])}
         </div>
       )}
 
@@ -626,6 +629,7 @@ export default function LeftSidebar() {
         <div className="space-y-4">
           <input type="email" placeholder="Email du membre" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="w-full p-2 border rounded-lg" />
           <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full p-2 border rounded-lg">
+            <option value="Invité">Invité</option>
             <option value="Membre">Membre</option>
             <option value="Administrateur">Administrateur</option>
           </select>

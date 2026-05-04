@@ -200,6 +200,7 @@ def _validate_member_management_permissions(
     actor_role: str,
     target_user_id: str,
     target_member: Optional[Membre],
+    new_role: Optional[str] = None,
 ):
     """Valide que l'acteur peut gérer le membre cible."""
     if workspace.id_utilisateur == target_user_id:
@@ -215,6 +216,13 @@ def _validate_member_management_permissions(
         raise HTTPException(
             status_code=403,
             detail="Un administrateur ne peut gérer que les membres et invités du workspace.",
+        )
+        
+    # Validation du nouveau rôle
+    if actor_role == Role.ADMIN and new_role and new_role not in Role.ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut pas promouvoir un membre à ce rôle.",
         )
 
 
@@ -266,6 +274,7 @@ def _require_workspace_member_management_access(
     workspace_id: str,
     current_user_id: str,
     target_user_id: str,
+    new_role: Optional[str] = None
 ) -> Tuple[Workspace, Optional[Membre], str, Membre]:
     """
     Vérifie que l'acteur peut gérer le membre cible.
@@ -291,6 +300,7 @@ def _require_workspace_member_management_access(
         actor_role,
         target_user_id,
         target_member,
+        new_role
     )
     
     return workspace, membre, actor_role, target_member

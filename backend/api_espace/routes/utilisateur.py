@@ -10,7 +10,8 @@ from ..core.function import (
     _require_espace_access,
     _require_espace_management_access,
     _require_workspace_management_access,
-    _serialize_member
+    _serialize_member,
+    _require_workspace_read_access
 )
 from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM
 from ..core.emails import send_espace_invitation_email
@@ -88,10 +89,21 @@ def list_workspaces_espaces(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Liste à plat de TOUS les espaces du workspace."""
+    """Liste à plat de TOUS les espaces du workspace auxquels l'utilisateur a accès."""
     _get_workspace_or_404(db, workspace_id)
-    _get_workspace_member_or_403(db, workspace_id, current_user.id)
-    return get_espaces_for_workspace(db, workspace_id)
+    _require_workspace_read_access(db, workspace_id, current_user.id)
+    
+    # On filtre les résultats si l'utilisateur n'est pas membre complet du workspace
+    all_espaces = get_espaces_for_workspace(db, workspace_id)
+    
+    # Vérifier si membre workspace
+    try:
+        _get_workspace_member_or_403(db, workspace_id, current_user.id)
+        return all_espaces
+    except HTTPException:
+        # Non membre -> filtrer par accessibilité
+        from ..crud.utilisateur import get_espace_member
+        return [esp for esp in all_espaces if get_espace_member(db, esp.id, current_user.id)]
 
 # Récupérer uniquement les espaces de premier niveau (sans parent) d'un workspace
 @router.get("/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
@@ -102,8 +114,20 @@ def list_workspace_root_espaces(
 ):
     """Liste uniquement les espaces de niveau 1 (sans parent)."""
     _get_workspace_or_404(db, workspace_id)
-    _get_workspace_member_or_403(db, workspace_id, current_user.id)
-    return get_root_espaces_for_workspace(db, workspace_id)
+    _require_workspace_read_access(db, workspace_id, current_user.id)
+    
+    # Si membre workspace -> tout, sinon on utilise l'arbre filtré pour extraire les racines
+    try:
+        _get_workspace_member_or_403(db, workspace_id, current_user.id)
+        return get_root_espaces_for_workspace(db, workspace_id)
+    except HTTPException:
+        tree = get_workspace_espaces_tree(db, workspace_id, current_user.id)
+        # On retourne les eléments de premier niveau de l'arbre filtré
+        results = []
+        for node in tree:
+            # Re-sérialisation vers EspaceOut (on a les champs nécessaires dans node)
+            results.append(node)
+        return results
 
 # Récupérer les sous-espaces directs d'un espace parent
 @router.get("/espaces/{espace_id}/children", response_model=List[EspaceOut])
@@ -126,8 +150,8 @@ def get_workspace_espaces_tree_endpoint(
 ):
     """Récupère l'arborescence complète (espaces et sous-espaces) du workspace."""
     _get_workspace_or_404(db, workspace_id)
-    _get_workspace_member_or_403(db, workspace_id, current_user.id)
-    return get_workspace_espaces_tree(db, workspace_id)
+    _require_workspace_read_access(db, workspace_id, current_user.id)
+    return get_workspace_espaces_tree(db, workspace_id, user_id=current_user.id)
 
 # Récupérer les espaces où l'utilisateur est admin
 @router.get("/espaces/{espace_id}/get_espace", response_model=EspaceOut)
@@ -217,6 +241,14 @@ def invite_espace_member(
     
     _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
+    # Validation stricte des rôles (Règle : un Admin ne peut pas inviter d'autres Admins ou le Créateur)
+    actor_member = _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+    if actor_member.role == "Administrateur" and membre_in.role not in ["Membre", "Invité"]:
+        raise HTTPException(
+            status_code=403,
+            detail="En tant qu'Administrateur, vous pouvez uniquement inviter des Membres ou des Invités."
+        )
+
     # Delegation de la logique d'invitation au CRUD
     result = invite_member_to_espace(db, espace_id, membre_in)
     email_target = membre_in.email or membre_in.username 
@@ -263,7 +295,7 @@ def invite_espace_member(
             "token": token
         }
 
-#Accepter une invitation à un espace via token
+#Accepter une invitation à un espace via token (endpoint authentifié — gardé pour compatibilité)
 @router.post("/espaces/invitations/accept", response_model=EspaceMemberOut)
 def accept_espace_invitation_endpoint(
     invitation_in: EspaceInvitationAcceptRequest,
@@ -280,6 +312,147 @@ def accept_espace_invitation_endpoint(
     )
     return _serialize_member(membre)
 
+
+# ─── Acceptation directe depuis l'email (pas d'authentification requise) ───
+@router.get("/espaces/invitations/accept-from-email")
+def accept_espace_invitation_from_email(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Accepte une invitation a un espace directement depuis le lien email.
+    Pas d'authentification requise — le token JWT contient le sub de l'utilisateur.
+    Retourne une page HTML avec le resultat.
+    """
+    from fastapi.responses import HTMLResponse
+
+    def _html_page(title: str, icon: str, message: str, sub_message: str = "", color: str = "#264a67") -> HTMLResponse:
+        html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - K-Planer</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .card {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            padding: 48px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }}
+        .icon {{
+            font-size: 64px;
+            margin-bottom: 20px;
+        }}
+        h1 {{
+            color: {color};
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }}
+        .message {{
+            color: #555;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }}
+        .sub-message {{
+            color: #999;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }}
+        .brand {{
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #bbb;
+            font-size: 0.8rem;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">{icon}</div>
+        <h1>{title}</h1>
+        <p class="message">{message}</p>
+        {"<p class='sub-message'>" + sub_message + "</p>" if sub_message else ""}
+        <div class="brand">K-Planer &mdash; Votre espace de travail collaboratif</div>
+    </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html, status_code=200)
+
+    # 1. Décodage du token
+    payload = decode_invitation_token(token)
+    if not payload:
+        return _html_page(
+            title="Lien invalide",
+            icon="❌",
+            message="Ce lien d'invitation est invalide ou a expiré.",
+            sub_message="Demandez à l'administrateur de vous renvoyer une nouvelle invitation.",
+            color="#dc3545"
+        )
+
+    # 2. Extraire le user_id du token (sub)
+    user_id = payload.get("sub")
+    if not user_id:
+        return _html_page(
+            title="Lien non compatible",
+            icon="⚠️",
+            message="Ce lien est destiné à un nouvel utilisateur. Veuillez vous inscrire sur la plateforme pour accepter l'invitation.",
+            color="#f0ad4e"
+        )
+
+    # 3. Vérifier si déjà acceptée (optimisation avant d'appeler le CRUD)
+    target_espace_id = payload.get("espace_id")
+    if target_espace_id:
+        existing = get_espace_member(db, target_espace_id, user_id)
+        if existing and existing.statut == "Actif":
+            espace = get_espace_by_id(db, target_espace_id)
+            espace_nom = espace.nom if espace else "l'espace"
+            return _html_page(
+                title="Invitation déjà acceptée",
+                icon="✅",
+                message=f"Vous êtes déjà membre actif de l'espace « {espace_nom} ».",
+                sub_message="Connectez-vous sur K-Planer pour accéder à votre espace de travail."
+            )
+
+    # 4. Accepter l'invitation via le CRUD existant
+    try:
+        membre = accept_espace_invitation(
+            db,
+            espace_id=None,
+            user_id=user_id,
+            invitation_token=token
+        )
+        espace = get_espace_by_id(db, membre.id_espace) if membre.id_espace else None
+        espace_nom = espace.nom if espace else "l'espace"
+        return _html_page(
+            title="Invitation acceptée !",
+            icon="🎉",
+            message=f"Vous avez rejoint l'espace « {espace_nom} » avec succès.",
+            sub_message="Connectez-vous sur K-Planer pour accéder à votre nouvel espace de travail."
+        )
+    except HTTPException as e:
+        return _html_page(
+            title="Erreur",
+            icon="❌",
+            message=e.detail or "Une erreur est survenue lors de l'acceptation.",
+            color="#dc3545"
+        )
+
 # Modifier le rôle d'un membre dans un espace
 @router.put("/espaces/{espace_id}/members/{user_id}/update_member_espace", response_model=EspaceMemberOut)
 def update_espace_member_endpoint(
@@ -289,16 +462,21 @@ def update_espace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
+    from ..core.function import _get_espace_actor_context, _validate_espace_member_management_permissions
+
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+    
+    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
 
     target_member = get_espace_member(db, espace_id, user_id)
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre non trouve")
     if target_member.role == "Créateur":
         raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
+
+    _validate_espace_member_management_permissions(espace_obj, actor_role, user_id, target_member, membre_in.role)
 
     updated = update_espace_member(db, espace_id, user_id, membre_in)
     if not updated:
@@ -313,16 +491,21 @@ def remove_espace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
+    from ..core.function import _get_espace_actor_context, _validate_espace_member_management_permissions
+
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
+    
+    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
 
     target_member = get_espace_member(db, espace_id, user_id)
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre non trouve")
     if target_member.role == "Créateur":
         raise HTTPException(status_code=403, detail="Le createur de l'espace ne peut pas etre supprime")
+
+    _validate_espace_member_management_permissions(espace_obj, actor_role, user_id, target_member)
 
     if not remove_espace_member(db, espace_id, user_id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")

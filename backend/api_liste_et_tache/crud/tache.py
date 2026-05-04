@@ -272,6 +272,39 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
         
     return kanban
 
+# backend/api_liste_et_tache/crud/tache.py
+def update_tache_status_based_on_checklists(db: Session, tache_id: str):
+    """Met à jour le statut d'une tâche en fonction de ses checklists"""
+    from ..models import Checklist
+    
+    # Récupérer toutes les checklists de la tâche
+    checklists = db.query(Checklist).filter(Checklist.id_tache == tache_id).all()
+    
+    if not checklists:
+        return
+    
+    # Vérifier si toutes les checklists sont cochées
+    all_checked = all(c.is_checked for c in checklists)
+    
+    # Récupérer la tâche
+    tache = get_tache_by_id(db, tache_id)
+    if not tache:
+        return
+    
+    # Si toutes sont cochées et la tâche n'est pas déjà terminée
+    if all_checked and tache.statut != "terminé":
+        tache.statut = "terminé"
+        tache.statut_date = datetime.now()
+        db.commit()
+        print(f"✅ Tâche {tache_id} automatiquement marquée comme terminée")
+    
+    # Optionnel : Si certaines ne sont pas cochées et que la tâche est terminée, repasser en "en cours"
+    elif not all_checked and tache.statut == "terminé":
+        tache.statut = "en cours"
+        tache.statut_date = datetime.now()
+        db.commit()
+        print(f"🔄 Tâche {tache_id} repassée en cours (checklists incomplètes)")
+        
 
 def update_taches_bulk(db: Session, items: List[dict]) -> bool:
     """Met à jour plusieurs tâches (statut, ordre) dans une seule transaction."""

@@ -43,23 +43,4 @@ export const workspaceService = {
   leaveWorkspace: (workspaceId: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/leave_workspace`, { method: 'POST' }),
 
-  // Endpoints individuels de navigation
-  getOwned: () =>
-    apiFetch(WORKSPACE_BASE_URL, '/workspaces/owned') as Promise<Workspace[]>,
-  getJoined: () =>
-    apiFetch(WORKSPACE_BASE_URL, '/workspaces/joined') as Promise<Workspace[]>,
-  getJoinedEspaces: () =>
-    apiFetch(WORKSPACE_BASE_URL, '/workspaces/joined_espaces') as Promise<JoinedResource[]>,
-  getJoinedListes: () =>
-    apiFetch(WORKSPACE_BASE_URL, '/workspaces/joined_listes') as Promise<JoinedResource[]>,
-  getJoinedTaches: () =>
-    apiFetch(WORKSPACE_BASE_URL, '/workspaces/joined_taches') as Promise<JoinedResource[]>,
-
-  // Récupérer les workspaces où l'utilisateur est admin
-  getAdminWorkspaces: () =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/admin`),
-
-  // Mettre à jour le statut d'un membre
-  updateMemberStatus: (workspaceId: string, userId: string, status: string) =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${userId}/update_status`, { method: 'PUT', body: JSON.stringify({ status }) }),
 };

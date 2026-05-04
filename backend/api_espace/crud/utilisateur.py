@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from ..core.function import commit_or_raise
+from ..core.utils import commit_or_raise
 from ..core.security import create_access_token, decode_invitation_token
 from ..models import Espace, Membre, Utilisateur
 from ..schemas import (
@@ -36,24 +36,62 @@ def get_sub_espaces_for_parent(db: Session, parent_id: str) -> List[Espace]:
     return db.query(Espace).filter(Espace.id_espace_parent == parent_id).all()
 
 
-def get_workspace_espaces_tree(db: Session, workspace_id: str) -> List[dict]:
+def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional[str] = None) -> List[dict]:
     """
     Récupère tout le contenu d'un workspace sous forme d'arborescence.
-    Associe les racines et les sous-espaces de manière récursive.
+    Si user_id est fourni et que l'utilisateur n'est pas membre du workspace,
+    on ne retourne que les espaces auxquels il a accès directement.
     """
-    # 1. Récupérer tous les espaces du workspace pour éviter N+1 requêtes
-    all_espaces = db.query(Espace).filter(Espace.id_workspace == workspace_id).all()
-    
-    # 2. Organiser par parent_id
+    # 1. Récupérer tous les espaces du workspace
+    query = db.query(Espace).filter(Espace.id_workspace == workspace_id)
+    all_espaces = query.all()
+
+    # 2. Filtrage par permissions si user_id est fourni
+    is_workspace_member = True
+    visible_ids = {esp.id for esp in all_espaces}
+
+    if user_id:
+        ws_member = db.query(Membre).filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif"
+        ).first()
+
+        if not ws_member:
+            is_workspace_member = False
+            # Récupérer les IDs des espaces où l'utilisateur est membre actif
+            # On inclut aussi les espaces dont il est créateur global (fallback via workspace owner déjà géré par ws_member si c'était le cas)
+            esp_memberships = db.query(Membre.id_espace).filter(
+                Membre.id_utilisateur == user_id,
+                Membre.id_espace != None,
+                Membre.statut == "Actif"
+            ).all()
+            visible_ids = {mid for (mid,) in esp_memberships}
+
+    # 3. Organiser par parent_id
     from collections import defaultdict
     nodes_by_parent = defaultdict(list)
-    for esp in all_espaces:
-        nodes_by_parent[esp.id_espace_parent].append(esp)
+    roots = []
 
-    # 3. Fonction récursive pour construire l'arbre
-    def build_tree(parent_id: Optional[str]) -> List[dict]:
+    for esp in all_espaces:
+        if esp.id not in visible_ids:
+            continue
+        
+        # Si membre du workspace, l'arborescence est naturelle
+        if is_workspace_member:
+            nodes_by_parent[esp.id_espace_parent].append(esp)
+        else:
+            # Si non-membre workspace (accès isolé), on vérifie si le parent est visible
+            # Si le parent n'est pas visible, alors cet espace devient une racine pour cet utilisateur
+            if esp.id_espace_parent in visible_ids:
+                nodes_by_parent[esp.id_espace_parent].append(esp)
+            else:
+                roots.append(esp)
+
+    # 4. Fonction récursive pour construire l'arbre
+    def build_tree(parent_list: List[Espace]) -> List[dict]:
         tree = []
-        for esp in nodes_by_parent[parent_id]:
+        for esp in parent_list:
             node = {
                 "id": esp.id,
                 "nom": esp.nom,
@@ -61,12 +99,15 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str) -> List[dict]:
                 "created_at": esp.created_at,
                 "id_workspace": esp.id_workspace,
                 "id_espace_parent": esp.id_espace_parent,
-                "sous_espaces": build_tree(esp.id)
+                "sous_espaces": build_tree(nodes_by_parent[esp.id])
             }
             tree.append(node)
         return tree
 
-    return build_tree(None)
+    if is_workspace_member:
+        return build_tree(nodes_by_parent[None])
+    else:
+        return build_tree(roots)
 
 
 def get_espaces_where_admin(db: Session, user_id: str) -> List[Espace]:
@@ -372,14 +413,22 @@ def accept_espace_invitation(
             if not ws_member.role:
                 ws_member.role = "Invité"
         else:
-            # On l'ajoute comme "Invité" au workspace pour qu'il puisse voir le nom et l'arborescence
-            new_ws_member = Membre(
-                id_utilisateur=user_id,
-                id_workspace=workspace_id,
-                role="Invité",
-                statut="Actif"
-            )
-            db.add(new_ws_member)
+            # On vérifie si l'utilisateur est déjà membre du workspace (ex: Créateur ou déjà invité ailleurs)
+            from ..models import Membre
+            existing_ws_member = db.query(Membre).filter(
+                Membre.id_utilisateur == user_id,
+                Membre.id_workspace == workspace_id
+            ).first()
+
+            if not existing_ws_member:
+                # On l'ajoute comme "Invité" au workspace uniquement s'il n'y est pas déjà
+                new_ws_member = Membre(
+                    id_utilisateur=user_id,
+                    id_workspace=workspace_id,
+                    role="Invité",
+                    statut="Actif"
+                )
+                db.add(new_ws_member)
             # Pas de commit immédiat, on laisse le commit global à la fin
 
     # 6. Prevention des doublons sur l'Espace (Contrainte 5)

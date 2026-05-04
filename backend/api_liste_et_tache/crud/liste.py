@@ -1,8 +1,9 @@
+# backend/api_liste_et_tache/crud/liste.py
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from ..models import Liste, Membre
+from ..models import Liste, Membre, Canevas, Section
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
     return db.query(Liste).filter(Liste.id == liste_id).first()
@@ -17,13 +18,24 @@ def get_listes_for_espace(db: Session, espace_id: str) -> List[Liste]:
 
 
 def create_liste(db: Session, nom: str, description: str = None, id_espace: str = None, id_workspace: str = None) -> Liste:
+    # 1. Créer la liste
     liste = Liste(
         nom=nom, 
         description=description, 
-        id_espace=id_espace, 
-        id_workspace=id_workspace
+        id_espace=id_espace if id_espace else None, 
+        id_workspace=id_workspace if id_workspace else None
     )
     db.add(liste)
+    db.flush()  # Pour obtenir l'ID de la liste sans commit final
+    
+    # 2. Créer le canevas associé (SANS section par défaut)
+    canevas = Canevas(
+        is_verrouille=False,
+        id_liste=liste.id
+    )
+    db.add(canevas)
+    
+    # 3. Commit final
     try:
         db.commit()
         db.refresh(liste)
@@ -31,8 +43,9 @@ def create_liste(db: Session, nom: str, description: str = None, id_espace: str 
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Impossible de creer la liste (conflit d'integrite ou mauvais rattachement).",
+            detail=f"Impossible de creer la liste. Vérifiez que l'id_espace ou id_workspace existe. Erreur: {str(exc)}",
         ) from exc
+    
     return liste
 
 
@@ -42,7 +55,7 @@ def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
         return None
     
     for key, value in kwargs.items():
-        if hasattr(liste, key):
+        if hasattr(liste, key) and value is not None:
             setattr(liste, key, value)
             
     try:
@@ -61,6 +74,11 @@ def delete_liste(db: Session, liste_id: str) -> bool:
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         return False
+    
+    # Supprimer d'abord le canevas (cascade devrait le faire, mais par sécurité)
+    canevas = db.query(Canevas).filter(Canevas.id_liste == liste_id).first()
+    if canevas:
+        db.delete(canevas)
     
     db.delete(liste)
     try:

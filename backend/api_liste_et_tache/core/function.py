@@ -4,7 +4,32 @@ from .database import get_db
 from ..models import Workspace, Espace, Membre, Liste, Tache
 
 # Constantes de rôles (selon les schémas existants)
-WORKSPACE_MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
+WORKSPACE_OWNER_ROLE = "Créateur"
+WORKSPACE_ADMIN_ROLE = "Administrateur"
+WORKSPACE_MEMBER_ROLE = "Membre"
+WORKSPACE_GUEST_ROLE = "Invité"
+
+WORKSPACE_READ_ROLES = {
+    WORKSPACE_OWNER_ROLE,
+    WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_MEMBER_ROLE,
+    WORKSPACE_GUEST_ROLE,
+}
+WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
+
+# Rôles Espace
+ESPACE_OWNER_ROLE = "Créateur"
+ESPACE_ADMIN_ROLE = "Administrateur"
+ESPACE_MEMBER_ROLE = "Membre"
+ESPACE_GUEST_ROLE = "Invité"
+
+ESPACE_READ_ROLES = {
+    ESPACE_OWNER_ROLE,
+    ESPACE_ADMIN_ROLE,
+    ESPACE_MEMBER_ROLE,
+    ESPACE_GUEST_ROLE,
+}
+ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
 
 # -----------------------------------------------
 # Helpers d'accès — Workspace
@@ -27,9 +52,23 @@ def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id
         )
         .first()
     )
-    if not membre:
-        raise HTTPException(status_code=403, detail="Acces refuse au workspace")
-    return membre
+    if membre:
+        return membre
+
+    # Fallback : le créateur du workspace a toujours accès
+    ws = db.query(Workspace).filter(
+        Workspace.id == workspace_id,
+        Workspace.id_utilisateur == current_user_id
+    ).first()
+    if ws:
+        return Membre(
+            id_utilisateur=current_user_id,
+            id_workspace=workspace_id,
+            role=WORKSPACE_OWNER_ROLE,
+            statut="Actif",
+        )
+
+    raise HTTPException(status_code=403, detail="Acces refuse au workspace")
 
 
 _require_workspace_member = _get_workspace_member_or_403

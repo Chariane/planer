@@ -2,7 +2,7 @@
 import TopBar from './TopBar';
 import LeftSidebar from './LeftSidebar';
 import CenterContent from './CenterContent';
-import RightPanel from './RightPanel';
+import RightCanevas from './RightCanevas';
 
 export default function AppView() {
   return (
@@ -19,7 +19,7 @@ export default function AppView() {
         </div>
         {/* Colonne droite */}
         <div className="w-[320px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
-          <RightPanel />
+          <RightCanevas />
         </div>
       </div>
     </div>

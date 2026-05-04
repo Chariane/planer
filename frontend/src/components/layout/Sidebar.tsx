@@ -1,9 +1,10 @@
 // frontend/src/components/layout/Sidebar.tsx
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, CheckSquare2 } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, CheckSquare2, Lock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { useNavigationStore } from '../../store/useNavigationStore';
 import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal';
 
 interface SidebarProps {
@@ -14,7 +15,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
   const { workspaceId } = useParams();
   const { user, logout } = useAuth();
-  const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes, joinedTaches, loadWorkspaces } = useApp();
+  const { loadWorkspaces } = useApp();
+  const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes, joinedTaches } = useNavigationStore();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [ownedOpen, setOwnedOpen] = useState(true);
   const [joinedOpen, setJoinedOpen] = useState(true);
@@ -170,16 +172,15 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             </button>
           </div>
           {espacesOpen && (
-            <div className="space-y-0.5 px-2">
-              {joinedEspaces.map((espace) => {
-                const href = espace.id_workspace
-                  ? `/workspace/${espace.id_workspace}/${espace.id}`
-                  : '#';
-                return (
+            <div className="space-y-1 px-2">
+              {joinedEspaces.map((espace) => (
+                <div key={`joined-espace-${espace.id}`}>
+                  <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
+                    {espace.workspace_nom || 'Workspace'} <Lock className="inline w-3 h-3 ml-1" />
+                  </div>
                   <Link
-                    key={`joined-espace-${espace.id}`}
-                    to={href}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                    to={`/espace/${espace.id}`}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
                   >
                     <FolderOpen className="h-4 w-4 flex-shrink-0 text-emerald-400" />
                     <span className="truncate flex-1">{espace.nom}</span>
@@ -189,8 +190,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                       </span>
                     )}
                   </Link>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -209,18 +210,15 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             </button>
           </div>
           {listesOpen && (
-            <div className="space-y-0.5 px-2">
-              {joinedListes.map((liste) => {
-                const href = liste.id_workspace
-                  ? liste.id_espace
-                    ? `/workspace/${liste.id_workspace}/${liste.id_espace}/${liste.id}`
-                    : `/workspace/${liste.id_workspace}/list/${liste.id}`
-                  : '#';
-                return (
+            <div className="space-y-1 px-2">
+              {joinedListes.map((liste) => (
+                <div key={`joined-liste-${liste.id}`}>
+                  <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
+                    {liste.espace_nom || liste.workspace_nom || 'Parent inconnu'} <Lock className="inline w-3 h-3 ml-1" />
+                  </div>
                   <Link
-                    key={`joined-liste-${liste.id}`}
-                    to={href}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                    to={`/liste/${liste.id}`}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
                   >
                     <ListTodo className="h-4 w-4 flex-shrink-0 text-violet-400" />
                     <span className="truncate flex-1">{liste.nom}</span>
@@ -230,8 +228,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                       </span>
                     )}
                   </Link>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -250,18 +248,15 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             </button>
           </div>
           {tachesOpen && (
-            <div className="space-y-0.5 px-2">
-              {joinedTaches.map((tache) => {
-                const href = tache.id_workspace && tache.id_liste
-                  ? tache.id_espace
-                    ? `/workspace/${tache.id_workspace}/${tache.id_espace}/${tache.id_liste}`
-                    : `/workspace/${tache.id_workspace}/list/${tache.id_liste}`
-                  : '#';
-                return (
+            <div className="space-y-1 px-2">
+              {joinedTaches.map((tache) => (
+                <div key={`joined-tache-${tache.id}`}>
+                  <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
+                    {tache.liste_nom || tache.espace_nom || tache.workspace_nom || 'Parent inconnu'} <Lock className="inline w-3 h-3 ml-1" />
+                  </div>
                   <Link
-                    key={`joined-tache-${tache.id}`}
-                    to={href}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                    to={`/tache/${tache.id}`}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
                   >
                     <CheckSquare2 className="h-4 w-4 flex-shrink-0 text-orange-400" />
                     <span className="truncate flex-1">{tache.nom}</span>
@@ -271,8 +266,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                       </span>
                     )}
                   </Link>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>

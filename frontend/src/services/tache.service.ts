@@ -14,17 +14,19 @@ export const tacheService = {
   // Assignations de membres
   assignMember: (tacheId: string, utilisateurId: string) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/assign/${utilisateurId}/assign_tache`, { method: 'POST' }),
-
   unassignMember: (tacheId: string, utilisateurId: string) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/unassign/${utilisateurId}/unassign_tache`, { method: 'DELETE' }),
-
   getMembers: (tacheId: string) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/list_members_tache`),
 
-  // Checklists (sous-tâches)
-  getChecklists: (tacheId: string) => apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/tache/${tacheId}`),
-  createChecklist: (tacheId: string, data: { texte: string; is_checked?: boolean }) => 
-    apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${tacheId}`, { method: 'POST', body: JSON.stringify({ ...data, id_tache: tacheId }) }),
+  // Checklists de tâche (NOUVEAUX ENDPOINTS)
+  getChecklistsByTache: (tacheId: string) => 
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/checklists`),
+  createChecklistInTache: (tacheId: string, data: { texte: string; is_checked?: boolean }) => 
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/checklists`, { 
+      method: 'POST', 
+      body: JSON.stringify(data) 
+    }),
   updateChecklist: (checklistId: string, data: { texte?: string; is_checked?: boolean }) => 
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteChecklist: (checklistId: string) => 

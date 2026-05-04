@@ -6,12 +6,32 @@ from .utilisateur import (
     get_member,
     get_members_of_workspace,
     get_workspace_by_id,
-    get_workspaces_where_admin,
     remove_member_from_workspace,
     update_member_role,
 )
 from ..models import Membre, Workspace
 from ..schemas import MembreUpdate, WorkspaceMemberUpdate
+from ..core.function import Role, Status
+
+def get_workspaces_where_admin(db: Session, user_id: str) -> List[Workspace]:
+    """Retourne les workspaces où l'utilisateur est le Créateur (maître) ou un Administrateur."""
+    from sqlalchemy import or_
+    return (
+        db.query(Workspace)
+        .outerjoin(
+            Membre,
+            (Membre.id_workspace == Workspace.id) & 
+            (Membre.id_utilisateur == user_id) & 
+            (Membre.statut == Status.ACTIVE)
+        )
+        .filter(
+            or_(
+                Workspace.id_utilisateur == user_id,
+                Membre.role.in_([Role.CREATOR, Role.ADMIN])
+            )
+        )
+        .all()
+    )
 
 
 def get_admin_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Workspace]:

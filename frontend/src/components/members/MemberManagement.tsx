@@ -14,7 +14,7 @@ interface MemberManagementProps {
 }
 
 // Rôles disponibles (valeurs backend en français)
-const AVAILABLE_ROLES = ['Membre', 'Administrateur'];
+const AVAILABLE_ROLES = ['Invité', 'Membre', 'Administrateur'];
 // Rôle spécial "Créateur" non modifiable
 const CREATOR_ROLE = 'Créateur';
 

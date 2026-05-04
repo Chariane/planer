@@ -1,4 +1,5 @@
 // frontend/src/types/index.ts
+
 export interface Member {
   id: string;
   name: string;
@@ -10,6 +11,53 @@ export interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+}
+
+// Types pour les checklists (API)
+export interface ApiChecklist {
+  id: string;
+  texte: string;
+  is_checked: boolean;
+  created_at: string;
+  updated_at: string | null;
+  id_section: string | null;
+  id_tache: string | null;
+}
+
+// Type simplifié pour les checklists dans les tâches (UI)
+export interface TaskChecklist {
+  id: string;
+  texte: string;
+  is_checked: boolean;
+}
+
+// Types pour les sections (API)
+export interface ApiSection {
+  id: string;
+  titre: string;
+  created_at: string;
+  updated_at: string | null;
+  id_canevas: string;
+}
+
+// Types pour les sections (UI)
+export interface CanevasSection extends ApiSection {
+  checklists: ApiChecklist[];
+  progress: number;
+}
+
+// Types pour le canevas (API)
+export interface ApiCanevas {
+  id: string;
+  is_verrouille: boolean;
+  created_at: string;
+  updated_at: string | null;
+  id_liste: string;
+}
+
+// Types pour le canevas (UI)
+export interface CanevasData extends ApiCanevas {
+  sections: CanevasSection[];
 }
 
 export interface Task {
@@ -25,6 +73,9 @@ export interface Task {
   listId: string;
   createdAt: Date;
   subTasks?: ChecklistItem[];
+  // Utilisons le type simplifié pour les checklists dans les tâches
+  checklists?: TaskChecklist[];
+  progression?: number;
 }
 
 export interface Period {
@@ -42,6 +93,7 @@ export interface List {
   description: string;
   taches: Task[];
   periods?: Period[];
+  canevas?: CanevasData;
   createdAt: Date;
 }
 

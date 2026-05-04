@@ -24,7 +24,7 @@ from ..core.function import (
     validate_self_password_update,
     verify_google_authenticator_code,
 )
-from backend.api_workspace.core.function import get_user_navigation_data
+from ..core.function import get_user_navigation_data
 from ..core.security import (
     get_password_hash,
     verify_password,
