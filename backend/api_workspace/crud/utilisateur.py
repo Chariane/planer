@@ -311,15 +311,15 @@ def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -
 # INVITATIONS
 # ============================================================================
 
-def invite_member_to_workspace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
+def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
     """
-    Invite un utilisateur a un espace.
+    Invite un utilisateur a un workspace.
     Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
     """
     # 1. Verification de l'existence de l'espace (Contrainte 1)
-    espace = get_workspace_by_id(db, espace_id)
-    if not espace:
-        raise HTTPException(status_code=404, detail="Espace non trouve.")
+    workspace = get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouve.")
 
     # 2. Recherche de l'utilisateur par email ou username
     query = db.query(Utilisateur)
@@ -331,16 +331,16 @@ def invite_member_to_workspace(db: Session, espace_id: str, membre_in: Workspace
     target_user = query.first()
 
     # Uniformisation du type de token (Contrainte 2)
-    TOKEN_TYPE = "espace_invitation"
+    TOKEN_TYPE = "workspace_invitation"
 
     if target_user:
         # CAS 1 : Utilisateur existant -> Creation/Mise a jour du membre en base
-        membre = get_workspace_member(db, espace_id, target_user.id)
+        membre = get_workspace_member(db, workspace_id, target_user.id)
         if membre:
             if membre.statut == "Actif":
                 raise HTTPException(
                     status_code=409,
-                    detail="Cet utilisateur est deja membre actif de cet espace."
+                    detail="Cet utilisateur est deja membre actif de ce workspace."
                 )
             # Si l'invitation existe deja, on met a jour son role et on la repasse en attente
             membre.role = membre_in.role
@@ -348,7 +348,7 @@ def invite_member_to_workspace(db: Session, espace_id: str, membre_in: Workspace
         else:
             membre = Membre(
                 id_utilisateur=target_user.id,
-                id_espace=espace_id,
+                id_workspace=workspace_id,
                 role=membre_in.role,
                 statut="En attente",
             )
@@ -361,8 +361,8 @@ def invite_member_to_workspace(db: Session, espace_id: str, membre_in: Workspace
             data={
                 "sub": target_user.id,
                 "email": target_user.email,
-                "workspace_id": espace.id_workspace, # Ajouté pour cohérence
-                "espace_id": espace_id,
+                "workspace_id": workspace.id_workspace, # Ajouté pour cohérence
+                "workspace_id": workspace_id,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
@@ -380,8 +380,8 @@ def invite_member_to_workspace(db: Session, espace_id: str, membre_in: Workspace
         token = create_access_token(
             data={
                 "email": membre_in.email,
-                "workspace_id": espace.id_workspace,
-                "espace_id": espace_id,
+                "workspace_id": workspace.id_workspace,
+                "workspace_id": workspace_id,
                 "role": membre_in.role,
                 "type": TOKEN_TYPE, # Uniformisation (Contrainte 2)
             },
@@ -397,10 +397,10 @@ def accept_workspace_invitation(
     invitation_token: str
 ) -> Membre:
     """
-    Accepte une invitation a un espace via token JWT.
+    Accepte une invitation a un workspace via token JWT.
     Supporte deux familles de token :
-    - token d'invitation "guest" / standard avec type="espace_invitation"
-    - ancien token d'utilisateur existant avec scope="espace_invitation_accept"
+    - token d'invitation "guest" / standard avec type="workspace_invitation"
+    - ancien token d'utilisateur existant avec scope="workspace_invitation_accept"
     """
     # 1. Decodage et validation du token
     payload = decode_invitation_token(invitation_token)
@@ -410,8 +410,8 @@ def accept_workspace_invitation(
     # 2. Support des deux formats de token
     token_type = payload.get("type")
     token_scope = payload.get("scope")
-    is_standard_invitation = token_type == "espace_invitation"
-    is_existing_user_legacy_invitation = token_scope == "espace_invitation_accept"
+    is_standard_invitation = token_type == "workspace_invitation"
+    is_existing_user_legacy_invitation = token_scope == "workspace_invitation_accept"
 
     if not is_standard_invitation and not is_existing_user_legacy_invitation:
         raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
@@ -423,9 +423,9 @@ def accept_workspace_invitation(
         raise HTTPException(status_code=400, detail="ID du workspace absent du token.")
 
     # Verification de l'existence de l'espace parent
-    espace = get_workspace_by_id(db, target_workspace_id)
-    if not espace:
-        raise HTTPException(status_code=404, detail="LLe workspace cible n'existe plus.")
+    workspace = get_workspace_by_id(db, target_workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Le workspace cible n'existe plus.")
 
     # 4. Verification de l'utilisateur (Prevenir les fraudes)
     user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
@@ -465,7 +465,7 @@ def accept_workspace_invitation(
         statut="Actif"
     )
     db.add(new_member)
-    commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
+    commit_or_raise(db, detail="Impossible de finaliser votre adhesion au workspace.", refresh_instance=new_member)
     
     return new_member
 
