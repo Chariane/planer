@@ -1,9 +1,7 @@
-# backend/api_workspace/crud/utilisateur.py
-
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, func
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise, Role, Status
 from ..models import (
@@ -11,7 +9,7 @@ from ..models import (
     Membre, Rapport, Section, Tache, Utilisateur, Workspace,
 )
 from ..core.security import create_access_token, decode_invitation_token
-from ..schemas import MembreCreate, WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate
+from ..schemas import WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate, WorkspaceMemberInvite
 
 
 # ============================================================================
@@ -226,7 +224,14 @@ def _collect_workspace_dependency_ids(db: Session, workspace_id: str) -> dict:
 # ============================================================================
 # MEMBRES - GESTION
 # ============================================================================
-
+def get_workspace_member(db: Session, workspace_id: str, user_id: str) -> Optional[Membre]:
+    return (
+        db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
+        .filter(Membre.id_workspace == workspace_id, Membre.id_utilisateur == user_id)
+        .first()
+    )
+    
 def get_member(
     db: Session,
     workspace_id: str,
@@ -306,90 +311,83 @@ def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -
 # INVITATIONS
 # ============================================================================
 
-def invite_member_to_workspace(
-    db: Session,
-    workspace_id: str,
-    user_identifier: str,
-    role: str,
-    id_liste: Optional[str] = None,
-    id_tache: Optional[str] = None,
-) -> dict:
+def invite_member_to_workspace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
     """
-    Invite un membre : s'il existe on l'ajoute/met à jour, sinon on génère un token JWT.
+    Invite un utilisateur a un espace.
+    Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
     """
-    workspace = get_workspace_by_id(db, workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace non trouvé.")
+    # 1. Verification de l'existence de l'espace (Contrainte 1)
+    espace = get_workspace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve.")
 
-    assignment = _validate_workspace_member_assignment(
-        db,
-        workspace_id,
-        role,
-        id_liste=id_liste,
-        id_tache=id_tache,
-    )
-
-    # Recherche de l'utilisateur
-    normalized_identifier = user_identifier.strip()
-    if "@" in normalized_identifier:
-        user = db.query(Utilisateur).filter(Utilisateur.email == normalized_identifier.lower()).first()
+    # 2. Recherche de l'utilisateur par email ou username
+    query = db.query(Utilisateur)
+    if membre_in.email:
+        query = query.filter(Utilisateur.email == membre_in.email)
     else:
-        user = db.query(Utilisateur).filter(Utilisateur.id == normalized_identifier).first()
+        query = query.filter(Utilisateur.username == membre_in.username)
     
-    TOKEN_TYPE = "workspace_invitation"
+    target_user = query.first()
 
-    if user:
-        # CAS 1 : Utilisateur existant
-        membre = get_member(db, workspace_id, user.id)
+    # Uniformisation du type de token (Contrainte 2)
+    TOKEN_TYPE = "espace_invitation"
+
+    if target_user:
+        # CAS 1 : Utilisateur existant -> Creation/Mise a jour du membre en base
+        membre = get_workspace_member(db, espace_id, target_user.id)
         if membre:
-            membre.role = role
-            if membre.statut != Status.ACTIVE:
-                membre.statut = Status.PENDING
+            if membre.statut == "Actif":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cet utilisateur est deja membre actif de cet espace."
+                )
+            # Si l'invitation existe deja, on met a jour son role et on la repasse en attente
+            membre.role = membre_in.role
+            membre.statut = "En attente"
         else:
             membre = Membre(
-                id_utilisateur=user.id,
-                id_workspace=workspace_id,
-                role=role,
-                statut=Status.PENDING,
+                id_utilisateur=target_user.id,
+                id_espace=espace_id,
+                role=membre_in.role,
+                statut="En attente",
             )
             db.add(membre)
-
-        _sync_assignment_membership(db, user.id, assignment, Status.PENDING)
         
-        commit_or_raise(db, detail="Impossible d'inviter cet utilisateur existant.")
+        commit_or_raise(db, detail="Impossible de creer ou mettre a jour le membre.")
         
+        # Token pour utilisateur existant (Contrainte 2)
         token = create_access_token(
             data={
-                "sub": user.id,
-                "email": user.email,
-                "workspace_id": workspace_id,
-                "role": role,
-                "id_liste": assignment.get("id_liste"),
-                "id_tache": assignment.get("id_tache"),
+                "sub": target_user.id,
+                "email": target_user.email,
+                "workspace_id": espace.id_workspace, # Ajouté pour cohérence
+                "espace_id": espace_id,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
         )
-        return {"status": "existing_user", "membre": membre, "token": token}
-
-    # CAS 2 : Invité externe (Guest)
-    token = create_access_token(
-        data={
-            "email": normalized_identifier.lower(),
-            "workspace_id": workspace_id,
-            "role": role,
-            "id_liste": assignment.get("id_liste"),
-            "id_tache": assignment.get("id_tache"),
-            "type": TOKEN_TYPE,
-        },
-        expires_delta=timedelta(days=4),
-    )
+        return {"membre": membre, "invitation_token": token}
     
-    return {
-        "status": "guest_invitation",
-        "email": normalized_identifier.lower(),
-        "token": token
-    }
+    else:
+        # CAS 2 : Invité externe -> Generation d'un token JWT complet
+        if not membre_in.email:
+            raise HTTPException(
+                status_code=400, 
+                detail="Email obligatoire pour inviter un utilisateur non inscrit."
+            )
+
+        token = create_access_token(
+            data={
+                "email": membre_in.email,
+                "workspace_id": espace.id_workspace,
+                "espace_id": espace_id,
+                "role": membre_in.role,
+                "type": TOKEN_TYPE, # Uniformisation (Contrainte 2)
+            },
+            expires_delta=timedelta(days=4),
+        )
+        return {"token": token}
 
 
 def accept_workspace_invitation(
@@ -398,61 +396,78 @@ def accept_workspace_invitation(
     user_id: str,
     invitation_token: str
 ) -> Membre:
-    """Accepte une invitation à un workspace via token JWT."""
+    """
+    Accepte une invitation a un espace via token JWT.
+    Supporte deux familles de token :
+    - token d'invitation "guest" / standard avec type="espace_invitation"
+    - ancien token d'utilisateur existant avec scope="espace_invitation_accept"
+    """
+    # 1. Decodage et validation du token
     payload = decode_invitation_token(invitation_token)
     if not payload:
-        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expiré.")
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.")
 
-    if payload.get("type") != "workspace_invitation":
+    # 2. Support des deux formats de token
+    token_type = payload.get("type")
+    token_scope = payload.get("scope")
+    is_standard_invitation = token_type == "espace_invitation"
+    is_existing_user_legacy_invitation = token_scope == "espace_invitation_accept"
+
+    if not is_standard_invitation and not is_existing_user_legacy_invitation:
         raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
 
+    # 3. Extraction et verification des donnees du payload
+    # Si espace_id n'est pas fourni par l'URL, on le prend du token
     target_workspace_id = workspace_id or payload.get("workspace_id")
     if not target_workspace_id:
         raise HTTPException(status_code=400, detail="ID du workspace absent du token.")
 
-    ws = get_workspace_by_id(db, target_workspace_id)
-    if not ws:
-        raise HTTPException(status_code=404, detail="Le workspace cible n'existe plus.")
+    # Verification de l'existence de l'espace parent
+    espace = get_workspace_by_id(db, target_workspace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="LLe workspace cible n'existe plus.")
 
+    # 4. Verification de l'utilisateur (Prevenir les fraudes)
     user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve.")
 
+    # Le token est lié soit par SUB (utilisateur existant), soit par EMAIL (invité)
     token_sub = payload.get("sub")
     token_email = payload.get("email")
 
     if token_sub and token_sub != user_id:
-        raise HTTPException(status_code=403, detail="Cette invitation appartient à un autre utilisateur.")
+        raise HTTPException(status_code=403, detail="Cette invitation appartient a un autre utilisateur.")
     
     if token_email and token_email.lower() != user.email.lower():
-        raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au vôtre.")
+        raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
-    invited_role = payload.get("role") or Role.MEMBER
-    assignment = _validate_workspace_member_assignment(
-        db,
-        target_workspace_id,
-        invited_role,
-        id_liste=payload.get("id_liste"),
-        id_tache=payload.get("id_tache"),
-    )
-
-    membre = get_member(db, target_workspace_id, user_id)
-    if membre:
-        membre.role = invited_role or membre.role
-        if membre.statut != Status.ACTIVE:
-            membre.statut = Status.ACTIVE
-    else:
-        membre = Membre(
-            id_utilisateur=user_id,
-            id_workspace=target_workspace_id,
-            role=invited_role,
-            statut=Status.ACTIVE,
+    # 5. Prevention des doublons sur le Workspace (Contrainte 5)
+    existing_member = get_workspace_member(db, target_workspace_id, user_id)
+    if existing_member:
+        if existing_member.statut == "Actif":
+            raise HTTPException(status_code=409, detail="Invitation deja acceptee.")
+        # Les anciens tokens "scope" ne transportent pas toujours le role.
+        existing_member.role = payload.get("role") or existing_member.role
+        existing_member.statut = "Actif"
+        commit_or_raise(
+            db,
+            detail="Impossible d'activer votre statut de membre.",
+            refresh_instance=existing_member,
         )
-        db.add(membre)
+        return existing_member
 
-    _sync_assignment_membership(db, user_id, assignment, Status.ACTIVE)
-    commit_or_raise(db, detail="Impossible d'activer votre statut de membre.", refresh_instance=membre)
-    return membre
+    # 6. Creation du nouveau membre de l'Espace
+    new_member = Membre(
+        id_utilisateur=user_id,
+        id_workspace=target_workspace_id,
+        role=payload.get("role") or "Membre",
+        statut="Actif"
+    )
+    db.add(new_member)
+    commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
+    
+    return new_member
 
 
 def get_pending_invitations(db: Session, user_id: str) -> List[Membre]:
@@ -507,147 +522,3 @@ def leave_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
     db.delete(membre)
     commit_or_raise(db, detail="Impossible de quitter le workspace.")
     return True
-
-
-# ============================================================================
-# UTILITAIRES PRIVÉS
-# ============================================================================
-
-def _get_member_by_liste(db: Session, liste_id: str, user_id: str) -> Optional[Membre]:
-    """Récupère un membre assigné à une liste."""
-    return (
-        db.query(Membre)
-        .filter(
-            Membre.id_liste == liste_id,
-            Membre.id_utilisateur == user_id,
-        )
-        .first()
-    )
-
-
-def _get_member_by_tache(db: Session, tache_id: str, user_id: str) -> Optional[Membre]:
-    """Récupère un membre assigné à une tâche."""
-    return (
-        db.query(Membre)
-        .filter(
-            Membre.id_tache == tache_id,
-            Membre.id_utilisateur == user_id,
-        )
-        .first()
-    )
-
-
-def _validate_workspace_member_assignment(
-    db: Session,
-    workspace_id: str,
-    role: str,
-    id_liste: Optional[str] = None,
-    id_tache: Optional[str] = None,
-) -> dict:
-    """Valide qu'une assignation (liste/tâche) est cohérente avec le rôle."""
-    assignment_count = int(id_liste is not None) + int(id_tache is not None)
-
-    if role == Role.MEMBER:
-        if assignment_count != 1:
-            raise HTTPException(
-                status_code=400,
-                detail="Une invitation avec le rôle 'Membre' doit cibler exactement une liste ou une tâche du workspace.",
-            )
-    elif assignment_count != 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Seul le rôle 'Membre' peut recevoir une affectation directe à une liste ou une tâche.",
-        )
-
-    if id_liste:
-        liste = (
-            db.query(Liste)
-            .options(joinedload(Liste.espace), joinedload(Liste.workspace))
-            .filter(Liste.id == id_liste)
-            .first()
-        )
-        if not liste:
-            raise HTTPException(status_code=404, detail="Liste introuvable.")
-
-        liste_workspace_id = liste.id_workspace or (liste.espace.id_workspace if liste.espace else None)
-        if liste_workspace_id != workspace_id:
-            raise HTTPException(
-                status_code=400,
-                detail="La liste sélectionnée n'appartient pas à ce workspace.",
-            )
-        return {"id_liste": liste.id, "id_tache": None}
-
-    if id_tache:
-        tache = (
-            db.query(Tache)
-            .options(
-                joinedload(Tache.liste).joinedload(Liste.espace),
-                joinedload(Tache.liste).joinedload(Liste.workspace),
-            )
-            .filter(Tache.id == id_tache)
-            .first()
-        )
-        if not tache:
-            raise HTTPException(status_code=404, detail="Tâche introuvable.")
-        if not tache.liste:
-            raise HTTPException(
-                status_code=400,
-                detail="La tâche sélectionnée n'est rattachée à aucune liste exploitable.",
-            )
-
-        tache_workspace_id = tache.liste.id_workspace or (
-            tache.liste.espace.id_workspace if tache.liste.espace else None
-        )
-        if tache_workspace_id != workspace_id:
-            raise HTTPException(
-                status_code=400,
-                detail="La tâche sélectionnée n'appartient pas à ce workspace.",
-            )
-        return {"id_liste": None, "id_tache": tache.id}
-
-    return {"id_liste": None, "id_tache": None}
-
-
-def _sync_assignment_membership(
-    db: Session,
-    user_id: str,
-    assignment: dict,
-    statut: str,
-) -> Optional[Membre]:
-    """Synchronise un membership d'assignation (liste ou tâche)."""
-    id_liste = assignment.get("id_liste")
-    id_tache = assignment.get("id_tache")
-
-    if not id_liste and not id_tache:
-        return None
-
-    membre = None
-    if id_liste:
-        membre = _get_member_by_liste(db, id_liste, user_id)
-        if not membre:
-            membre = Membre(
-                id_utilisateur=user_id,
-                id_liste=id_liste,
-                role=Role.MEMBER,
-                statut=statut,
-            )
-            db.add(membre)
-            return membre
-
-    if id_tache:
-        membre = _get_member_by_tache(db, id_tache, user_id)
-        if not membre:
-            membre = Membre(
-                id_utilisateur=user_id,
-                id_tache=id_tache,
-                role=Role.MEMBER,
-                statut=statut,
-            )
-            db.add(membre)
-            return membre
-
-    if membre:
-        membre.role = Role.MEMBER
-        if statut == Status.ACTIVE or membre.statut != Status.ACTIVE:
-            membre.statut = statut
-    return membre

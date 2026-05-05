@@ -18,6 +18,7 @@ from ..crud.admin import (
     update_admin_espace_member,
 )
 from ..crud.utilisateur import get_espace_member
+from ..crud.utilisateur import get_espace_by_id
 from ..schemas import EspaceOut, EspaceMemberOut, UtilisateurOut, WorkspaceMemberUpdate
 
 router = APIRouter(prefix="/admin/espaces", tags=["Admin Espaces"])

@@ -81,16 +81,12 @@ def invite_member_for_entreprise_workspace(
     workspace_id: str,
     user_identifier: str,
     role: str,
-    id_liste: Optional[str] = None,
-    id_tache: Optional[str] = None,
 ) -> Membre:
     result = invite_member_to_workspace(
         db,
         workspace_id,
         user_identifier,
         role,
-        id_liste=id_liste,
-        id_tache=id_tache,
     )
     membre = result.get("membre")
     if not membre:
@@ -102,8 +98,9 @@ def accept_entreprise_workspace_invitation(
     db: Session,
     workspace_id: str,
     user_id: str,
+    invitation_token: str,
 ) -> Optional[Membre]:
-    return accept_workspace_invitation(db, workspace_id, user_id)
+    return accept_workspace_invitation(db, workspace_id, user_id, invitation_token)
 
 
 def update_entreprise_workspace_member(

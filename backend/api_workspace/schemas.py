@@ -769,15 +769,9 @@ class WorkspaceMemberInvite(BaseModel):
     def validate_target(self):
         if not self.email and not self.username:
             raise ValueError("Fournissez l'email ou le username de l'utilisateur a inviter.")
-        assignment_count = int(self.id_liste is not None) + int(self.id_tache is not None)
-        if self.role == "Membre":
-            if assignment_count != 1:
-                raise ValueError(
-                    "Une invitation avec le role 'Membre' doit cibler exactement une liste ou une tache du workspace."
-                )
-        elif assignment_count != 0:
+        if self.id_liste is not None or self.id_tache is not None:
             raise ValueError(
-                "Seul le role 'Membre' peut etre invite avec une affectation directe a une liste ou une tache."
+                "Une invitation workspace ne peut pas cibler directement une liste ou une tache."
             )
         return self
 
@@ -792,7 +786,7 @@ class WorkspaceMemberInvite(BaseModel):
  
  
 class WorkspaceInvitationResponse(BaseModel):
-    status: str 
+    status: str # "existing_user" or "guest_invitation"
     message: str
     email: str
     membre: Optional[WorkspaceMemberOut] = None

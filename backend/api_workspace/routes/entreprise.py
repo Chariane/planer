@@ -144,8 +144,6 @@ def invite_member_entreprise_workspace_endpoint(
         workspace_id,
         target_user.email,
         membre_in.role,
-        id_liste=membre_in.id_liste,
-        id_tache=membre_in.id_tache,
     )
     membre = result["membre"]
     invitation_token = result["token"]

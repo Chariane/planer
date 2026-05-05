@@ -1,8 +1,7 @@
-# backend/api_workspace/core/function.py
-
 from datetime import datetime
 from typing import Any, List, Optional, Set, Tuple
 from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_
@@ -665,3 +664,77 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
             "taches": taches,
         }
     }
+    
+def render_invitation_html_page(
+    title: str,
+    icon: str,
+    message: str,
+    sub_message: str = "",
+    color: str = "#264a67",
+) -> HTMLResponse:
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - K-Planer</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .card {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            padding: 48px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }}
+        .icon {{
+            font-size: 64px;
+            margin-bottom: 20px;
+        }}
+        h1 {{
+            color: {color};
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }}
+        .message {{
+            color: #555;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }}
+        .sub-message {{
+            color: #999;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }}
+        .brand {{
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #bbb;
+            font-size: 0.8rem;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">{icon}</div>
+        <h1>{title}</h1>
+        <p class="message">{message}</p>
+        {"<p class='sub-message'>" + sub_message + "</p>" if sub_message else ""}
+        <div class="brand">K-Planer &mdash; Votre workspace de travail collaboratif</div>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)

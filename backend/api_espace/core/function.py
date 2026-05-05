@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from ..models import Espace, PlanerEntreprise, Utilisateur, Workspace, Membre
-from .utils import commit_or_raise
-
+from ..models import Espace, Membre, PlanerEntreprise, Utilisateur, Workspace
+from ..crud.utilisateur import get_espace_member
 
 # Rôles Workspace
 WORKSPACE_OWNER_ROLE = "Créateur"
@@ -35,6 +35,98 @@ ESPACE_READ_ROLES = {
 }
 ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
 ESPACE_ADMIN_MANAGEABLE_ROLES = {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}
+
+
+
+def commit_or_raise(
+    db: Session,
+    *,
+    detail: str,
+    status_code: int = 409,
+    refresh_instance: Any | None = None,
+) -> None:
+    try:
+        db.commit()
+        if refresh_instance is not None:
+            db.refresh(refresh_instance)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+def render_invitation_html_page(
+    title: str,
+    icon: str,
+    message: str,
+    sub_message: str = "",
+    color: str = "#264a67",
+) -> HTMLResponse:
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - K-Planer</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .card {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            padding: 48px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }}
+        .icon {{
+            font-size: 64px;
+            margin-bottom: 20px;
+        }}
+        h1 {{
+            color: {color};
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }}
+        .message {{
+            color: #555;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }}
+        .sub-message {{
+            color: #999;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }}
+        .brand {{
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #bbb;
+            font-size: 0.8rem;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">{icon}</div>
+        <h1>{title}</h1>
+        <p class="message">{message}</p>
+        {"<p class='sub-message'>" + sub_message + "</p>" if sub_message else ""}
+        <div class="brand">K-Planer &mdash; Votre espace de travail collaboratif</div>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)
 
 
 def is_premium_user(user: Optional[Utilisateur]) -> bool:
@@ -179,40 +271,19 @@ def _require_workspace_read_access(db: Session, workspace_id: str, current_user_
     raise HTTPException(status_code=403, detail="Acces refuse au workspace (aucun acces detecte)")
 
 
-def _resolve_espace_role(
-    espace: Espace,
-    membre: Optional[Membre],
+def _get_espace_actor_context(
+    db: Session,
+    espace_id: str,
     current_user_id: str,
-) -> Optional[str]:
-    if membre:
-        return membre.role
-    return None
-
-
-def _resolve_espace_status(
-    espace: Espace,
-    membre: Optional[Membre],
-    current_user_id: str,
-) -> Optional[str]:
-    if membre:
-        return membre.statut
-    return None
-
-
-def _get_espace_actor_context(db: Session, espace_id: str, current_user_id: str):
-
-    espace = get_espace_by_id(db, espace_id)
-    if not espace:
-        raise HTTPException(status_code=404, detail="Espace non trouve")
-
-    membre = get_espace_member(db, espace_id, current_user_id)
-    role = _resolve_espace_role(espace, membre, current_user_id)
-    statut = _resolve_espace_status(espace, membre, current_user_id)
-
-    if role is None or statut != "Actif":
-        raise HTTPException(status_code=403, detail="Acces refuse a cet espace")
-
-    return espace, membre, role
+):
+    espace = _get_espace_or_404(db, espace_id)
+    actor_member = _require_espace_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user_id,
+    )
+    return espace, actor_member, actor_member.role
 
 
 def _validate_espace_member_management_permissions(
@@ -262,8 +333,7 @@ def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
 
 def _require_espace_access(db: Session, espace_id: str, workspace_id: str, current_user_id: str):
     """Vérifie l'accès à un espace (membre espace OU membre workspace)."""
-    from ..crud.utilisateur import get_espace_member
-
+ 
     espace_member = get_espace_member(db, espace_id, current_user_id)
     if espace_member:
         return espace_member
@@ -279,7 +349,6 @@ def _require_espace_management_access(db: Session, espace_id: str, workspace_id:
     3. Un administrateur du Workspace parent
     """
     from ..crud.utilisateur import get_espace_member
-    from ..models import Workspace, Espace
 
     # 1. Résolution du workspace_id si manquant
     if not workspace_id:
@@ -323,27 +392,14 @@ def _require_espace_admin_access(db: Session, espace_id: str, current_user_id: s
     Lève une 404 si l'espace n'existe pas,
     une 403 si l'utilisateur n'a pas les droits d'administration.
     """
-    from ..crud.utilisateur import get_espace_member
-
     espace = _get_espace_or_404(db, espace_id)
-
-    # Vérifier d'abord si membre admin/créateur de l'espace
-    espace_member = get_espace_member(db, espace_id, current_user_id)
-    if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
-        return espace, espace_member
-
-    # Sinon, vérifier si admin/créateur du workspace parent
-    if espace.id_workspace:
-        try:
-            ws_member = _require_workspace_management_access(db, espace.id_workspace, current_user_id)
-            return espace, ws_member
-        except HTTPException:
-            pass
-
-    raise HTTPException(
-        status_code=403,
-        detail="Acces reserve aux administrateurs de l'espace",
+    membre = _require_espace_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user_id,
     )
+    return espace, membre
 
 
 def _require_espace_owner_access(db: Session, espace_id: str, current_user_id: str):

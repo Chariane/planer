@@ -68,13 +68,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_invitation_token(token: str) -> Optional[dict]:
-    """Décode et valide un token d'invitation workspace."""
+    """Décode et valide un token d'invitation (workspace ou espace)."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        # On vérifie que c'est bien une invitation workspace
-        if payload.get("type") != "workspace_invitation":
-            return None
-        return payload
+        # On vérifie que c'est bien une invitation
+        if payload.get("type") in ["workspace_invitation", "espace_invitation"]:
+            return payload
+        if payload.get("scope") in ["workspace_invitation_accept", "espace_invitation_accept"]:
+            return payload
+        return None
     except JWTError:
         return None
 
