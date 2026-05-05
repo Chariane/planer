@@ -241,7 +241,7 @@ def invite_espace_member(
     
     _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
 
-    # Validation stricte des rôles (Règle : un Admin ne peut pas inviter d'autres Admins ou le Créateur)
+    # Validation stricte des rôles
     actor_member = _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
     if actor_member.role == "Administrateur" and membre_in.role not in ["Membre", "Invité"]:
         raise HTTPException(
@@ -249,12 +249,10 @@ def invite_espace_member(
             detail="En tant qu'Administrateur, vous pouvez uniquement inviter des Membres ou des Invités."
         )
 
-    # Delegation de la logique d'invitation au CRUD
     result = invite_member_to_espace(db, espace_id, membre_in)
     email_target = membre_in.email or membre_in.username 
 
     if "membre" in result:
-        # Cas utilisateur existant
         membre = result["membre"]
         token = result["invitation_token"]
         target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else email_target
@@ -276,7 +274,6 @@ def invite_espace_member(
             "membre": _serialize_member(membre)
         }
     else:
-        # Cas invitation externe (Guest)
         token = result["token"]
         background_tasks.add_task(
             send_espace_invitation_email,
@@ -295,7 +292,8 @@ def invite_espace_member(
             "token": token
         }
 
-#Accepter une invitation à un espace via token (endpoint authentifié — gardé pour compatibilité)
+
+# Accepter une invitation à un espace via token (endpoint authentifié)
 @router.post("/espaces/invitations/accept", response_model=EspaceMemberOut)
 def accept_espace_invitation_endpoint(
     invitation_in: EspaceInvitationAcceptRequest,
@@ -303,17 +301,16 @@ def accept_espace_invitation_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Accepte une invitation a un espace (classique ou JWT guest)."""
-    # On délègue toute la logique de validation et de creation au CRUD
     membre = accept_espace_invitation(
         db, 
-        espace_id=None, # Sera extrait du token par le CRUD
+        espace_id=None,
         user_id=current_user.id,
         invitation_token=invitation_in.token
     )
     return _serialize_member(membre)
 
 
-# ─── Acceptation directe depuis l'email (pas d'authentification requise) ───
+# Acceptation directe depuis l'email (pas d'authentification requise)
 @router.get("/espaces/invitations/accept-from-email")
 def accept_espace_invitation_from_email(
     token: str,
@@ -353,33 +350,11 @@ def accept_espace_invitation_from_email(
             width: 100%;
             text-align: center;
         }}
-        .icon {{
-            font-size: 64px;
-            margin-bottom: 20px;
-        }}
-        h1 {{
-            color: {color};
-            font-size: 1.5rem;
-            margin-bottom: 12px;
-        }}
-        .message {{
-            color: #555;
-            font-size: 1rem;
-            line-height: 1.6;
-            margin-bottom: 16px;
-        }}
-        .sub-message {{
-            color: #999;
-            font-size: 0.85rem;
-            line-height: 1.5;
-        }}
-        .brand {{
-            margin-top: 32px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #bbb;
-            font-size: 0.8rem;
-        }}
+        .icon {{ font-size: 64px; margin-bottom: 20px; }}
+        h1 {{ color: {color}; font-size: 1.5rem; margin-bottom: 12px; }}
+        .message {{ color: #555; font-size: 1rem; line-height: 1.6; margin-bottom: 16px; }}
+        .sub-message {{ color: #999; font-size: 0.85rem; line-height: 1.5; }}
+        .brand {{ margin-top: 32px; padding-top: 20px; border-top: 1px solid #eee; color: #bbb; font-size: 0.8rem; }}
     </style>
 </head>
 <body>
@@ -415,7 +390,7 @@ def accept_espace_invitation_from_email(
             color="#f0ad4e"
         )
 
-    # 3. Vérifier si déjà acceptée (optimisation avant d'appeler le CRUD)
+    # 3. Vérifier si déjà acceptée
     target_espace_id = payload.get("espace_id")
     if target_espace_id:
         existing = get_espace_member(db, target_espace_id, user_id)
@@ -429,7 +404,7 @@ def accept_espace_invitation_from_email(
                 sub_message="Connectez-vous sur K-Planer pour accéder à votre espace de travail."
             )
 
-    # 4. Accepter l'invitation via le CRUD existant
+    # 4. Accepter l'invitation
     try:
         membre = accept_espace_invitation(
             db,
@@ -452,7 +427,7 @@ def accept_espace_invitation_from_email(
             message=e.detail or "Une erreur est survenue lors de l'acceptation.",
             color="#dc3545"
         )
-
+    
 # Modifier le rôle d'un membre dans un espace
 @router.put("/espaces/{espace_id}/members/{user_id}/update_member_espace", response_model=EspaceMemberOut)
 def update_espace_member_endpoint(

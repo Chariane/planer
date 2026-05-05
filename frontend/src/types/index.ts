@@ -131,6 +131,10 @@ export interface JoinedResource {
   id_workspace?: string | null;
   id_espace?: string | null;
   id_liste?: string | null;
+  id_tache?: string | null;      // Ajouté pour les tâches
+  espace_nom?: string | null;    // Ajouté pour le nom de l'espace
+  liste_nom?: string | null;     // Ajouté pour le nom de la liste
+  tache_nom?: string | null;     // Ajouté pour le nom de la tâche
 }
 
 export interface WorkspaceAccessListingResponse {
@@ -144,6 +148,7 @@ export interface WorkspaceDirectAccessItem {
   role: string;
   id_espace?: string | null;
   id_liste?: string | null;
+  id_tache?: string | null;      // Ajouté pour les tâches
 }
 
 export interface WorkspaceLocalResourcesResponse {

@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Link } from 'react-router-dom';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import { Lock, ChevronRight } from 'lucide-react';
 

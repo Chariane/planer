@@ -42,11 +42,11 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
     Si user_id est fourni et que l'utilisateur n'est pas membre du workspace,
     on ne retourne que les espaces auxquels il a accès directement.
     """
-    # 1. Récupérer tous les espaces du workspace
+    from collections import defaultdict
+    
     query = db.query(Espace).filter(Espace.id_workspace == workspace_id)
     all_espaces = query.all()
 
-    # 2. Filtrage par permissions si user_id est fourni
     is_workspace_member = True
     visible_ids = {esp.id for esp in all_espaces}
 
@@ -59,8 +59,6 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
 
         if not ws_member:
             is_workspace_member = False
-            # Récupérer les IDs des espaces où l'utilisateur est membre actif
-            # On inclut aussi les espaces dont il est créateur global (fallback via workspace owner déjà géré par ws_member si c'était le cas)
             esp_memberships = db.query(Membre.id_espace).filter(
                 Membre.id_utilisateur == user_id,
                 Membre.id_espace != None,
@@ -68,8 +66,6 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
             ).all()
             visible_ids = {mid for (mid,) in esp_memberships}
 
-    # 3. Organiser par parent_id
-    from collections import defaultdict
     nodes_by_parent = defaultdict(list)
     roots = []
 
@@ -77,18 +73,14 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
         if esp.id not in visible_ids:
             continue
         
-        # Si membre du workspace, l'arborescence est naturelle
         if is_workspace_member:
             nodes_by_parent[esp.id_espace_parent].append(esp)
         else:
-            # Si non-membre workspace (accès isolé), on vérifie si le parent est visible
-            # Si le parent n'est pas visible, alors cet espace devient une racine pour cet utilisateur
             if esp.id_espace_parent in visible_ids:
                 nodes_by_parent[esp.id_espace_parent].append(esp)
             else:
                 roots.append(esp)
 
-    # 4. Fonction récursive pour construire l'arbre
     def build_tree(parent_list: List[Espace]) -> List[dict]:
         tree = []
         for esp in parent_list:
@@ -187,19 +179,15 @@ def delete_espace(db: Session, espace_id: str) -> bool:
     if not espace:
         return False
 
-    # Collecter tous les IDs descendants (enfants, petits-enfants, etc.)
     descendant_ids = _collect_descendant_espace_ids(db, espace_id)
     all_espace_ids = [espace_id] + descendant_ids
 
-    # Supprimer les membres de tous les espaces concernés
     if all_espace_ids:
         db.query(Membre).filter(Membre.id_espace.in_(all_espace_ids)).delete(synchronize_session=False)
 
-    # Supprimer les sous-espaces descendants (du plus profond au plus haut)
     for desc_id in reversed(descendant_ids):
         db.query(Espace).filter(Espace.id == desc_id).delete(synchronize_session=False)
 
-    # Supprimer l'espace parent
     db.delete(espace)
     commit_or_raise(
         db,
@@ -272,17 +260,15 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
     )
     return True
 
+
 def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
     """
     Invite un utilisateur a un espace.
-    Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
     """
-    # 1. Verification de l'existence de l'espace (Contrainte 1)
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve.")
 
-    # 2. Recherche de l'utilisateur par email ou username
     query = db.query(Utilisateur)
     if membre_in.email:
         query = query.filter(Utilisateur.email == membre_in.email)
@@ -291,16 +277,14 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
     
     target_user = query.first()
 
-    # Uniformisation du type de token (Contrainte 2)
     TOKEN_TYPE = "espace_invitation"
 
     if target_user:
-        # CAS 1 : Utilisateur existant -> Creation/Mise a jour du membre en base
         membre = get_espace_member(db, espace_id, target_user.id)
         if membre:
-            # Si déjà membre, on met à jour son role et on repasse en attente s'il ne l'est pas
             membre.role = membre_in.role
-            membre.statut = "En attente"
+            if membre.statut != "Actif":
+                membre.statut = "En attente"
         else:
             membre = Membre(
                 id_utilisateur=target_user.id,
@@ -310,15 +294,16 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             )
             db.add(membre)
         
-        commit_or_raise(db, detail="Impossible de creer ou mettre a jour le membre.")
+        db.commit()
+        db.refresh(membre)
         
-        # Token pour utilisateur existant (Contrainte 2)
         token = create_access_token(
             data={
                 "sub": target_user.id,
                 "email": target_user.email,
-                "workspace_id": espace.id_workspace, # Ajouté pour cohérence
+                "workspace_id": espace.id_workspace,
                 "espace_id": espace_id,
+                "role": membre_in.role,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
@@ -326,7 +311,6 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
         return {"membre": membre, "invitation_token": token}
     
     else:
-        # CAS 2 : Invité externe -> Generation d'un token JWT complet
         if not membre_in.email:
             raise HTTPException(
                 status_code=400, 
@@ -339,7 +323,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 "workspace_id": espace.id_workspace,
                 "espace_id": espace_id,
                 "role": membre_in.role,
-                "type": TOKEN_TYPE, # Uniformisation (Contrainte 2)
+                "type": TOKEN_TYPE,
             },
             expires_delta=timedelta(days=4),
         )
@@ -354,16 +338,11 @@ def accept_espace_invitation(
 ) -> Membre:
     """
     Accepte une invitation a un espace via token JWT.
-    Supporte deux familles de token :
-    - token d'invitation "guest" / standard avec type="espace_invitation"
-    - ancien token d'utilisateur existant avec scope="espace_invitation_accept"
     """
-    # 1. Decodage et validation du token
     payload = decode_invitation_token(invitation_token)
     if not payload:
         raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.")
 
-    # 2. Support des deux formats de token
     token_type = payload.get("type")
     token_scope = payload.get("scope")
     is_standard_invitation = token_type == "espace_invitation"
@@ -372,23 +351,18 @@ def accept_espace_invitation(
     if not is_standard_invitation and not is_existing_user_legacy_invitation:
         raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
 
-    # 3. Extraction et verification des donnees du payload
-    # Si espace_id n'est pas fourni par l'URL, on le prend du token
     target_espace_id = espace_id or payload.get("espace_id")
     if not target_espace_id:
         raise HTTPException(status_code=400, detail="ID de l'espace absent du token.")
 
-    # Verification de l'existence de l'espace parent
     espace = get_espace_by_id(db, target_espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="L'espace cible n'existe plus.")
 
-    # 4. Verification de l'utilisateur (Prevenir les fraudes)
     user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve.")
 
-    # Le token est lié soit par SUB (utilisateur existant), soit par EMAIL (invité)
     token_sub = payload.get("sub")
     token_email = payload.get("email")
 
@@ -398,10 +372,8 @@ def accept_espace_invitation(
     if token_email and token_email.lower() != user.email.lower():
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
-    # 5. Gestion de l'accès au Workspace parent (Indispensable pour le contexte frontend)
     workspace_id = payload.get("workspace_id") or espace.id_workspace
     if workspace_id:
-        # On vérifie si l'utilisateur est déjà membre du workspace
         ws_member = db.query(Membre).filter(
             Membre.id_workspace == workspace_id,
             Membre.id_utilisateur == user_id
@@ -413,46 +385,33 @@ def accept_espace_invitation(
             if not ws_member.role:
                 ws_member.role = "Invité"
         else:
-            # On vérifie si l'utilisateur est déjà membre du workspace (ex: Créateur ou déjà invité ailleurs)
-            from ..models import Membre
-            existing_ws_member = db.query(Membre).filter(
-                Membre.id_utilisateur == user_id,
-                Membre.id_workspace == workspace_id
-            ).first()
+            new_ws_member = Membre(
+                id_utilisateur=user_id,
+                id_workspace=workspace_id,
+                role="Invité",
+                statut="Actif"
+            )
+            db.add(new_ws_member)
 
-            if not existing_ws_member:
-                # On l'ajoute comme "Invité" au workspace uniquement s'il n'y est pas déjà
-                new_ws_member = Membre(
-                    id_utilisateur=user_id,
-                    id_workspace=workspace_id,
-                    role="Invité",
-                    statut="Actif"
-                )
-                db.add(new_ws_member)
-            # Pas de commit immédiat, on laisse le commit global à la fin
-
-    # 6. Prevention des doublons sur l'Espace (Contrainte 5)
     existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
-        # Les anciens tokens "scope" ne transportent pas toujours le role.
-        existing_member.role = payload.get("role") or existing_member.role
+        if payload.get("role"):
+            existing_member.role = payload.get("role")
         if existing_member.statut != "Actif":
             existing_member.statut = "Actif"
-        commit_or_raise(
-            db,
-            detail="Impossible d'activer votre statut de membre.",
-            refresh_instance=existing_member,
-        )
+        db.commit()
+        db.refresh(existing_member)
         return existing_member
 
-    # 7. Creation du nouveau membre de l'Espace
+    role_from_payload = payload.get("role")
     new_member = Membre(
         id_utilisateur=user_id,
         id_espace=target_espace_id,
-        role=payload.get("role") or "Membre",
+        role=role_from_payload if role_from_payload else "Membre",
         statut="Actif"
     )
     db.add(new_member)
-    commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
+    db.commit()
+    db.refresh(new_member)
     
     return new_member
