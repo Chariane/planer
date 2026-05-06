@@ -148,11 +148,10 @@ def invite_member_entreprise_workspace_endpoint(
     result = invite_member_to_workspace(
         db,
         workspace_id,
-        target_user.email,
-        membre_in.role,
+        membre_in,
     )
     membre = result["membre"]
-    invitation_token = result["token"]
+    invitation_token = result["invitation_token"]
     background_tasks.add_task(
         send_workspace_invitation_email,
         current_entreprise.username,

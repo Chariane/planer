@@ -180,8 +180,7 @@ def invite_workspace_member(
     result = invite_member_to_workspace(
         db,
         workspace_id,
-        email_target,
-        membre_in.role,
+        membre_in,
     )
 
     if "membre" in result:

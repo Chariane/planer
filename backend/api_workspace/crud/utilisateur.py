@@ -361,8 +361,8 @@ def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: Worksp
             data={
                 "sub": target_user.id,
                 "email": target_user.email,
-                "workspace_id": workspace.id_workspace, # Ajouté pour cohérence
                 "workspace_id": workspace_id,
+                "role": membre_in.role,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
@@ -380,7 +380,6 @@ def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: Worksp
         token = create_access_token(
             data={
                 "email": membre_in.email,
-                "workspace_id": workspace.id_workspace,
                 "workspace_id": workspace_id,
                 "role": membre_in.role,
                 "type": TOKEN_TYPE, # Uniformisation (Contrainte 2)
