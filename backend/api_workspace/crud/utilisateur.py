@@ -316,7 +316,7 @@ def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: Worksp
     Invite un utilisateur a un workspace.
     Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
     """
-    # 1. Verification de l'existence de l'espace (Contrainte 1)
+    # 1. Verification de l'existence d'un workspace (Contrainte 1)
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve.")
