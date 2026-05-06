@@ -128,45 +128,7 @@ def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
     """
     Vérifie l'accès au contenu d'un espace.
 
-    - accès direct si membre actif du sous-espace
-    - accès si membre actif du workspace parent
-    - accès si créateur/admin d'un espace ancêtre
-    - refus pour membre/invité d'un espace ancêtre non ajouté au sous-espace
-    """
-    espace = _get_espace_or_404(db, espace_id)
-
-    membre_espace = _get_espace_member_record(db, espace_id, current_user_id)
-    if membre_espace and membre_espace.statut == "Actif":
-        return membre_espace
-
-    try:
-        workspace_member = _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
-        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
-            return workspace_member
-        raise HTTPException(
-            status_code=403,
-            detail="Vous devez etre ajoute a cet espace pour en voir le contenu.",
-        )
-    except HTTPException:
-        pass
-
-    ancestor_member = _get_active_ancestor_espace_member(db, espace, current_user_id)
-    if ancestor_member:
-        if ancestor_member.role in ESPACE_MANAGEMENT_ROLES:
-            return ancestor_member
-        raise HTTPException(
-            status_code=403,
-            detail="Vous devez etre ajoute a ce sous-espace pour en voir le contenu.",
-        )
-
-    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
-
-
-def _require_espace_read_access(db: Session, espace_id: str, current_user_id: str):
-    """
-    Vérifie l'accès en lecture à un espace.
-
-    Autorise la lecture si l'utilisateur est :
+    Autorise l'accès si l'utilisateur est :
     - membre actif direct de l'espace
     - membre actif du workspace parent
     - membre actif d'un espace ancêtre
@@ -187,6 +149,11 @@ def _require_espace_read_access(db: Session, espace_id: str, current_user_id: st
         return ancestor_member
 
     raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
+
+
+def _require_espace_read_access(db: Session, espace_id: str, current_user_id: str):
+    """Vérifie l'accès en lecture à un espace."""
+    return _require_espace_access(db, espace_id, current_user_id)
 
 
 def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):
@@ -258,14 +225,7 @@ def _require_list_access(db: Session, liste_id: str, current_user_id: str):
 
 def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
     """Vérifie l'accès en lecture à une liste (via son espace ou son workspace)."""
-    liste = _get_liste_or_404(db, liste_id)
-
-    if liste.id_espace:
-        return _require_espace_read_access(db, liste.id_espace, current_user_id)
-    if liste.id_workspace:
-        return _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
-
-    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+    return _require_list_access(db, liste_id, current_user_id)
 
 # -----------------------------------------------
 # Helpers d'accès — Tache
