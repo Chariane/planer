@@ -218,7 +218,7 @@ async def send_workspace_invitation_email(
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Invitation Espace</title>
+                <title>Invitation Workspace</title>
             </head>
             <body style="background-color:#faf4f4;font-family:Arial,sans-serif;">
                 <div style="max-width:600px;margin:auto;padding:20px;">
