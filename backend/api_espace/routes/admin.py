@@ -4,10 +4,9 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
     _require_espace_admin_access,
+    _require_espace_member_management_access,
     _require_espace_owner_access,
     _serialize_member,
-    _get_espace_actor_context,
-    _validate_espace_member_management_permissions,
 )
 from ..core.security import get_current_user
 from ..crud.admin import (
@@ -17,7 +16,6 @@ from ..crud.admin import (
     remove_admin_espace_member,
     update_admin_espace_member,
 )
-from ..crud.utilisateur import get_espace_member
 from ..crud.utilisateur import get_espace_by_id
 from ..schemas import EspaceOut, EspaceMemberOut, UtilisateurOut, WorkspaceMemberUpdate
 
@@ -68,21 +66,13 @@ def update_admin_member(
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
     
-    # 1. Récupérer le contexte de l'acteur (incluant le fallback Créateur Workspace)
-    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
-
-    # 2. Récupérer le membre cible
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-
-    # 3. Validation stricte des rôles et de la promotion
-    _validate_espace_member_management_permissions(
-        espace_obj, 
-        actor_role, 
-        user_id, 
-        target_member, 
-        membre_in.role
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user.id,
+        user_id,
+        membre_in.role,
     )
 
     updated_member = update_admin_espace_member(db, espace_id, user_id, membre_in)
@@ -102,16 +92,13 @@ def remove_admin_member(
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
     
-    # 1. Contexte acteur
-    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
-
-    # 2. Cible
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-
-    # 3. Validation (pas de suppression du créateur, de confrères admins, etc.)
-    _validate_espace_member_management_permissions(espace_obj, actor_role, user_id, target_member)
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user.id,
+        user_id,
+    )
 
     removed = remove_admin_espace_member(db, espace_id, user_id)
     if removed is None:

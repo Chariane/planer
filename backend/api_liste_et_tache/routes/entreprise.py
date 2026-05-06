@@ -10,6 +10,7 @@ from ..core.function import (
     _get_workspace_member_or_403,
     _get_espace_or_404,
     _require_espace_access,
+    _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
     _get_tache_or_404
@@ -71,7 +72,7 @@ def create_entreprise_liste_endpoint(
         _get_workspace_or_404(db, liste_in.id_workspace)
         _require_workspace_management_access(db, liste_in.id_workspace, current_entreprise.id)
     else:
-        _require_espace_access(db, liste_in.id_espace, current_entreprise.id)
+        _require_espace_management_access(db, liste_in.id_espace, current_entreprise.id)
         
     return create_liste(
         db, 

@@ -138,6 +138,12 @@ def invite_member_entreprise_workspace_endpoint(
     workspace = get_entreprise_workspace(db, current_entreprise.id, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
+    _require_workspace_invitation_access(
+        db,
+        workspace_id,
+        current_entreprise.id,
+        membre_in.role,
+    )
 
     result = invite_member_to_workspace(
         db,

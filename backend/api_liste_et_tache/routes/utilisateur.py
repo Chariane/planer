@@ -9,6 +9,7 @@ from ..core.function import (
     _require_workspace_management_access,
     _get_workspace_member_or_403,
     _require_espace_access,
+    _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
     _get_tache_or_404
@@ -76,7 +77,7 @@ def create_liste_endpoint(
         _get_workspace_or_404(db, liste_in.id_workspace)
         _require_workspace_management_access(db, liste_in.id_workspace, current_user.id)
     else:
-        _require_espace_access(db, liste_in.id_espace, current_user.id)
+        _require_espace_management_access(db, liste_in.id_espace, current_user.id)
         
     return create_liste(
         db, 

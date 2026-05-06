@@ -8,6 +8,7 @@ from ..core.emails import send_workspace_invitation_email
 from ..core.database import get_db
 from ..core.function import (
     _require_workspace_read_access,
+    _require_workspace_invitation_access,
     _require_workspace_management_access,
     _require_workspace_member_management_access,
     _require_workspace_owner_access,
@@ -167,19 +168,21 @@ def invite_workspace_member(
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
-    
-    _require_workspace_management_access(db, workspace_id, workspace.id_workspace, current_user.id)
-    # Validation stricte des rôles (Règle : un Admin ne peut pas inviter d'autres Admins ou le Créateur)
-    actor_member = _require_workspace_management_access(db, workspace_id, workspace.id_workspace, current_user.id)
-    if actor_member.role == "Administrateur" and membre_in.role not in ["Membre", "Invité"]:
-        raise HTTPException(
-            status_code=403,
-            detail="En tant qu'Administrateur, vous pouvez uniquement inviter des Membres ou des Invités."
-        )
+    email_target = membre_in.email or membre_in.username
+    _require_workspace_invitation_access(
+        db,
+        workspace_id,
+        current_user.id,
+        membre_in.role,
+    )
 
     # Delegation de la logique d'invitation au CRUD
-    result = invite_member_to_workspace(db, workspace_id, membre_in)
-    email_target = membre_in.email or membre_in.username 
+    result = invite_member_to_workspace(
+        db,
+        workspace_id,
+        email_target,
+        membre_in.role,
+    )
 
     if "membre" in result:
         # Cas utilisateur existant

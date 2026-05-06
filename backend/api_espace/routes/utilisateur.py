@@ -8,6 +8,8 @@ from ..core.function import (
     _get_espace_or_404,
     _require_espace_access,
     _require_espace_management_access,
+    _require_espace_invitation_access,
+    _require_espace_member_management_access,
     _require_workspace_management_access,
     _serialize_member,
     _require_workspace_read_access,
@@ -101,8 +103,6 @@ def list_workspaces_espaces(
         _get_workspace_member_or_403(db, workspace_id, current_user.id)
         return all_espaces
     except HTTPException:
-        # Non membre -> filtrer par accessibilité
-        from ..crud.utilisateur import get_espace_member
         return [esp for esp in all_espaces if get_espace_member(db, esp.id, current_user.id)]
 
 # Récupérer uniquement les espaces de premier niveau (sans parent) d'un workspace
@@ -238,16 +238,13 @@ def invite_espace_member(
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
-
-    # Validation stricte des rôles (Règle : un Admin ne peut pas inviter d'autres Admins ou le Créateur)
-    actor_member = _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
-    if actor_member.role == "Administrateur" and membre_in.role not in ["Membre", "Invité"]:
-        raise HTTPException(
-            status_code=403,
-            detail="En tant qu'Administrateur, vous pouvez uniquement inviter des Membres ou des Invités."
-        )
+    _require_espace_invitation_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user.id,
+        membre_in.role,
+    )
 
     # Delegation de la logique d'invitation au CRUD
     result = invite_member_to_espace(db, espace_id, membre_in)
@@ -402,21 +399,17 @@ def update_espace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    from ..core.function import _get_espace_actor_context, _validate_espace_member_management_permissions
-
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    
-    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
-
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
-
-    _validate_espace_member_management_permissions(espace_obj, actor_role, user_id, target_member, membre_in.role)
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user.id,
+        user_id,
+        membre_in.role,
+    )
 
     updated = update_espace_member(db, espace_id, user_id, membre_in)
     if not updated:
@@ -431,21 +424,16 @@ def remove_espace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    from ..core.function import _get_espace_actor_context, _validate_espace_member_management_permissions
-
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    
-    espace_obj, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user.id)
-
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Le createur de l'espace ne peut pas etre supprime")
-
-    _validate_espace_member_management_permissions(espace_obj, actor_role, user_id, target_member)
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user.id,
+        user_id,
+    )
 
     if not remove_espace_member(db, espace_id, user_id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")

@@ -110,6 +110,50 @@ def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
     return _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
 
 
+def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):
+    """
+    Vérifie l'accès de gestion à un espace.
+
+    Autorise uniquement :
+    - le créateur du workspace parent
+    - un administrateur du workspace parent
+    - le créateur de l'espace
+    - un administrateur de l'espace
+    """
+    espace = _get_espace_or_404(db, espace_id)
+
+    ws = db.query(Workspace).filter(
+        Workspace.id == espace.id_workspace,
+        Workspace.id_utilisateur == current_user_id
+    ).first()
+    if ws:
+        return Membre(
+            id_utilisateur=current_user_id,
+            id_workspace=espace.id_workspace,
+            role=WORKSPACE_OWNER_ROLE,
+            statut="Actif",
+        )
+
+    espace_member = db.query(Membre).filter(
+        Membre.id_espace == espace_id,
+        Membre.id_utilisateur == current_user_id,
+        Membre.statut == "Actif",
+    ).first()
+    if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
+        return espace_member
+
+    ws_member = db.query(Membre).filter(
+        Membre.id_workspace == espace.id_workspace,
+        Membre.id_utilisateur == current_user_id,
+        Membre.role == WORKSPACE_ADMIN_ROLE,
+        Membre.statut == "Actif",
+    ).first()
+    if ws_member:
+        return ws_member
+
+    raise HTTPException(status_code=403, detail="Privileges insuffisants sur l'espace")
+
+
 # -----------------------------------------------
 # Helpers d'accès — Liste
 # -----------------------------------------------

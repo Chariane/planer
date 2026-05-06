@@ -5,7 +5,9 @@ from ..core.database import get_db
 from ..core.function import (
     _get_workspace_or_404,
     _require_espace_access,
+    _require_espace_invitation_access,
     _require_espace_management_access,
+    _require_espace_member_management_access,
     _require_workspace_management_access,
     _serialize_member,
     can_create_espace,
@@ -223,7 +225,13 @@ def invite_entreprise_espace_member_endpoint(
     espace = get_entreprise_espace(db, current_entreprise.id, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
+    _require_espace_invitation_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_entreprise.id,
+        membre_in.role,
+    )
 
     result = invite_member_to_espace(db, espace_id, membre_in)
     email_target = membre_in.email or membre_in.username
@@ -279,13 +287,14 @@ def update_entreprise_espace_member_endpoint(
     espace = get_entreprise_espace(db, current_entreprise.id, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
-
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=400, detail="Impossible de modifier le role du createur")
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_entreprise.id,
+        user_id,
+        membre_in.role,
+    )
 
     updated = update_entreprise_espace_member(db, current_entreprise.id, espace_id, user_id, membre_in)
     if not updated:
@@ -303,13 +312,13 @@ def remove_entreprise_espace_member_endpoint(
     espace = get_entreprise_espace(db, current_entreprise.id, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
-
-    target_member = get_espace_member(db, espace_id, user_id)
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    if target_member.role == "Créateur":
-        raise HTTPException(status_code=403, detail="Le createur de l'espace ne peut pas etre supprime")
+    _require_espace_member_management_access(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_entreprise.id,
+        user_id,
+    )
 
     success = remove_entreprise_espace_member(db, current_entreprise.id, espace_id, user_id)
     if success is None:

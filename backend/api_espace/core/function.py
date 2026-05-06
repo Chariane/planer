@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from ..models import Espace, Membre, PlanerEntreprise, Utilisateur, Workspace
-from ..crud.utilisateur import get_espace_member
 
 # Rôles Workspace
 WORKSPACE_OWNER_ROLE = "Créateur"
@@ -206,6 +205,17 @@ def _get_workspace_or_404(db: Session, workspace_id: str) -> Workspace:
     return workspace
 
 
+def _get_espace_member_record(db: Session, espace_id: str, user_id: str) -> Optional[Membre]:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_espace == espace_id,
+            Membre.id_utilisateur == user_id,
+        )
+        .first()
+    )
+
+
 def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str):
 
     membre = (
@@ -296,6 +306,12 @@ def _validate_espace_member_management_permissions(
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre introuvable")
 
+    if target_member.role == ESPACE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Le créateur de l'espace ne peut pas être modifié ou retiré.",
+        )
+
     # REGLE 1 : Un Admin ne peut pas modifier un autre Admin ou le Créateur
     if actor_role == ESPACE_ADMIN_ROLE and target_member.role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
         raise HTTPException(
@@ -318,14 +334,20 @@ def _validate_espace_member_management_permissions(
         )
 
 
+def _validate_espace_invitation_permissions(actor_role: str, invited_role: str):
+    if actor_role == ESPACE_ADMIN_ROLE and invited_role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut inviter que des membres ou invites dans l'espace.",
+        )
+
+
 # -----------------------------------------------
 # Helpers d'accès — Espace
 # -----------------------------------------------
 
 def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
-    from ..crud.utilisateur import get_espace_by_id
-
-    espace = get_espace_by_id(db, espace_id)
+    espace = db.query(Espace).filter(Espace.id == espace_id).first()
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
     return espace
@@ -333,8 +355,7 @@ def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
 
 def _require_espace_access(db: Session, espace_id: str, workspace_id: str, current_user_id: str):
     """Vérifie l'accès à un espace (membre espace OU membre workspace)."""
- 
-    espace_member = get_espace_member(db, espace_id, current_user_id)
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
     if espace_member:
         return espace_member
     return _get_workspace_member_or_403(db, workspace_id, current_user_id)
@@ -348,8 +369,6 @@ def _require_espace_management_access(db: Session, espace_id: str, workspace_id:
     2. Un membre de l'espace avec rôle 'Créateur' ou 'Administrateur'
     3. Un administrateur du Workspace parent
     """
-    from ..crud.utilisateur import get_espace_member
-
     # 1. Résolution du workspace_id si manquant
     if not workspace_id:
         espace = db.query(Espace).filter(Espace.id == espace_id).first()
@@ -367,7 +386,7 @@ def _require_espace_management_access(db: Session, espace_id: str, workspace_id:
             return Membre(role=WORKSPACE_OWNER_ROLE, statut="Actif")
 
     # 3. Vérification MEMBRE DIRECT DE L'ESPACE
-    espace_member = get_espace_member(db, espace_id, current_user_id)
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
     if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
         return espace_member
 
@@ -402,16 +421,46 @@ def _require_espace_admin_access(db: Session, espace_id: str, current_user_id: s
     return espace, membre
 
 
+def _require_espace_member_management_access(
+    db: Session,
+    espace_id: str,
+    workspace_id: Optional[str],
+    current_user_id: str,
+    target_user_id: str,
+    new_role: Optional[str] = None,
+):
+    espace, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user_id)
+    target_member = _get_espace_member_record(db, espace_id, target_user_id)
+    _validate_espace_member_management_permissions(
+        espace,
+        actor_role,
+        target_user_id,
+        target_member,
+        new_role,
+    )
+    return espace, actor_member, actor_role, target_member
+
+
+def _require_espace_invitation_access(
+    db: Session,
+    espace_id: str,
+    workspace_id: Optional[str],
+    current_user_id: str,
+    invited_role: str,
+):
+    espace, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user_id)
+    _validate_espace_invitation_permissions(actor_role, invited_role)
+    return espace, actor_member, actor_role
+
+
 def _require_espace_owner_access(db: Session, espace_id: str, current_user_id: str):
     """Vérifie que l'utilisateur est le créateur de l'espace.
 
     Retourne un tuple (espace, membre).
     """
-    from ..crud.utilisateur import get_espace_member
-
     espace = _get_espace_or_404(db, espace_id)
 
-    espace_member = get_espace_member(db, espace_id, current_user_id)
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
     if espace_member and espace_member.role == "Créateur":
         return espace, espace_member
 
