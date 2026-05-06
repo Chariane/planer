@@ -7,6 +7,7 @@ from ..core.function import (
     _get_workspace_member_or_403,
     _get_espace_or_404,
     _require_espace_access,
+    _require_espace_visibility_access,
     _require_espace_management_access,
     _require_espace_invitation_access,
     _require_espace_member_management_access,
@@ -138,7 +139,7 @@ def list_espace_children(
 ):
     """Liste les sous-espaces directs d'un espace parent."""
     espace = _get_espace_or_404(db, espace_id)
-    _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
+    _require_espace_visibility_access(db, espace_id, espace.id_workspace, current_user.id)
     return get_sub_espaces_for_parent(db, espace_id)
 
 # Récupérer l'arborescence complète des espaces d'un workspace (avec sous-espaces imbriqués)

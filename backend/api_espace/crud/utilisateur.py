@@ -46,7 +46,28 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
     query = db.query(Espace).filter(Espace.id_workspace == workspace_id)
     all_espaces = query.all()
 
-    # 2. Filtrage par permissions si user_id est fourni
+    # 2. Index par parent pour pouvoir etendre la visibilite aux descendants
+    from collections import defaultdict
+
+    children_by_parent: dict[Optional[str], List[Espace]] = defaultdict(list)
+    for esp in all_espaces:
+        children_by_parent[esp.id_espace_parent].append(esp)
+
+    def collect_descendant_ids(parent_id: str) -> set[str]:
+        descendant_ids: set[str] = set()
+        stack = [parent_id]
+
+        while stack:
+            current_parent_id = stack.pop()
+            for child in children_by_parent.get(current_parent_id, []):
+                if child.id in descendant_ids:
+                    continue
+                descendant_ids.add(child.id)
+                stack.append(child.id)
+
+        return descendant_ids
+
+    # 3. Filtrage par permissions si user_id est fourni
     is_workspace_member = True
     visible_ids = {esp.id for esp in all_espaces}
 
@@ -59,17 +80,21 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
 
         if not ws_member:
             is_workspace_member = False
-            # Récupérer les IDs des espaces où l'utilisateur est membre actif
-            # On inclut aussi les espaces dont il est créateur global (fallback via workspace owner déjà géré par ws_member si c'était le cas)
+            # Récupérer les espaces où l'utilisateur est membre actif.
+            # On expose aussi les descendants dans l'arborescence pour afficher leurs noms,
+            # meme si l'acces a leur contenu reste controle par les endpoints de detail.
             esp_memberships = db.query(Membre.id_espace).filter(
                 Membre.id_utilisateur == user_id,
                 Membre.id_espace != None,
                 Membre.statut == "Actif"
             ).all()
-            visible_ids = {mid for (mid,) in esp_memberships}
+            direct_visible_ids = {mid for (mid,) in esp_memberships}
+            visible_ids = set(direct_visible_ids)
 
-    # 3. Organiser par parent_id
-    from collections import defaultdict
+            for espace_id in direct_visible_ids:
+                visible_ids.update(collect_descendant_ids(espace_id))
+
+    # 4. Organiser par parent_id
     nodes_by_parent = defaultdict(list)
     roots = []
 
@@ -88,7 +113,7 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
             else:
                 roots.append(esp)
 
-    # 4. Fonction récursive pour construire l'arbre
+    # 5. Fonction récursive pour construire l'arbre
     def build_tree(parent_list: List[Espace]) -> List[dict]:
         tree = []
         for esp in parent_list:

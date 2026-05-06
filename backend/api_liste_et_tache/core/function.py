@@ -81,6 +81,38 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
     return membre
 
 
+def _get_espace_member_record(db: Session, espace_id: str, user_id: str) -> Membre | None:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_espace == espace_id,
+            Membre.id_utilisateur == user_id,
+        )
+        .first()
+    )
+
+
+def _get_active_ancestor_espace_member(
+    db: Session,
+    espace: Espace,
+    user_id: str,
+) -> Membre | None:
+    parent_id = espace.id_espace_parent
+
+    while parent_id:
+        parent_espace = db.query(Espace).filter(Espace.id == parent_id).first()
+        if not parent_espace:
+            return None
+
+        parent_member = _get_espace_member_record(db, parent_espace.id, user_id)
+        if parent_member and parent_member.statut == "Actif":
+            return parent_member
+
+        parent_id = parent_espace.id_espace_parent
+
+    return None
+
+
 # -----------------------------------------------
 # Helpers d'accès — Espace
 # -----------------------------------------------
@@ -93,21 +125,41 @@ def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
 
 
 def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
-    """Vérifie l'accès à un espace (soit membre de l'espace, soit membre du workspace parent)."""
+    """
+    Vérifie l'accès au contenu d'un espace.
+
+    - accès direct si membre actif du sous-espace
+    - accès si membre actif du workspace parent
+    - accès si créateur/admin d'un espace ancêtre
+    - refus pour membre/invité d'un espace ancêtre non ajouté au sous-espace
+    """
     espace = _get_espace_or_404(db, espace_id)
-    
-    # Check espace membership
-    membre_espace = db.query(Membre).filter(
-        Membre.id_espace == espace_id,
-        Membre.id_utilisateur == current_user_id,
-        Membre.statut == "Actif"
-    ).first()
-    
-    if membre_espace:
+
+    membre_espace = _get_espace_member_record(db, espace_id, current_user_id)
+    if membre_espace and membre_espace.statut == "Actif":
         return membre_espace
-    
-    # Fallback: check workspace membership
-    return _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
+
+    try:
+        workspace_member = _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
+        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member
+        raise HTTPException(
+            status_code=403,
+            detail="Vous devez etre ajoute a cet espace pour en voir le contenu.",
+        )
+    except HTTPException:
+        pass
+
+    ancestor_member = _get_active_ancestor_espace_member(db, espace, current_user_id)
+    if ancestor_member:
+        if ancestor_member.role in ESPACE_MANAGEMENT_ROLES:
+            return ancestor_member
+        raise HTTPException(
+            status_code=403,
+            detail="Vous devez etre ajoute a ce sous-espace pour en voir le contenu.",
+        )
+
+    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
 
 
 def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):

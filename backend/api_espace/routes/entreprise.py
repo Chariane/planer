@@ -5,6 +5,7 @@ from ..core.database import get_db
 from ..core.function import (
     _get_workspace_or_404,
     _require_espace_access,
+    _require_espace_visibility_access,
     _require_espace_invitation_access,
     _require_espace_management_access,
     _require_espace_member_management_access,
@@ -128,7 +129,7 @@ def list_entreprise_espace_children(
     espace = get_entreprise_espace(db, current_entreprise.id, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
-    _require_espace_access(db, espace_id, espace.id_workspace, current_entreprise.id)
+    _require_espace_visibility_access(db, espace_id, espace.id_workspace, current_entreprise.id)
     return get_sub_espaces_for_parent(db, espace_id)
 
 # Récupérer les détails d'un espace entreprise dans un workspace, uniquement si l'utilisateur est membre de l'espace
