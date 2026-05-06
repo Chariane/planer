@@ -9,9 +9,11 @@ from ..core.function import (
     _require_workspace_management_access,
     _get_workspace_member_or_403,
     _require_espace_access,
+    _require_espace_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
+    _require_list_read_access,
     _get_tache_or_404
 )
 from ..crud.liste import (
@@ -102,7 +104,7 @@ def get_listes_endpoint(
         _get_workspace_member_or_403(db, workspace_id, current_user.id)
         return get_listes_for_workspace(db, workspace_id)
     else:
-        _require_espace_access(db, espace_id, current_user.id)
+        _require_espace_read_access(db, espace_id, current_user.id)
         return get_listes_for_espace(db, espace_id)
 
 @router.get("/{liste_id}/get_liste", response_model=ListeOut)
@@ -111,7 +113,7 @@ def get_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return _get_liste_or_404(db, liste_id)
 
 @router.put("/{liste_id}/update_liste", response_model=ListeOut)
@@ -121,7 +123,7 @@ def update_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     upd = update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
     if not upd:
         raise HTTPException(status_code=404, detail="Liste non trouvee")
@@ -133,7 +135,7 @@ def delete_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     if not delete_liste(db, liste_id):
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return None
@@ -216,7 +218,7 @@ def get_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_list_read_access(db, tache.id_liste, current_user.id)
     return tache
 
 # Modifier une tâche, uniquement si l'utilisateur a accès à la liste parente
@@ -254,7 +256,7 @@ def get_kanban_view_endpoint(
     db: Session = Depends(get_db), 
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return {"columns": get_taches_kanban(db, liste_id)}
 
 #vue gantt : liste des tâches triées par date de début
@@ -264,7 +266,7 @@ def get_gantt_view_endpoint(
     db: Session = Depends(get_db), 
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     # Tri chronologique pour le diagramme de Gantt
     return get_taches_for_liste(db, liste_id, sort_by="date_debut", order="asc")
 
@@ -280,7 +282,7 @@ def get_tableau_view_endpoint(
     db: Session = Depends(get_db), 
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return get_taches_for_liste(
         db, liste_id, 
         statut=statut, 
@@ -320,7 +322,7 @@ def assign_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_list_read_access(db, tache.id_liste, current_user.id)
     return assign_member_to_tache(db, tache_id, utilisateur_id)
 
 #Désassigner une tâche d'un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
@@ -352,7 +354,7 @@ def get_tache_members_endpoint(
 
 @router.post("/{liste_id}/canevas", response_model=CanevasOut)
 def create_canevas_endpoint(liste_id: str, canevas_in: CanevasCreate, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return create_canevas(db, is_verrouille=canevas_in.is_verrouille, id_liste=liste_id)
 
 @router.get("/{liste_id}/canevas", response_model=CanevasOut)
@@ -391,7 +393,7 @@ def create_section_endpoint(
 def get_sections_endpoint(canevas_id: str, db: Session = Depends(get_db), current_user: UtilisateurOut = Depends(get_current_user)):
     can = get_canevas_by_id(db, canevas_id)
     if not can: raise HTTPException(404, "Canevas non trouve")
-    _require_list_access(db, can.id_liste, current_user.id)
+    _require_list_read_access(db, can.id_liste, current_user.id)
     return get_sections_for_canevas(db, canevas_id)
 
 @router.put("/sections/{section_id}", response_model=SectionOut)
@@ -425,7 +427,7 @@ def get_enhanced_canevas_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     """Récupère le canevas d'une liste avec les checklists enrichies (tâches + sections)"""
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return get_enhanced_canevas(db, liste_id)
 
 # -----------------------------------------------------------------------------
@@ -442,7 +444,7 @@ def create_checklist_for_tache_endpoint(
 ):
     """Crée une checklist directement pour une tâche."""
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_list_read_access(db, tache.id_liste, current_user.id)
     return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_tache=tache_id)
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
@@ -488,7 +490,7 @@ def create_checklist_for_section_endpoint(
     canevas = get_canevas_by_id(db, section.id_canevas)
     if not canevas:
         raise HTTPException(status_code=404, detail="Canevas non trouve")
-    _require_list_access(db, canevas.id_liste, current_user.id)
+    _require_list_read_access(db, canevas.id_liste, current_user.id)
     return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_section=section_id)
 
 @router.get("/sections/{section_id}/checklists", response_model=List[ChecklistOut])
@@ -521,11 +523,11 @@ def get_checklist_endpoint(
     
     if chk.id_tache:
         tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_access(db, tache.id_liste, current_user.id)
+        _require_list_read_access(db, tache.id_liste, current_user.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
-        _require_list_access(db, can.id_liste, current_user.id)
+        _require_list_read_access(db, can.id_liste, current_user.id)
     return chk
 
 @router.put("/checklists/{checklist_id}", response_model=ChecklistOut)
@@ -579,5 +581,5 @@ def get_checklists_for_tache_legacy_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_list_read_access(db, tache.id_liste, current_user.id)
     return get_checklists_for_tache(db, tache_id)

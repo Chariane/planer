@@ -162,6 +162,33 @@ def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
     raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
 
 
+def _require_espace_read_access(db: Session, espace_id: str, current_user_id: str):
+    """
+    Vérifie l'accès en lecture à un espace.
+
+    Autorise la lecture si l'utilisateur est :
+    - membre actif direct de l'espace
+    - membre actif du workspace parent
+    - membre actif d'un espace ancêtre
+    """
+    espace = _get_espace_or_404(db, espace_id)
+
+    membre_espace = _get_espace_member_record(db, espace_id, current_user_id)
+    if membre_espace and membre_espace.statut == "Actif":
+        return membre_espace
+
+    try:
+        return _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
+    except HTTPException:
+        pass
+
+    ancestor_member = _get_active_ancestor_espace_member(db, espace, current_user_id)
+    if ancestor_member and ancestor_member.statut == "Actif":
+        return ancestor_member
+
+    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
+
+
 def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):
     """
     Vérifie l'accès de gestion à un espace.
@@ -226,6 +253,18 @@ def _require_list_access(db: Session, liste_id: str, current_user_id: str):
     elif liste.id_workspace:
         return _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
     
+    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+
+
+def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
+    """Vérifie l'accès en lecture à une liste (via son espace ou son workspace)."""
+    liste = _get_liste_or_404(db, liste_id)
+
+    if liste.id_espace:
+        return _require_espace_read_access(db, liste.id_espace, current_user_id)
+    if liste.id_workspace:
+        return _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
+
     raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
 
 # -----------------------------------------------

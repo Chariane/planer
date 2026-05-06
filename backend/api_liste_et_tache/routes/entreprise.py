@@ -10,9 +10,11 @@ from ..core.function import (
     _get_workspace_member_or_403,
     _get_espace_or_404,
     _require_espace_access,
+    _require_espace_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
+    _require_list_read_access,
     _get_tache_or_404
 )
 from ..crud.liste import (
@@ -96,7 +98,7 @@ def get_entreprise_listes_endpoint(
         _get_workspace_member_or_403(db, workspace_id, current_entreprise.id)
         return get_listes_for_workspace(db, workspace_id)
     else:
-        _require_espace_access(db, espace_id, current_entreprise.id)
+        _require_espace_read_access(db, espace_id, current_entreprise.id)
         return get_listes_for_espace(db, espace_id)
 
 @router.get("/{liste_id}", response_model=ListeOut)
@@ -105,7 +107,7 @@ def get_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return _get_liste_or_404(db, liste_id)
 
 @router.put("/{liste_id}", response_model=ListeOut)
@@ -115,7 +117,7 @@ def update_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
 
 @router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -124,7 +126,7 @@ def delete_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     delete_liste(db, liste_id)
     return None
 
@@ -204,7 +206,7 @@ def update_entreprise_tache_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_entreprise.id)
+    _require_list_read_access(db, tache.id_liste, current_entreprise.id)
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
 @router.delete("/taches/{tache_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -226,7 +228,7 @@ def get_entreprise_kanban_view_endpoint(
     db: Session = Depends(get_db), 
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return {"columns": get_taches_kanban(db, liste_id)}
 
 @router.get("/{liste_id}/vues/gantt", response_model=List[TacheFullOut])
@@ -235,7 +237,7 @@ def get_entreprise_gantt_view_endpoint(
     db: Session = Depends(get_db), 
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     # Tri chronologique pour le diagramme de Gantt
     return get_taches_for_liste(db, liste_id, sort_by="date_debut", order="asc")
 
@@ -250,7 +252,7 @@ def get_entreprise_tableau_view_endpoint(
     db: Session = Depends(get_db), 
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return get_taches_for_liste(
         db, liste_id, 
         statut=statut, 
