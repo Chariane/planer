@@ -23,7 +23,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('Membre');
+  const [inviteRole, setInviteRole] = useState('Invité');
 
   const loadMembers = async () => {
     setLoading(true);
@@ -31,7 +31,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
       if (workspaceId) {
         const data = await workspaceService.getMembers(workspaceId);
         setMembers(data.map((m: any) => ({
-          id: m.id,
+          id: m.id_utilisateur || m.utilisateur?.id || m.id,
           name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
           email: m.utilisateur?.email || '',
           role: m.role,
@@ -39,7 +39,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
       } else if (espaceId) {
         const data = await espaceService.getMembers(espaceId);
         setMembers(data.map((m: any) => ({
-          id: m.id,
+          id: m.id_utilisateur || m.utilisateur?.id || m.id,
           name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
           email: m.utilisateur?.email || '',
           role: m.role,
@@ -182,6 +182,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
               onChange={e => setInviteRole(e.target.value)}
               className="w-full p-2 border rounded-lg"
             >
+              <option value="Invité">Invité</option>
               <option value="Membre">Membre</option>
               <option value="Administrateur">Administrateur</option>
             </select>

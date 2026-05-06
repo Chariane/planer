@@ -13,7 +13,8 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
-  const { workspaceId } = useParams();
+  const { workspaceId, id } = useParams();
+  const activeWorkspaceId = workspaceId || (location.pathname.startsWith('/workspace/') ? id : undefined);
   const { user, logout } = useAuth();
   const { loadWorkspaces } = useApp();
   const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes, joinedTaches } = useNavigationStore();
@@ -109,7 +110,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
               <Link
                 key={ws.id}
                 to={`/workspace/${ws.id}`}
-                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${workspaceId === ws.id
+                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${activeWorkspaceId === ws.id
                   ? 'bg-secondary text-white'
                   : 'text-white/70 hover:bg-white/10 hover:text-white'
                   }`}
@@ -140,7 +141,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 <Link
                   key={ws.id}
                   to={`/workspace/${ws.id}`}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${workspaceId === ws.id
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${activeWorkspaceId === ws.id
                     ? 'bg-secondary text-white'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}

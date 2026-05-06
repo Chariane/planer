@@ -31,13 +31,13 @@ export const workspaceService = {
       id_tache?: string;
     },
   ) =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite_member`, { method: 'POST', body: JSON.stringify(data) }),
+    apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite_member_workspace`, { method: 'POST', body: JSON.stringify(data) }),
   updateMemberRole: (workspaceId: string, userId: string, role: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${userId}/update_workspace_member`, { method: 'PUT', body: JSON.stringify({ role }) }),
   removeMember: (workspaceId: string, memberId: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${memberId}/remove_workspace_member`, { method: 'DELETE' }),
   acceptInvitation: (token: string) =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/invitations/accept_workspace_invitation`, { method: 'POST', body: JSON.stringify({ token }) }),
+    apiFetch(WORKSPACE_BASE_URL, `/workspaces/workspaces/invitations/accept`, { method: 'POST', body: JSON.stringify({ token }) }),
   getPendingInvitations: () =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/invitations/list_pending_invitations`),
   leaveWorkspace: (workspaceId: string) =>

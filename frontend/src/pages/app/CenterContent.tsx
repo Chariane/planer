@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import {
   Plus, Search, Filter, ChevronDown, ChevronRight, MoreVertical,
-  Edit, Trash, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, FolderTree,
+  Edit, Trash, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo,
   CheckCircle, Circle, X, Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -14,6 +14,7 @@ import KanbanView from './components/KanbanView';
 import GanttView from './components/GanttView';
 import MemberManagement from '../../components/members/MemberManagement';
 import SpaceDashboard from './components/SpaceDashboard';
+import WorkspaceDashboardPanel from './components/WorkspaceDashboardPanel';
 import { tacheService } from '../../services/tache.service';
 import { espaceService } from '../../services/espace.service';
 import type { Task, Member } from '../../types';
@@ -1177,15 +1178,11 @@ export default function CenterContent() {
     );
   }
 
-  // Cas 3: Ni liste ni espace, mais un workspace existe → Message de bienvenue
+  // Cas 3: Ni liste ni espace, mais un workspace existe → Dashboard du workspace
   if (workspaceId) {
     return (
-      <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">
-          <FolderTree className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-          <p className="text-lg font-medium">Bienvenue dans le workspace</p>
-          <p className="text-sm">Sélectionnez un espace ou une liste dans le menu de gauche.</p>
-        </div>
+      <div className="p-6">
+        <WorkspaceDashboardPanel workspaceId={workspaceId} />
       </div>
     );
   }
