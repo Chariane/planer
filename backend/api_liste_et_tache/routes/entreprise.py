@@ -9,13 +9,14 @@ from ..core.function import (
     _require_workspace_management_access,
     _get_workspace_member_or_403,
     _get_espace_or_404,
-    _require_espace_access,
     _require_espace_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
     _require_list_read_access,
-    _get_tache_or_404
+    _get_tache_or_404,
+    _require_task_access,
+    _require_task_read_access,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -95,10 +96,10 @@ def get_entreprise_listes_endpoint(
         raise HTTPException(status_code=400, detail="Specifiez soit workspace_id, soit espace_id")
     
     if workspace_id:
-        _get_workspace_member_or_403(db, workspace_id, current_entreprise.id)
+        _require_workspace_management_access(db, workspace_id, current_entreprise.id)
         return get_listes_for_workspace(db, workspace_id)
     else:
-        _require_espace_read_access(db, espace_id, current_entreprise.id)
+        _require_espace_management_access(db, espace_id, current_entreprise.id)
         return get_listes_for_espace(db, espace_id)
 
 @router.get("/{liste_id}", response_model=ListeOut)
@@ -205,8 +206,7 @@ def update_entreprise_tache_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_read_access(db, tache.id_liste, current_entreprise.id)
+    _require_task_access(db, tache_id, current_entreprise.id)
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
 @router.delete("/taches/{tache_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -362,8 +362,7 @@ def delete_entreprise_section_endpoint(section_id: str, db: Session = Depends(ge
 @router.post("/checklists/{parent_id}", response_model=ChecklistOut)
 def create_entreprise_checklist_endpoint(parent_id: str, checklist_in: ChecklistCreate, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
     if checklist_in.id_tache:
-        tache = _get_tache_or_404(db, checklist_in.id_tache)
-        _require_list_access(db, tache.id_liste, current_entreprise.id)
+        _require_task_access(db, checklist_in.id_tache, current_entreprise.id)
     elif checklist_in.id_section:
         sec = get_section_by_id(db, checklist_in.id_section)
         if not sec: raise HTTPException(404, "Section non trouvee")
@@ -373,8 +372,7 @@ def create_entreprise_checklist_endpoint(parent_id: str, checklist_in: Checklist
 
 @router.get("/checklists/tache/{tache_id}", response_model=List[ChecklistOut])
 def get_entreprise_checklists_for_tache_endpoint(tache_id: str, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_entreprise.id)
+    _require_task_read_access(db, tache_id, current_entreprise.id)
     return get_checklists_for_tache(db, tache_id)
 
 @router.put("/checklists/{checklist_id}", response_model=ChecklistOut)
@@ -382,8 +380,7 @@ def update_entreprise_checklist_endpoint(checklist_id: str, checklist_in: Checkl
     chk = get_checklist_by_id(db, checklist_id)
     if not chk: raise HTTPException(404, "Checklist non trouvee")
     if chk.id_tache:
-        tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_access(db, tache.id_liste, current_entreprise.id)
+        _require_task_access(db, chk.id_tache, current_entreprise.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
@@ -395,8 +392,7 @@ def delete_entreprise_checklist_endpoint(checklist_id: str, db: Session = Depend
     chk = get_checklist_by_id(db, checklist_id)
     if not chk: raise HTTPException(404, "Checklist non trouvee")
     if chk.id_tache:
-        tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_access(db, tache.id_liste, current_entreprise.id)
+        _require_task_access(db, chk.id_tache, current_entreprise.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)

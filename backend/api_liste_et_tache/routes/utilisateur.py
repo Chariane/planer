@@ -8,13 +8,14 @@ from ..core.function import (
     _get_workspace_or_404,
     _require_workspace_management_access,
     _get_workspace_member_or_403,
-    _require_espace_access,
     _require_espace_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
     _require_list_read_access,
-    _get_tache_or_404
+    _get_tache_or_404,
+    _require_task_access,
+    _require_task_read_access,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -101,10 +102,10 @@ def get_listes_endpoint(
         raise HTTPException(status_code=400, detail="Specifiez soit workspace_id, soit espace_id")
     
     if workspace_id:
-        _get_workspace_member_or_403(db, workspace_id, current_user.id)
+        _require_workspace_management_access(db, workspace_id, current_user.id)
         return get_listes_for_workspace(db, workspace_id)
     else:
-        _require_espace_read_access(db, espace_id, current_user.id)
+        _require_espace_management_access(db, espace_id, current_user.id)
         return get_listes_for_espace(db, espace_id)
 
 @router.get("/{liste_id}/get_liste", response_model=ListeOut)
@@ -217,9 +218,8 @@ def get_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_read_access(db, tache.id_liste, current_user.id)
-    return tache
+    _require_task_read_access(db, tache_id, current_user.id)
+    return _get_tache_or_404(db, tache_id)
 
 # Modifier une tâche, uniquement si l'utilisateur a accès à la liste parente
 @router.put("/taches/{tache_id}/update_tache", response_model=TacheOut)
@@ -229,8 +229,7 @@ def update_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_task_access(db, tache_id, current_user.id)
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
 # Supprimer une tâche, uniquement si l'utilisateur a accès à la liste parente
@@ -322,7 +321,7 @@ def assign_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_read_access(db, tache.id_liste, current_user.id)
+    _require_task_access(db, tache_id, current_user.id)
     return assign_member_to_tache(db, tache_id, utilisateur_id)
 
 #Désassigner une tâche d'un membre, uniquement si l'utilisateur a accès à la liste parente de la tâche
@@ -344,8 +343,7 @@ def get_tache_members_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_task_read_access(db, tache_id, current_user.id)
     return get_tache_members(db, tache_id)
 
 # -----------------------------------------------------------------------------
@@ -443,8 +441,7 @@ def create_checklist_for_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     """Crée une checklist directement pour une tâche."""
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_read_access(db, tache.id_liste, current_user.id)
+    _require_task_access(db, tache_id, current_user.id)
     return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_tache=tache_id)
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
@@ -454,8 +451,7 @@ def get_checklists_for_tache_v2_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     """Récupère toutes les checklists d'une tâche."""
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_task_read_access(db, tache_id, current_user.id)
     return get_checklists_for_tache(db, tache_id)
 
 # Dans routes/utilisateur.py
@@ -466,8 +462,7 @@ def update_task_status_from_checklists_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     """Met à jour le statut d'une tâche en fonction de ses checklists"""
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_user.id)
+    _require_task_access(db, tache_id, current_user.id)
     
     from ..crud.tache import update_tache_status_based_on_checklists
     update_tache_status_based_on_checklists(db, tache_id)
@@ -522,8 +517,7 @@ def get_checklist_endpoint(
         raise HTTPException(404, "Checklist non trouvee")
     
     if chk.id_tache:
-        tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_read_access(db, tache.id_liste, current_user.id)
+        _require_task_read_access(db, chk.id_tache, current_user.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
@@ -542,8 +536,7 @@ def update_checklist_endpoint(
         raise HTTPException(404, "Checklist non trouvee")
     
     if chk.id_tache:
-        tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_access(db, tache.id_liste, current_user.id)
+        _require_task_access(db, chk.id_tache, current_user.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
@@ -562,8 +555,7 @@ def delete_checklist_endpoint(
         raise HTTPException(404, "Checklist non trouvee")
     
     if chk.id_tache:
-        tache = _get_tache_or_404(db, chk.id_tache)
-        _require_list_access(db, tache.id_liste, current_user.id)
+        _require_task_access(db, chk.id_tache, current_user.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
@@ -580,6 +572,5 @@ def get_checklists_for_tache_legacy_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    tache = _get_tache_or_404(db, tache_id)
-    _require_list_read_access(db, tache.id_liste, current_user.id)
+    _require_task_read_access(db, tache_id, current_user.id)
     return get_checklists_for_tache(db, tache_id)

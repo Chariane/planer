@@ -113,6 +113,17 @@ def _get_active_ancestor_espace_member(
     return None
 
 
+def _get_active_ancestor_espace_manager(
+    db: Session,
+    espace: Espace,
+    user_id: str,
+) -> Membre | None:
+    ancestor_member = _get_active_ancestor_espace_member(db, espace, user_id)
+    if ancestor_member and ancestor_member.role in ESPACE_MANAGEMENT_ROLES:
+        return ancestor_member
+    return None
+
+
 # -----------------------------------------------
 # Helpers d'accès — Espace
 # -----------------------------------------------
@@ -140,12 +151,14 @@ def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
         return membre_espace
 
     try:
-        return _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
+        workspace_member = _get_workspace_member_or_403(db, espace.id_workspace, current_user_id)
+        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member
     except HTTPException:
         pass
 
-    ancestor_member = _get_active_ancestor_espace_member(db, espace, current_user_id)
-    if ancestor_member and ancestor_member.statut == "Actif":
+    ancestor_member = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+    if ancestor_member:
         return ancestor_member
 
     raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
@@ -188,6 +201,10 @@ def _require_espace_management_access(db: Session, espace_id: str, current_user_
     if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
         return espace_member
 
+    ancestor_manager = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+    if ancestor_manager:
+        return ancestor_manager
+
     ws_member = db.query(Membre).filter(
         Membre.id_workspace == espace.id_workspace,
         Membre.id_utilisateur == current_user_id,
@@ -211,21 +228,51 @@ def _get_liste_or_404(db: Session, liste_id: str) -> Liste:
     return liste
 
 
+def _get_liste_member_record(db: Session, liste_id: str, user_id: str) -> Membre | None:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+
 def _require_list_access(db: Session, liste_id: str, current_user_id: str):
-    """Vérifie l'accès à une liste (via son espace ou son workspace)."""
+    """Vérifie l'accès à une liste via accès direct ou héritage descendant admin/créateur."""
     liste = _get_liste_or_404(db, liste_id)
-    
+
+    liste_member = _get_liste_member_record(db, liste_id, current_user_id)
+    if liste_member:
+        return liste_member
+
     if liste.id_espace:
-        return _require_espace_access(db, liste.id_espace, current_user_id)
-    elif liste.id_workspace:
-        return _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
-    
+        return _require_espace_management_access(db, liste.id_espace, current_user_id)
+    if liste.id_workspace:
+        workspace_member = _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
+        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member
+
     raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
 
 
 def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
     """Vérifie l'accès en lecture à une liste (via son espace ou son workspace)."""
     return _require_list_access(db, liste_id, current_user_id)
+
+
+def _get_tache_member_record(db: Session, tache_id: str, user_id: str) -> Membre | None:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_tache == tache_id,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
 
 # -----------------------------------------------
 # Helpers d'accès — Tache
@@ -236,3 +283,18 @@ def _get_tache_or_404(db: Session, tache_id: str) -> Tache:
     if not tache:
         raise HTTPException(status_code=404, detail="Tache non trouvee")
     return tache
+
+
+def _require_task_access(db: Session, tache_id: str, current_user_id: str):
+    """Vérifie l'accès à une tâche via accès direct ou héritage descendant admin/créateur."""
+    task_member = _get_tache_member_record(db, tache_id, current_user_id)
+    if task_member:
+        return task_member
+
+    tache = _get_tache_or_404(db, tache_id)
+    return _require_list_access(db, tache.id_liste, current_user_id)
+
+
+def _require_task_read_access(db: Session, tache_id: str, current_user_id: str):
+    """Vérifie l'accès en lecture à une tâche."""
+    return _require_task_access(db, tache_id, current_user_id)

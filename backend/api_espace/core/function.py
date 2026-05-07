@@ -237,6 +237,17 @@ def _get_active_ancestor_espace_member(
     return None
 
 
+def _get_active_ancestor_espace_manager(
+    db: Session,
+    espace: Espace,
+    user_id: str,
+) -> Optional[Membre]:
+    ancestor_member = _get_active_ancestor_espace_member(db, espace, user_id)
+    if ancestor_member and ancestor_member.role in ESPACE_MANAGEMENT_ROLES:
+        return ancestor_member
+    return None
+
+
 def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str):
 
     membre = (
@@ -276,30 +287,8 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
 
 
 def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
-    """
-    Donne l'accès si l'utilisateur :
-    1. Est membre (ou créateur) du workspace
-    2. OU est membre d'au moins un espace dans ce workspace
-    """
-
-    # 1. Vérifier membre workspace
-    try:
-        return _get_workspace_member_or_403(db, workspace_id, current_user_id)
-    except HTTPException:
-        pass
-
-    # 2. Vérifier si membre d'un espace du workspace
-    has_espace_access = db.query(Membre).join(Espace, Membre.id_espace == Espace.id).filter(
-        Espace.id_workspace == workspace_id,
-        Membre.id_utilisateur == current_user_id,
-        Membre.statut == "Actif"
-    ).first()
-
-    if has_espace_access:
-        # Retourne un membre fictif avec accès limité (Invité)
-        return Membre(role=WORKSPACE_GUEST_ROLE, statut="Actif")
-
-    raise HTTPException(status_code=403, detail="Acces refuse au workspace (aucun acces detecte)")
+    """Donne l'accès complet au workspace uniquement aux membres directs actifs."""
+    return _get_workspace_member_or_403(db, workspace_id, current_user_id)
 
 
 def _get_espace_actor_context(
@@ -390,12 +379,14 @@ def _require_espace_access(db: Session, espace_id: str, workspace_id: str, curre
         return espace_member
 
     try:
-        return _get_workspace_member_or_403(db, workspace_id, current_user_id)
+        workspace_member = _get_workspace_member_or_403(db, workspace_id, current_user_id)
+        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member
     except HTTPException:
         pass
 
-    ancestor_member = _get_active_ancestor_espace_member(db, espace, current_user_id)
-    if ancestor_member and ancestor_member.statut == "Actif":
+    ancestor_member = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+    if ancestor_member:
         return ancestor_member
 
     raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
@@ -437,10 +428,20 @@ def _require_espace_management_access(db: Session, espace_id: str, workspace_id:
 
     # 3. Vérification MEMBRE DIRECT DE L'ESPACE
     espace_member = _get_espace_member_record(db, espace_id, current_user_id)
-    if espace_member and espace_member.role in ESPACE_MANAGEMENT_ROLES:
+    if (
+        espace_member
+        and espace_member.statut == "Actif"
+        and espace_member.role in ESPACE_MANAGEMENT_ROLES
+    ):
         return espace_member
 
-    # 4. Vérification ADMINISTRATEUR DU WORKSPACE
+    # 4. Vérification ESPACE ANCETRE (Créateur/Admin)
+    espace = _get_espace_or_404(db, espace_id)
+    ancestor_manager = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+    if ancestor_manager:
+        return ancestor_manager
+
+    # 5. Vérification ADMINISTRATEUR DU WORKSPACE
     if workspace_id:
         ws_admin = db.query(Membre).filter(
             Membre.id_workspace == workspace_id,
