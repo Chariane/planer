@@ -10,6 +10,7 @@ from ..core.function import (
     _get_workspace_member_or_403,
     _get_espace_or_404,
     _require_espace_read_access,
+    _require_espace_descendant_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
@@ -17,6 +18,7 @@ from ..core.function import (
     _get_tache_or_404,
     _require_task_access,
     _require_task_read_access,
+    _require_workspace_descendant_read_access,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -96,10 +98,10 @@ def get_entreprise_listes_endpoint(
         raise HTTPException(status_code=400, detail="Specifiez soit workspace_id, soit espace_id")
     
     if workspace_id:
-        _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+        _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
         return get_listes_for_workspace(db, workspace_id)
     else:
-        _require_espace_management_access(db, espace_id, current_entreprise.id)
+        _require_espace_descendant_read_access(db, espace_id, current_entreprise.id)
         return get_listes_for_espace(db, espace_id)
 
 @router.get("/{liste_id}", response_model=ListeOut)
@@ -108,7 +110,7 @@ def get_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_read_access(db, liste_id, current_entreprise.id)
+    _require_list_access(db, liste_id, current_entreprise.id)
     return _get_liste_or_404(db, liste_id)
 
 @router.put("/{liste_id}", response_model=ListeOut)
@@ -118,7 +120,7 @@ def update_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_read_access(db, liste_id, current_entreprise.id)
+    _require_list_access(db, liste_id, current_entreprise.id)
     return update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
 
 @router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -139,7 +141,7 @@ def assign_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return assign_member_to_liste(db, liste_id, utilisateur_id)
 
 

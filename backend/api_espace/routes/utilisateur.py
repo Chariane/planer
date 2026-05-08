@@ -12,6 +12,7 @@ from ..core.function import (
     _require_espace_invitation_access,
     _require_espace_member_management_access,
     _require_workspace_management_access,
+    _require_workspace_descendant_read_access,
     _serialize_member,
     _require_workspace_read_access,
     render_invitation_html_page,
@@ -94,17 +95,8 @@ def list_workspaces_espaces(
 ):
     """Liste à plat de TOUS les espaces du workspace auxquels l'utilisateur a accès."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_read_access(db, workspace_id, current_user.id)
-    
-    # On filtre les résultats si l'utilisateur n'est pas membre complet du workspace
-    all_espaces = get_espaces_for_workspace(db, workspace_id)
-    
-    # Vérifier si membre workspace
-    try:
-        _get_workspace_member_or_403(db, workspace_id, current_user.id)
-        return all_espaces
-    except HTTPException:
-        return [esp for esp in all_espaces if get_espace_member(db, esp.id, current_user.id)]
+    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
+    return get_espaces_for_workspace(db, workspace_id)
 
 # Récupérer uniquement les espaces de premier niveau (sans parent) d'un workspace
 @router.get("/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
@@ -115,20 +107,8 @@ def list_workspace_root_espaces(
 ):
     """Liste uniquement les espaces de niveau 1 (sans parent)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_read_access(db, workspace_id, current_user.id)
-    
-    # Si membre workspace -> tout, sinon on utilise l'arbre filtré pour extraire les racines
-    try:
-        _get_workspace_member_or_403(db, workspace_id, current_user.id)
-        return get_root_espaces_for_workspace(db, workspace_id)
-    except HTTPException:
-        tree = get_workspace_espaces_tree(db, workspace_id, current_user.id)
-        # On retourne les eléments de premier niveau de l'arbre filtré
-        results = []
-        for node in tree:
-            # Re-sérialisation vers EspaceOut (on a les champs nécessaires dans node)
-            results.append(node)
-        return results
+    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
+    return get_root_espaces_for_workspace(db, workspace_id)
 
 # Récupérer les sous-espaces directs d'un espace parent
 @router.get("/espaces/{espace_id}/children", response_model=List[EspaceOut])
@@ -151,7 +131,7 @@ def get_workspace_espaces_tree_endpoint(
 ):
     """Récupère l'arborescence complète (espaces et sous-espaces) du workspace."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_read_access(db, workspace_id, current_user.id)
+    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
     return get_workspace_espaces_tree(db, workspace_id, user_id=current_user.id)
 
 # Récupérer les espaces où l'utilisateur est admin
@@ -223,7 +203,7 @@ def list_espace_members(
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_user.id)
     return [_serialize_member(m) for m in get_espace_members(db, espace_id)]
 
 # Inviter un membre dans un espace

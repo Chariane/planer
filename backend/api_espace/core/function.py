@@ -19,6 +19,11 @@ WORKSPACE_READ_ROLES = {
     WORKSPACE_GUEST_ROLE,
 }
 WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
+WORKSPACE_DESCENDANT_READ_ROLES = {
+    WORKSPACE_OWNER_ROLE,
+    WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_GUEST_ROLE,
+}
 
 # Rôles Espace
 ESPACE_OWNER_ROLE = "Créateur"
@@ -34,6 +39,11 @@ ESPACE_READ_ROLES = {
 }
 ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
 ESPACE_ADMIN_MANAGEABLE_ROLES = {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}
+ESPACE_DESCENDANT_READ_ROLES = {
+    ESPACE_OWNER_ROLE,
+    ESPACE_ADMIN_ROLE,
+    ESPACE_GUEST_ROLE,
+}
 
 
 
@@ -248,6 +258,17 @@ def _get_active_ancestor_espace_manager(
     return None
 
 
+def _get_active_ancestor_espace_descendant_reader(
+    db: Session,
+    espace: Espace,
+    user_id: str,
+) -> Optional[Membre]:
+    ancestor_member = _get_active_ancestor_espace_member(db, espace, user_id)
+    if ancestor_member and ancestor_member.role in ESPACE_DESCENDANT_READ_ROLES:
+        return ancestor_member
+    return None
+
+
 def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str):
 
     membre = (
@@ -283,6 +304,14 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
     membre = _get_workspace_member_or_403(db, workspace_id, current_user_id)
     if membre.role not in WORKSPACE_MANAGEMENT_ROLES:
         raise HTTPException(status_code=403, detail="Privileges insuffisants sur le workspace")
+    return membre
+
+
+def _require_workspace_descendant_read_access(db: Session, workspace_id: str, current_user_id: str):
+    """Donne un accès de lecture descendante sur le contenu du workspace."""
+    membre = _get_workspace_member_or_403(db, workspace_id, current_user_id)
+    if membre.role not in WORKSPACE_DESCENDANT_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Acces refuse au contenu du workspace")
     return membre
 
 
@@ -379,13 +408,13 @@ def _require_espace_access(db: Session, espace_id: str, workspace_id: str, curre
         return espace_member
 
     try:
-        workspace_member = _get_workspace_member_or_403(db, workspace_id, current_user_id)
-        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
-            return workspace_member
+        return _require_workspace_descendant_read_access(db, workspace_id, current_user_id)
     except HTTPException:
         pass
 
-    ancestor_member = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+    ancestor_member = _get_active_ancestor_espace_descendant_reader(
+        db, espace, current_user_id
+    )
     if ancestor_member:
         return ancestor_member
 
@@ -398,8 +427,29 @@ def _require_espace_visibility_access(
     workspace_id: str,
     current_user_id: str,
 ):
-    """Vérifie l'accès de visibilité à un espace."""
-    return _require_espace_access(db, espace_id, workspace_id, current_user_id)
+    """Vérifie l'accès de lecture descendante sur les enfants d'un espace."""
+    espace = _get_espace_or_404(db, espace_id)
+
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
+    if (
+        espace_member
+        and espace_member.statut == "Actif"
+        and espace_member.role in ESPACE_DESCENDANT_READ_ROLES
+    ):
+        return espace_member
+
+    try:
+        return _require_workspace_descendant_read_access(db, workspace_id, current_user_id)
+    except HTTPException:
+        pass
+
+    ancestor_member = _get_active_ancestor_espace_descendant_reader(
+        db, espace, current_user_id
+    )
+    if ancestor_member:
+        return ancestor_member
+
+    raise HTTPException(status_code=403, detail="Acces refuse au contenu descendant de l'espace")
 
 
 def _require_espace_management_access(db: Session, espace_id: str, workspace_id: Optional[str], current_user_id: str):

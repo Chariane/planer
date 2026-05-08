@@ -10,6 +10,7 @@ from ..core.function import (
     _require_espace_management_access,
     _require_espace_member_management_access,
     _require_workspace_management_access,
+    _require_workspace_descendant_read_access,
     _serialize_member,
     can_create_espace,
 )
@@ -103,7 +104,7 @@ def list_entreprise_espaces_endpoint(
 ):
     """Liste à plat de TOUS les espaces du workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
     return get_entreprise_espaces(db, current_entreprise.id, workspace_id)
 
 # Récupérer uniquement les espaces de niveau 1 d'un workspace entreprise
@@ -115,7 +116,7 @@ def list_entreprise_workspace_root_espaces(
 ):
     """Liste uniquement les espaces de niveau 1 d'un workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
     return get_root_espaces_for_workspace(db, workspace_id)
 
 # Récupérer les sous-espaces directs d'un espace entreprise
@@ -141,8 +142,8 @@ def get_entreprise_workspace_espaces_tree(
 ):
     """Récupère l'arborescence complète du workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
-    return get_workspace_espaces_tree(db, workspace_id)
+    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
+    return get_workspace_espaces_tree(db, workspace_id, current_entreprise.id)
 
 # Récupérer les détails d'un espace entreprise dans un workspace, uniquement si l'utilisateur est membre de l'espace
 @router.get("/entreprise/espaces/{espace_id}", response_model=EspaceOut)
@@ -211,6 +212,10 @@ def list_entreprise_espace_members_endpoint(
     members = get_entreprise_espace_members(db, current_entreprise.id, espace_id)
     if members is None:
         raise HTTPException(status_code=404, detail="Espace non trouve")
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
+    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
     return [_serialize_member(m) for m in members]
 
 # Inviter un membre dans un espace entreprise
