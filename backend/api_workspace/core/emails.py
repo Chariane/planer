@@ -210,7 +210,7 @@ async def send_workspace_invitation_email(
     if is_guest:
         invitation_link = f"{front_base_url}{front_register_url}?invitation_token={token}"
     else:
-        invitation_link = f"{back_base_url}/workspace/invitations/accept-from-email?token={token}"
+        invitation_link = f"{back_base_url}/workspaces/invitations/accept-from-email?token={token}"
     
     template = f"""
         <!DOCTYPE html>

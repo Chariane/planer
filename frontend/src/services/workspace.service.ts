@@ -37,7 +37,7 @@ export const workspaceService = {
   removeMember: (workspaceId: string, memberId: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${memberId}/remove_workspace_member`, { method: 'DELETE' }),
   acceptInvitation: (token: string) =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/workspaces/invitations/accept`, { method: 'POST', body: JSON.stringify({ token }) }),
+    apiFetch(WORKSPACE_BASE_URL, `/workspaces/invitations/accept`, { method: 'POST', body: JSON.stringify({ token }) }),
   getPendingInvitations: () =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/invitations/list_pending_invitations`),
   leaveWorkspace: (workspaceId: string) =>
