@@ -187,13 +187,22 @@ def invite_workspace_member(
         # Cas utilisateur existant
         membre = result["membre"]
         token = result["invitation_token"]
-        target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else email_target
+        recipient_email = (
+            membre.utilisateur.email
+            if (membre.utilisateur and membre.utilisateur.email)
+            else email_target
+        )
+        target_name = (
+            membre.utilisateur.username
+            if (membre.utilisateur and membre.utilisateur.username)
+            else recipient_email
+        )
         
         background_tasks.add_task(
             send_workspace_invitation_email,
             current_user.username,
             target_name,
-            email_target,
+            recipient_email,
             workspace.nom,
             membre_in.role,
             token,
@@ -202,7 +211,7 @@ def invite_workspace_member(
         return {
             "status": "existing_user",
             "message": "Invitation envoyee a l'utilisateur existant.",
-            "email": email_target,
+            "email": recipient_email,
             "membre": _serialize_member(membre)
         }
     else:

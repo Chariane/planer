@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import HTTPException
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise, Role, Status
 from ..models import (
@@ -324,9 +324,9 @@ def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: Worksp
     # 2. Recherche de l'utilisateur par email ou username
     query = db.query(Utilisateur)
     if membre_in.email:
-        query = query.filter(Utilisateur.email == membre_in.email)
+        query = query.filter(func.lower(Utilisateur.email) == membre_in.email.lower())
     else:
-        query = query.filter(Utilisateur.username == membre_in.username)
+        query = query.filter(func.lower(Utilisateur.username) == membre_in.username.lower())
     
     target_user = query.first()
 
@@ -362,7 +362,6 @@ def invite_member_to_workspace(db: Session, workspace_id: str, membre_in: Worksp
                 "sub": target_user.id,
                 "email": target_user.email,
                 "workspace_id": workspace_id,
-                "role": membre_in.role,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),

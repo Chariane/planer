@@ -1,5 +1,4 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
@@ -35,12 +34,11 @@ from ..crud.utilisateur import (
     get_pending_invitations,
     invite_member_to_workspace,
 )
-from ..models import Utilisateur
 from ..schemas import (
-    EmailSchema,
     UtilisateurOut,
     WorkspaceCreate,
     WorkspaceInvitationAcceptRequest,
+    WorkspaceInvitationResponse,
     WorkspaceMemberInvite,
     WorkspaceMemberOut,
     WorkspaceMemberUpdate,
@@ -103,7 +101,7 @@ def delete_entreprise_workspace_endpoint(
     return None
 
 
-@router.post("/{workspace_id}/invite", response_model=WorkspaceMemberOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{workspace_id}/invite", response_model=WorkspaceInvitationResponse, status_code=status.HTTP_201_CREATED)
 def invite_member_entreprise_workspace_endpoint(
     workspace_id: str,
     membre_in: WorkspaceMemberInvite,
@@ -118,50 +116,64 @@ def invite_member_entreprise_workspace_endpoint(
         membre_in.role,
     )
 
-    target_user = None
-    if membre_in.email:
-        target_user = (
-            db.query(Utilisateur)
-            .filter(func.lower(Utilisateur.email) == membre_in.email.lower())
-            .first()
-        )
-    elif membre_in.username:
-        target_user = (
-            db.query(Utilisateur)
-            .filter(func.lower(Utilisateur.username) == membre_in.username.lower())
-            .first()
-        )
-
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Utilisateur invite non trouve")
-
     workspace = get_entreprise_workspace(db, current_entreprise.id, workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
-    _require_workspace_invitation_access(
-        db,
-        workspace_id,
-        current_entreprise.id,
-        membre_in.role,
-    )
 
     result = invite_member_to_workspace(
         db,
         workspace_id,
         membre_in,
     )
-    membre = result["membre"]
-    invitation_token = result["invitation_token"]
+    email_target = membre_in.email or membre_in.username
+
+    if "membre" in result:
+        membre = result["membre"]
+        invitation_token = result["invitation_token"]
+        recipient_email = (
+            membre.utilisateur.email
+            if (membre.utilisateur and membre.utilisateur.email)
+            else email_target
+        )
+        target_name = (
+            membre.utilisateur.username
+            if (membre.utilisateur and membre.utilisateur.username)
+            else recipient_email
+        )
+        background_tasks.add_task(
+            send_workspace_invitation_email,
+            current_entreprise.username,
+            target_name,
+            recipient_email,
+            workspace.nom,
+            membre_in.role,
+            invitation_token,
+            is_guest=False,
+        )
+        return {
+            "status": "existing_user",
+            "message": "Invitation envoyee a l'utilisateur existant.",
+            "email": recipient_email,
+            "membre": _serialize_member(membre),
+        }
+
+    token = result["token"]
     background_tasks.add_task(
         send_workspace_invitation_email,
         current_entreprise.username,
-        target_user.username,
-        EmailSchema(email=[target_user.email]),
+        email_target,
+        email_target,
         workspace.nom,
         membre_in.role,
-        invitation_token,
+        token,
+        is_guest=True,
     )
-    return _serialize_member(membre)
+    return {
+        "status": "guest_invitation",
+        "message": "Invitation envoyee par lien (utilisateur non inscrit).",
+        "email": email_target,
+        "token": token,
+    }
 
 
 @router.post("/invitations/accept", response_model=WorkspaceMemberOut)
