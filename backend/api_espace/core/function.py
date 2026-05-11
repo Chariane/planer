@@ -46,6 +46,19 @@ ESPACE_DESCENDANT_READ_ROLES = {
 }
 
 
+class ResourceType:
+    WORKSPACE = "workspace"
+    ESPACE = "espace"
+
+
+ROLE_HIERARCHY = {
+    WORKSPACE_GUEST_ROLE: 1,
+    WORKSPACE_MEMBER_ROLE: 2,
+    WORKSPACE_ADMIN_ROLE: 3,
+    WORKSPACE_OWNER_ROLE: 4,
+}
+
+
 
 def commit_or_raise(
     db: Session,
@@ -61,6 +74,118 @@ def commit_or_raise(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+def _get_role_rank(role: Optional[str]) -> int:
+    if role is None:
+        return 0
+    return ROLE_HIERARCHY.get(role, 0)
+
+
+def _get_active_workspace_membership(
+    db: Session,
+    workspace_id: str,
+    user_id: str,
+) -> Optional[Membre]:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if workspace and workspace.id_utilisateur == user_id:
+        return Membre(
+            id_utilisateur=user_id,
+            id_workspace=workspace_id,
+            role=WORKSPACE_OWNER_ROLE,
+            statut="Actif",
+        )
+
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+
+def _append_inherited_candidate(
+    candidates: list[tuple[str, str, str]],
+    *,
+    role: Optional[str],
+    resource_type: str,
+    resource_id: Optional[str],
+) -> None:
+    if role in WORKSPACE_DESCENDANT_READ_ROLES and resource_id:
+        candidates.append((role, resource_type, resource_id))
+
+
+def get_parent_inherited_role(
+    db: Session,
+    user_id: str,
+    target_type: str,
+    target_id: str,
+) -> Optional[tuple[str, str, str]]:
+    if target_type != ResourceType.ESPACE:
+        raise HTTPException(status_code=400, detail="Type de ressource invalide pour cet API.")
+
+    espace = db.query(Espace).filter(Espace.id == target_id).first()
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve.")
+
+    candidates: list[tuple[str, str, str]] = []
+
+    workspace_member = _get_active_workspace_membership(db, espace.id_workspace, user_id)
+    if workspace_member:
+        _append_inherited_candidate(
+            candidates,
+            role=workspace_member.role,
+            resource_type=ResourceType.WORKSPACE,
+            resource_id=espace.id_workspace,
+        )
+
+    parent_id = espace.id_espace_parent
+    while parent_id:
+        parent_member = _get_espace_member_record(db, parent_id, user_id)
+        if parent_member and parent_member.statut == "Actif":
+            _append_inherited_candidate(
+                candidates,
+                role=parent_member.role,
+                resource_type=ResourceType.ESPACE,
+                resource_id=parent_id,
+            )
+
+        parent_espace = db.query(Espace).filter(Espace.id == parent_id).first()
+        if not parent_espace:
+            break
+        parent_id = parent_espace.id_espace_parent
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda item: _get_role_rank(item[0]))
+
+
+def validate_role_hierarchy(
+    db: Session,
+    user_id: str,
+    target_type: str,
+    target_id: str,
+    new_role: str,
+) -> Optional[tuple[str, str, str]]:
+    inherited = get_parent_inherited_role(db, user_id, target_type, target_id)
+    if not inherited:
+        return None
+
+    inherited_role, source_type, source_id = inherited
+    if _get_role_rank(inherited_role) >= _get_role_rank(new_role):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Role redondant ou inferieur refuse : l'utilisateur dispose deja du role "
+                f"'{inherited_role}' herite depuis ce {source_type} ({source_id})."
+            ),
+        )
+
+    return inherited
 
 
 def render_invitation_html_page(

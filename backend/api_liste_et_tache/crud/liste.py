@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from ..core.function import ResourceType, Role, validate_role_hierarchy
 from ..models import Liste, Membre, Canevas, Section
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -101,43 +102,19 @@ def _get_liste_with_scope(db: Session, liste_id: str) -> Optional[Liste]:
     )
 
 
-def _resolve_workspace_id_from_liste(liste: Liste) -> Optional[str]:
-    return liste.id_workspace or (liste.espace.id_workspace if liste.espace else None)
-
-
-def _promote_active_workspace_guest_to_member(
-    db: Session,
-    workspace_id: Optional[str],
-    utilisateur_id: str,
-) -> bool:
-    if not workspace_id:
-        return False
-
-    workspace_member = (
-        db.query(Membre)
-        .filter(
-            Membre.id_workspace == workspace_id,
-            Membre.id_utilisateur == utilisateur_id,
-            Membre.statut == "Actif",
-        )
-        .first()
-    )
-
-    if not workspace_member or workspace_member.role != "Invité":
-        return False
-
-    workspace_member.role = "Membre"
-    return True
-
-
 def assign_member_to_liste(db: Session, liste_id: str, utilisateur_id: str) -> Membre:
-    """Assigne un utilisateur a une liste et promeut un invite actif en membre si necessaire."""
+    """Ajoute un utilisateur a une liste avec un role local de membre."""
     liste = _get_liste_with_scope(db, liste_id)
     if not liste:
         raise HTTPException(status_code=404, detail="Liste introuvable.")
 
-    workspace_id = _resolve_workspace_id_from_liste(liste)
-    promoted_guest = _promote_active_workspace_guest_to_member(db, workspace_id, utilisateur_id)
+    validate_role_hierarchy(
+        db,
+        utilisateur_id,
+        ResourceType.LISTE,
+        liste_id,
+        Role.MEMBER,
+    )
 
     existing = (
         db.query(Membre)
@@ -149,16 +126,6 @@ def assign_member_to_liste(db: Session, liste_id: str, utilisateur_id: str) -> M
     )
 
     if existing:
-        if promoted_guest:
-            try:
-                db.commit()
-                db.refresh(existing)
-            except IntegrityError as exc:
-                db.rollback()
-                raise HTTPException(
-                    status_code=400,
-                    detail="Erreur lors de la mise a jour du role du membre assigne a la liste.",
-                ) from exc
         return existing
 
     assignation = Membre(

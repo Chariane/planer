@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from ..core.function import commit_or_raise
+from ..core.function import ResourceType, commit_or_raise, validate_role_hierarchy
 from ..core.security import create_access_token, decode_invitation_token
 from ..models import Espace, Membre, Utilisateur
 from ..schemas import (
@@ -253,6 +253,13 @@ def get_espace_members(db: Session, espace_id: str) -> List[Membre]:
 
 
 def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -> Membre:
+    validate_role_hierarchy(
+        db,
+        membre_in.id_utilisateur,
+        ResourceType.ESPACE,
+        espace_id,
+        membre_in.role,
+    )
     membre = Membre(
         **membre_in.model_dump(exclude={"id_workspace", "id_liste", "id_tache"}, exclude_none=True),
         id_espace=espace_id,
@@ -276,6 +283,15 @@ def update_espace_member(
     if not membre:
         return None
     update_data = membre_in.model_dump(exclude_unset=True)
+    new_role = update_data.get("role")
+    if new_role:
+        validate_role_hierarchy(
+            db,
+            user_id,
+            ResourceType.ESPACE,
+            espace_id,
+            new_role,
+        )
     for key, value in update_data.items():
         setattr(membre, key, value)
     commit_or_raise(
@@ -320,6 +336,13 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
     TOKEN_TYPE = "espace_invitation"
 
     if target_user:
+        validate_role_hierarchy(
+            db,
+            target_user.id,
+            ResourceType.ESPACE,
+            espace_id,
+            membre_in.role,
+        )
         # CAS 1 : Utilisateur existant -> Creation/Mise a jour du membre en base
         membre = get_espace_member(db, espace_id, target_user.id)
         if membre:
@@ -429,6 +452,15 @@ def accept_espace_invitation(
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
     # 5. Prevention des doublons sur l'Espace (Contrainte 5)
+    invited_role = payload.get("role") or "Membre"
+    validate_role_hierarchy(
+        db,
+        user_id,
+        ResourceType.ESPACE,
+        target_espace_id,
+        invited_role,
+    )
+
     existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
         if existing_member.statut == "Actif":
@@ -447,7 +479,7 @@ def accept_espace_invitation(
     new_member = Membre(
         id_utilisateur=user_id,
         id_espace=target_espace_id,
-        role=payload.get("role") or "Membre",
+        role=invited_role,
         statut="Actif"
     )
     db.add(new_member)

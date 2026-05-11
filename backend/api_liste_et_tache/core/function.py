@@ -41,6 +41,28 @@ ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_GUEST_ROLE,
 }
 
+
+class Role:
+    CREATOR = WORKSPACE_OWNER_ROLE
+    ADMIN = WORKSPACE_ADMIN_ROLE
+    MEMBER = WORKSPACE_MEMBER_ROLE
+    GUEST = WORKSPACE_GUEST_ROLE
+
+
+class ResourceType:
+    WORKSPACE = "workspace"
+    ESPACE = "espace"
+    LISTE = "liste"
+    TACHE = "tache"
+
+
+ROLE_HIERARCHY = {
+    WORKSPACE_GUEST_ROLE: 1,
+    WORKSPACE_MEMBER_ROLE: 2,
+    WORKSPACE_ADMIN_ROLE: 3,
+    WORKSPACE_OWNER_ROLE: 4,
+}
+
 # -----------------------------------------------
 # Helpers d'accès — Workspace
 # -----------------------------------------------
@@ -50,6 +72,12 @@ def _get_workspace_or_404(db: Session, workspace_id: str) -> Workspace:
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
     return workspace
+
+
+def _get_role_rank(role: str | None) -> int:
+    if role is None:
+        return 0
+    return ROLE_HIERARCHY.get(role, 0)
 
 
 def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id: str):
@@ -82,6 +110,42 @@ def _get_workspace_member_or_403(db: Session, workspace_id: str, current_user_id
 
 
 _require_workspace_member = _get_workspace_member_or_403
+
+
+def _get_active_workspace_membership(
+    db: Session,
+    workspace_id: str,
+    user_id: str,
+) -> Membre | None:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if workspace and workspace.id_utilisateur == user_id:
+        return Membre(
+            id_utilisateur=user_id,
+            id_workspace=workspace_id,
+            role=WORKSPACE_OWNER_ROLE,
+            statut="Actif",
+        )
+
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+
+def _append_inherited_candidate(
+    candidates: list[tuple[str, str, str]],
+    *,
+    role: str | None,
+    resource_type: str,
+    resource_id: str | None,
+) -> None:
+    if role in WORKSPACE_DESCENDANT_READ_ROLES and resource_id:
+        candidates.append((role, resource_type, resource_id))
 
 
 def _require_workspace_management_access(db: Session, workspace_id: str, current_user_id: str):
@@ -151,6 +215,151 @@ def _get_active_ancestor_espace_descendant_reader(
     if ancestor_member and ancestor_member.role in ESPACE_DESCENDANT_READ_ROLES:
         return ancestor_member
     return None
+
+
+def get_parent_inherited_role(
+    db: Session,
+    user_id: str,
+    target_type: str,
+    target_id: str,
+) -> tuple[str, str, str] | None:
+    candidates: list[tuple[str, str, str]] = []
+
+    if target_type == ResourceType.LISTE:
+        liste = (
+            db.query(Liste)
+            .filter(Liste.id == target_id)
+            .first()
+        )
+        if not liste:
+            raise HTTPException(status_code=404, detail="Liste non trouvee.")
+
+        if liste.id_workspace:
+            workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
+            if workspace_member:
+                _append_inherited_candidate(
+                    candidates,
+                    role=workspace_member.role,
+                    resource_type=ResourceType.WORKSPACE,
+                    resource_id=liste.id_workspace,
+                )
+
+        parent_espace_id = liste.id_espace
+        while parent_espace_id:
+            parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
+            if parent_member and parent_member.statut == "Actif":
+                _append_inherited_candidate(
+                    candidates,
+                    role=parent_member.role,
+                    resource_type=ResourceType.ESPACE,
+                    resource_id=parent_espace_id,
+                )
+
+            parent_espace = db.query(Espace).filter(Espace.id == parent_espace_id).first()
+            if not parent_espace:
+                break
+
+            if parent_espace.id_workspace and not liste.id_workspace:
+                workspace_member = _get_active_workspace_membership(
+                    db,
+                    parent_espace.id_workspace,
+                    user_id,
+                )
+                if workspace_member:
+                    _append_inherited_candidate(
+                        candidates,
+                        role=workspace_member.role,
+                        resource_type=ResourceType.WORKSPACE,
+                        resource_id=parent_espace.id_workspace,
+                    )
+            parent_espace_id = parent_espace.id_espace_parent
+
+    elif target_type == ResourceType.TACHE:
+        tache = db.query(Tache).filter(Tache.id == target_id).first()
+        if not tache:
+            raise HTTPException(status_code=404, detail="Tache non trouvee.")
+
+        liste_member = _get_liste_member_record(db, tache.id_liste, user_id)
+        if liste_member and liste_member.statut == "Actif":
+            _append_inherited_candidate(
+                candidates,
+                role=liste_member.role,
+                resource_type=ResourceType.LISTE,
+                resource_id=tache.id_liste,
+            )
+
+        liste = _get_liste_or_404(db, tache.id_liste)
+        if liste.id_workspace:
+            workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
+            if workspace_member:
+                _append_inherited_candidate(
+                    candidates,
+                    role=workspace_member.role,
+                    resource_type=ResourceType.WORKSPACE,
+                    resource_id=liste.id_workspace,
+                )
+
+        parent_espace_id = liste.id_espace
+        while parent_espace_id:
+            parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
+            if parent_member and parent_member.statut == "Actif":
+                _append_inherited_candidate(
+                    candidates,
+                    role=parent_member.role,
+                    resource_type=ResourceType.ESPACE,
+                    resource_id=parent_espace_id,
+                )
+
+            parent_espace = db.query(Espace).filter(Espace.id == parent_espace_id).first()
+            if not parent_espace:
+                break
+
+            if parent_espace.id_workspace and not liste.id_workspace:
+                workspace_member = _get_active_workspace_membership(
+                    db,
+                    parent_espace.id_workspace,
+                    user_id,
+                )
+                if workspace_member:
+                    _append_inherited_candidate(
+                        candidates,
+                        role=workspace_member.role,
+                        resource_type=ResourceType.WORKSPACE,
+                        resource_id=parent_espace.id_workspace,
+                    )
+            parent_espace_id = parent_espace.id_espace_parent
+
+    else:
+        raise HTTPException(status_code=400, detail="Type de ressource invalide pour cet API.")
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda item: _get_role_rank(item[0]))
+
+
+def validate_role_hierarchy(
+    db: Session,
+    user_id: str,
+    target_type: str,
+    target_id: str,
+    new_role: str,
+) -> tuple[str, str, str] | None:
+    inherited = get_parent_inherited_role(db, user_id, target_type, target_id)
+    if not inherited:
+        return None
+
+    inherited_role, source_type, source_id = inherited
+    if _get_role_rank(inherited_role) >= _get_role_rank(new_role):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Role redondant ou inferieur refuse : l'utilisateur dispose deja du role "
+                f"'{inherited_role}' herite depuis ce {source_type} ({source_id})."
+            ),
+        )
+
+    return inherited
 
 
 # -----------------------------------------------
