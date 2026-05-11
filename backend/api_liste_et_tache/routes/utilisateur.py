@@ -116,7 +116,7 @@ def get_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return _get_liste_or_404(db, liste_id)
 
 @router.put("/{liste_id}/update_liste", response_model=ListeOut)
@@ -138,7 +138,7 @@ def delete_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_read_access(db, liste_id, current_user.id)
+    _require_list_access(db, liste_id, current_user.id)
     if not delete_liste(db, liste_id):
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return None
@@ -151,7 +151,7 @@ def assign_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_read_access(db, liste_id, current_user.id)
+    _require_list_access(db, liste_id, current_user.id)
     return assign_member_to_liste(db, liste_id, utilisateur_id)
 
 
@@ -203,7 +203,7 @@ def get_taches_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_read_access(db, liste_id, current_user.id)
     return get_taches_for_liste(
         db, liste_id, 
         statut=statut, 

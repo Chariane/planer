@@ -110,7 +110,7 @@ def get_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return _get_liste_or_404(db, liste_id)
 
 @router.put("/{liste_id}", response_model=ListeOut)
@@ -129,7 +129,7 @@ def delete_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_read_access(db, liste_id, current_entreprise.id)
+    _require_list_access(db, liste_id, current_entreprise.id)
     delete_liste(db, liste_id)
     return None
 
@@ -141,7 +141,7 @@ def assign_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_read_access(db, liste_id, current_entreprise.id)
+    _require_list_access(db, liste_id, current_entreprise.id)
     return assign_member_to_liste(db, liste_id, utilisateur_id)
 
 
@@ -191,7 +191,7 @@ def get_entreprise_taches_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     return get_taches_for_liste(
         db, liste_id, 
         statut=statut, 
@@ -318,7 +318,7 @@ def create_entreprise_canevas_endpoint(liste_id: str, canevas_in: CanevasCreate,
 
 @router.get("/{liste_id}/canevas", response_model=CanevasOut)
 def get_entreprise_canevas_endpoint(liste_id: str, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_read_access(db, liste_id, current_entreprise.id)
     res = get_canevas_for_liste(db, liste_id)
     if not res: raise HTTPException(404, "Canevas non trouve")
     return res
@@ -341,7 +341,7 @@ def create_entreprise_section_endpoint(canevas_id: str, section_in: SectionCreat
 def get_entreprise_sections_endpoint(canevas_id: str, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
     can = get_canevas_by_id(db, canevas_id)
     if not can: raise HTTPException(404, "Canevas non trouve")
-    _require_list_access(db, can.id_liste, current_entreprise.id)
+    _require_list_read_access(db, can.id_liste, current_entreprise.id)
     return get_sections_for_canevas(db, canevas_id)
 
 @router.put("/sections/{section_id}", response_model=SectionOut)
