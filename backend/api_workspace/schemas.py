@@ -746,7 +746,7 @@ class MembreDelete(BaseModel):
 class WorkspaceMemberInvite(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
-    role: str = Field(default="Invité")
+    role: str = Field(...)
     id_liste: Optional[str] = Field(None, min_length=12, max_length=12)
     id_tache: Optional[str] = Field(None, min_length=12, max_length=12)
  

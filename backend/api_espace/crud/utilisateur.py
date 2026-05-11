@@ -452,7 +452,16 @@ def accept_espace_invitation(
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
     # 5. Prevention des doublons sur l'Espace (Contrainte 5)
-    invited_role = payload.get("role") or "Invité"
+    existing_member = get_espace_member(db, target_espace_id, user_id)
+    invited_role = payload.get("role")
+
+    if not existing_member and not invited_role:
+        raise HTTPException(
+            status_code=400,
+            detail="Role d'invitation absent du token."
+        )
+
+    invited_role = invited_role or existing_member.role
     validate_role_hierarchy(
         db,
         user_id,
@@ -461,12 +470,11 @@ def accept_espace_invitation(
         invited_role,
     )
 
-    existing_member = get_espace_member(db, target_espace_id, user_id)
     if existing_member:
         if existing_member.statut == "Actif":
             raise HTTPException(status_code=409, detail="Invitation deja acceptee.")
         # Les anciens tokens "scope" ne transportent pas toujours le role.
-        existing_member.role = payload.get("role") or existing_member.role
+        existing_member.role = invited_role
         existing_member.statut = "Actif"
         commit_or_raise(
             db,

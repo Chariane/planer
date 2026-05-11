@@ -442,11 +442,19 @@ def accept_workspace_invitation(
 
     # 5. Prevention des doublons sur le Workspace (Contrainte 5)
     existing_member = get_workspace_member(db, target_workspace_id, user_id)
+    invited_role = payload.get("role")
+
+    if not existing_member and not invited_role:
+        raise HTTPException(
+            status_code=400,
+            detail="Role d'invitation absent du token."
+        )
+
     if existing_member:
         if existing_member.statut == "Actif":
             raise HTTPException(status_code=409, detail="Invitation deja acceptee.")
         # Les anciens tokens "scope" ne transportent pas toujours le role.
-        existing_member.role = payload.get("role") or existing_member.role
+        existing_member.role = invited_role or existing_member.role
         existing_member.statut = "Actif"
         commit_or_raise(
             db,
@@ -459,7 +467,7 @@ def accept_workspace_invitation(
     new_member = Membre(
         id_utilisateur=user_id,
         id_workspace=target_workspace_id,
-        role=payload.get("role") or "Invité",
+        role=invited_role,
         statut="Actif"
     )
     db.add(new_member)
