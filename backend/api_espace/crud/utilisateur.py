@@ -452,7 +452,7 @@ def accept_espace_invitation(
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au votre.")
 
     # 5. Prevention des doublons sur l'Espace (Contrainte 5)
-    invited_role = payload.get("role") or "Membre"
+    invited_role = payload.get("role") or "Invité"
     validate_role_hierarchy(
         db,
         user_id,

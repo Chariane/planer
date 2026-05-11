@@ -459,7 +459,7 @@ def accept_workspace_invitation(
     new_member = Membre(
         id_utilisateur=user_id,
         id_workspace=target_workspace_id,
-        role=payload.get("role") or "Membre",
+        role=payload.get("role") or "Invité",
         statut="Actif"
     )
     db.add(new_member)

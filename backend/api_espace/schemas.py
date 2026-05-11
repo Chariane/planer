@@ -735,7 +735,7 @@ class MembreDelete(BaseModel):
 class WorkspaceMemberInvite(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=30, pattern=USERNAME_REGEX)
-    role: str = Field(default="Membre")
+    role: str = Field(default="Invité")
 
     @model_validator(mode="before")
     @classmethod
