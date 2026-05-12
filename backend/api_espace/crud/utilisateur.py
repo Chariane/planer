@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import ResourceType, commit_or_raise, validate_role_hierarchy
 from ..core.security import create_access_token, decode_invitation_token
@@ -326,9 +327,9 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
     # 2. Recherche de l'utilisateur par email ou username
     query = db.query(Utilisateur)
     if membre_in.email:
-        query = query.filter(Utilisateur.email == membre_in.email)
+        query = query.filter(func.lower(Utilisateur.email) == membre_in.email.lower())
     else:
-        query = query.filter(Utilisateur.username == membre_in.username)
+        query = query.filter(func.lower(Utilisateur.username) == membre_in.username.lower())
     
     target_user = query.first()
 
