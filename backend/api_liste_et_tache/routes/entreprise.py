@@ -14,6 +14,8 @@ from ..core.function import (
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
+    _require_list_admin_access,
+    _require_list_delete_access,
     _require_list_read_access,
     _get_tache_or_404,
     _require_task_access,
@@ -120,7 +122,7 @@ def update_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     return update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
 
 @router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -129,7 +131,7 @@ def delete_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_delete_access(db, liste_id, current_entreprise.id)
     delete_liste(db, liste_id)
     return None
 
@@ -141,7 +143,7 @@ def assign_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     return assign_member_to_liste(db, liste_id, utilisateur_id)
 
 
@@ -152,7 +154,7 @@ def unassign_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     unassign_member_from_liste(db, liste_id, utilisateur_id)
     return None
 
@@ -163,7 +165,7 @@ def get_entreprise_liste_members_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     return get_liste_members(db, liste_id)
 
 # -----------------------------------------------------------------------------

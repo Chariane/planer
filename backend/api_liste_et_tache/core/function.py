@@ -41,6 +41,13 @@ ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_GUEST_ROLE,
 }
 
+# Rôles Liste
+LISTE_OWNER_ROLE = "Créateur"
+LISTE_ADMIN_ROLE = "Administrateur"
+LISTE_MEMBER_ROLE = "Membre"
+LISTE_GUEST_ROLE = "Invité"
+LISTE_MANAGEMENT_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE}
+
 
 class Role:
     CREATOR = WORKSPACE_OWNER_ROLE
@@ -512,6 +519,63 @@ def _get_liste_member_record(db: Session, liste_id: str, user_id: str) -> Membre
     )
 
 
+def _get_list_management_grant(
+    db: Session,
+    liste_id: str,
+    current_user_id: str,
+) -> tuple[Membre, str, str, str]:
+    """
+    Décrit l'origine du droit de gestion sur une liste.
+
+    Retourne:
+    (actor_member, actor_role, source_type, source_id)
+    """
+    liste = _get_liste_or_404(db, liste_id)
+
+    liste_member = _get_liste_member_record(db, liste_id, current_user_id)
+    if (
+        liste_member
+        and liste_member.statut == "Actif"
+        and liste_member.role in LISTE_MANAGEMENT_ROLES
+    ):
+        return liste_member, liste_member.role, ResourceType.LISTE, liste_id
+
+    if liste.id_espace:
+        espace = _get_espace_or_404(db, liste.id_espace)
+
+        espace_member = _get_espace_member_record(db, liste.id_espace, current_user_id)
+        if (
+            espace_member
+            and espace_member.statut == "Actif"
+            and espace_member.role in ESPACE_MANAGEMENT_ROLES
+        ):
+            return espace_member, espace_member.role, ResourceType.ESPACE, liste.id_espace
+
+        ancestor_manager = _get_active_ancestor_espace_manager(db, espace, current_user_id)
+        if ancestor_manager:
+            source_id = ancestor_manager.id_espace or liste.id_espace
+            return ancestor_manager, ancestor_manager.role, ResourceType.ESPACE, source_id
+
+        workspace_member = _get_active_workspace_membership(
+            db,
+            espace.id_workspace,
+            current_user_id,
+        )
+        if workspace_member and workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member, workspace_member.role, ResourceType.WORKSPACE, espace.id_workspace
+
+    if liste.id_workspace:
+        workspace_member = _get_active_workspace_membership(
+            db,
+            liste.id_workspace,
+            current_user_id,
+        )
+        if workspace_member and workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+            return workspace_member, workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace
+
+    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+
+
 def _require_list_access(db: Session, liste_id: str, current_user_id: str):
     """Vérifie l'accès opérationnel à une liste."""
     liste = _get_liste_or_404(db, liste_id)
@@ -528,6 +592,36 @@ def _require_list_access(db: Session, liste_id: str, current_user_id: str):
             return workspace_member
 
     raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+
+
+def _require_list_admin_access(db: Session, liste_id: str, current_user_id: str):
+    """Vérifie l'accès de gestion de la liste elle-même."""
+    actor_member, _, _, _ = _get_list_management_grant(db, liste_id, current_user_id)
+    return actor_member
+
+
+def _require_list_delete_access(db: Session, liste_id: str, current_user_id: str):
+    """
+    Un administrateur ne peut pas supprimer la liste racine où commence son périmètre.
+    Il peut supprimer les descendants de son périmètre via les tâches.
+    """
+    actor_member, actor_role, source_type, source_id = _get_list_management_grant(
+        db,
+        liste_id,
+        current_user_id,
+    )
+
+    if (
+        actor_role == LISTE_ADMIN_ROLE
+        and source_type == ResourceType.LISTE
+        and source_id == liste_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut pas supprimer la liste racine de son perimetre.",
+        )
+
+    return actor_member
 
 
 def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):

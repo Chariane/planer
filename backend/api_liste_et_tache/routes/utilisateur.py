@@ -13,6 +13,8 @@ from ..core.function import (
     _require_espace_management_access,
     _get_liste_or_404,
     _require_list_access,
+    _require_list_admin_access,
+    _require_list_delete_access,
     _require_list_read_access,
     _get_tache_or_404,
     _require_task_access,
@@ -126,7 +128,7 @@ def update_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_admin_access(db, liste_id, current_user.id)
     upd = update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
     if not upd:
         raise HTTPException(status_code=404, detail="Liste non trouvee")
@@ -138,7 +140,7 @@ def delete_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_delete_access(db, liste_id, current_user.id)
     if not delete_liste(db, liste_id):
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return None
@@ -151,7 +153,7 @@ def assign_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_admin_access(db, liste_id, current_user.id)
     return assign_member_to_liste(db, liste_id, utilisateur_id)
 
 
@@ -162,7 +164,7 @@ def unassign_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_admin_access(db, liste_id, current_user.id)
     unassign_member_from_liste(db, liste_id, utilisateur_id)
     return None
 
@@ -173,7 +175,7 @@ def get_liste_members_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_access(db, liste_id, current_user.id)
+    _require_list_admin_access(db, liste_id, current_user.id)
     return get_liste_members(db, liste_id)
 
 # -----------------------------------------------------------------------------

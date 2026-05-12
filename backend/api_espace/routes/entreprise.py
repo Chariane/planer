@@ -8,6 +8,7 @@ from ..core.function import (
     _require_espace_visibility_access,
     _require_espace_invitation_access,
     _require_espace_management_access,
+    _require_espace_delete_access,
     _require_espace_member_management_access,
     _require_workspace_management_access,
     _require_workspace_descendant_read_access,
@@ -200,7 +201,7 @@ def delete_entreprise_espace_endpoint(
     espace = get_entreprise_espace(db, current_entreprise.id, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
+    _require_espace_delete_access(db, espace_id, espace.id_workspace, current_entreprise.id)
     if not delete_entreprise_espace(db, espace_id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression de l'espace")
     return None

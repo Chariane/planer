@@ -490,6 +490,83 @@ def _get_espace_actor_context(
     return espace, actor_member, actor_member.role
 
 
+def _get_espace_management_grant(
+    db: Session,
+    espace_id: str,
+    workspace_id: Optional[str],
+    current_user_id: str,
+):
+    """
+    Décrit l'origine du droit de gestion sur un espace.
+
+    Retourne:
+    (actor_member, role, source_type, source_id)
+    """
+    if not workspace_id:
+        espace = db.query(Espace).filter(Espace.id == espace_id).first()
+        if espace:
+            workspace_id = espace.id_workspace
+
+    if workspace_id:
+        ws = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.id_utilisateur == current_user_id
+        ).first()
+        if ws:
+            return (
+                Membre(role=WORKSPACE_OWNER_ROLE, statut="Actif"),
+                WORKSPACE_OWNER_ROLE,
+                "workspace",
+                workspace_id,
+            )
+
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
+    if (
+        espace_member
+        and espace_member.statut == "Actif"
+        and espace_member.role in ESPACE_MANAGEMENT_ROLES
+    ):
+        return (
+            espace_member,
+            espace_member.role,
+            "espace",
+            espace_id,
+        )
+
+    espace = _get_espace_or_404(db, espace_id)
+    parent_id = espace.id_espace_parent
+    while parent_id:
+        parent_member = _get_espace_member_record(db, parent_id, current_user_id)
+        if (
+            parent_member
+            and parent_member.statut == "Actif"
+            and parent_member.role in ESPACE_MANAGEMENT_ROLES
+        ):
+            return (
+                parent_member,
+                parent_member.role,
+                "espace",
+                parent_id,
+            )
+
+        parent_espace = db.query(Espace).filter(Espace.id == parent_id).first()
+        if not parent_espace:
+            break
+        parent_id = parent_espace.id_espace_parent
+
+    if workspace_id:
+        ws_admin = db.query(Membre).filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.role == WORKSPACE_ADMIN_ROLE,
+            Membre.statut == "Actif"
+        ).first()
+        if ws_admin:
+            return ws_admin, ws_admin.role, "workspace", workspace_id
+
+    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
+
+
 def _validate_espace_member_management_permissions(
     espace: Espace,
     actor_role: str,
@@ -615,49 +692,43 @@ def _require_espace_management_access(db: Session, espace_id: str, workspace_id:
     2. Un membre de l'espace avec rôle 'Créateur' ou 'Administrateur'
     3. Un administrateur du Workspace parent
     """
-    # 1. Résolution du workspace_id si manquant
-    if not workspace_id:
-        espace = db.query(Espace).filter(Espace.id == espace_id).first()
-        if espace:
-            workspace_id = espace.id_workspace
+    actor_member, _, _, _ = _get_espace_management_grant(
+        db,
+        espace_id,
+        workspace_id,
+        current_user_id,
+    )
+    return actor_member
 
-    # 2. Vérification PROPRIÉTAIRE DU WORKSPACE (Le Maître)
-    if workspace_id:
-        ws = db.query(Workspace).filter(
-            Workspace.id == workspace_id,
-            Workspace.id_utilisateur == current_user_id
-        ).first()
-        if ws:
-            # Le créateur du workspace a tous les droits
-            return Membre(role=WORKSPACE_OWNER_ROLE, statut="Actif")
 
-    # 3. Vérification MEMBRE DIRECT DE L'ESPACE
-    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
+def _require_espace_delete_access(
+    db: Session,
+    espace_id: str,
+    workspace_id: Optional[str],
+    current_user_id: str,
+):
+    """
+    Un administrateur ne peut pas supprimer la ressource racine où commence son périmètre.
+    Il peut en revanche supprimer ses descendants.
+    """
+    actor_member, actor_role, source_type, source_id = _get_espace_management_grant(
+        db,
+        espace_id,
+        workspace_id,
+        current_user_id,
+    )
+
     if (
-        espace_member
-        and espace_member.statut == "Actif"
-        and espace_member.role in ESPACE_MANAGEMENT_ROLES
+        actor_role == ESPACE_ADMIN_ROLE
+        and source_type == "espace"
+        and source_id == espace_id
     ):
-        return espace_member
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut pas supprimer l'espace racine de son perimetre.",
+        )
 
-    # 4. Vérification ESPACE ANCETRE (Créateur/Admin)
-    espace = _get_espace_or_404(db, espace_id)
-    ancestor_manager = _get_active_ancestor_espace_manager(db, espace, current_user_id)
-    if ancestor_manager:
-        return ancestor_manager
-
-    # 5. Vérification ADMINISTRATEUR DU WORKSPACE
-    if workspace_id:
-        ws_admin = db.query(Membre).filter(
-            Membre.id_workspace == workspace_id,
-            Membre.id_utilisateur == current_user_id,
-            Membre.role == WORKSPACE_ADMIN_ROLE,
-            Membre.statut == "Actif"
-        ).first()
-        if ws_admin:
-            return ws_admin
-
-    raise HTTPException(status_code=403, detail="Acces refuse a l'espace")
+    return actor_member
 
 
 def _require_espace_admin_access(db: Session, espace_id: str, current_user_id: str):
