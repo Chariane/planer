@@ -32,6 +32,100 @@ def get_root_espaces_for_workspace(db: Session, workspace_id: str) -> List[Espac
     )
 
 
+def _get_visible_espace_ids_for_workspace(
+    db: Session,
+    workspace_id: str,
+    user_id: Optional[str] = None,
+) -> set[str]:
+    """Calcule les IDs d'espaces visibles pour un utilisateur dans un workspace."""
+    all_espaces = db.query(Espace).filter(Espace.id_workspace == workspace_id).all()
+    all_ids = {esp.id for esp in all_espaces}
+
+    if not user_id:
+        return all_ids
+
+    ws_member = db.query(Membre).filter(
+        Membre.id_workspace == workspace_id,
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif"
+    ).first()
+
+    if ws_member:
+        return all_ids
+
+    from collections import defaultdict
+
+    children_by_parent: dict[Optional[str], List[Espace]] = defaultdict(list)
+    for esp in all_espaces:
+        children_by_parent[esp.id_espace_parent].append(esp)
+
+    def collect_descendant_ids(parent_id: str) -> set[str]:
+        descendant_ids: set[str] = set()
+        stack = [parent_id]
+
+        while stack:
+            current_parent_id = stack.pop()
+            for child in children_by_parent.get(current_parent_id, []):
+                if child.id in descendant_ids:
+                    continue
+                descendant_ids.add(child.id)
+                stack.append(child.id)
+
+        return descendant_ids
+
+    esp_memberships = db.query(Membre.id_espace).join(
+        Espace, Membre.id_espace == Espace.id
+    ).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_espace.isnot(None),
+        Membre.statut == "Actif",
+        Espace.id_workspace == workspace_id,
+    ).all()
+
+    direct_visible_ids = {espace_id for (espace_id,) in esp_memberships}
+    visible_ids = set(direct_visible_ids)
+    for espace_id in direct_visible_ids:
+        visible_ids.update(collect_descendant_ids(espace_id))
+
+    return visible_ids
+
+
+def get_visible_espaces_for_workspace(
+    db: Session,
+    workspace_id: str,
+    user_id: Optional[str] = None,
+) -> List[Espace]:
+    """Liste à plat des espaces visibles dans un workspace pour un utilisateur."""
+    visible_ids = _get_visible_espace_ids_for_workspace(db, workspace_id, user_id)
+    if not visible_ids:
+        return []
+    return (
+        db.query(Espace)
+        .filter(Espace.id_workspace == workspace_id, Espace.id.in_(visible_ids))
+        .all()
+    )
+
+
+def get_visible_root_espaces_for_workspace(
+    db: Session,
+    workspace_id: str,
+    user_id: Optional[str] = None,
+) -> List[Espace]:
+    """Liste des espaces racines visibles dans un workspace pour un utilisateur."""
+    visible_ids = _get_visible_espace_ids_for_workspace(db, workspace_id, user_id)
+    if not visible_ids:
+        return []
+    return (
+        db.query(Espace)
+        .filter(
+            Espace.id_workspace == workspace_id,
+            Espace.id_espace_parent == None,
+            Espace.id.in_(visible_ids),
+        )
+        .all()
+    )
+
+
 def get_sub_espaces_for_parent(db: Session, parent_id: str) -> List[Espace]:
     """Récupère les sous-espaces directs d'un espace parent."""
     return db.query(Espace).filter(Espace.id_espace_parent == parent_id).all()
@@ -79,21 +173,9 @@ def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional
             Membre.statut == "Actif"
         ).first()
 
+        visible_ids = _get_visible_espace_ids_for_workspace(db, workspace_id, user_id)
         if not ws_member:
             is_workspace_member = False
-            # Récupérer les espaces où l'utilisateur est membre actif.
-            # On expose aussi les descendants dans l'arborescence pour afficher leurs noms,
-            # meme si l'acces a leur contenu reste controle par les endpoints de detail.
-            esp_memberships = db.query(Membre.id_espace).filter(
-                Membre.id_utilisateur == user_id,
-                Membre.id_espace != None,
-                Membre.statut == "Actif"
-            ).all()
-            direct_visible_ids = {mid for (mid,) in esp_memberships}
-            visible_ids = set(direct_visible_ids)
-
-            for espace_id in direct_visible_ids:
-                visible_ids.update(collect_descendant_ids(espace_id))
 
     # 4. Organiser par parent_id
     nodes_by_parent = defaultdict(list)

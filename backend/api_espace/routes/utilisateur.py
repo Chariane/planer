@@ -13,6 +13,7 @@ from ..core.function import (
     _require_espace_member_management_access,
     _require_workspace_management_access,
     _require_workspace_descendant_read_access,
+    _require_workspace_espace_navigation_access,
     _serialize_member,
     _require_workspace_read_access,
     render_invitation_html_page,
@@ -28,6 +29,8 @@ from ..crud.utilisateur import (
     get_espaces_for_workspace,
     get_root_espaces_for_workspace,
     get_sub_espaces_for_parent,
+    get_visible_espaces_for_workspace,
+    get_visible_root_espaces_for_workspace,
     get_workspace_espaces_tree,
     invite_member_to_espace,
     accept_espace_invitation,
@@ -95,8 +98,8 @@ def list_workspaces_espaces(
 ):
     """Liste à plat de TOUS les espaces du workspace auxquels l'utilisateur a accès."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
-    return get_espaces_for_workspace(db, workspace_id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_user.id)
+    return get_visible_espaces_for_workspace(db, workspace_id, current_user.id)
 
 # Récupérer uniquement les espaces de premier niveau (sans parent) d'un workspace
 @router.get("/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
@@ -107,8 +110,8 @@ def list_workspace_root_espaces(
 ):
     """Liste uniquement les espaces de niveau 1 (sans parent)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
-    return get_root_espaces_for_workspace(db, workspace_id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_user.id)
+    return get_visible_root_espaces_for_workspace(db, workspace_id, current_user.id)
 
 # Récupérer les sous-espaces directs d'un espace parent
 @router.get("/espaces/{espace_id}/children", response_model=List[EspaceOut])
@@ -131,7 +134,7 @@ def get_workspace_espaces_tree_endpoint(
 ):
     """Récupère l'arborescence complète (espaces et sous-espaces) du workspace."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_user.id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_user.id)
     return get_workspace_espaces_tree(db, workspace_id, user_id=current_user.id)
 
 # Récupérer les espaces où l'utilisateur est admin

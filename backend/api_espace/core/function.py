@@ -440,6 +440,36 @@ def _require_workspace_descendant_read_access(db: Session, workspace_id: str, cu
     return membre
 
 
+def _require_workspace_espace_navigation_access(
+    db: Session,
+    workspace_id: str,
+    current_user_id: str,
+):
+    """
+    Autorise la navigation des espaces d'un workspace soit par accès direct au workspace,
+    soit par membership actif direct sur au moins un espace de ce workspace.
+    """
+    try:
+        return _require_workspace_descendant_read_access(db, workspace_id, current_user_id)
+    except HTTPException:
+        pass
+
+    espace_member = (
+        db.query(Membre)
+        .join(Espace, Membre.id_espace == Espace.id)
+        .filter(
+            Espace.id_workspace == workspace_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+    if espace_member:
+        return espace_member
+
+    raise HTTPException(status_code=403, detail="Acces refuse a la navigation des espaces du workspace")
+
+
 def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
     """Donne l'accès complet au workspace uniquement aux membres directs actifs."""
     return _get_workspace_member_or_403(db, workspace_id, current_user_id)

@@ -11,6 +11,7 @@ from ..core.function import (
     _require_espace_member_management_access,
     _require_workspace_management_access,
     _require_workspace_descendant_read_access,
+    _require_workspace_espace_navigation_access,
     _serialize_member,
     can_create_espace,
 )
@@ -31,6 +32,8 @@ from ..crud.utilisateur import (
     get_espace_member,
     get_root_espaces_for_workspace,
     get_sub_espaces_for_parent,
+    get_visible_espaces_for_workspace,
+    get_visible_root_espaces_for_workspace,
     get_workspace_espaces_tree,
     invite_member_to_espace,
     accept_espace_invitation,
@@ -104,8 +107,8 @@ def list_entreprise_espaces_endpoint(
 ):
     """Liste à plat de TOUS les espaces du workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
-    return get_entreprise_espaces(db, current_entreprise.id, workspace_id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_entreprise.id)
+    return get_visible_espaces_for_workspace(db, workspace_id, current_entreprise.id)
 
 # Récupérer uniquement les espaces de niveau 1 d'un workspace entreprise
 @router.get("/entreprise/workspaces/{workspace_id}/espaces/roots", response_model=List[EspaceOut])
@@ -116,8 +119,8 @@ def list_entreprise_workspace_root_espaces(
 ):
     """Liste uniquement les espaces de niveau 1 d'un workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
-    return get_root_espaces_for_workspace(db, workspace_id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_entreprise.id)
+    return get_visible_root_espaces_for_workspace(db, workspace_id, current_entreprise.id)
 
 # Récupérer les sous-espaces directs d'un espace entreprise
 @router.get("/entreprise/espaces/{espace_id}/children", response_model=List[EspaceOut])
@@ -142,7 +145,7 @@ def get_entreprise_workspace_espaces_tree(
 ):
     """Récupère l'arborescence complète du workspace (entreprise)."""
     _get_workspace_or_404(db, workspace_id)
-    _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
+    _require_workspace_espace_navigation_access(db, workspace_id, current_entreprise.id)
     return get_workspace_espaces_tree(db, workspace_id, current_entreprise.id)
 
 # Récupérer les détails d'un espace entreprise dans un workspace, uniquement si l'utilisateur est membre de l'espace
