@@ -235,7 +235,7 @@ def invite_workspace_member(
         }
 
 #Accepter une invitation à un espace via token (endpoint authentifié — gardé pour compatibilité)
-@router.post("/workspaces/invitations/accept", response_model=WorkspaceMemberOut)
+@router.post("/invitations/accept", response_model=WorkspaceMemberOut)
 def accept_workspace_invitation_endpoint(
     invitation_in: WorkspaceInvitationAcceptRequest,
     db: Session = Depends(get_db),
@@ -252,7 +252,7 @@ def accept_workspace_invitation_endpoint(
     return _serialize_member(membre)
 
 # ─── Acceptation directe depuis l'email (pas d'authentification requise) ───
-@router.get("/workspaces/invitations/accept-from-email")
+@router.get("/invitations/accept-from-email")
 def accept_workspace_invitation_from_email(
     token: str,
     db: Session = Depends(get_db),
