@@ -74,9 +74,15 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
 
         # 6. Traitement de l'invitation (Contrainte 2, 4, 5)
         if payload:
-            target_role = payload.get("role") or "Membre"
+            target_role = payload.get("role")
             target_workspace_id = payload.get("workspace_id")
             target_espace_id = payload.get("espace_id")
+
+            if not target_role:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Role d'invitation absent du token."
+                )
 
             # Verification existence Workspace (Contrainte 4)
             if target_workspace_id:
