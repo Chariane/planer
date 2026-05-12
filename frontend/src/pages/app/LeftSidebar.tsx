@@ -4,13 +4,38 @@ import { Link } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare,
-  FileText, Calendar, Plus, Edit, Trash2, UserPlus, ListTodo, Settings
+  FileText, Calendar, Plus, Edit, Trash2, ListTodo, Settings, UserPlus, X
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { listeService } from '../../services/liste.service';
 import Modal from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import ConfirmModal from '../../components/ui/ConfirmModal';
+import { usePermissions } from '../../hooks/usePermissions';
+import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
+import { useResourceRole } from '../../hooks/useResourceRole';
+import { getRoleLabel, ROLES, getAvailableInvitationRoles } from '../../lib/roleHierarchy';
 
+// Composant Toast simple
+const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+  
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
+        <span className="text-sm flex-1">{message}</span>
+        <button onClick={onClose} className="hover:opacity-70">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function LeftSidebar() {
   const { workspaceId, spaceId, listId } = useActiveResource();
@@ -18,6 +43,50 @@ export default function LeftSidebar() {
     workspaces, workspaceLocalResources, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
     addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
+
+  // Récupérer le rôle dans le workspace
+  const { role: workspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
+  
+  // Récupérer le rôle dans l'espace (si un espace est sélectionné)
+  const { role: espaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
+  
+  // Déterminer le rôle effectif (priorité au rôle le plus élevé)
+  const effectiveRole = espaceRole || workspaceRole;
+  const isAdmin = isEspaceAdmin || isWorkspaceAdmin;
+  const isCreator = isEspaceCreator || isWorkspaceCreator;
+  const isGuest = isEspaceGuest || isWorkspaceGuest;
+  
+  // Permissions
+  const { canShowContextMenu, canManageMembers, canDelete, canInviteMembers, canManageListe } = usePermissions({
+    userRole: effectiveRole,
+    resourceType: 'workspace',
+  });
+
+  // Rôles disponibles pour l'invitation
+  const availableInvitationRoles = getAvailableInvitationRoles(effectiveRole || '');
+
+  // États pour les notifications toast
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
+
+  // État pour la modale de confirmation
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'space' | 'list';
+    item: any;
+    parentSpaceId?: string | null;
+    isWorkspaceList?: boolean;
+  }>({
+    isOpen: false,
+    type: 'space',
+    item: null,
+    parentSpaceId: null,
+    isWorkspaceList: false,
+  });
+
   const [openSpaces, setOpenSpaces] = useState<Record<string, boolean>>({});
   const [listsBySpace, setListsBySpace] = useState<Record<string, any[]>>({});
   const [loadingLists, setLoadingLists] = useState<Record<string, boolean>>({});
@@ -61,8 +130,9 @@ export default function LeftSidebar() {
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('Membre');
+  const [inviteRole, setInviteRole] = useState('Invité');
 
+  // États pour les menus contextuels
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -75,15 +145,31 @@ export default function LeftSidebar() {
     x: number;
     y: number;
     list: any;
-    parentSpaceId: string;
-  }>({ visible: false, x: 0, y: 0, list: null, parentSpaceId: '' });
+    parentSpaceId: string | null;
+    isWorkspaceList: boolean;
+  }>({ visible: false, x: 0, y: 0, list: null, parentSpaceId: null, isWorkspaceList: false });
 
   const menuRef = useRef<HTMLDivElement>(null);
   const listMenuRef = useRef<HTMLDivElement>(null);
 
-  const workspace = workspaces.find(w => w.id === workspaceId);
+  // Fermer les menus contextuels quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutsideMenus = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setContextMenu(prev => ({ ...prev, visible: false }));
+      }
+      if (listMenuRef.current && !listMenuRef.current.contains(event.target as Node)) {
+        setListContextMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutsideMenus);
+    return () => document.removeEventListener('mousedown', handleClickOutsideMenus);
+  }, []);
+
   const localResources = workspaceId ? workspaceLocalResources[workspaceId] : undefined;
-  const hasWorkspaceAccess = !!workspace || !!localResources;
+  const hasWorkspaceAccess = !!workspaceId;
+
   // Fonction pour récupérer tous les espaces d'un arbre (récursif)
   const getAllSpacesFromTree = (items: any[] | undefined): any[] => {
     if (!items) return [];
@@ -105,18 +191,17 @@ export default function LeftSidebar() {
 
   useEffect(() => {
     if (workspaceId && hasWorkspaceAccess) {
-      loadEspacesTree(workspaceId).catch(() => {
-        // Accès partiel au workspace — l'arbre n'est pas disponible
-      });
+      loadEspacesTree(workspaceId).catch(() => {});
     }
   }, [workspaceId, hasWorkspaceAccess, loadEspacesTree]);
 
-  // Charger les listes pour tous les espaces au démarrage (pour que les chevrons apparaissent)
+  // Charger les listes pour tous les espaces au démarrage
   useEffect(() => {
     if (!hasWorkspaceAccess) return;
 
     const loadAllLists = async () => {
-      const allSpaces = getAllSpacesFromTree(workspace?.espaces || []);
+      const workspaceData = workspaces.find(w => w.id === workspaceId);
+      const allSpaces = getAllSpacesFromTree(workspaceData?.espaces || []);
       for (const space of allSpaces) {
         if (!listsBySpace[space.id] && !loadingLists[space.id]) {
           setLoadingLists(prev => ({ ...prev, [space.id]: true }));
@@ -133,7 +218,7 @@ export default function LeftSidebar() {
     };
 
     loadAllLists();
-  }, [hasWorkspaceAccess, workspace?.espaces]);
+  }, [hasWorkspaceAccess, workspaces, workspaceId]);
 
   const loadWorkspaceLists = async () => {
     if (!workspaceId) return;
@@ -142,7 +227,6 @@ export default function LeftSidebar() {
       const lists = await listeService.getByWorkspace(workspaceId);
       setWorkspaceLists(lists);
     } catch {
-      // Accès partiel au workspace — les listes directes ne sont pas disponibles
       setWorkspaceLists([]);
     } finally {
       setLoadingWorkspaceLists(false);
@@ -156,7 +240,7 @@ export default function LeftSidebar() {
   }, [workspaceId, hasWorkspaceAccess]);
 
   useEffect(() => {
-    if (!hasWorkspaceAccess || !workspace?.espaces) return;
+    if (!hasWorkspaceAccess || !workspaces.length) return;
     const fetchListsForOpenSpaces = async () => {
       for (const id of Object.keys(openSpaces)) {
         if (openSpaces[id] && !listsBySpace[id] && !loadingLists[id]) {
@@ -173,7 +257,7 @@ export default function LeftSidebar() {
       }
     };
     fetchListsForOpenSpaces();
-  }, [hasWorkspaceAccess, openSpaces, workspace?.espaces, listsBySpace, loadingLists]);
+  }, [hasWorkspaceAccess, openSpaces, workspaces, listsBySpace, loadingLists]);
 
   const refreshLists = async (espaceId: string) => {
     try {
@@ -182,6 +266,10 @@ export default function LeftSidebar() {
     } catch (error) {
       console.error(`Erreur rafraîchissement listes espace ${espaceId}`, error);
     }
+  };
+
+  const refreshWorkspaceLists = async () => {
+    await loadWorkspaceLists();
   };
 
   const toggleSpace = (id: string) => {
@@ -194,6 +282,8 @@ export default function LeftSidebar() {
     setNewSpaceDesc('');
     setIsCreateSpaceModalOpen(true);
     setIsCreateMenuOpen(false);
+    setContextMenu(prev => ({ ...prev, visible: false }));
+    setListContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   const handleCreateSpace = async () => {
@@ -206,9 +296,10 @@ export default function LeftSidebar() {
       });
       await loadEspacesTree(workspaceId);
       setIsCreateSpaceModalOpen(false);
+      showMessage(`Espace "${newSpaceName}" créé avec succès`, 'success');
     } catch (error) {
       console.error('Erreur création espace', error);
-      alert('Erreur lors de la création de l\'espace');
+      showMessage('Erreur lors de la création de l\'espace', 'error');
     }
   };
 
@@ -226,33 +317,45 @@ export default function LeftSidebar() {
       await updateEspace(editingSpace.id, { nom: editSpaceName, description: editSpaceDesc });
       if (workspaceId) await loadEspacesTree(workspaceId);
       setIsEditSpaceModalOpen(false);
+      showMessage(`Espace "${editSpaceName}" modifié avec succès`, 'success');
     } catch (error) {
       console.error('Erreur modification espace', error);
-      alert('Erreur lors de la modification de l\'espace');
+      showMessage('Erreur lors de la modification de l\'espace', 'error');
     }
   };
 
-  const handleDeleteSpace = async (space: any) => {
-    if (window.confirm(`Supprimer l'espace "${space.nom}" ? Cette action est irréversible.`)) {
-      try {
-        await deleteEspace(space.id);
-        if (workspaceId) await loadEspacesTree(workspaceId);
-      } catch (error) {
-        console.error('Erreur suppression espace', error);
-        alert('Erreur lors de la suppression de l\'espace');
-      }
-    }
+  const handleDeleteSpace = (space: any) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'space',
+      item: space,
+    });
     setContextMenu(prev => ({ ...prev, visible: false }));
   };
 
-  const openCreateListModal = (spaceId?: string, workspaceId?: string) => {
-    setSelectedSpaceId(spaceId || null);
-    setSelectedWorkspaceId(workspaceId || null);
+  const confirmDeleteSpace = async () => {
+    const space = confirmModal.item;
+    if (!space) return;
+    try {
+      await deleteEspace(space.id);
+      if (workspaceId) await loadEspacesTree(workspaceId);
+      showMessage(`Espace "${space.nom}" supprimé avec succès`, 'success');
+    } catch (error) {
+      console.error('Erreur suppression espace', error);
+      showMessage('Erreur lors de la suppression de l\'espace', 'error');
+    }
+    setConfirmModal(prev => ({ ...prev, isOpen: false, item: null }));
+  };
+
+  const openCreateListModal = (spaceIdParam?: string, workspaceIdParam?: string) => {
+    setSelectedSpaceId(spaceIdParam || null);
+    setSelectedWorkspaceId(workspaceIdParam || null);
     setNewListName('');
     setNewListDesc('');
     setIsCreateListModalOpen(true);
     setIsCreateMenuOpen(false);
-    if (contextMenu.visible) setContextMenu(prev => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
+    setListContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   const handleCreateList = async () => {
@@ -262,22 +365,23 @@ export default function LeftSidebar() {
         await addListe(selectedSpaceId, { nom: newListName, description: newListDesc });
         await refreshLists(selectedSpaceId);
         setOpenSpaces(prev => ({ ...prev, [selectedSpaceId]: true }));
+        showMessage(`Liste "${newListName}" créée dans l'espace`, 'success');
       } else if (selectedWorkspaceId) {
         await listeService.create({ nom: newListName, description: newListDesc, id_workspace: selectedWorkspaceId });
-        await loadWorkspaceLists();
-        alert(`Liste "${newListName}" créée dans le workspace.`);
+        await refreshWorkspaceLists();
+        showMessage(`Liste "${newListName}" créée dans le workspace`, 'success');
       } else {
         throw new Error("Aucun espace ou workspace sélectionné.");
       }
       setIsCreateListModalOpen(false);
     } catch (error: any) {
       console.error('Erreur création liste', error);
-      alert(error.message || 'Erreur lors de la création de la liste');
+      showMessage(error.message || 'Erreur lors de la création de la liste', 'error');
     }
   };
 
-  const openEditListModal = (list: any, parentSpaceId: string) => {
-    setEditingList({ ...list, parentSpaceId });
+  const openEditListModal = (list: any, parentSpaceIdParam: string | null, isWorkspaceListParam: boolean) => {
+    setEditingList({ ...list, parentSpaceId: parentSpaceIdParam, isWorkspaceList: isWorkspaceListParam });
     setEditListName(list.nom);
     setEditListDesc(list.description || '');
     setIsEditListModalOpen(true);
@@ -288,31 +392,52 @@ export default function LeftSidebar() {
     if (!editListName.trim() || !editingList) return;
     try {
       await updateListe(editingList.id, { nom: editListName, description: editListDesc });
-      await refreshLists(editingList.parentSpaceId);
+      if (editingList.isWorkspaceList) {
+        await refreshWorkspaceLists();
+      } else if (editingList.parentSpaceId) {
+        await refreshLists(editingList.parentSpaceId);
+      }
       setIsEditListModalOpen(false);
+      showMessage(`Liste "${editListName}" modifiée avec succès`, 'success');
     } catch (error) {
       console.error('Erreur modification liste', error);
-      alert('Erreur lors de la modification de la liste');
+      showMessage('Erreur lors de la modification de la liste', 'error');
     }
   };
 
-  const handleDeleteList = async (list: any, parentSpaceId: string) => {
-    if (window.confirm(`Supprimer la liste "${list.nom}" ? Cette action est irréversible.`)) {
-      try {
-        await deleteListe(list.id);
-        await refreshLists(parentSpaceId);
-      } catch (error) {
-        console.error('Erreur suppression liste', error);
-        alert('Erreur lors de la suppression de la liste');
-      }
-    }
+  const handleDeleteList = (list: any, parentSpaceIdParam: string | null, isWorkspaceListParam: boolean) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'list',
+      item: list,
+      parentSpaceId: parentSpaceIdParam,
+      isWorkspaceList: isWorkspaceListParam,
+    });
     setListContextMenu(prev => ({ ...prev, visible: false }));
+  };
+
+  const confirmDeleteList = async () => {
+    const list = confirmModal.item;
+    if (!list) return;
+    try {
+      await deleteListe(list.id);
+      if (confirmModal.isWorkspaceList) {
+        await refreshWorkspaceLists();
+      } else if (confirmModal.parentSpaceId) {
+        await refreshLists(confirmModal.parentSpaceId);
+      }
+      showMessage(`Liste "${list.nom}" supprimée avec succès`, 'success');
+    } catch (error) {
+      console.error('Erreur suppression liste', error);
+      showMessage('Erreur lors de la suppression de la liste', 'error');
+    }
+    setConfirmModal(prev => ({ ...prev, isOpen: false, item: null }));
   };
 
   const openInviteModal = (space: any) => {
     setSelectedSpaceId(space.id);
     setInviteEmail('');
-    setInviteRole('Membre');
+    setInviteRole('Invité');
     setIsInviteModalOpen(true);
     setContextMenu(prev => ({ ...prev, visible: false }));
   };
@@ -321,21 +446,28 @@ export default function LeftSidebar() {
     if (!inviteEmail.trim() || !selectedSpaceId) return;
     try {
       await inviteMemberToEspace(selectedSpaceId, inviteEmail, inviteRole);
-      alert(`Invitation envoyée à ${inviteEmail}`);
+      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
       setIsInviteModalOpen(false);
+      setInviteEmail('');
     } catch (error) {
       console.error('Erreur invitation', error);
-      alert('Erreur lors de l\'invitation');
+      showMessage('Erreur lors de l\'invitation', 'error');
     }
   };
 
   const handleSettings = (space: any) => {
-    alert(`Paramètres de l'espace "${space.nom}" (à implémenter)`);
+    showMessage(`Paramètres de l'espace "${space.nom}" (à implémenter)`, 'info');
     setContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   const handleContextMenu = (e: React.MouseEvent, space: any) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // Un Invité ne peut pas voir le menu contextuel
+    if (!canShowContextMenu) return;
+    
+    setListContextMenu(prev => ({ ...prev, visible: false }));
     setContextMenu({
       visible: true,
       x: e.clientX,
@@ -344,15 +476,26 @@ export default function LeftSidebar() {
     });
   };
 
-  const handleListContextMenu = (e: React.MouseEvent, list: any, parentSpaceId: string) => {
+  const handleListContextMenu = (e: React.MouseEvent, list: any, parentSpaceIdParam: string | null, isWorkspaceListParam: boolean) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    if (!canShowContextMenu) return;
+    
+    setContextMenu(prev => ({ ...prev, visible: false }));
     setListContextMenu({
       visible: true,
       x: e.clientX,
       y: e.clientY,
       list,
-      parentSpaceId,
+      parentSpaceId: parentSpaceIdParam,
+      isWorkspaceList: isWorkspaceListParam,
     });
+  };
+
+  const handleLinkClick = () => {
+    setContextMenu(prev => ({ ...prev, visible: false }));
+    setListContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   const renderTree = (items: any[], depth = 0) => {
@@ -365,6 +508,7 @@ export default function LeftSidebar() {
         >
           <Link
             to={`/workspace/${workspaceId}/${item.id}`}
+            onClick={handleLinkClick}
             className={`flex-1 flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-all ${spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
               }`}
           >
@@ -372,23 +516,26 @@ export default function LeftSidebar() {
             <span className="truncate">{item.nom}</span>
           </Link>
           <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.preventDefault(); openCreateListModal(item.id); }}
-              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
-              title="Ajouter une liste"
-            >
-              <ListTodo className="h-3 w-3" />
-            </button>
-            <button
-              onClick={(e) => { e.preventDefault(); openCreateSpaceModal(item.id); }}
-              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
-              title="Ajouter un sous-espace"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-            {/* Chevron : s'affiche si l'espace a des sous-espaces OU des listes */}
+            {canManageListe && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateListModal(item.id, undefined); }}
+                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
+                title="Ajouter une liste"
+              >
+                <ListTodo className="h-3 w-3" />
+              </button>
+            )}
+            {canManageListe && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateSpaceModal(item.id); }}
+                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
+                title="Ajouter un sous-espace"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            )}
             {(item.sous_espaces?.length > 0 || (listsBySpace[item.id]?.length ?? 0) > 0) && (
-              <button onClick={() => toggleSpace(item.id)} className="p-1 text-gray-400">
+              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSpace(item.id); }} className="p-1 text-gray-400">
                 {openSpaces[item.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </button>
             )}
@@ -405,11 +552,12 @@ export default function LeftSidebar() {
             {listsBySpace[item.id]?.map(list => (
               <div
                 key={list.id}
-                onContextMenu={(e) => handleListContextMenu(e, list, item.id)}
+                onContextMenu={(e) => handleListContextMenu(e, list, item.id, false)}
                 className="block py-1.5 pl-8 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
               >
                 <Link
                   to={`/workspace/${workspaceId}/${item.id}/${list.id}`}
+                  onClick={handleLinkClick}
                   className="flex-1 flex items-center gap-2"
                 >
                   <ListTodo className="h-4 w-4 text-gray-500" />
@@ -428,47 +576,78 @@ export default function LeftSidebar() {
     ));
   };
 
-
-
-
+  // Message pour les invités - affichage simplifié sans actions
+  if (isGuest && hasWorkspaceAccess) {
+    return (
+      <div className="p-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            Vous pouvez consulter le contenu mais ne pouvez pas créer, modifier ou supprimer des ressources.
+          </p>
+          <p className="text-xs text-blue-600 mt-2">
+            Contactez un administrateur pour obtenir plus de droits.
+          </p>
+        </div>
+        {/* Affichage des espaces en lecture seule */}
+        {hasWorkspaceAccess && (
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Espaces</h3>
+            {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-3">
-
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
       {/* Section Espaces et listes hiérarchiques */}
       {hasWorkspaceAccess && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2 relative">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
-            <div className="relative" ref={createMenuRef}>
-              <button
-                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                className="p-1 rounded hover:bg-gray-100"
-              >
-                <Plus className="h-3.5 w-3.5 text-gray-500" />
-              </button>
-              {isCreateMenuOpen && (
-                <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
-                  <button
-                    onClick={() => openCreateSpaceModal()}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <FolderTree className="h-4 w-4" />
-                    Espace
-                  </button>
-                  <button
-                    onClick={() => openCreateListModal(undefined, workspaceId)}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <ListTodo className="h-4 w-4" />
-                    Liste (projet)
-                  </button>
-                </div>
-              )}
-            </div>
+            {canManageListe && (
+              <div className="relative" ref={createMenuRef}>
+                <button
+                  onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                  className="p-1 rounded hover:bg-gray-100"
+                >
+                  <Plus className="h-3.5 w-3.5 text-gray-500" />
+                </button>
+                {isCreateMenuOpen && (
+                  <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
+                    <button
+                      onClick={() => openCreateSpaceModal()}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <FolderTree className="h-4 w-4" />
+                      Espace
+                    </button>
+                    <button
+                      onClick={() => openCreateListModal(undefined, workspaceId)}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <ListTodo className="h-4 w-4" />
+                      Liste (projet)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {renderTree(workspace?.espaces || [])}
+          {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
         </div>
       )}
 
@@ -483,10 +662,12 @@ export default function LeftSidebar() {
             {workspaceLists.map(list => (
               <div
                 key={list.id}
+                onContextMenu={(e) => handleListContextMenu(e, list, null, true)}
                 className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
               >
                 <Link
                   to={`/workspace/${workspaceId}/list/${list.id}`}
+                  onClick={handleLinkClick}
                   className="flex-1 flex items-center gap-2"
                 >
                   <ListTodo className="h-4 w-4 text-gray-500" />
@@ -503,9 +684,7 @@ export default function LeftSidebar() {
         </div>
       )}
 
-
-
-      {/* Chat */}
+      {/* Chat - visible pour tous */}
       <div className="mb-6">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Chat</h3>
         <div className="space-y-1">
@@ -524,24 +703,26 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* Gestion */}
-      <div>
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gestion</h3>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-            <FileText className="h-4 w-4 text-primary" /> Fichiers
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-            <FileText className="h-4 w-4 text-primary" /> Gestion des rapports
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-            <Calendar className="h-4 w-4 text-primary" /> Gestion des absences/congés
+      {/* Gestion - visible pour Admin et Créateur */}
+      {(isAdmin || isCreator) && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gestion</h3>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
+              <FileText className="h-4 w-4 text-primary" /> Fichiers
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
+              <FileText className="h-4 w-4 text-primary" /> Gestion des rapports
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
+              <Calendar className="h-4 w-4 text-primary" /> Gestion des absences/congés
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Menus contextuels */}
-      {contextMenu.visible && (
+      {/* Menu contextuel pour Espace */}
+      {contextMenu.visible && canShowContextMenu && (
         <div
           ref={menuRef}
           className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
@@ -550,33 +731,42 @@ export default function LeftSidebar() {
           <button onClick={() => openEditSpaceModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier
           </button>
-          <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-            <Trash2 className="h-4 w-4" /> Supprimer
-          </button>
-          <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <UserPlus className="h-4 w-4" /> Inviter
-          </button>
-          <button onClick={() => openCreateListModal(contextMenu.space.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <ListTodo className="h-4 w-4" /> Créer une liste
-          </button>
+          {canDelete && (
+            <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+              <Trash2 className="h-4 w-4" /> Supprimer
+            </button>
+          )}
+          {canInviteMembers && availableInvitationRoles.length > 0 && (
+            <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+              <UserPlus className="h-4 w-4" /> Inviter
+            </button>
+          )}
+          {canManageListe && (
+            <button onClick={() => openCreateListModal(contextMenu.space.id, undefined)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+              <ListTodo className="h-4 w-4" /> Créer une liste
+            </button>
+          )}
           <button onClick={() => handleSettings(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Settings className="h-4 w-4" /> Paramètres
           </button>
         </div>
       )}
 
-      {listContextMenu.visible && (
+      {/* Menu contextuel pour Liste */}
+      {listContextMenu.visible && canShowContextMenu && (
         <div
           ref={listMenuRef}
           className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
           style={{ top: listContextMenu.y, left: listContextMenu.x }}
         >
-          <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+          <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier la liste
           </button>
-          <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-            <Trash2 className="h-4 w-4" /> Supprimer la liste
-          </button>
+          {canDelete && (
+            <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+              <Trash2 className="h-4 w-4" /> Supprimer la liste
+            </button>
+          )}
         </div>
       )}
 
@@ -617,7 +807,7 @@ export default function LeftSidebar() {
       <Modal isOpen={isEditListModalOpen} onClose={() => setIsEditListModalOpen(false)} title="Modifier la liste" size="md">
         <div className="space-y-4">
           <input type="text" placeholder="Nom" value={editListName} onChange={e => setEditListName(e.target.value)} className="w-full p-2 border rounded-lg" />
-          <textarea placeholder="Description" value={editListDesc} onChange={e => setEditSpaceDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
+          <textarea placeholder="Description" value={editListDesc} onChange={e => setEditListDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsEditListModalOpen(false)}>Annuler</Button>
             <Button onClick={handleEditList}>Enregistrer</Button>
@@ -625,20 +815,71 @@ export default function LeftSidebar() {
         </div>
       </Modal>
 
+      {/* Modale d'invitation avec choix selon le rôle */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
-          <input type="email" placeholder="Email du membre" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="w-full p-2 border rounded-lg" />
-          <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full p-2 border rounded-lg">
-            <option value="Invité">Invité</option>
-            <option value="Membre">Membre</option>
-            <option value="Administrateur">Administrateur</option>
-          </select>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email du membre
+            </label>
+            <input
+              type="email"
+              placeholder="exemple@email.com"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rôle
+            </label>
+            <select
+              value={inviteRole}
+              onChange={e => setInviteRole(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            >
+              {availableInvitationRoles.map(role => (
+                <option key={role} value={role}>{getRoleLabel(role)}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              {isCreator ? (
+                <>
+                  💡 <strong>Invitant</strong> : accès en lecture seule<br />
+                  💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres
+                </>
+              ) : isAdmin ? (
+                <>
+                  💡 En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                </>
+              ) : (
+                <>
+                  💡 Vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                </>
+              )}
+            </p>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
             <Button onClick={handleInviteMember}>Inviter</Button>
           </div>
         </div>
       </Modal>
+
+      {/* ConfirmModal pour suppression */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false, item: null }))}
+        onConfirm={confirmModal.type === 'space' ? confirmDeleteSpace : confirmDeleteList}
+        title={confirmModal.type === 'space' ? 'Supprimer l\'espace' : 'Supprimer la liste'}
+        message={confirmModal.type === 'space' 
+          ? `Êtes-vous sûr de vouloir supprimer l'espace "${confirmModal.item?.nom || ''}" ? Cette action est irréversible et supprimera également tous les sous-espaces et listes associés.`
+          : `Êtes-vous sûr de vouloir supprimer la liste "${confirmModal.item?.nom || ''}" ? Cette action est irréversible.`
+        }
+        confirmText="Supprimer"
+        confirmVariant="danger"
+      />
     </div>
   );
 }

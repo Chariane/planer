@@ -1,12 +1,13 @@
 // frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
 import { useEffect, useState } from 'react';
-import { Activity, Briefcase, Calendar, FolderTree, ListTodo, UserPlus, Users } from 'lucide-react';
+import { Activity, Briefcase, Calendar, FolderTree, ListTodo, UserPlus, Users, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
+import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import type { Member } from '../../../types';
 
 interface WorkspaceDashboardPanelProps {
@@ -18,6 +19,27 @@ const INVITATION_ROLES = ['Invité', 'Administrateur'];
 
 const countSpaces = (items: any[] = []): number =>
   items.reduce((total, item) => total + 1 + countSpaces(item.sous_espaces || []), 0);
+
+// Composant Toast simple
+const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+  
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
+        <span className="text-sm flex-1">{message}</span>
+        <button onClick={onClose} className="hover:opacity-70">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashboardPanelProps) {
   const [workspaceName, setWorkspaceName] = useState('');
@@ -32,6 +54,17 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
+  
+  // État pour les notifications toast
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
+
+  // Récupérer le rôle de l'utilisateur dans ce workspace
+  const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
+  const canInviteMembers = isAdmin || isCreator;
 
   const loadData = async () => {
     setLoading(true);
@@ -47,6 +80,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         // Accès contextuel ou endpoint indisponible : les stats chargent ce qui est possible.
       }
 
+      // Charger les membres - IMPORTANT: Les invités peuvent aussi voir les membres
       let formattedMembers: Member[] = [];
       try {
         const membersData = await workspaceService.getMembers(workspaceId);
@@ -56,9 +90,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           email: m.utilisateur?.email || '',
           role: m.role,
         }));
-      } catch {
-        formattedMembers = [];
+      } catch (err: any) {
+        console.warn('Impossible de charger les membres:', err);
+        if (err.status === 403) {
+          console.log('Accès refusé pour voir les membres - affichage limité');
+        }
       }
+      setMembers(formattedMembers);
 
       let spacesCount = 0;
       try {
@@ -78,7 +116,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
       setWorkspaceName(resolvedName);
       setWorkspaceDescription(resolvedDescription);
-      setMembers(formattedMembers);
       setStats({
         spacesCount,
         listsCount,
@@ -97,16 +134,16 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     if (!inviteEmail.trim()) return;
     try {
       await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
-      alert(`✅ Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`);
+      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
       setIsInviteModalOpen(false);
       setInviteEmail('');
       await loadData();
     } catch (err: any) {
       const msg = err?.message || '';
       if (msg.includes('refuse') || msg.includes('redondant')) {
-        alert('❌ Cette personne a déjà un rôle parent qui couvre ce workspace');
+        showMessage('Cette personne a déjà un rôle parent qui couvre ce workspace', 'error');
       } else {
-        alert(msg || "Erreur lors de l'invitation");
+        showMessage(msg || "Erreur lors de l'invitation", 'error');
       }
     }
   };
@@ -121,6 +158,27 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
   return (
     <div className="space-y-6">
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Message pour les invités */}
+      {isGuest && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            👁️ Vous êtes en mode <strong>lecture seule</strong> dans ce workspace.
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            Vous pouvez consulter les informations mais ne pouvez pas inviter de nouveaux membres.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -136,10 +194,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             <p className="text-sm text-gray-500 mt-3 max-w-2xl">{workspaceDescription}</p>
           )}
         </div>
-        <Button onClick={() => setIsInviteModalOpen(true)}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Inviter un membre
-        </Button>
+        {/* Bouton Inviter - visible uniquement pour Admin et Créateur */}
+        {canInviteMembers && (
+          <Button onClick={() => setIsInviteModalOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Inviter un membre
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -180,35 +241,39 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         </GlassCard>
       </div>
 
+      {/* Liste des membres - visible pour tous (invités inclus) */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Users className="h-5 w-5" />
           Membres du workspace
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {members.map(member => (
-            <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
-              <div>
-                <p className="font-medium text-gray-800">{member.name}</p>
-                <p className="text-sm text-gray-500">{member.email}</p>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700'
-                  : member.role === 'Créateur' ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-100 text-gray-600'
-              }`}>
-                {member.role}
-              </span>
-            </GlassCard>
-          ))}
-          {members.length === 0 && (
-            <div className="col-span-2 text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+        {members.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {members.map(member => (
+              <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
+                <div>
+                  <p className="font-medium text-gray-800">{member.name}</p>
+                  <p className="text-sm text-gray-500">{member.email}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700'
+                    : member.role === 'Créateur' ? 'bg-purple-100 text-purple-700'
+                      : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {member.role}
+                </span>
+              </GlassCard>
+            ))}
+          </div>
+        ) : (
+          <GlassCard className="p-4">
+            <div className="text-center text-gray-400 py-4">
               <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun membre visible dans ce workspace</p>
-              <p className="text-sm mt-1">Invitez des membres ou vérifiez vos permissions.</p>
+              <p>Impossible de charger la liste des membres</p>
+              <p className="text-sm mt-1">Vous n'avez pas les droits nécessaires pour voir les membres de ce workspace.</p>
             </div>
-          )}
-        </div>
+          </GlassCard>
+        )}
       </div>
 
       <div>
@@ -225,48 +290,50 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         </GlassCard>
       </div>
 
-      {/* Modale d'invitation avec choix Invité / Administrateur */}
-      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre au workspace" size="md">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email du membre
-            </label>
-            <input
-              type="email"
-              placeholder="exemple@email.com"
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
-            />
+      {/* Modale d'invitation - visible uniquement pour Admin et Créateur */}
+      {canInviteMembers && (
+        <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre au workspace" size="md">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email du membre
+              </label>
+              <input
+                type="email"
+                placeholder="exemple@email.com"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Rôle
+              </label>
+              <select
+                value={inviteRole}
+                onChange={e => setInviteRole(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+              >
+                {INVITATION_ROLES.map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                💡 <strong>Invitant</strong> : accès en lecture seule<br />
+                💡 <strong>Administrateur</strong> : peut gérer le workspace et ses membres
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
+              <Button onClick={handleInvite}>Inviter</Button>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rôle
-            </label>
-            <select
-              value={inviteRole}
-              onChange={e => setInviteRole(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
-            >
-              {INVITATION_ROLES.map(role => (
-                <option key={role} value={role}>{role}</option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">
-              💡 <strong>Invitant</strong> : accès en lecture seule<br />
-              💡 <strong>Administrateur</strong> : peut gérer le workspace et ses membres
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
-            </p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleInvite}>Inviter</Button>
-          </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 }

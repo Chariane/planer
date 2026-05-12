@@ -1,3 +1,4 @@
+// frontend/src/store/useNavigationStore.ts
 import { create } from 'zustand';
 import type { Workspace, JoinedResource } from '../types';
 
@@ -7,8 +8,10 @@ interface NavigationState {
     joinedEspaces: JoinedResource[];
     joinedListes: JoinedResource[];
     joinedTaches: JoinedResource[];
+    loading: boolean; // Ajout de la propriété loading
 
-    loadNavigation: (data: Partial<NavigationState>) => void;
+    loadNavigation: (data: Partial<Omit<NavigationState, 'loadNavigation' | 'checkAccess' | 'getResourceContext' | 'setLoading'>>) => void;
+    setLoading: (loading: boolean) => void; // Ajout pour gérer le chargement
     checkAccess: (type: 'workspace' | 'espace' | 'liste' | 'tache', id: string) => boolean;
     getResourceContext: (type: 'workspace' | 'espace' | 'liste' | 'tache', id: string) => any;
 }
@@ -19,6 +22,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     joinedEspaces: [],
     joinedListes: [],
     joinedTaches: [],
+    loading: false,
+
+    setLoading: (loading) => set({ loading }),
 
     // Charge les données brutes depuis l'API sans fabriquer de hiérarchie.
     loadNavigation: (data) => set({ ...data }),

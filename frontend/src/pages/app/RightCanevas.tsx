@@ -8,14 +8,19 @@ import {
 import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '../../services/canevas.service';
 import { sectionService } from '../../services/section.service';
 import { checklistService } from '../../services/checklist.service';
+import { useResourceRole } from '../../hooks/useResourceRole';
+import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
+import { useApp } from '../../contexts/AppContext';
 
 export default function RightCanevas() {
   const { listId } = useParams();
+  const { workspaceLocalResources, workspaces } = useApp();
   const [canevas, setCanevas] = useState<EnhancedCanevas | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [userRole, setUserRole] = useState<string | null>(null);
   
   // États pour l'édition
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
@@ -32,11 +37,30 @@ export default function RightCanevas() {
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const calculateSectionProgress = (checklists: EnhancedChecklist[]): number => {
-    if (checklists.length === 0) return 0;
-    const checkedCount = checklists.filter(c => c.is_checked).length;
-    return Math.round((checkedCount / checklists.length) * 100);
-  };
+  // Récupérer le rôle de l'utilisateur pour cette liste
+  useEffect(() => {
+    const findUserRole = () => {
+      // 1. Chercher dans les ressources locales (rôle effectif hérité)
+      for (const [wsId, resources] of Object.entries(workspaceLocalResources)) {
+        const foundList = resources.direct_access?.listes?.find((l: any) => l.id === listId);
+        if (foundList && foundList.role) {
+          setUserRole(foundList.role);
+          return;
+        }
+      }
+      
+      // 2. Chercher dans les espaces rejoints via le store
+      // Pour l'instant, si non trouvé, on considère que l'utilisateur a un accès de base
+      setUserRole(null);
+    };
+    
+    if (listId) {
+      findUserRole();
+    }
+  }, [listId, workspaceLocalResources]);
+
+  const canModify = userRole !== 'Invité' && userRole !== null;
+  const isReadOnly = userRole === 'Invité';
 
   const loadCanevas = async () => {
     if (!listId) return;
@@ -67,7 +91,7 @@ export default function RightCanevas() {
   }, [listId]);
 
   const addSection = async () => {
-    if (!newSectionTitle.trim() || !canevas) return;
+    if (!newSectionTitle.trim() || !canevas || !canModify) return;
     setActionLoading('add-section');
     try {
       await sectionService.create(canevas.id, { titre: newSectionTitle });
@@ -76,13 +100,14 @@ export default function RightCanevas() {
       setIsAddingSection(false);
     } catch (err) {
       console.error('Erreur ajout section:', err);
+      alert('Erreur lors de l\'ajout de la section');
     } finally {
       setActionLoading(null);
     }
   };
 
   const updateSection = async (sectionId: string) => {
-    if (!editingSectionTitle.trim()) return;
+    if (!editingSectionTitle.trim() || !canModify) return;
     setActionLoading(`section-${sectionId}`);
     try {
       await sectionService.update(sectionId, { titre: editingSectionTitle });
@@ -91,12 +116,14 @@ export default function RightCanevas() {
       setEditingSectionTitle('');
     } catch (err) {
       console.error('Erreur modification section:', err);
+      alert('Erreur lors de la modification de la section');
     } finally {
       setActionLoading(null);
     }
   };
 
   const deleteSection = async (sectionId: string) => {
+    if (!canModify) return;
     if (!confirm('Supprimer cette section ? Toutes les checklists seront également supprimées.')) return;
     setActionLoading(`delete-section-${sectionId}`);
     try {
@@ -104,13 +131,14 @@ export default function RightCanevas() {
       await loadCanevas();
     } catch (err) {
       console.error('Erreur suppression section:', err);
+      alert('Erreur lors de la suppression de la section');
     } finally {
       setActionLoading(null);
     }
   };
 
   const addChecklist = async (sectionId: string) => {
-    if (!newChecklistText.trim()) return;
+    if (!newChecklistText.trim() || !canModify) return;
     setActionLoading(`add-checklist-${sectionId}`);
     try {
       await checklistService.createInSection(sectionId, { texte: newChecklistText, is_checked: false });
@@ -119,6 +147,7 @@ export default function RightCanevas() {
       setAddingChecklistToSection(null);
     } catch (err) {
       console.error('Erreur ajout checklist:', err);
+      alert('Erreur lors de l\'ajout de l\'élément');
     } finally {
       setActionLoading(null);
     }
@@ -126,6 +155,7 @@ export default function RightCanevas() {
 
   const toggleChecklist = async (checklist: EnhancedChecklist, sectionId: string) => {
     if (checklist.source !== 'manual') return;
+    if (!canModify) return;
     
     setActionLoading(`toggle-${checklist.id}`);
     try {
@@ -139,7 +169,7 @@ export default function RightCanevas() {
   };
 
   const updateChecklist = async (checklist: EnhancedChecklist, sectionId: string) => {
-    if (!editingChecklistText.trim()) return;
+    if (!editingChecklistText.trim() || !canModify) return;
     setActionLoading(`update-${checklist.id}`);
     try {
       await checklistService.update(checklist.id, { texte: editingChecklistText });
@@ -148,12 +178,14 @@ export default function RightCanevas() {
       setEditingChecklistText('');
     } catch (err) {
       console.error('Erreur modification checklist:', err);
+      alert('Erreur lors de la modification de l\'élément');
     } finally {
       setActionLoading(null);
     }
   };
 
   const deleteChecklist = async (checklistId: string, sectionId: string) => {
+    if (!canModify) return;
     if (!confirm('Supprimer cet élément ?')) return;
     setActionLoading(`delete-${checklistId}`);
     try {
@@ -161,6 +193,7 @@ export default function RightCanevas() {
       await loadCanevas();
     } catch (err) {
       console.error('Erreur suppression checklist:', err);
+      alert('Erreur lors de la suppression de l\'élément');
     } finally {
       setActionLoading(null);
     }
@@ -182,6 +215,7 @@ export default function RightCanevas() {
       setCanevas(null);
     } catch (err) {
       console.error('Erreur suppression canevas:', err);
+      alert('Erreur lors de la suppression du canevas');
     } finally {
       setActionLoading(null);
     }
@@ -198,6 +232,68 @@ export default function RightCanevas() {
     );
   }
 
+  // Vue pour les invités (lecture seule)
+  if (isReadOnly) {
+    return (
+      <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-secondary" />
+            <h2 className="font-semibold text-gray-800">
+              {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
+            </h2>
+          </div>
+          <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 transition">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-800">
+              👁️ Vous êtes en mode <strong>lecture seule</strong>.
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Vous ne pouvez pas modifier le canevas.
+            </p>
+          </div>
+          {canevas?.sections.map((section) => (
+            <div key={section.id} className="border border-gray-100 rounded-lg mb-4">
+              <div className="p-3 bg-gray-50">
+                <span className="text-sm font-medium text-gray-700">{section.titre}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs font-semibold text-secondary">{section.progress}%</span>
+                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                    <div className="bg-secondary h-1.5 rounded-full" style={{ width: `${section.progress}%` }} />
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 space-y-2">
+                {section.checklists.map((checklist) => (
+                  <div key={checklist.id} className="flex items-center gap-2">
+                    {checklist.is_checked ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-gray-300" />
+                    )}
+                    <span className={`text-sm ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                      {checklist.texte}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(!canevas?.sections || canevas.sections.length === 0) && (
+            <div className="text-center text-gray-400 text-sm py-8">
+              <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>Aucune section disponible</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
       <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
@@ -211,7 +307,7 @@ export default function RightCanevas() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {canevas && canevas.sections.length === 0 && (
+          {canevas && canevas.sections.length === 0 && canModify && (
             <button
               onClick={deleteCanevas}
               disabled={actionLoading === 'delete-canevas'}
@@ -264,7 +360,7 @@ export default function RightCanevas() {
                       ) : (
                         <ChevronRight className="h-4 w-4 text-gray-500" />
                       )}
-                      {editingSectionId === section.id ? (
+                      {editingSectionId === section.id && canModify ? (
                         <input
                           type="text"
                           value={editingSectionTitle}
@@ -284,7 +380,7 @@ export default function RightCanevas() {
                         <div className="bg-secondary h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
                       </div>
                       
-                      {!canevas.is_verrouille && (
+                      {canModify && !canevas.is_verrouille && (
                         <>
                           {editingSectionId !== section.id && (
                             <button
@@ -331,7 +427,7 @@ export default function RightCanevas() {
                           
                           <button
                             onClick={() => toggleChecklist(checklist, section.id)}
-                            disabled={canevas.is_verrouille || checklist.source !== 'manual' || actionLoading?.startsWith('toggle')}
+                            disabled={canevas.is_verrouille || checklist.source !== 'manual' || !canModify || actionLoading?.startsWith('toggle')}
                             className="flex-shrink-0"
                           >
                             {actionLoading === `toggle-${checklist.id}` ? (
@@ -343,7 +439,7 @@ export default function RightCanevas() {
                             )}
                           </button>
                           
-                          {editingChecklistId === checklist.id ? (
+                          {editingChecklistId === checklist.id && canModify ? (
                             <input
                               type="text"
                               value={editingChecklistText}
@@ -358,7 +454,7 @@ export default function RightCanevas() {
                             </span>
                           )}
                           
-                          {!canevas.is_verrouille && checklist.source === 'manual' && (
+                          {canModify && !canevas.is_verrouille && checklist.source === 'manual' && (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                               {editingChecklistId !== checklist.id && (
                                 <button
@@ -392,7 +488,7 @@ export default function RightCanevas() {
                         </div>
                       ))}
                       
-                      {!canevas.is_verrouille && (
+                      {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">
                           {addingChecklistToSection === section.id ? (
                             <div className="flex items-center gap-2">
@@ -436,7 +532,7 @@ export default function RightCanevas() {
               );
             })}
 
-            {!canevas.is_verrouille && (
+            {canModify && !canevas.is_verrouille && (
               <div className="mt-4 pt-2 border-t border-gray-100">
                 {isAddingSection ? (
                   <div className="flex items-center gap-2">
@@ -477,11 +573,18 @@ export default function RightCanevas() {
               </div>
             )}
 
-            {canevas.sections.length === 0 && !canevas.is_verrouille && (
+            {canevas.sections.length === 0 && canModify && !canevas.is_verrouille && (
               <div className="text-center text-gray-400 text-sm py-8">
                 <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>Créez votre première section</p>
                 <p className="text-xs mt-1">Exemples: "Mois de Décembre", "Semaine du 05/12", "Lundi 05/12"</p>
+              </div>
+            )}
+
+            {canevas.sections.length === 0 && !canModify && (
+              <div className="text-center text-gray-400 text-sm py-8">
+                <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>Aucune section disponible</p>
               </div>
             )}
           </div>

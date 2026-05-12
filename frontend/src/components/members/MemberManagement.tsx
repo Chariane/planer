@@ -1,31 +1,68 @@
 // frontend/src/components/members/MemberManagement.tsx
 import { useState, useEffect } from 'react';
-import { UserPlus, Trash2 } from 'lucide-react';
+import { UserPlus, Trash2, X, Users } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
+import { usePermissions } from '../../hooks/usePermissions';
+import { getRoleLabel, ROLES, getAvailableInvitationRoles } from '../../lib/roleHierarchy';
 import type { Member } from '../../types';
 
 interface MemberManagementProps {
   workspaceId?: string;
   espaceId?: string;
   onMemberAdded?: () => void;
+  currentUserRole?: string | null;
 }
 
 // Rôles disponibles pour la gestion (après invitation)
 const MANAGABLE_ROLES = ['Invité', 'Membre', 'Administrateur'];
 const CREATOR_ROLE = 'Créateur';
 
-// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
-const INVITATION_ROLES = ['Invité', 'Administrateur'];
+// Composant Toast simple
+const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
-export default function MemberManagement({ workspaceId, espaceId, onMemberAdded }: MemberManagementProps) {
+  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+  
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
+        <span className="text-sm flex-1">{message}</span>
+        <button onClick={onClose} className="hover:opacity-70">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default function MemberManagement({ workspaceId, espaceId, onMemberAdded, currentUserRole }: MemberManagementProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
+  
+  // États pour les notifications toast
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
+
+  // Permissions
+  const { canManageMembers, canInviteMembers, isAdmin, isCreator } = usePermissions({
+    userRole: currentUserRole,
+    resourceType: workspaceId ? 'workspace' : 'espace',
+  });
+
+  // Rôles disponibles pour l'invitation (selon le rôle de l'inviteur)
+  const availableInvitationRoles = getAvailableInvitationRoles(currentUserRole || '');
 
   const loadMembers = async () => {
     setLoading(true);
@@ -49,6 +86,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
       }
     } catch (err) {
       console.error('Erreur chargement membres', err);
+      showMessage('Erreur lors du chargement des membres', 'error');
     } finally {
       setLoading(false);
     }
@@ -70,18 +108,27 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
       onMemberAdded?.();
       setIsInviteModalOpen(false);
       setInviteEmail('');
-      alert(`✅ Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`);
+      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
     } catch (err: any) {
       console.error('Erreur invitation', err);
       if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
-        alert('❌ Cette personne a déjà un rôle parent qui couvre cet espace/workspace');
+        showMessage('Cette personne a déjà un rôle parent qui couvre cet espace/workspace', 'error');
       } else {
-        alert(err.message || 'Erreur lors de l\'invitation');
+        showMessage(err.message || 'Erreur lors de l\'invitation', 'error');
       }
     }
   };
 
   const handleRemoveMember = async (userId: string) => {
+    const targetMember = members.find(m => m.id === userId);
+    
+    // L'Admin ne peut pas supprimer un autre Admin ou le Créateur
+    // Utilisation de (as any) pour contourner le typage TypeScript
+    if (isAdmin && targetMember && ((targetMember.role as any) === ROLES.ADMIN || (targetMember.role as any) === ROLES.CREATOR)) {
+      showMessage('Vous ne pouvez pas retirer un autre administrateur ou le créateur', 'error');
+      return;
+    }
+    
     if (!confirm('Retirer ce membre ?')) return;
     try {
       if (workspaceId) {
@@ -90,13 +137,28 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
         await espaceService.removeMember(espaceId, userId);
       }
       await loadMembers();
+      showMessage('Membre retiré avec succès', 'success');
     } catch (err) {
       console.error('Erreur suppression', err);
-      alert('Erreur lors de la suppression');
+      showMessage('Erreur lors de la suppression', 'error');
     }
   };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
+    const targetMember = members.find(m => m.id === userId);
+    
+    // L'Admin ne peut pas modifier un autre Admin ou le Créateur
+    if (isAdmin && targetMember && ((targetMember.role as any) === ROLES.ADMIN || (targetMember.role as any) === ROLES.CREATOR)) {
+      showMessage('Vous ne pouvez pas modifier le rôle d\'un autre administrateur ou du créateur', 'error');
+      return;
+    }
+    
+    // L'Admin ne peut pas promouvoir quelqu'un au rôle Administrateur
+    if (isAdmin && newRole === ROLES.ADMIN) {
+      showMessage('Vous ne pouvez pas promouvoir un membre au rôle Administrateur', 'error');
+      return;
+    }
+    
     try {
       if (workspaceId) {
         await workspaceService.updateMemberRole(workspaceId, userId, newRole);
@@ -104,33 +166,51 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
         await espaceService.updateMemberRole(espaceId, userId, newRole);
       }
       await loadMembers();
+      showMessage(`Rôle modifié avec succès`, 'success');
     } catch (err: any) {
       console.error('Erreur modification rôle', err);
       if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
-        alert('❌ Ce rôle est déjà couvert par un rôle parent');
+        showMessage('Ce rôle est déjà couvert par un rôle parent', 'error');
       } else {
-        alert('Erreur lors de la modification du rôle');
+        showMessage('Erreur lors de la modification du rôle', 'error');
       }
     }
   };
 
-  const isCreator = (role: string) => role === CREATOR_ROLE;
+  const isCreatorMember = (role: string) => role === CREATOR_ROLE;
+
+  if (loading) {
+    return <div className="text-center py-8 text-gray-500">Chargement...</div>;
+  }
 
   return (
     <div className="space-y-4">
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-gray-800">
           {workspaceId ? 'Membres du workspace' : 'Membres de l\'espace'}
         </h3>
-        <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
-          <UserPlus className="h-4 w-4 mr-1" /> Inviter
-        </Button>
+        {canInviteMembers && availableInvitationRoles.length > 0 && (
+          <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-1" /> Inviter
+          </Button>
+        )}
       </div>
 
-      {loading ? (
-        <div className="text-center py-8 text-gray-500">Chargement...</div>
-      ) : members.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">Aucun membre</div>
+      {members.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+          <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+          <p>Aucun membre</p>
+          <p className="text-sm mt-1">Invitez des membres pour commencer</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {members.map(member => (
@@ -139,29 +219,32 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
                 <p className="font-medium text-gray-800">{member.name}</p>
                 <p className="text-sm text-gray-500">{member.email}</p>
                 <span className="text-xs text-gray-400 mt-1 inline-block">
-                  Rôle : {member.role}
+                  Rôle : {getRoleLabel(member.role)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {!isCreator(member.role) ? (
+                {!isCreatorMember(member.role) && canManageMembers && (
                   <>
                     <select
                       value={member.role}
                       onChange={(e) => handleChangeRole(member.id, e.target.value)}
                       className="text-sm border rounded px-2 py-1"
+                      disabled={isAdmin && ((member.role as any) === ROLES.ADMIN || (member.role as any) === ROLES.CREATOR)}
                     >
                       {MANAGABLE_ROLES.map(r => (
-                        <option key={r} value={r}>{r}</option>
+                        <option key={r} value={r}>{getRoleLabel(r)}</option>
                       ))}
                     </select>
                     <button
                       onClick={() => handleRemoveMember(member.id)}
                       className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      disabled={isAdmin && ((member.role as any) === ROLES.ADMIN || (member.role as any) === ROLES.CREATOR)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </>
-                ) : (
+                )}
+                {isCreatorMember(member.role) && (
                   <span className="text-xs text-gray-400 italic">Créateur</span>
                 )}
               </div>
@@ -170,7 +253,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
         </div>
       )}
 
-      {/* Modale d'invitation avec choix Invité / Administrateur */}
+      {/* Modale d'invitation avec choix selon le rôle */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
           <div>
@@ -182,7 +265,7 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
               placeholder="exemple@email.com"
               value={inviteEmail}
               onChange={e => setInviteEmail(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
+              className="w-full p-2 border rounded-lg"
             />
           </div>
           <div>
@@ -192,18 +275,30 @@ export default function MemberManagement({ workspaceId, espaceId, onMemberAdded 
             <select
               value={inviteRole}
               onChange={e => setInviteRole(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
+              className="w-full p-2 border rounded-lg"
             >
-              {INVITATION_ROLES.map(role => (
-                <option key={role} value={role}>{role}</option>
+              {availableInvitationRoles.map(role => (
+                <option key={role} value={role}>{getRoleLabel(role)}</option>
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-1">
-              💡 <strong>Invitant</strong> : accès en lecture seule<br />
-              💡 <strong>Administrateur</strong> : peut gérer l'espace/workspace et ses membres
+              {isCreator ? (
+                <>
+                  💡 <strong>Invitant</strong> : accès en lecture seule<br />
+                  💡 <strong>Administrateur</strong> : peut gérer l'espace/workspace et ses membres
+                </>
+              ) : isAdmin ? (
+                <>
+                  💡 En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                </>
+              ) : (
+                <>
+                  💡 Vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                </>
+              )}
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
+              ⚡ Le rôle <strong>Membre</strong> permet de travailler sur les listes et tâches assignées.
             </p>
           </div>
           <div className="flex justify-end gap-2">

@@ -1,9 +1,8 @@
 // frontend/src/pages/app/CenterContent.tsx
-import { useState, useEffect } from 'react';  // ← AJOUTER useEffect
+import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-// CORRECTION: importer depuis les bons chemins
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
 import MemberManagement from '../../components/members/MemberManagement';
@@ -16,13 +15,45 @@ import ListView from './views/ListView';
 import { useTasks } from './hooks/useTasks';
 import { useTaskChecklists } from './hooks/useTaskChecklists';
 import { espaceService } from '../../services/espace.service';
+import { usePermissions } from '../../hooks/usePermissions';
+import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
+import { useResourceRole } from '../../hooks/useResourceRole';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
 
+  // Récupérer le rôle dans le workspace
+  const { role: userWorkspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
+  
+  // Récupérer le rôle dans l'espace (si un espace est sélectionné)
+  const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
+  
+  // Déterminer le rôle effectif (priorité au rôle le plus élevé)
+  const effectiveRole = userEspaceRole || userWorkspaceRole;
+  const isAdmin = isEspaceAdmin || isWorkspaceAdmin;
+  const isCreator = isEspaceCreator || isWorkspaceCreator;
+  const isGuest = isEspaceGuest || isWorkspaceGuest;
+  
+  // Permissions
+  const { canCreateContent, canManageMembers } = usePermissions({
+    userRole: effectiveRole,
+    resourceType: spaceId ? 'espace' : 'workspace',
+  });
+
+  // Définir les onglets disponibles selon le rôle
+  const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres')[] => {
+    if (isGuest) {
+      // Les invités n'ont pas accès à l'onglet membres
+      return ['liste', 'kanban', 'gantt'];
+    }
+    return ['liste', 'kanban', 'gantt', 'membres'];
+  };
+
+  const availableTabs = getAvailableTabs();
+  
   // States
-  const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres'>('liste');
+  const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres'>(availableTabs[0]);
   const [members, setMembers] = useState<Member[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -35,9 +66,9 @@ export default function CenterContent() {
   const { tasks, loading, error, loadTasks, addTask, updateTask, deleteTask } = useTasks(listId);
   const { checklists, loading: checklistLoading, addChecklist, toggleChecklist, updateChecklistText, deleteChecklist } = useTaskChecklists(editingTask?.id);
 
-  // Charger les membres de l'espace - CORRECTION: utiliser useEffect au lieu de useState
+  // Charger les membres de l'espace (seulement si l'onglet membres est disponible)
   useEffect(() => {
-    if (spaceId && spaceId !== 'list') {
+    if (!isGuest && spaceId && spaceId !== 'list') {
       espaceService.getMembers(spaceId)
         .then(data => {
           setMembers(data.map((m: any) => ({
@@ -51,7 +82,7 @@ export default function CenterContent() {
     } else {
       setMembers([]);
     }
-  }, [spaceId]);
+  }, [spaceId, isGuest]);
 
   const getTaskProgress = (task: Task): number => {
     const taskChecklists = task.checklists || [];
@@ -61,16 +92,19 @@ export default function CenterContent() {
   };
 
   const openCreateTask = () => {
+    if (!canCreateContent) return;
     setEditingTask(null);
     setIsTaskModalOpen(true);
   };
 
   const openEditTask = (task: Task) => {
+    if (!canCreateContent) return;
     setEditingTask(task);
     setIsTaskModalOpen(true);
   };
 
   const handleTaskSubmit = async (formData: any) => {
+    if (!canCreateContent) return;
     if (editingTask) {
       await updateTask({ ...editingTask, ...formData });
     } else {
@@ -102,11 +136,64 @@ export default function CenterContent() {
   if (loading) return <div className="p-6 flex justify-center">Chargement des tâches...</div>;
   if (error) return <div className="p-6 flex justify-center text-red-500">{error}</div>;
 
+  // Message pour les invités (lecture seule) - mais ils peuvent voir les vues liste, kanban, gantt
+  if (isGuest) {
+    return (
+      <div className="p-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-blue-800">
+            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            Vous pouvez consulter les tâches et utiliser les vues, mais vous ne pouvez pas créer, modifier ou supprimer des éléments.
+          </p>
+        </div>
+
+        {/* Onglets pour les invités (sans l'onglet membres) */}
+        <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
+          {availableTabs.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
+                activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
+              {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
+              {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
+              {tab === 'liste' && 'Vue liste'}
+              {tab === 'kanban' && 'Vue Kanban'}
+              {tab === 'gantt' && 'Diagramme de Gantt'}
+            </button>
+          ))}
+        </div>
+
+        {/* Contenu selon l'onglet pour les invités */}
+        {activeTab === 'liste' && (
+          <ListView
+            tasks={tasks}
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            onEditTask={() => {}}
+            onDeleteTask={() => {}}
+            onAssignTask={() => {}}
+            getTaskProgress={getTaskProgress}
+            readOnly={true}
+          />
+        )}
+
+        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => {}} />}
+        {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       {/* Onglets */}
       <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
-        {(['liste', 'kanban', 'gantt', 'membres'] as const).map(tab => (
+        {availableTabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -126,17 +213,19 @@ export default function CenterContent() {
         ))}
       </div>
 
-      {/* Boutons d'action */}
-      <div className="flex gap-2 mb-6">
-        <Button variant="primary" size="sm" onClick={openCreateTask}>
-          <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
-        </Button>
-        {spaceId && spaceId !== 'list' && (
-          <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Assigner membre à la liste
+      {/* Boutons d'action - visibles uniquement pour Admin et Créateur */}
+      {(isAdmin || isCreator) && (
+        <div className="flex gap-2 mb-6">
+          <Button variant="primary" size="sm" onClick={openCreateTask}>
+            <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
           </Button>
-        )}
-      </div>
+          {spaceId && spaceId !== 'list' && canManageMembers && (
+            <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Assigner membre à la liste
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Contenu selon l'onglet */}
       {activeTab === 'liste' && (
@@ -144,19 +233,23 @@ export default function CenterContent() {
           tasks={tasks}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          onEditTask={openEditTask}
-          onDeleteTask={deleteTask}
-          onAssignTask={(task) => { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); }}
+          onEditTask={canCreateContent ? openEditTask : () => {}}
+          onDeleteTask={canCreateContent ? deleteTask : () => {}}
+          onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
           getTaskProgress={getTaskProgress}
+          readOnly={!canCreateContent}
         />
       )}
 
-      {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={updateTask} />}
+      {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={canCreateContent ? updateTask : () => {}} />}
       {activeTab === 'gantt' && <GanttView tasks={tasks} />}
 
       {activeTab === 'membres' && (
         spaceId && spaceId !== 'list' ? (
-          <MemberManagement espaceId={spaceId} />
+          <MemberManagement 
+            espaceId={spaceId} 
+            currentUserRole={userEspaceRole || userWorkspaceRole}
+          />
         ) : (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -165,37 +258,41 @@ export default function CenterContent() {
         )
       )}
 
-      {/* Modales */}
-      <TaskFormModal
-        isOpen={isTaskModalOpen}
-        onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); }}
-        editingTask={editingTask}
-        members={members}
-        checklists={checklists}
-        checklistLoading={checklistLoading}
-        onAddChecklist={addChecklist}
-        onToggleChecklist={toggleChecklist}
-        onUpdateChecklistText={updateChecklistText}
-        onDeleteChecklist={deleteChecklist}
-        onSubmit={handleTaskSubmit}
-      />
+      {/* Modales - visibles uniquement pour Admin et Créateur */}
+      {(isAdmin || isCreator) && (
+        <>
+          <TaskFormModal
+            isOpen={isTaskModalOpen}
+            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); }}
+            editingTask={editingTask}
+            members={members}
+            checklists={checklists}
+            checklistLoading={checklistLoading}
+            onAddChecklist={addChecklist}
+            onToggleChecklist={toggleChecklist}
+            onUpdateChecklistText={updateChecklistText}
+            onDeleteChecklist={deleteChecklist}
+            onSubmit={handleTaskSubmit}
+          />
 
-      <AssignTaskMemberModal
-        tacheId={selectedTaskForAssignment?.id || ''}
-        listeId={listId}
-        isOpen={isAssignTaskModalOpen}
-        onClose={() => { setIsAssignTaskModalOpen(false); setSelectedTaskForAssignment(null); }}
-        onSuccess={loadTasks}
-      />
+          <AssignTaskMemberModal
+            tacheId={selectedTaskForAssignment?.id || ''}
+            listeId={listId}
+            isOpen={isAssignTaskModalOpen}
+            onClose={() => { setIsAssignTaskModalOpen(false); setSelectedTaskForAssignment(null); }}
+            onSuccess={loadTasks}
+          />
 
-      <AssignListMemberModal
-        listeId={listId}
-        espaceId={spaceId && spaceId !== 'list' ? spaceId : undefined}
-        workspaceId={workspaceId || undefined}
-        isOpen={isAssignListModalOpen}
-        onClose={() => setIsAssignListModalOpen(false)}
-        onSuccess={loadTasks}
-      />
+          <AssignListMemberModal
+            listeId={listId}
+            espaceId={spaceId && spaceId !== 'list' ? spaceId : undefined}
+            workspaceId={workspaceId || undefined}
+            isOpen={isAssignListModalOpen}
+            onClose={() => setIsAssignListModalOpen(false)}
+            onSuccess={loadTasks}
+          />
+        </>
+      )}
     </div>
   );
 }

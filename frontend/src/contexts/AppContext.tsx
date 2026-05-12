@@ -99,50 +99,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setWorkspaces([...owned, ...joined]);
   };
 
-  const applyNavigationData = (data: WorkspaceNavigationResponse) => {
-    const owned = Array.isArray(data.owned_workspaces) ? data.owned_workspaces : [];
-    const joined = Array.isArray(data.joined_workspaces) ? data.joined_workspaces : [];
+  const applyNavigationData = async (data: WorkspaceNavigationResponse) => {
+    const store = useNavigationStore.getState();
+    store.setLoading(true);
+    
+    try {
+      const owned = Array.isArray(data.owned_workspaces) ? data.owned_workspaces : [];
+      const joined = Array.isArray(data.joined_workspaces) ? data.joined_workspaces : [];
 
-    useNavigationStore.getState().loadNavigation({
-      ownedWorkspaces: owned,
-      joinedWorkspaces: joined,
-      joinedEspaces: Array.isArray(data.joined_espaces) ? data.joined_espaces : [],
-      joinedListes: Array.isArray(data.joined_listes) ? data.joined_listes : [],
-      joinedTaches: Array.isArray(data.joined_taches) ? data.joined_taches : []
-    });
+      // Mettre à jour les states locaux avec les rôles
+      setOwnedWorkspaces(owned);
+      setJoinedWorkspaces(joined);
+      setWorkspaces([...owned, ...joined]);
 
-    // Identifier les workspaces "partiels" (ceux dont on a rejoint une ressource mais pas le workspace entier)
-    const allJoined = [
-      ...(Array.isArray(data.joined_espaces) ? data.joined_espaces : []),
-      ...(Array.isArray(data.joined_listes) ? data.joined_listes : []),
-      ...(Array.isArray(data.joined_taches) ? data.joined_taches : [])
-    ];
+      // Mettre à jour le store
+      store.loadNavigation({
+        ownedWorkspaces: owned,
+        joinedWorkspaces: joined,
+        joinedEspaces: Array.isArray(data.joined_espaces) ? data.joined_espaces : [],
+        joinedListes: Array.isArray(data.joined_listes) ? data.joined_listes : [],
+        joinedTaches: Array.isArray(data.joined_taches) ? data.joined_taches : []
+      });
 
-    const existingIds = new Set([...owned, ...joined].map(ws => ws.id));
-    const partialWorkspaces: Workspace[] = [];
+      // Identifier les workspaces "partiels" (ceux dont on a rejoint une ressource mais pas le workspace entier)
+      const allJoined = [
+        ...(Array.isArray(data.joined_espaces) ? data.joined_espaces : []),
+        ...(Array.isArray(data.joined_listes) ? data.joined_listes : []),
+        ...(Array.isArray(data.joined_taches) ? data.joined_taches : [])
+      ];
 
-    allJoined.forEach(res => {
-      const wsId = res.workspace_id || res.id_workspace;
-      if (wsId && !existingIds.has(wsId)) {
-        partialWorkspaces.push({
-          id: wsId,
-          nom: res.workspace_nom || 'Workspace',
-          description: '',
-          membres: [],
-          created_at: new Date().toISOString(),
-          id_utilisateur: '',
-          espaces: []
-        });
-        existingIds.add(wsId);
-      }
-    });
+      const existingIds = new Set([...owned, ...joined].map(ws => ws.id));
+      const partialWorkspaces: Workspace[] = [];
 
-    setOwnedWorkspaces(owned);
-    setJoinedWorkspaces(joined);
-    setWorkspaces([...owned, ...joined, ...partialWorkspaces]);
-    setJoinedEspaces(Array.isArray(data.joined_espaces) ? data.joined_espaces : EMPTY_JOINED_ITEMS);
-    setJoinedListes(Array.isArray(data.joined_listes) ? data.joined_listes : EMPTY_JOINED_ITEMS);
-    setJoinedTaches(Array.isArray(data.joined_taches) ? data.joined_taches : EMPTY_JOINED_ITEMS);
+      allJoined.forEach(res => {
+        const wsId = res.workspace_id || (res as any).id_workspace;
+        if (wsId && !existingIds.has(wsId)) {
+          partialWorkspaces.push({
+            id: wsId,
+            nom: res.workspace_nom || 'Workspace',
+            description: '',
+            membres: [],
+            created_at: new Date().toISOString(),
+            id_utilisateur: '',
+            espaces: [],
+            current_user_role: null,
+          });
+          existingIds.add(wsId);
+        }
+      });
+
+      setOwnedWorkspaces(owned);
+      setJoinedWorkspaces(joined);
+      setWorkspaces([...owned, ...joined, ...partialWorkspaces]);
+      setJoinedEspaces(Array.isArray(data.joined_espaces) ? data.joined_espaces : EMPTY_JOINED_ITEMS);
+      setJoinedListes(Array.isArray(data.joined_listes) ? data.joined_listes : EMPTY_JOINED_ITEMS);
+      setJoinedTaches(Array.isArray(data.joined_taches) ? data.joined_taches : EMPTY_JOINED_ITEMS);
+    } finally {
+      store.setLoading(false);
+    }
   };
 
   const loadWorkspaces = async () => {
@@ -160,9 +174,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadNavigationData = async () => {
     try {
       const data = await workspaceService.getMyNavigation();
-      applyNavigationData(data);
+      await applyNavigationData(data);
     } catch (error) {
       console.error('Erreur chargement navigation utilisateur', error);
+      const store = useNavigationStore.getState();
+      store.setLoading(false);
       setOwnedWorkspaces([]);
       setJoinedWorkspaces([]);
       setWorkspaces([]);
@@ -206,7 +222,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (exists) {
           return prev.map(ws => ws.id === workspaceId ? { ...ws, espaces: tree } : ws);
         }
-        // Si le workspace n'est pas dans la liste (accès partiel), on l'ajoute
         return [...prev, {
           id: workspaceId,
           nom: 'Workspace',
@@ -214,11 +229,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           membres: [],
           created_at: new Date().toISOString(),
           id_utilisateur: '',
-          espaces: tree
+          espaces: tree,
+          current_user_role: null,
         }];
       });
     } catch (error) {
-      // L'utilisateur navigue probablement avec un accès direct, il n'a pas accès à la racine. C'est normal.
+      console.error('Erreur chargement arborescence', error);
     }
   };
 

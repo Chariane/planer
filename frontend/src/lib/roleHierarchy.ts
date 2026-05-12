@@ -2,7 +2,7 @@
 
 /**
  * Hiérarchie des rôles pour K-Planner
- * Utilisé pour valider les rôles côté CLIENT (le serveur fait la validation définitive)
+ * À synchroniser strictement avec le backend
  */
 
 export const ROLES = {
@@ -14,6 +14,7 @@ export const ROLES = {
 
 export type RoleType = typeof ROLES[keyof typeof ROLES];
 
+// Hiérarchie des rôles (doit correspondre au backend)
 export const ROLE_RANKS: Record<RoleType, number> = {
   [ROLES.GUEST]: 1,
   [ROLES.MEMBER]: 2,
@@ -21,51 +22,58 @@ export const ROLE_RANKS: Record<RoleType, number> = {
   [ROLES.CREATOR]: 4,
 };
 
-/**
- * Rôles qui héritent automatiquement vers les descendants
- * Seul "Membre" est un rôle local (n'hérite pas)
- */
-export const INHERITED_ROLES = new Set([
+// Rôles qui héritent automatiquement vers les descendants
+export const INHERITED_ROLES = new Set<RoleType>([
   ROLES.CREATOR,
   ROLES.ADMIN,
   ROLES.GUEST,
 ]);
 
-/**
- * Tous les rôles disponibles (en ordre hiérarchique inverse pour les select)
- */
-export const ALL_ROLES = [
+// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
+export const INVITABLE_ROLES: RoleType[] = [
+  ROLES.GUEST,
+  ROLES.ADMIN,
+];
+
+// Rôles qu'un Admin peut gérer (modifier/supprimer)
+export const ADMIN_MANAGEABLE_ROLES: RoleType[] = [
+  ROLES.MEMBER,
+  ROLES.GUEST,
+];
+
+// Rôles qu'un Admin peut inviter (Membre et Invité uniquement)
+export const ADMIN_INVITABLE_ROLES: RoleType[] = [
+  ROLES.MEMBER,
+  ROLES.GUEST,
+];
+
+// Tous les rôles pour les sélecteurs de gestion
+export const ALL_ROLES: RoleType[] = [
   ROLES.CREATOR,
   ROLES.ADMIN,
   ROLES.MEMBER,
   ROLES.GUEST,
 ];
 
-/**
- * Rôles gérables par les Administrateurs
- */
-export const ADMIN_MANAGEABLE_ROLES = [ROLES.MEMBER, ROLES.GUEST];
+// Rôles qui permettent la gestion des membres
+export const MANAGEMENT_ROLES: RoleType[] = [
+  ROLES.CREATOR,
+  ROLES.ADMIN,
+];
+
+// Rôles qui permettent la création de contenu
+export const CONTENT_CREATION_ROLES: RoleType[] = [
+  ROLES.CREATOR,
+  ROLES.ADMIN,
+  ROLES.MEMBER,
+];
 
 /**
  * Obtenir le rang d'un rôle
- * Rang plus élevé = permissions supérieures
  */
 export function getRoleRank(role: string | null | undefined): number {
   if (!role) return 0;
   return ROLE_RANKS[role as RoleType] || 0;
-}
-
-/**
- * Comparer deux rôles
- * Retourne:
- *  -1 si role1 < role2
- *   0 si role1 === role2
- *   1 si role1 > role2
- */
-export function compareRoles(role1: string | null, role2: string | null): number {
-  const rank1 = getRoleRank(role1);
-  const rank2 = getRoleRank(role2);
-  return Math.sign(rank1 - rank2);
 }
 
 /**
@@ -83,82 +91,49 @@ export function isRoleInferiorOrEqual(role1: string, role2: string): boolean {
 }
 
 /**
- * Détermine si un nouveau rôle peut être assigné étant donné un rôle parent hérité.
- *
- * RÈGLE: Un utilisateur ne peut PAS recevoir sur une ressource enfant:
- * - Un rôle identique
- * - Un rôle inférieur
- * si ce rôle est déjà hérité depuis un parent couvrant cette ressource.
- *
- * @param parentRole Rôle hérité depuis un parent (ou null s'il n'y en a pas)
- * @param newRole Nouveau rôle qu'on veut assigner
- * @returns true si l'assignation est autorisée, false sinon
+ * Vérifie si un utilisateur peut gérer les membres
  */
-export function canAssignRoleClientSide(
-  parentRole: string | null | undefined,
-  newRole: string,
-): boolean {
-  // S'il n'y a pas de rôle parent hérité, on peut assigner n'importe quel rôle
-  if (!parentRole || !INHERITED_ROLES.has(parentRole as any)) {
-    return true;
-  }
-
-  // S'il y a un rôle parent hérité, on ne peut assigner que les rôles SUPÉRIEURS
-  return getRoleRank(newRole) > getRoleRank(parentRole);
+export function canManageMembers(userRole: string): boolean {
+  return MANAGEMENT_ROLES.includes(userRole as RoleType);
 }
 
 /**
- * Retourne uniquement les rôles qui peuvent être assignés étant donné un rôle parent
+ * Vérifie si un utilisateur peut créer du contenu
  */
-export function getAssignableRoles(parentRole: string | null | undefined): RoleType[] {
-  if (!parentRole || !INHERITED_ROLES.has(parentRole as any)) {
-    return ALL_ROLES;
-  }
-
-  const parentRank = getRoleRank(parentRole);
-  return ALL_ROLES.filter(role => getRoleRank(role) > parentRank);
+export function canCreateContent(userRole: string): boolean {
+  return CONTENT_CREATION_ROLES.includes(userRole as RoleType);
 }
 
 /**
- * Génère un message d'erreur explicite pour l'utilisateur (côté client)
+ * Vérifie si un utilisateur peut inviter des membres
  */
-export function genererMessageErreurClientRoleRedondant(
-  inheritedRole: string,
-  parentType: string, // 'workspace', 'espace', 'liste'
-): string {
-  return (
-    `⚠️ Rôle non permis\n\n` +
-    `L'utilisateur possède déjà un rôle ${inheritedRole} hérité depuis le ${parentType} parent.\n\n` +
-    `Selon la hiérarchie de permissions:\n` +
-    `• Un rôle parent couvre automatiquement tous les descendants\n` +
-    `• Vous pouvez uniquement assigner un rôle supérieur\n` +
-    `• Les rôles égaux ou inférieurs sont refusés (redondants)`
-  );
+export function canInviteMembers(userRole: string): boolean {
+  return MANAGEMENT_ROLES.includes(userRole as RoleType);
 }
 
 /**
- * Génère un message d'erreur du serveur pour affichage
+ * Vérifie si un Admin peut gérer un membre cible
  */
-export function genererMessageErreurServeurRoleRedondant(
-  serverDetail: string,
-): string {
-  return `❌ ${serverDetail}`;
+export function canAdminManageTarget(adminRole: string, targetRole: string): boolean {
+  if (adminRole !== ROLES.ADMIN) return false;
+  return ADMIN_MANAGEABLE_ROLES.includes(targetRole as RoleType);
 }
 
 /**
- * Détermine si un rôle est un rôle héritable
- * (i.e., il affecte automatiquement les descendants)
+ * Vérifie si un Admin peut inviter avec un rôle spécifique
  */
-export function isInheritableRole(role: string): boolean {
-  return INHERITED_ROLES.has(role as any);
+export function canAdminInviteWithRole(role: string): boolean {
+  return ADMIN_INVITABLE_ROLES.includes(role as RoleType);
 }
 
 /**
- * Détermine si un rôle est un rôle local
- * (i.e., n'affecte que la ressource spécifique)
+ * Vérifie si l'utilisateur peut supprimer une ressource
+ * Seul le Créateur peut supprimer la ressource racine
  */
-export function isLocalRole(role: string): boolean {
-  return !isInheritableRole(role);
+export function canDeleteResource(role: string, isRootResource: boolean = false): boolean {
+  if (role === ROLES.CREATOR) return true;
+  if (role === ROLES.ADMIN && !isRootResource) return true;
+  return false;
 }
 
 /**
@@ -175,37 +150,39 @@ export function getRoleLabel(role: string): string {
 }
 
 /**
- * Retourne la description d'un rôle pour l'aide utilisateur
+ * Retourne la description d'un rôle
  */
 export function getRoleDescription(role: string): string {
   const descriptions: Record<string, string> = {
-    [ROLES.CREATOR]:
-      'Contrôle total sur la ressource et ses descendants. Hérite automatiquement.',
-    [ROLES.ADMIN]:
-      'Gestion complète. Hérite automatiquement vers les descendants.',
-    [ROLES.MEMBER]:
-      'Accès complet (lecture/écriture). Rôle local, n\'hérite pas.',
-    [ROLES.GUEST]:
-      'Accès en lecture seule. Hérite automatiquement vers les descendants.',
+    [ROLES.CREATOR]: 'Contrôle total. Hérite automatiquement.',
+    [ROLES.ADMIN]: 'Gestion complète. Hérite automatiquement.',
+    [ROLES.MEMBER]: 'Accès complet local. N\'hérite pas.',
+    [ROLES.GUEST]: 'Lecture seule. Hérite automatiquement.',
   };
   return descriptions[role] || '';
 }
 
 /**
- * Vérifie si l'utilisateur peut gérer les membres d'une ressource
+ * Récupère les rôles disponibles pour l'invitation selon le rôle de l'inviteur
  */
-export function canManageMembers(userRole: string): boolean {
-  // Seuls Créateur et Admin peuvent gérer
-  const managementRoles = [ROLES.CREATOR, ROLES.ADMIN];
-  return managementRoles.includes(userRole as any);
+export function getAvailableInvitationRoles(inviterRole: string): RoleType[] {
+  if (inviterRole === ROLES.CREATOR) {
+    return INVITABLE_ROLES; // Invité et Administrateur
+  }
+  if (inviterRole === ROLES.ADMIN) {
+    return ADMIN_INVITABLE_ROLES; // Membre et Invité uniquement
+  }
+  return [];
 }
 
 /**
- * Vérifie si l'utilisateur peut créer du contenu
+ * Génère un message d'erreur pour rôle redondant
  */
-export function canCreateContent(userRole: string): boolean {
-  const contentCreationRoles = [ROLES.CREATOR, ROLES.ADMIN, ROLES.MEMBER];
-  return contentCreationRoles.includes(userRole as any);
+export function genererMessageErreurClientRoleRedondant(
+  inheritedRole: string,
+  parentType: string,
+): string {
+  return `⚠️ Rôle non permis : L'utilisateur possède déjà le rôle "${inheritedRole}" hérité depuis le ${parentType} parent.`;
 }
 
 /**
@@ -215,7 +192,6 @@ export function canEditContent(userRole: string, contentOwnerRole: string | null
   const canCreate = canCreateContent(userRole);
   if (!canCreate) return false;
 
-  // Un Admin/Créateur peut modifier le contenu d'un Membre/Invité
   if (contentOwnerRole) {
     return getRoleRank(userRole) >= getRoleRank(contentOwnerRole);
   }
@@ -224,62 +200,65 @@ export function canEditContent(userRole: string, contentOwnerRole: string | null
 }
 
 /**
- * Vérifie si l'utilisateur peut supprimer
+ * Vérifie si un rôle est héritable
  */
-export function canDelete(userRole: string): boolean {
-  return canManageMembers(userRole);
+export function isInheritableRole(role: string): boolean {
+  return INHERITED_ROLES.has(role as RoleType);
 }
 
 /**
- * Permissions complètes pour chaque rôle
+ * Vérifie si un rôle est local
  */
-export const ROLE_PERMISSIONS: Record<RoleType, Record<string, boolean>> = {
-  [ROLES.CREATOR]: {
-    read: true,
-    create: true,
-    edit: true,
-    delete: true,
-    manage_members: true,
-    change_role: true,
-    remove_member: true,
-    invite_member: true,
-  },
-  [ROLES.ADMIN]: {
-    read: true,
-    create: true,
-    edit: true,
-    delete: true,
-    manage_members: true,
-    change_role: true,
-    remove_member: true,
-    invite_member: true,
-  },
-  [ROLES.MEMBER]: {
-    read: true,
-    create: true,
-    edit: true,
-    delete: true,
-    manage_members: false,
-    change_role: false,
-    remove_member: false,
-    invite_member: false,
-  },
-  [ROLES.GUEST]: {
-    read: true,
-    create: false,
-    edit: false,
-    delete: false,
-    manage_members: false,
-    change_role: false,
-    remove_member: false,
-    invite_member: false,
-  },
-};
+export function isLocalRole(role: string): boolean {
+  return !isInheritableRole(role);
+}
 
 /**
  * Vérifie si un utilisateur possède une permission
  */
-export function hasPermission(role: string, permission: keyof typeof ROLE_PERMISSIONS['Créateur']): boolean {
-  const perms = ROLE_PERMISSIONS[role as RoleType];
+export function hasPermission(role: string, permission: string): boolean {
+  const permissions: Record<RoleType, Record<string, boolean>> = {
+    [ROLES.CREATOR]: {
+      read: true,
+      create: true,
+      edit: true,
+      delete: true,
+      manage_members: true,
+      change_role: true,
+      remove_member: true,
+      invite_member: true,
+    },
+    [ROLES.ADMIN]: {
+      read: true,
+      create: true,
+      edit: true,
+      delete: false, // L'Admin ne peut pas supprimer la ressource racine
+      manage_members: true,
+      change_role: false,
+      remove_member: true,
+      invite_member: true,
+    },
+    [ROLES.MEMBER]: {
+      read: true,
+      create: true,
+      edit: true,
+      delete: false,
+      manage_members: false,
+      change_role: false,
+      remove_member: false,
+      invite_member: false,
+    },
+    [ROLES.GUEST]: {
+      read: true,
+      create: false,
+      edit: false,
+      delete: false,
+      manage_members: false,
+      change_role: false,
+      remove_member: false,
+      invite_member: false,
+    },
+  };
+  const perms = permissions[role as RoleType];
   return perms ? perms[permission] : false;
 }
