@@ -1,5 +1,5 @@
-// frontend/src/pages/app/components/GanttView.tsx
-import type { Task } from '../../../types'; // ← importer depuis types
+// frontend/src/pages/app/views/GanttView.tsx
+import type { Task } from '../../../types';
 import { GlassCard } from '../../../components/ui/GlassCard';
 
 const priorityLabels: Record<string, string> = {
@@ -24,11 +24,17 @@ export default function GanttView({ tasks }: GanttViewProps) {
   const validTasks = tasks.filter(t => t.dueDate);
   
   if (validTasks.length === 0) {
-    return <GlassCard className="p-8 text-center text-gray-500">Aucune tâche avec date de fin pour le diagramme de Gantt.</GlassCard>;
+    return (
+      <GlassCard className="p-8 text-center text-gray-500">
+        Aucune tâche avec date de fin pour le diagramme de Gantt.
+      </GlassCard>
+    );
   }
 
   // Trier par date d'échéance
-  const sortedTasks = [...validTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  const sortedTasks = [...validTasks].sort((a, b) => 
+    new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  );
 
   // Calculer la plage de dates pour l'échelle
   const dates = sortedTasks.map(t => t.dueDate);
@@ -64,6 +70,7 @@ export default function GanttView({ tasks }: GanttViewProps) {
             ))}
           </div>
         </div>
+        
         {/* Lignes des tâches */}
         {sortedTasks.map(task => {
           const position = getTaskPosition(task.dueDate);

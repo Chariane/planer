@@ -13,6 +13,9 @@ interface SpaceDashboardProps {
   onMemberInvited?: () => void;
 }
 
+// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
+const INVITATION_ROLES = ['Invité', 'Administrateur'];
+
 export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashboardProps) {
   const [stats, setStats] = useState({
     subSpacesCount: 0,
@@ -24,7 +27,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('Membre');
+  const [inviteRole, setInviteRole] = useState('Invité');
 
   const loadData = async () => {
     setLoading(true);
@@ -86,15 +89,17 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     if (!inviteEmail.trim()) return;
     try {
       await espaceService.inviteMember(spaceId, inviteEmail, inviteRole);
-      alert(`Invitation envoyée à ${inviteEmail}`);
+      alert(`✅ Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`);
       setIsInviteModalOpen(false);
       setInviteEmail('');
       await loadData();
       onMemberInvited?.();
     } catch (err: any) {
       const msg = err?.message || '';
-      if (msg.includes('refuse')) {
-        alert('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cet espace.');
+      if (msg.includes('refuse') || msg.includes('redondant')) {
+        alert('❌ Cette personne a déjà un rôle parent qui couvre cet espace');
+      } else if (msg.includes('403')) {
+        alert('❌ Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cet espace.');
       } else {
         alert(msg || 'Erreur lors de l\'invitation');
       }
@@ -231,7 +236,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </GlassCard>
       </div>
 
-      {/* Modale d'invitation */}
+      {/* Modale d'invitation avec choix Invité / Administrateur */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
           <div>
@@ -255,10 +260,17 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               onChange={e => setInviteRole(e.target.value)}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
             >
-              <option value="Invité">Invité</option>
-              <option value="Membre">Membre</option>
-              <option value="Administrateur">Administrateur</option>
+              {INVITATION_ROLES.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
             </select>
+            <p className="text-xs text-gray-400 mt-1">
+              💡 <strong>Invitant</strong> : accès en lecture seule<br />
+              💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>

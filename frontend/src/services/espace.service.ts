@@ -4,6 +4,7 @@ import { apiFetch } from './api';
 const ESPACE_BASE_URL = import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001';
 
 export const espaceService = {
+  // ========== Récupération des espaces ==========
   getByWorkspace: (workspaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/workspaces/${workspaceId}/list_workspace_espaces`),
   
@@ -16,6 +17,7 @@ export const espaceService = {
   getSubSpaces: (espaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/children`),
   
+  // ========== CRUD Espace ==========
   create: async (data: { nom: string; description?: string; id_workspace: string; id_espace_parent?: string }) => {
     if (data.id_espace_parent) {
       return apiFetch(ESPACE_BASE_URL, `/espaces/${data.id_espace_parent}/create_sous_espace`, {
@@ -31,35 +33,77 @@ export const espaceService = {
   },
   
   update: (id: string, data: { nom?: string; description?: string; id_espace_parent?: string }) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${id}/update_espace`, { method: 'PUT', body: JSON.stringify(data) }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${id}/update_espace`, { 
+      method: 'PUT', 
+      body: JSON.stringify(data) 
+    }),
   
   delete: (id: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${id}/delete_espace`, { method: 'DELETE' }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${id}/delete_espace`, { 
+      method: 'DELETE' 
+    }),
   
+  // ========== Gestion des membres ==========
   getMembers: (espaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/list_members_espace`),
   
   inviteMember: (espaceId: string, email: string, role: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/invite_member_espace`, { method: 'POST', body: JSON.stringify({ email, role }) }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/invite_member_espace`, { 
+      method: 'POST', 
+      body: JSON.stringify({ email, role }) 
+    }),
   
   updateMemberRole: (espaceId: string, userId: string, role: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/update_member_espace`, { method: 'PUT', body: JSON.stringify({ role }) }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/update_member_espace`, { 
+      method: 'PUT', 
+      body: JSON.stringify({ role }) 
+    }),
   
   removeMember: (espaceId: string, userId: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/remove_member_espace`, { method: 'DELETE' }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/remove_member_espace`, { 
+      method: 'DELETE' 
+    }),
   
+  // ========== Invitations ==========
   acceptInvitation: (token: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/invitations/accept`, { method: 'POST', body: JSON.stringify({ token }) }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/invitations/accept`, { 
+      method: 'POST', 
+      body: JSON.stringify({ token }) 
+    }),
   
   // Alias pour compatibilité
   updateMember: (espaceId: string, userId: string, role: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/update_member_espace`, { method: 'PUT', body: JSON.stringify({ role }) }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/members/${userId}/update_member_espace`, { 
+      method: 'PUT', 
+      body: JSON.stringify({ role }) 
+    }),
   
-  // Récupérer les espaces où l'utilisateur est admin
+  // ========== Actions utilisateur ==========
   getAdminEspaces: () => 
     apiFetch(ESPACE_BASE_URL, `/espaces/admin`),
   
-  // Quitter un espace
   leaveEspace: (espaceId: string) => 
-    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/leave`, { method: 'POST' }),
+    apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/leave`, { 
+      method: 'POST' 
+    }),
+
+  // ========== ADMIN ==========
+  getAdminEspaceMembers: (espaceId: string) =>
+    apiFetch(ESPACE_BASE_URL, `/admin/espaces/${espaceId}/members`),
+
+  updateAdminEspaceMember: (espaceId: string, userId: string, data: { role?: string; statut?: string }) =>
+    apiFetch(ESPACE_BASE_URL, `/admin/espaces/${espaceId}/members/${userId}`, { 
+      method: 'PUT', 
+      body: JSON.stringify(data) 
+    }),
+
+  removeAdminEspaceMember: (espaceId: string, userId: string) =>
+    apiFetch(ESPACE_BASE_URL, `/admin/espaces/${espaceId}/members/${userId}`, { 
+      method: 'DELETE' 
+    }),
+
+  deleteAdminEspace: (espaceId: string) =>
+    apiFetch(ESPACE_BASE_URL, `/admin/espaces/${espaceId}`, { 
+      method: 'DELETE' 
+    }),
 };

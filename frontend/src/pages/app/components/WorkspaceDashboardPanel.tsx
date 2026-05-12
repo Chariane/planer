@@ -1,3 +1,4 @@
+// frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
 import { useEffect, useState } from 'react';
 import { Activity, Briefcase, Calendar, FolderTree, ListTodo, UserPlus, Users } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
@@ -11,6 +12,9 @@ import type { Member } from '../../../types';
 interface WorkspaceDashboardPanelProps {
   workspaceId: string;
 }
+
+// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
+const INVITATION_ROLES = ['Invité', 'Administrateur'];
 
 const countSpaces = (items: any[] = []): number =>
   items.reduce((total, item) => total + 1 + countSpaces(item.sous_espaces || []), 0);
@@ -93,13 +97,17 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     if (!inviteEmail.trim()) return;
     try {
       await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
-      alert(`Invitation envoyée à ${inviteEmail}`);
+      alert(`✅ Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`);
       setIsInviteModalOpen(false);
       setInviteEmail('');
-      setInviteRole('Invité');
       await loadData();
     } catch (err: any) {
-      alert(err?.message || "Erreur lors de l'invitation");
+      const msg = err?.message || '';
+      if (msg.includes('refuse') || msg.includes('redondant')) {
+        alert('❌ Cette personne a déjà un rôle parent qui couvre ce workspace');
+      } else {
+        alert(msg || "Erreur lors de l'invitation");
+      }
     }
   };
 
@@ -217,6 +225,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         </GlassCard>
       </div>
 
+      {/* Modale d'invitation avec choix Invité / Administrateur */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre au workspace" size="md">
         <div className="space-y-4">
           <div>
@@ -240,10 +249,17 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
               onChange={e => setInviteRole(e.target.value)}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
             >
-              <option value="Invité">Invité</option>
-              <option value="Membre">Membre</option>
-              <option value="Administrateur">Administrateur</option>
+              {INVITATION_ROLES.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
             </select>
+            <p className="text-xs text-gray-400 mt-1">
+              💡 <strong>Invitant</strong> : accès en lecture seule<br />
+              💡 <strong>Administrateur</strong> : peut gérer le workspace et ses membres
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>

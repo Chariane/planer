@@ -35,7 +35,7 @@ export interface EnhancedSection {
 
 export interface EnhancedCanevas extends Canevas {
   sections: EnhancedSection[];
-  liste_nom?: string;  // ← Ajouté pour le nom de la liste
+  liste_nom?: string;
 }
 
 export const canevasService = {
