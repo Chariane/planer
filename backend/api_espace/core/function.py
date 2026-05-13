@@ -570,6 +570,8 @@ def _get_espace_management_grant(
 def _validate_espace_member_management_permissions(
     espace: Espace,
     actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
     target_user_id: str,
     target_member: Optional[Membre],
     new_role: Optional[str] = None,
@@ -578,10 +580,18 @@ def _validate_espace_member_management_permissions(
         raise HTTPException(status_code=404, detail="Membre introuvable")
 
     if target_member.role == ESPACE_OWNER_ROLE:
-        raise HTTPException(
-            status_code=403,
-            detail="Le créateur de l'espace ne peut pas être modifié ou retiré.",
+        is_creator_parent = (
+            actor_role == ESPACE_OWNER_ROLE
+            and (
+                actor_source_type == "workspace"
+                or actor_source_id != espace.id
+            )
         )
+        if not is_creator_parent:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur de l'espace ne peut pas être modifié ou retiré.",
+            )
 
     # REGLE 1 : Un Admin ne peut pas modifier un autre Admin ou le Créateur
     if actor_role == ESPACE_ADMIN_ROLE and target_member.role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
@@ -756,11 +766,19 @@ def _require_espace_member_management_access(
     target_user_id: str,
     new_role: Optional[str] = None,
 ):
-    espace, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user_id)
+    espace = _get_espace_or_404(db, espace_id)
+    actor_member, actor_role, actor_source_type, actor_source_id = _get_espace_management_grant(
+        db,
+        espace_id,
+        workspace_id,
+        current_user_id,
+    )
     target_member = _get_espace_member_record(db, espace_id, target_user_id)
     _validate_espace_member_management_permissions(
         espace,
         actor_role,
+        actor_source_type,
+        actor_source_id,
         target_user_id,
         target_member,
         new_role,
@@ -786,10 +804,14 @@ def _require_espace_owner_access(db: Session, espace_id: str, current_user_id: s
     Retourne un tuple (espace, membre).
     """
     espace = _get_espace_or_404(db, espace_id)
-
-    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
-    if espace_member and espace_member.role == "Créateur":
-        return espace, espace_member
+    actor_member, actor_role, _, _ = _get_espace_management_grant(
+        db,
+        espace_id,
+        espace.id_workspace,
+        current_user_id,
+    )
+    if actor_role == ESPACE_OWNER_ROLE:
+        return espace, actor_member
 
     raise HTTPException(
         status_code=403,
