@@ -32,14 +32,22 @@ export function usePermissions({
     const isMember = role === ROLES.MEMBER;
     const isGuest = role === ROLES.GUEST;
 
+    // 🔧 CORRECTION: canInviteMembers selon resourceType
+    // Pour un espace: Admin et Créateur peuvent inviter
+    // Pour une liste: Admin et Créateur peuvent inviter (via assign)
+    const canInvite = (resourceType === 'espace' || resourceType === 'liste') 
+      ? (isCreator || isAdmin)
+      : (isCreator || isAdmin); // workspace aussi
+
     return {
       // Permissions de base
       canRead: !!role,
       canCreateContent: isCreator || isAdmin || isMember,
       canManageMembers: isCreator || isAdmin,
-      canInviteMembers: isCreator || isAdmin,
+      canInviteMembers: canInvite,  // 🔧 CORRECTION: dépend du resourceType
       
       // DELETE: seul le Créateur peut supprimer la ressource racine
+      // 🔧 CORRECTION: Pour les espaces/listes, l'Admin peut supprimer si ce n'est pas la racine de son périmètre
       canDelete: isCreator || (isAdmin && !isRootResource),
       
       // Modification: Admin, Créateur et Membre peuvent modifier
@@ -49,7 +57,9 @@ export function usePermissions({
       canShowContextMenu: isCreator || isAdmin,
       
       // Gestion des listes: Admin et Créateur
-      canManageListe: isCreator || isAdmin,
+      canManageListe: (resourceType === 'espace' || resourceType === 'workspace') 
+        ? (isCreator || isAdmin)
+        : (isCreator || isAdmin),
       
       // Gestion des tâches: Admin, Créateur et Membre
       canManageTache: isCreator || isAdmin || isMember,
@@ -83,7 +93,7 @@ export function usePermissions({
         return 'bg-gray-100 text-gray-600';
       })(),
     };
-  }, [role, isRootResource]);
+  }, [role, isRootResource, resourceType]);
 
   return permissions;
 }

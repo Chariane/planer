@@ -7,6 +7,7 @@ import Modal from '../../../components/ui/Modal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { useResourceRole } from '../../../hooks/useResourceRole';
+import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import type { Member } from '../../../types';
 
 interface SpaceDashboardProps {
@@ -45,6 +46,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     membersCount: 0,
   });
   const [spaceName, setSpaceName] = useState('');
+  const [spaceWorkspaceId, setSpaceWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -58,9 +60,27 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     setToast({ message, type });
   };
 
-  // Récupérer le rôle de l'utilisateur dans cet espace
-  const { isGuest, isAdmin, isCreator } = useResourceRole(spaceId, 'espace');
-  const canInviteMembers = isAdmin || isCreator;
+  // Récupérer le rôle dans l'espace
+  const { isGuest: isEspaceGuest, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId, 'espace');
+  
+  // 🔧 Récupérer le rôle dans le workspace parent
+  const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(spaceWorkspaceId || undefined);
+  
+  // 🔧 CORRECTION: Un utilisateur peut inviter s'il est:
+  // - Créateur ou Admin de l'espace directement
+  // - OU Créateur ou Admin du workspace parent (héritage)
+  const canInviteMembers = isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator;
+  
+  // Rôles disponibles pour l'invitation selon le rôle
+  const getAvailableRoles = () => {
+    if (isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator) {
+      return ['Invité', 'Administrateur'];
+    }
+    if (isEspaceAdmin) {
+      return ['Membre', 'Invité'];
+    }
+    return [];
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -68,8 +88,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       // 1. Charger les infos de l'espace
       const spaceData = await espaceService.getById(spaceId);
       setSpaceName(spaceData.nom);
+      setSpaceWorkspaceId(spaceData.id_workspace || null);
 
-      // 2. Charger les membres - IMPORTANT: Les invités peuvent aussi voir les membres
+      // 2. Charger les membres
       let formattedMembers: Member[] = [];
       try {
         const membersData = await espaceService.getMembers(spaceId);
@@ -80,7 +101,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           role: m.role,
         }));
       } catch (err: any) {
-        // Si l'API retourne une erreur 403, on affiche un message mais on ne bloque pas l'affichage
         console.warn('Impossible de charger les membres:', err);
         if (err.status === 403) {
           console.log('Accès refusé pour voir les membres - affichage limité');
@@ -88,17 +108,16 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       }
       setMembers(formattedMembers);
 
-      // 3. Charger les listes (peut échouer si accès partiel)
+      // 3. Charger les listes
       let listsCount = 0;
       try {
         const lists = await listeService.getByEspace(spaceId);
         listsCount = lists.length;
       } catch {
-        // Accès partiel - l'utilisateur ne peut pas voir les listes
         console.log('Impossible de charger les listes');
       }
 
-      // 4. Charger les sous-espaces (enfants directs)
+      // 4. Charger les sous-espaces
       let subSpacesCount = 0;
       try {
         const subSpaces = await espaceService.getSubSpaces(spaceId);
@@ -152,6 +171,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     );
   }
 
+  const availableRoles = getAvailableRoles();
+
   return (
     <div className="space-y-6">
       {/* Toast Notifications */}
@@ -164,7 +185,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       )}
 
       {/* Message pour les invités */}
-      {isGuest && (
+      {isEspaceGuest && !canInviteMembers && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800">
             👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
@@ -181,8 +202,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           <h1 className="text-2xl font-bold text-gray-800">{spaceName}</h1>
           <p className="text-gray-500 mt-1">Tableau de bord de l'espace</p>
         </div>
-        {/* Bouton Inviter - visible uniquement pour Admin et Créateur */}
-        {canInviteMembers && (
+        {/* 🔧 Bouton Inviter - visible pour Créateur/Admin workspace OU Créateur/Admin espace */}
+        {canInviteMembers && availableRoles.length > 0 && (
           <div className="flex items-center gap-2">
             <Button onClick={() => setIsInviteModalOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
@@ -231,7 +252,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </GlassCard>
       </div>
 
-      {/* Liste des membres - visible pour tous (invités inclus) */}
+      {/* Liste des membres */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Users className="h-5 w-5" />
@@ -265,7 +286,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         )}
       </div>
 
-      {/* Liste des sous-espaces (optionnel - pour voir la hiérarchie) */}
+      {/* Liste des sous-espaces */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <FolderTree className="h-5 w-5" />
@@ -286,7 +307,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         )}
       </div>
 
-      {/* Activités récentes (placeholder) - visible pour tous */}
+      {/* Activités récentes */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Activity className="h-5 w-5" />
@@ -301,7 +322,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </GlassCard>
       </div>
 
-      {/* Modale d'invitation - visible uniquement pour Admin et Créateur */}
+      {/* Modale d'invitation */}
       {canInviteMembers && (
         <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
           <div className="space-y-4">
@@ -326,7 +347,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                 onChange={e => setInviteRole(e.target.value)}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
               >
-                {INVITATION_ROLES.map(role => (
+                {availableRoles.map(role => (
                   <option key={role} value={role}>{role}</option>
                 ))}
               </select>

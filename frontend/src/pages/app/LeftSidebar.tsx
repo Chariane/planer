@@ -14,7 +14,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
-import { getRoleLabel, ROLES, getAvailableInvitationRoles } from '../../lib/roleHierarchy';
+import { getRoleLabel, getAvailableInvitationRoles, ROLES } from '../../lib/roleHierarchy';
 
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
@@ -44,26 +44,52 @@ export default function LeftSidebar() {
     addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
 
-  // Récupérer le rôle dans le workspace
+  // Récupérer le rôle dans le workspace (pour les actions globales)
   const { role: workspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
   
-  // Récupérer le rôle dans l'espace (si un espace est sélectionné)
+  // Récupérer le rôle dans l'espace (si un espace est sélectionné) - POUR LES ACTIONS SUR LES ESPACES
   const { role: espaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
   
-  // Déterminer le rôle effectif (priorité au rôle le plus élevé)
-  const effectiveRole = espaceRole || workspaceRole;
-  const isAdmin = isEspaceAdmin || isWorkspaceAdmin;
-  const isCreator = isEspaceCreator || isWorkspaceCreator;
-  const isGuest = isEspaceGuest || isWorkspaceGuest;
+  // Pour les actions sur les espaces, on utilise le rôle de l'espace (ou du workspace en fallback)
+  const effectiveRoleForSpace = espaceRole || workspaceRole;
+  const isAdminForSpace = isEspaceAdmin || isWorkspaceAdmin;
+  const isCreatorForSpace = isEspaceCreator || isWorkspaceCreator;
+  const isGuestForSpace = isEspaceGuest || isWorkspaceGuest;
   
-  // Permissions
-  const { canShowContextMenu, canManageMembers, canDelete, canInviteMembers, canManageListe } = usePermissions({
-    userRole: effectiveRole,
+  // Déterminer si l'utilisateur a un rôle hérité depuis le workspace
+  const hasWorkspaceInheritedRole = workspaceRole === ROLES.CREATOR || 
+                                     workspaceRole === ROLES.ADMIN || 
+                                     workspaceRole === ROLES.GUEST;
+  
+  // Permissions pour les actions sur les espaces
+  const spacePermissions = usePermissions({
+    userRole: effectiveRoleForSpace,
+    resourceType: 'espace',
+  });
+  
+  // Permissions pour les actions globales du workspace (création d'espaces à la racine)
+  const workspacePermissions = usePermissions({
+    userRole: workspaceRole,
     resourceType: 'workspace',
   });
-
+  
+  const canShowContextMenu = spacePermissions.canShowContextMenu || hasWorkspaceInheritedRole;
+  const canManageSpaceMembers = spacePermissions.canManageMembers || isWorkspaceAdmin || isWorkspaceCreator;
+  const canDeleteSpace = spacePermissions.canDelete;
+  const canManageSpaceListe = spacePermissions.canManageListe || isWorkspaceAdmin || isWorkspaceCreator;
+  
+  // Pour la création d'éléments dans le workspace
+  const canCreateWorkspaceContent = workspacePermissions.canCreateContent;
+  
   // Rôles disponibles pour l'invitation
-  const availableInvitationRoles = getAvailableInvitationRoles(effectiveRole || '');
+  let availableInvitationRoles: string[] = [];
+  if (isWorkspaceCreator || isWorkspaceAdmin) {
+    availableInvitationRoles = [ROLES.ADMIN, ROLES.GUEST];
+  } else if (isEspaceCreator) {
+    availableInvitationRoles = [ROLES.ADMIN, ROLES.GUEST];
+  } else if (isEspaceAdmin) {
+    availableInvitationRoles = [ROLES.MEMBER, ROLES.GUEST];
+  }
 
   // États pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -130,7 +156,7 @@ export default function LeftSidebar() {
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('Invité');
+  const [inviteRole, setInviteRole] = useState<string>(ROLES.GUEST);
 
   // États pour les menus contextuels
   const [contextMenu, setContextMenu] = useState<{
@@ -138,7 +164,8 @@ export default function LeftSidebar() {
     x: number;
     y: number;
     space: any;
-  }>({ visible: false, x: 0, y: 0, space: null });
+    canInvite: boolean;
+  }>({ visible: false, x: 0, y: 0, space: null, canInvite: false });
 
   const [listContextMenu, setListContextMenu] = useState<{
     visible: boolean;
@@ -437,7 +464,7 @@ export default function LeftSidebar() {
   const openInviteModal = (space: any) => {
     setSelectedSpaceId(space.id);
     setInviteEmail('');
-    setInviteRole('Invité');
+    setInviteRole(ROLES.GUEST);
     setIsInviteModalOpen(true);
     setContextMenu(prev => ({ ...prev, visible: false }));
   };
@@ -460,12 +487,19 @@ export default function LeftSidebar() {
     setContextMenu(prev => ({ ...prev, visible: false }));
   };
 
+  // handleContextMenu avec calcul du droit d'invitation
   const handleContextMenu = (e: React.MouseEvent, space: any) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // Un Invité ne peut pas voir le menu contextuel
-    if (!canShowContextMenu) return;
+    // Calculer si l'utilisateur peut inviter dans CET espace
+    let canInvite = false;
+    
+    if (isWorkspaceCreator || isWorkspaceAdmin) {
+      canInvite = true;
+    } else if (isEspaceCreator || isEspaceAdmin) {
+      canInvite = true;
+    }
     
     setListContextMenu(prev => ({ ...prev, visible: false }));
     setContextMenu({
@@ -473,6 +507,7 @@ export default function LeftSidebar() {
       x: e.clientX,
       y: e.clientY,
       space,
+      canInvite,
     });
   };
 
@@ -480,7 +515,7 @@ export default function LeftSidebar() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!canShowContextMenu) return;
+    if (!canShowContextMenu && workspaceRole !== ROLES.GUEST) return;
     
     setContextMenu(prev => ({ ...prev, visible: false }));
     setListContextMenu({
@@ -516,7 +551,7 @@ export default function LeftSidebar() {
             <span className="truncate">{item.nom}</span>
           </Link>
           <div className="flex items-center gap-1">
-            {canManageListe && (
+            {canManageSpaceListe && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateListModal(item.id, undefined); }}
                 className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
@@ -525,7 +560,7 @@ export default function LeftSidebar() {
                 <ListTodo className="h-3 w-3" />
               </button>
             )}
-            {canManageListe && (
+            {canManageSpaceListe && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateSpaceModal(item.id); }}
                 className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
@@ -577,7 +612,7 @@ export default function LeftSidebar() {
   };
 
   // Message pour les invités - affichage simplifié sans actions
-  if (isGuest && hasWorkspaceAccess) {
+  if (isGuestForSpace && hasWorkspaceAccess) {
     return (
       <div className="p-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -618,7 +653,7 @@ export default function LeftSidebar() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2 relative">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
-            {canManageListe && (
+            {canManageSpaceListe && (
               <div className="relative" ref={createMenuRef}>
                 <button
                   onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
@@ -704,7 +739,7 @@ export default function LeftSidebar() {
       </div>
 
       {/* Gestion - visible pour Admin et Créateur */}
-      {(isAdmin || isCreator) && (
+      {(isAdminForSpace || isCreatorForSpace) && (
         <div>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gestion</h3>
           <div className="space-y-1">
@@ -722,7 +757,7 @@ export default function LeftSidebar() {
       )}
 
       {/* Menu contextuel pour Espace */}
-      {contextMenu.visible && canShowContextMenu && (
+      {contextMenu.visible && (
         <div
           ref={menuRef}
           className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
@@ -731,17 +766,18 @@ export default function LeftSidebar() {
           <button onClick={() => openEditSpaceModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier
           </button>
-          {canDelete && (
+          {canDeleteSpace && (
             <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
               <Trash2 className="h-4 w-4" /> Supprimer
             </button>
           )}
-          {canInviteMembers && availableInvitationRoles.length > 0 && (
+          {/* Vérification forcée pour Créateur/Admin Workspace */}
+          {(isWorkspaceCreator || isWorkspaceAdmin || contextMenu.canInvite) && availableInvitationRoles.length > 0 && (
             <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
               <UserPlus className="h-4 w-4" /> Inviter
             </button>
           )}
-          {canManageListe && (
+          {canManageSpaceListe && (
             <button onClick={() => openCreateListModal(contextMenu.space.id, undefined)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
               <ListTodo className="h-4 w-4" /> Créer une liste
             </button>
@@ -762,7 +798,7 @@ export default function LeftSidebar() {
           <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier la liste
           </button>
-          {canDelete && (
+          {canDeleteSpace && (
             <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
               <Trash2 className="h-4 w-4" /> Supprimer la liste
             </button>
@@ -844,12 +880,12 @@ export default function LeftSidebar() {
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-1">
-              {isCreator ? (
+              {isCreatorForSpace || isWorkspaceCreator ? (
                 <>
-                  💡 <strong>Invitant</strong> : accès en lecture seule<br />
-                  💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres
+                  💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres<br />
+                  💡 <strong>Invitant</strong> : accès en lecture seule
                 </>
-              ) : isAdmin ? (
+              ) : isAdminForSpace || isWorkspaceAdmin ? (
                 <>
                   💡 En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
                 </>

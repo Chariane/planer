@@ -1,7 +1,22 @@
 // frontend/src/services/liste.service.ts
 import { apiFetch } from './api';
+import type { List } from '../types';
 
 const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
+
+export interface ListeCreateData {
+  nom: string;
+  description?: string;
+  id_espace?: string;
+  id_workspace?: string;
+}
+
+export interface ListeUpdateData {
+  nom?: string;
+  description?: string;
+  id_espace?: string;
+  id_workspace?: string;
+}
 
 export const listeService = {
   // ========== CRUD Listes ==========
@@ -11,10 +26,10 @@ export const listeService = {
   getByWorkspace: (workspaceId: string) => 
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/list_projets?workspace_id=${workspaceId}`),
   
-  getById: (id: string) => 
+  getById: (id: string): Promise<List> => 
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${id}/get_liste`),
   
-  create: (data: { nom: string; description?: string; id_espace?: string; id_workspace?: string }) => {
+  create: (data: ListeCreateData) => {
     if ((data.id_espace && data.id_workspace) || (!data.id_espace && !data.id_workspace)) {
       throw new Error("Il faut fournir exactement id_espace ou id_workspace, pas les deux, ni aucun.");
     }
@@ -24,7 +39,7 @@ export const listeService = {
     });
   },
   
-  update: (id: string, data: { nom?: string; description?: string; id_espace?: string; id_workspace?: string }) =>
+  update: (id: string, data: ListeUpdateData) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${id}/update_liste`, { 
       method: 'PUT', 
       body: JSON.stringify(data) 
@@ -36,9 +51,11 @@ export const listeService = {
     }),
   
   // ========== Gestion des membres ==========
-  assignMember: (listeId: string, utilisateurId: string) =>
+  // Le rôle par défaut est "Membre" pour l'assignation à une liste
+  assignMember: (listeId: string, utilisateurId: string, role: string = 'Membre') =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/assign/${utilisateurId}/assign_liste`, { 
-      method: 'POST' 
+      method: 'POST',
+      body: JSON.stringify({ role })
     }),
   
   unassignMember: (listeId: string, utilisateurId: string) =>

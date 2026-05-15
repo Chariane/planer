@@ -4,7 +4,7 @@ export interface Member {
   id: string;
   name: string;
   email: string;
-  role: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
+  role: string;
 }
 
 export interface ChecklistItem {
@@ -73,7 +73,6 @@ export interface Task {
   listId: string;
   createdAt: Date;
   subTasks?: ChecklistItem[];
-  // Utilisons le type simplifié pour les checklists dans les tâches
   checklists?: TaskChecklist[];
   progression?: number;
 }
@@ -95,6 +94,9 @@ export interface List {
   periods?: Period[];
   canevas?: CanevasData;
   createdAt: Date;
+  created_at?: string;  // Ajouté pour compatibilité API
+  id_espace?: string | null;  // Ajouté
+  id_workspace?: string | null;  // Ajouté
 }
 
 export interface Space {
@@ -104,6 +106,9 @@ export interface Space {
   sous_espaces?: Space[];
   listes: List[];
   createdAt: Date;
+  created_at?: string;  // Ajouté pour compatibilité API
+  id_workspace?: string;  // Ajouté
+  id_espace_parent?: string | null;  // Ajouté
 }
 
 export interface Workspace {
@@ -131,10 +136,10 @@ export interface JoinedResource {
   id_workspace?: string | null;
   id_espace?: string | null;
   id_liste?: string | null;
-  id_tache?: string | null;      // Ajouté pour les tâches
-  espace_nom?: string | null;    // Ajouté pour le nom de l'espace
-  liste_nom?: string | null;     // Ajouté pour le nom de la liste
-  tache_nom?: string | null;     // Ajouté pour le nom de la tâche
+  id_tache?: string | null;
+  espace_nom?: string | null;
+  liste_nom?: string | null;
+  tache_nom?: string | null;
 }
 
 export interface WorkspaceAccessListingResponse {
@@ -148,7 +153,7 @@ export interface WorkspaceDirectAccessItem {
   role: string;
   id_espace?: string | null;
   id_liste?: string | null;
-  id_tache?: string | null;      // Ajouté pour les tâches
+  id_tache?: string | null;
 }
 
 export interface WorkspaceLocalResourcesResponse {
@@ -168,4 +173,20 @@ export interface WorkspaceNavigationResponse {
   joined_espaces: JoinedResource[];
   joined_listes: JoinedResource[];
   joined_taches: JoinedResource[];
+}
+
+// Types pour les filtres de tâches
+export interface TaskFilters {
+  statut?: string;
+  priorite?: string;
+  membre_id?: string;
+  sort_by?: string;
+  order?: 'asc' | 'desc';
+}
+
+// Types pour les mises à jour groupées
+export interface TacheBulkUpdateItem {
+  id: string;
+  statut?: string;
+  ordre_affichage?: number;
 }

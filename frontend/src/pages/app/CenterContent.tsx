@@ -29,10 +29,13 @@ export default function CenterContent() {
   // Récupérer le rôle dans l'espace (si un espace est sélectionné)
   const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
   
-  // Déterminer le rôle effectif (priorité au rôle le plus élevé)
+  // Récupérer le rôle dans la liste (si une liste est sélectionnée)
+  const { isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
+  
+  // Déterminer le rôle effectif (priorité: liste > espace > workspace)
   const effectiveRole = userEspaceRole || userWorkspaceRole;
-  const isAdmin = isEspaceAdmin || isWorkspaceAdmin;
-  const isCreator = isEspaceCreator || isWorkspaceCreator;
+  const isAdmin = isEspaceAdmin || isWorkspaceAdmin || isListeAdmin;
+  const isCreator = isEspaceCreator || isWorkspaceCreator || isListeCreator;
   const isGuest = isEspaceGuest || isWorkspaceGuest;
   
   // Permissions
@@ -40,6 +43,10 @@ export default function CenterContent() {
     userRole: effectiveRole,
     resourceType: spaceId ? 'espace' : 'workspace',
   });
+  
+  // 🔧 CORRECTION PROBLÈME 4: Peut-on assigner des membres à la liste ?
+  // Un Admin ou Créateur de liste, ou Admin/Créateur d'espace parent, ou Admin/Créateur de workspace parent
+  const canAssignToList = (isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
   // Définir les onglets disponibles selon le rôle
   const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres')[] => {
@@ -219,9 +226,10 @@ export default function CenterContent() {
           <Button variant="primary" size="sm" onClick={openCreateTask}>
             <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
           </Button>
-          {spaceId && spaceId !== 'list' && canManageMembers && (
+          {/* 🔧 CORRECTION: Bouton "Assigner membre à la liste" - utilisant la nouvelle variable corrigée */}
+          {canAssignToList && (
             <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-1" /> Assigner membre à la liste
+              <UserPlus className="h-4 w-4 mr-1" /> Ajouter membre à la liste
             </Button>
           )}
         </div>

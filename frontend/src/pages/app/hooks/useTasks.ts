@@ -1,6 +1,7 @@
 // frontend/src/pages/app/hooks/useTasks.ts
 import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
+import type { TacheFilters } from '../../../services/tache.service';
 import type { Task, Member } from '../../../types';
 
 function transformTask(apiTask: any): Task {
@@ -30,6 +31,7 @@ export function useTasks(listId: string | undefined) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<TacheFilters>({});
 
   const loadTasks = useCallback(async () => {
     if (!listId) {
@@ -41,7 +43,7 @@ export function useTasks(listId: string | undefined) {
     setLoading(true);
     setError(null);
     try {
-      const data = await tacheService.getByListe(listId);
+      const data = await tacheService.getByListe(listId, filters);
       if (!data) {
         setTasks([]);
         return;
@@ -72,7 +74,7 @@ export function useTasks(listId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [listId]);
+  }, [listId, filters]);
 
   useEffect(() => {
     loadTasks();
@@ -130,5 +132,24 @@ export function useTasks(listId: string | undefined) {
     }
   };
 
-  return { tasks, loading, error, loadTasks, addTask, updateTask, deleteTask };
+  const updateFilters = (newFilters: TacheFilters) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+  };
+
+  const clearFilters = () => {
+    setFilters({});
+  };
+
+  return { 
+    tasks, 
+    loading, 
+    error, 
+    filters,
+    loadTasks, 
+    addTask, 
+    updateTask, 
+    deleteTask,
+    updateFilters,
+    clearFilters
+  };
 }

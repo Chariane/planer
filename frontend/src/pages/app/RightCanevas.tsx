@@ -8,19 +8,24 @@ import {
 import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '../../services/canevas.service';
 import { sectionService } from '../../services/section.service';
 import { checklistService } from '../../services/checklist.service';
-import { useResourceRole } from '../../hooks/useResourceRole';
-import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
+import { listeService } from '../../services/liste.service';
+import { workspaceService } from '../../services/workspace.service';
+import { espaceService } from '../../services/espace.service';
 import { useApp } from '../../contexts/AppContext';
+import { ROLES } from '../../lib/roleHierarchy';
 
 export default function RightCanevas() {
   const { listId } = useParams();
-  const { workspaceLocalResources, workspaces } = useApp();
+  const { workspaces } = useApp();
   const [canevas, setCanevas] = useState<EnhancedCanevas | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [canModify, setCanModify] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(true);
+  const [permissionChecked, setPermissionChecked] = useState(false);
+  const [userRoleDisplay, setUserRoleDisplay] = useState<string | null>(null);
   
   // États pour l'édition
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
@@ -37,30 +42,116 @@ export default function RightCanevas() {
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Récupérer le rôle de l'utilisateur pour cette liste
+  // Récupérer l'ID de l'utilisateur connecté
+  const getCurrentUserId = () => {
+    return localStorage.getItem('user_id');
+  };
+
+  // 🔧 Récupérer les permissions avec héritage descendant
   useEffect(() => {
-    const findUserRole = () => {
-      // 1. Chercher dans les ressources locales (rôle effectif hérité)
-      for (const [wsId, resources] of Object.entries(workspaceLocalResources)) {
-        const foundList = resources.direct_access?.listes?.find((l: any) => l.id === listId);
-        if (foundList && foundList.role) {
-          setUserRole(foundList.role);
+    const fetchPermissions = async () => {
+      if (!listId) return;
+      
+      try {
+        // 1. Récupérer les informations de la liste
+        const liste = await listeService.getById(listId);
+        const currentUserId = getCurrentUserId();
+        
+        if (!currentUserId) {
+          setCanModify(false);
+          setIsReadOnly(true);
+          setPermissionChecked(true);
           return;
         }
+        
+        // 2. Vérifier si l'utilisateur est membre direct de la liste
+        try {
+          const membres = await listeService.getMembers(listId);
+          const currentMember = membres.find((m: any) => m.id_utilisateur === currentUserId);
+          
+          if (currentMember) {
+            const role = currentMember.role;
+            setUserRoleDisplay(role);
+            const hasModifyRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER;
+            if (hasModifyRole) {
+              setCanModify(true);
+              setIsReadOnly(false);
+              setPermissionChecked(true);
+              return;
+            }
+          }
+        } catch (err) {
+          console.log('Pas de membre direct trouvé, vérification héritage...');
+        }
+        
+        // 3. Vérifier l'héritage depuis l'espace parent
+        if (liste.id_espace) {
+          try {
+            const espaceMembres = await espaceService.getMembers(liste.id_espace);
+            const currentEspaceMember = espaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
+            
+            if (currentEspaceMember) {
+              const role = currentEspaceMember.role;
+              setUserRoleDisplay(`${role} (hérité de l'espace)`);
+              const hasModifyRole = role === ROLES.CREATOR || role === ROLES.ADMIN;
+              if (hasModifyRole) {
+                setCanModify(true);
+                setIsReadOnly(false);
+                setPermissionChecked(true);
+                return;
+              }
+            }
+          } catch (err) {
+            console.log('Pas de rôle trouvé dans l\'espace');
+          }
+        }
+        
+        // 4. Vérifier l'héritage depuis le workspace parent
+        const workspaceId = liste.id_workspace;
+        if (workspaceId) {
+          try {
+            const workspace = await workspaceService.getById(workspaceId);
+            // Le créateur du workspace a tous les droits
+            if (workspace.id_utilisateur === currentUserId) {
+              setUserRoleDisplay('Créateur (hérité du workspace)');
+              setCanModify(true);
+              setIsReadOnly(false);
+              setPermissionChecked(true);
+              return;
+            }
+            
+            // Vérifier si l'utilisateur est admin du workspace
+            const workspaceMembres = await workspaceService.getMembers(workspaceId);
+            const currentWorkspaceMember = workspaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
+            
+            if (currentWorkspaceMember && currentWorkspaceMember.role === ROLES.ADMIN) {
+              setUserRoleDisplay('Administrateur (hérité du workspace)');
+              setCanModify(true);
+              setIsReadOnly(false);
+              setPermissionChecked(true);
+              return;
+            }
+          } catch (err) {
+            console.log('Pas de rôle trouvé dans le workspace');
+          }
+        }
+        
+        // 5. Aucune permission trouvée
+        setUserRoleDisplay('Invité');
+        setCanModify(false);
+        setIsReadOnly(true);
+        
+      } catch (err) {
+        console.error('Erreur récupération permissions:', err);
+        setCanModify(false);
+        setIsReadOnly(true);
+      } finally {
+        setPermissionChecked(true);
       }
-      
-      // 2. Chercher dans les espaces rejoints via le store
-      // Pour l'instant, si non trouvé, on considère que l'utilisateur a un accès de base
-      setUserRole(null);
     };
     
-    if (listId) {
-      findUserRole();
-    }
-  }, [listId, workspaceLocalResources]);
-
-  const canModify = userRole !== 'Invité' && userRole !== null;
-  const isReadOnly = userRole === 'Invité';
+    fetchPermissions();
+  }, [listId]);
 
   const loadCanevas = async () => {
     if (!listId) return;
@@ -85,10 +176,10 @@ export default function RightCanevas() {
   };
 
   useEffect(() => {
-    if (listId) {
+    if (listId && permissionChecked) {
       loadCanevas();
     }
-  }, [listId]);
+  }, [listId, permissionChecked]);
 
   const addSection = async () => {
     if (!newSectionTitle.trim() || !canevas || !canModify) return;
@@ -232,6 +323,16 @@ export default function RightCanevas() {
     );
   }
 
+  if (!permissionChecked) {
+    return (
+      <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 text-secondary animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   // Vue pour les invités (lecture seule)
   if (isReadOnly) {
     return (
@@ -253,47 +354,66 @@ export default function RightCanevas() {
               👁️ Vous êtes en mode <strong>lecture seule</strong>.
             </p>
             <p className="text-xs text-blue-600 mt-1">
-              Vous ne pouvez pas modifier le canevas.
+              {userRoleDisplay === 'Invité' && "Vous êtes invité dans cette liste, espace ou workspace."}
+              {userRoleDisplay?.includes('hérité') && `Vous avez le rôle "${userRoleDisplay}" mais les permissions d'écriture ne sont pas disponibles.`}
+              {!userRoleDisplay && "Vous n'avez pas les droits de modification."}
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Seuls les Créateurs et Administrateurs peuvent modifier le canevas.
             </p>
           </div>
-          {canevas?.sections.map((section) => (
-            <div key={section.id} className="border border-gray-100 rounded-lg mb-4">
-              <div className="p-3 bg-gray-50">
-                <span className="text-sm font-medium text-gray-700">{section.titre}</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs font-semibold text-secondary">{section.progress}%</span>
-                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                    <div className="bg-secondary h-1.5 rounded-full" style={{ width: `${section.progress}%` }} />
-                  </div>
-                </div>
-              </div>
-              <div className="p-3 space-y-2">
-                {section.checklists.map((checklist) => (
-                  <div key={checklist.id} className="flex items-center gap-2">
-                    {checklist.is_checked ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-500" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-gray-300" />
-                    )}
-                    <span className={`text-sm ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
-                      {checklist.texte}
-                    </span>
-                  </div>
-                ))}
-              </div>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 text-secondary animate-spin" />
             </div>
-          ))}
-          {(!canevas?.sections || canevas.sections.length === 0) && (
+          ) : error ? (
+            <div className="text-center text-red-500 text-sm py-8">{error}</div>
+          ) : !canevas ? (
             <div className="text-center text-gray-400 text-sm py-8">
               <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Aucune section disponible</p>
+              <p>Aucun canevas disponible</p>
             </div>
+          ) : (
+            canevas.sections.map((section) => (
+              <div key={section.id} className="border border-gray-100 rounded-lg mb-4">
+                <div className="p-3 bg-gray-50">
+                  <span className="text-sm font-medium text-gray-700">{section.titre}</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-semibold text-secondary">{section.progress}%</span>
+                    <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                      <div className="bg-secondary h-1.5 rounded-full" style={{ width: `${section.progress}%` }} />
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 space-y-2">
+                  {section.checklists.map((checklist) => (
+                    <div key={checklist.id} className="flex items-center gap-2">
+                      {checklist.source === 'task' && (
+                        <span className="text-xs text-blue-400 w-4" title={`Tâche: ${checklist.task_title}`}>📋</span>
+                      )}
+                      {checklist.source === 'manual' && (
+                        <span className="text-xs text-gray-400 w-4" title="Checklist manuelle">✏️</span>
+                      )}
+                      {checklist.is_checked ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-gray-300" />
+                      )}
+                      <span className={`text-sm ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                        {checklist.texte}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
     );
   }
 
+  // Vue normale (avec modifications possibles)
   return (
     <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
       <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
@@ -304,6 +424,11 @@ export default function RightCanevas() {
           </h2>
           {canevas && canevas.is_verrouille && (
             <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Verrouillé</span>
+          )}
+          {userRoleDisplay && (
+            <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full" title="Permission héritée">
+              {userRoleDisplay}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1">
