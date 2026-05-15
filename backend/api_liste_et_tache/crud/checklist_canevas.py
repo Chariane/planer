@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import func
-from ..models import Canevas, Section, Checklist, Tache
+from ..models import Canevas, Section, Checklist
 
 # --- CANEVAS CRUD ---
 

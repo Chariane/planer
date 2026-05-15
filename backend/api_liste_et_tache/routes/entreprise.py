@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.security import get_current_active_entreprise
 from ..core.function import (
+    LISTE_MEMBER_ROLE,
     _get_workspace_or_404,
     _require_workspace_management_access,
     _get_workspace_member_or_403,
@@ -13,13 +14,17 @@ from ..core.function import (
     _require_espace_descendant_read_access,
     _require_espace_management_access,
     _get_liste_or_404,
+    _get_liste_member_record,
+    _get_list_member_management_grant,
     _require_list_access,
     _require_list_admin_access,
     _require_list_delete_access,
+    _require_list_member_management_access,
     _require_list_read_access,
     _get_tache_or_404,
     _require_task_access,
     _require_task_read_access,
+    _validate_list_member_management_permissions,
     _require_workspace_descendant_read_access,
 )
 from ..crud.liste import (
@@ -86,7 +91,8 @@ def create_entreprise_liste_endpoint(
         nom=liste_in.nom, 
         description=liste_in.description, 
         id_espace=liste_in.id_espace, 
-        id_workspace=liste_in.id_workspace
+        id_workspace=liste_in.id_workspace,
+        creator_user_id=current_entreprise.id,
     )
 
 @router.get("", response_model=List[ListeOut])
@@ -140,11 +146,23 @@ def delete_entreprise_liste_endpoint(
 def assign_entreprise_liste_endpoint(
     liste_id: str,
     utilisateur_id: str,
+    role: str = LISTE_MEMBER_ROLE,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_admin_access(db, liste_id, current_entreprise.id)
-    return assign_member_to_liste(db, liste_id, utilisateur_id)
+    _require_list_member_management_access(db, liste_id, current_entreprise.id)
+    _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
+        db, liste_id, current_entreprise.id
+    )
+    _validate_list_member_management_permissions(
+        liste_id=liste_id,
+        actor_role=actor_role,
+        actor_source_type=actor_source_type,
+        actor_source_id=actor_source_id,
+        target_member=_get_liste_member_record(db, liste_id, utilisateur_id),
+        new_role=role,
+    )
+    return assign_member_to_liste(db, liste_id, utilisateur_id, role)
 
 
 @router.delete("/{liste_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -154,7 +172,20 @@ def unassign_entreprise_liste_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_admin_access(db, liste_id, current_entreprise.id)
+    _require_list_member_management_access(db, liste_id, current_entreprise.id)
+    target_member = _get_liste_member_record(db, liste_id, utilisateur_id)
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+    _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
+        db, liste_id, current_entreprise.id
+    )
+    _validate_list_member_management_permissions(
+        liste_id=liste_id,
+        actor_role=actor_role,
+        actor_source_type=actor_source_type,
+        actor_source_id=actor_source_id,
+        target_member=target_member,
+    )
     unassign_member_from_liste(db, liste_id, utilisateur_id)
     return None
 
@@ -165,7 +196,7 @@ def get_entreprise_liste_members_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_admin_access(db, liste_id, current_entreprise.id)
+    _require_list_member_management_access(db, liste_id, current_entreprise.id)
     return get_liste_members(db, liste_id)
 
 # -----------------------------------------------------------------------------

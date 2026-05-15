@@ -47,6 +47,7 @@ LISTE_ADMIN_ROLE = "Administrateur"
 LISTE_MEMBER_ROLE = "Membre"
 LISTE_GUEST_ROLE = "Invité"
 LISTE_MANAGEMENT_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE}
+LISTE_ADMIN_MANAGEABLE_ROLES = {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}
 
 
 class Role:
@@ -597,6 +598,62 @@ def _require_list_access(db: Session, liste_id: str, current_user_id: str):
 def _require_list_admin_access(db: Session, liste_id: str, current_user_id: str):
     """Vérifie l'accès de gestion de la liste elle-même."""
     actor_member, _, _, _ = _get_list_management_grant(db, liste_id, current_user_id)
+    return actor_member
+
+
+def _get_list_member_management_grant(
+    db: Session,
+    liste_id: str,
+    current_user_id: str,
+) -> tuple[Membre, str, str, str]:
+    """Décrit l'origine du droit de gestion des membres d'une liste."""
+    return _get_list_management_grant(db, liste_id, current_user_id)
+
+
+def _validate_list_member_management_permissions(
+    *,
+    liste_id: str,
+    actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
+    target_member: Membre | None,
+    new_role: str | None = None,
+) -> None:
+    # Un administrateur local ou parent ne peut gérer que Membre / Invité.
+    if (
+        actor_role == LISTE_ADMIN_ROLE
+        and target_member
+        and target_member.role not in LISTE_ADMIN_MANAGEABLE_ROLES
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Seul un createur peut gerer ce membre de liste.",
+        )
+
+    if actor_role == LISTE_ADMIN_ROLE and new_role and new_role not in LISTE_ADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur de liste ne peut attribuer que les roles Membre ou Invite.",
+        )
+
+    # Le createur direct de la liste ne peut pas se retirer/s'auto-retrograder via le scope local.
+    if (
+        target_member
+        and
+        target_member.role == LISTE_OWNER_ROLE
+        and actor_role == LISTE_OWNER_ROLE
+        and actor_source_type == ResourceType.LISTE
+        and actor_source_id == liste_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Le createur direct de la liste ne peut pas modifier ou retirer ce role depuis la liste elle-meme.",
+        )
+
+
+def _require_list_member_management_access(db: Session, liste_id: str, current_user_id: str):
+    """Vérifie l'accès de gestion des membres d'une liste."""
+    actor_member, _, _, _ = _get_list_member_management_grant(db, liste_id, current_user_id)
     return actor_member
 
 

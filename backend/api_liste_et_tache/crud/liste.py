@@ -3,7 +3,16 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from ..core.function import ResourceType, Role, validate_role_hierarchy
+from ..core.function import (
+    LISTE_ADMIN_ROLE,
+    LISTE_GUEST_ROLE,
+    LISTE_MANAGEMENT_ROLES,
+    LISTE_MEMBER_ROLE,
+    LISTE_OWNER_ROLE,
+    ResourceType,
+    Role,
+    validate_role_hierarchy,
+)
 from ..models import Liste, Membre, Canevas, Section
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -18,7 +27,22 @@ def get_listes_for_espace(db: Session, espace_id: str) -> List[Liste]:
     return db.query(Liste).filter(Liste.id_espace == espace_id).all()
 
 
-def create_liste(db: Session, nom: str, description: str = None, id_espace: str = None, id_workspace: str = None) -> Liste:
+LISTE_ALLOWED_ROLES = {
+    LISTE_OWNER_ROLE,
+    LISTE_ADMIN_ROLE,
+    LISTE_MEMBER_ROLE,
+    LISTE_GUEST_ROLE,
+}
+
+
+def create_liste(
+    db: Session,
+    nom: str,
+    description: str = None,
+    id_espace: str = None,
+    id_workspace: str = None,
+    creator_user_id: str | None = None,
+) -> Liste:
     # 1. Créer la liste
     liste = Liste(
         nom=nom, 
@@ -35,6 +59,16 @@ def create_liste(db: Session, nom: str, description: str = None, id_espace: str 
         id_liste=liste.id
     )
     db.add(canevas)
+
+    if creator_user_id:
+        db.add(
+            Membre(
+                id_utilisateur=creator_user_id,
+                id_liste=liste.id,
+                role=LISTE_OWNER_ROLE,
+                statut="Actif",
+            )
+        )
     
     # 3. Commit final
     try:
@@ -102,18 +136,26 @@ def _get_liste_with_scope(db: Session, liste_id: str) -> Optional[Liste]:
     )
 
 
-def assign_member_to_liste(db: Session, liste_id: str, utilisateur_id: str) -> Membre:
-    """Ajoute un utilisateur a une liste avec un role local de membre."""
+def assign_member_to_liste(
+    db: Session,
+    liste_id: str,
+    utilisateur_id: str,
+    role: str = LISTE_MEMBER_ROLE,
+) -> Membre:
+    """Ajoute ou met a jour un utilisateur sur une liste avec un role local explicite."""
     liste = _get_liste_with_scope(db, liste_id)
     if not liste:
         raise HTTPException(status_code=404, detail="Liste introuvable.")
+
+    if role not in LISTE_ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Role de liste invalide.")
 
     validate_role_hierarchy(
         db,
         utilisateur_id,
         ResourceType.LISTE,
         liste_id,
-        Role.MEMBER,
+        role,
     )
 
     existing = (
@@ -125,13 +167,40 @@ def assign_member_to_liste(db: Session, liste_id: str, utilisateur_id: str) -> M
         .first()
     )
 
+    if role == LISTE_OWNER_ROLE:
+        existing_owner = (
+            db.query(Membre)
+            .filter(
+                Membre.id_liste == liste_id,
+                Membre.role == LISTE_OWNER_ROLE,
+                Membre.id_utilisateur != utilisateur_id,
+            )
+            .first()
+        )
+        if existing_owner:
+            raise HTTPException(
+                status_code=409,
+                detail="Cette liste possede deja un createur local. Utilisez un transfert explicite de propriete.",
+            )
+
     if existing:
+        existing.role = role
+        existing.statut = "Actif"
+        try:
+            db.commit()
+            db.refresh(existing)
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="Erreur lors de la mise a jour du membre de la liste.",
+            ) from exc
         return existing
 
     assignation = Membre(
         id_liste=liste_id,
         id_utilisateur=utilisateur_id,
-        role="Membre",
+        role=role,
         statut="Actif",
     )
     db.add(assignation)

@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from ..models import Canevas, Section, Checklist, Tache, Liste
+from ..models import Canevas, Section, Tache, Liste
 from ..crud.checklist_canevas import get_checklists_for_section, get_checklists_for_tache
 
 
