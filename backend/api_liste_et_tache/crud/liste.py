@@ -1,8 +1,10 @@
 # backend/api_liste_et_tache/crud/liste.py
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from datetime import timedelta
 from ..core.function import (
     LISTE_ADMIN_ROLE,
     LISTE_GUEST_ROLE,
@@ -12,8 +14,12 @@ from ..core.function import (
     ResourceType,
     Role,
     validate_role_hierarchy,
+    commit_or_raise,
 )
-from ..models import Liste, Membre, Canevas, Section
+from ..core.security import create_access_token, decode_invitation_token
+from ..models import Liste, Membre, Canevas, Section, Tache, Checklist, Utilisateur
+from ..schemas import WorkspaceMemberInvite
+
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
     return db.query(Liste).filter(Liste.id == liste_id).first()
@@ -25,6 +31,13 @@ def get_listes_for_workspace(db: Session, workspace_id: str) -> List[Liste]:
 
 def get_listes_for_espace(db: Session, espace_id: str) -> List[Liste]:
     return db.query(Liste).filter(Liste.id_espace == espace_id).all()
+
+
+def get_liste_member_record(db: Session, liste_id: str, user_id: str) -> Optional[Membre]:
+    return db.query(Membre).filter(
+        Membre.id_liste == liste_id,
+        Membre.id_utilisateur == user_id
+    ).first()
 
 
 LISTE_ALLOWED_ROLES = {
@@ -106,24 +119,66 @@ def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
 
 
 def delete_liste(db: Session, liste_id: str) -> bool:
+    """
+    Supprime une liste et toutes ses dépendances :
+    - Tâches et leurs checklists
+    - Membres de la liste et des tâches
+    - Canevas, sections et checklists de sections
+    """
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         return False
     
-    # Supprimer d'abord le canevas (cascade devrait le faire, mais par sécurité)
+    # 1. Récupérer toutes les tâches de la liste
+    taches = db.query(Tache).filter(Tache.id_liste == liste_id).all()
+    tache_ids = [t.id for t in taches]
+    
+    # 2. Supprimer les checklists des tâches
+    if tache_ids:
+        db.query(Checklist).filter(Checklist.id_tache.in_(tache_ids)).delete(synchronize_session=False)
+    
+    # 3. Supprimer les membres assignés aux tâches
+    if tache_ids:
+        db.query(Membre).filter(Membre.id_tache.in_(tache_ids)).delete(synchronize_session=False)
+    
+    # 4. Supprimer les tâches
+    for tache in taches:
+        db.delete(tache)
+    
+    # 5. Supprimer les membres de la liste
+    db.query(Membre).filter(Membre.id_liste == liste_id).delete(synchronize_session=False)
+    
+    # 6. Supprimer le canevas et ses dépendances
     canevas = db.query(Canevas).filter(Canevas.id_liste == liste_id).first()
     if canevas:
+        # 6a. Récupérer les sections du canevas
+        sections = db.query(Section).filter(Section.id_canevas == canevas.id).all()
+        section_ids = [s.id for s in sections]
+        
+        # 6b. Supprimer les checklists des sections
+        if section_ids:
+            db.query(Checklist).filter(Checklist.id_section.in_(section_ids)).delete(synchronize_session=False)
+        
+        # 6c. Supprimer les sections
+        for section in sections:
+            db.delete(section)
+        
+        # 6d. Supprimer le canevas
         db.delete(canevas)
     
+    # 7. Supprimer la liste
     db.delete(liste)
+    
     try:
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
+        print(f"❌ Erreur suppression liste {liste_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erreur lors de la suppression de la liste.",
+            detail=f"Erreur lors de la suppression de la liste: {str(e)}",
         )
+    
     return True
 
 
@@ -238,3 +293,163 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
 def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
     """Recupere tous les membres assignes directement a une liste."""
     return db.query(Membre).filter(Membre.id_liste == liste_id).all()
+
+
+# ============================================================================
+# INVITATIONS DANS LES LISTES
+# ============================================================================
+
+def invite_member_to_liste(db: Session, liste_id: str, membre_in: WorkspaceMemberInvite) -> dict:
+    """
+    Invite un utilisateur à une liste.
+    Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
+    """
+    # 1. Vérification de l'existence de la liste
+    liste = get_liste_by_id(db, liste_id)
+    if not liste:
+        raise HTTPException(status_code=404, detail="Liste non trouvée.")
+    
+    # 2. Recherche de l'utilisateur par email ou username
+    query = db.query(Utilisateur)
+    if membre_in.email:
+        query = query.filter(func.lower(Utilisateur.email) == membre_in.email.lower())
+    else:
+        query = query.filter(func.lower(Utilisateur.username) == membre_in.username.lower())
+    
+    target_user = query.first()
+    TOKEN_TYPE = "liste_invitation"
+    
+    if target_user:
+        # Valider la hiérarchie des rôles
+        validate_role_hierarchy(
+            db,
+            target_user.id,
+            ResourceType.LISTE,
+            liste_id,
+            membre_in.role,
+        )
+        
+        # CAS 1 : Utilisateur existant
+        membre = get_liste_member_record(db, liste_id, target_user.id)
+        if membre:
+            if membre.statut == "Actif":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cet utilisateur est déjà membre actif de cette liste."
+                )
+            # Si l'invitation existe déjà, on met à jour son rôle et on la repasse en attente
+            membre.role = membre_in.role
+            membre.statut = "En attente"
+        else:
+            membre = Membre(
+                id_utilisateur=target_user.id,
+                id_liste=liste_id,
+                role=membre_in.role,
+                statut="En attente",
+            )
+            db.add(membre)
+        
+        commit_or_raise(db, detail="Impossible de créer ou mettre à jour le membre.")
+        
+        # Token pour utilisateur existant
+        token = create_access_token(
+            data={
+                "sub": target_user.id,
+                "email": target_user.email,
+                "liste_id": liste_id,
+                "workspace_id": liste.id_workspace,
+                "espace_id": liste.id_espace,
+                "type": TOKEN_TYPE
+            },
+            expires_delta=timedelta(days=7),
+        )
+        return {"membre": membre, "invitation_token": token}
+    
+    else:
+        # CAS 2 : Invité externe
+        if not membre_in.email:
+            raise HTTPException(
+                status_code=400,
+                detail="Email obligatoire pour inviter un utilisateur non inscrit."
+            )
+        
+        token = create_access_token(
+            data={
+                "email": membre_in.email,
+                "liste_id": liste_id,
+                "workspace_id": liste.id_workspace,
+                "espace_id": liste.id_espace,
+                "role": membre_in.role,
+                "type": TOKEN_TYPE,
+            },
+            expires_delta=timedelta(days=4),
+        )
+        return {"token": token}
+
+
+def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) -> Membre:
+    """Accepte une invitation à une liste via token JWT."""
+    payload = decode_invitation_token(invitation_token)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expiré.")
+    
+    # Support des deux formats de token
+    token_type = payload.get("type")
+    token_scope = payload.get("scope")
+    is_standard_invitation = token_type == "liste_invitation"
+    is_existing_user_legacy_invitation = token_scope == "liste_invitation_accept"
+    
+    if not is_standard_invitation and not is_existing_user_legacy_invitation:
+        raise HTTPException(status_code=403, detail="Type de token invalide pour cette action.")
+    
+    target_liste_id = payload.get("liste_id")
+    if not target_liste_id:
+        raise HTTPException(status_code=400, detail="ID de la liste absent du token.")
+    
+    liste = get_liste_by_id(db, target_liste_id)
+    if not liste:
+        raise HTTPException(status_code=404, detail="La liste cible n'existe plus.")
+    
+    user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
+    
+    token_sub = payload.get("sub")
+    token_email = payload.get("email")
+    
+    if token_sub and token_sub != user_id:
+        raise HTTPException(status_code=403, detail="Cette invitation appartient à un autre utilisateur.")
+    
+    if token_email and token_email.lower() != user.email.lower():
+        raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au vôtre.")
+    
+    existing_member = get_liste_member_record(db, target_liste_id, user_id)
+    invited_role = payload.get("role", LISTE_MEMBER_ROLE)
+    
+    # Valider la hiérarchie des rôles
+    validate_role_hierarchy(
+        db,
+        user_id,
+        ResourceType.LISTE,
+        target_liste_id,
+        invited_role,
+    )
+    
+    if existing_member:
+        if existing_member.statut == "Actif":
+            raise HTTPException(status_code=409, detail="Invitation déjà acceptée.")
+        existing_member.role = invited_role
+        existing_member.statut = "Actif"
+        commit_or_raise(db, detail="Impossible d'activer votre statut de membre.", refresh_instance=existing_member)
+        return existing_member
+    
+    new_member = Membre(
+        id_utilisateur=user_id,
+        id_liste=target_liste_id,
+        role=invited_role,
+        statut="Actif"
+    )
+    db.add(new_member)
+    commit_or_raise(db, detail="Impossible de finaliser votre adhésion à la liste.", refresh_instance=new_member)
+    
+    return new_member

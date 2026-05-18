@@ -195,3 +195,14 @@ def check_workspace_role(db: Session, user_id: str, workspace_id: str, allowed_r
     if allowed_roles and membre.role not in allowed_roles:
         return False
     return True
+
+def decode_invitation_token(token: str) -> Optional[dict]:
+    """
+    Décode un token JWT d'invitation sans vérifier l'expiration.
+    Retourne le payload si valide, None sinon.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False})
+        return payload
+    except JWTError:
+        return None

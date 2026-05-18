@@ -65,7 +65,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   // Récupérer le rôle de l'utilisateur dans ce workspace
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
-
+  
   const loadData = async () => {
     setLoading(true);
     try {
@@ -80,8 +80,10 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         // Accès contextuel ou endpoint indisponible : les stats chargent ce qui est possible.
       }
 
-      // Charger les membres - IMPORTANT: Les invités peuvent aussi voir les membres
+      // 🔧 Charger les membres pour tout le monde (y compris les invités)
       let formattedMembers: Member[] = [];
+      let membersCount = 0;
+      
       try {
         const membersData = await workspaceService.getMembers(workspaceId);
         formattedMembers = membersData.map((m: any) => ({
@@ -90,10 +92,12 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           email: m.utilisateur?.email || '',
           role: m.role,
         }));
+        membersCount = formattedMembers.length;
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
         if (err.status === 403) {
           console.log('Accès refusé pour voir les membres - affichage limité');
+          // Si c'est un invité, on peut essayer un endpoint public ou laisser vide
         }
       }
       setMembers(formattedMembers);
@@ -119,7 +123,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       setStats({
         spacesCount,
         listsCount,
-        membersCount: formattedMembers.length,
+        membersCount: membersCount,
       });
     } finally {
       setLoading(false);
@@ -167,14 +171,14 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         />
       )}
 
-      {/* Message pour les invités */}
+      {/* Message pour les invités - mais ils peuvent voir les membres */}
       {isGuest && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800">
             👁️ Vous êtes en mode <strong>lecture seule</strong> dans ce workspace.
           </p>
           <p className="text-xs text-blue-600 mt-1">
-            Vous pouvez consulter les informations mais ne pouvez pas inviter de nouveaux membres.
+            Vous pouvez consulter les informations et voir les membres, mais vous ne pouvez pas inviter de nouveaux membres.
           </p>
         </div>
       )}
@@ -241,7 +245,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         </GlassCard>
       </div>
 
-      {/* Liste des membres - visible pour tous (invités inclus) */}
+      {/* Liste des membres - visible pour tout le monde (y compris les invités) */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Users className="h-5 w-5" />
@@ -258,9 +262,10 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700'
                     : member.role === 'Créateur' ? 'bg-purple-100 text-purple-700'
-                      : 'bg-gray-100 text-gray-600'
+                      : member.role === 'Invité' ? 'bg-gray-100 text-gray-500'
+                        : 'bg-blue-100 text-blue-700'
                 }`}>
-                  {member.role}
+                  {member.role === 'Invité' ? '👁️ Invité' : member.role === 'Membre' ? '👤 Membre' : member.role === 'Administrateur' ? '🔐 Admin' : '👑 Créateur'}
                 </span>
               </GlassCard>
             ))}
@@ -269,8 +274,8 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           <GlassCard className="p-4">
             <div className="text-center text-gray-400 py-4">
               <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Impossible de charger la liste des membres</p>
-              <p className="text-sm mt-1">Vous n'avez pas les droits nécessaires pour voir les membres de ce workspace.</p>
+              <p>Aucun membre pour le moment</p>
+              {!isGuest && <p className="text-sm mt-1">Invitez des membres pour commencer à collaborer.</p>}
             </div>
           </GlassCard>
         )}

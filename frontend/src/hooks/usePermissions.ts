@@ -32,60 +32,66 @@ export function usePermissions({
     const isMember = role === ROLES.MEMBER;
     const isGuest = role === ROLES.GUEST;
 
-    // 🔧 CORRECTION: canInviteMembers selon resourceType
-    // Pour un espace: Admin et Créateur peuvent inviter
-    // Pour une liste: Admin et Créateur peuvent inviter (via assign)
-    const canInvite = (resourceType === 'espace' || resourceType === 'liste') 
+    // Permissions spécifiques aux listes
+    if (resourceType === 'liste') {
+      return {
+        canRead: isCreator || isAdmin || isMember,  // Membre peut lire
+        canCreateContent: isCreator || isAdmin,     // Seul Créateur/Admin peuvent créer des tâches
+        canManageMembers: isCreator || isAdmin,
+        canInviteMembers: isCreator || isAdmin,
+        canDelete: isCreator || (isAdmin && !isRootResource),
+        canEdit: isCreator || isAdmin,
+        canManageTache: isCreator || isAdmin,       // Gérer toutes les tâches
+        canManageOwnTache: isMember,                // Membre peut gérer ses propres tâches
+        canShowContextMenu: isCreator || isAdmin,
+        canManageListe: isCreator || isAdmin,
+        isCreator,
+        isAdmin,
+        isMember,
+        isGuest,
+        roleRank: getRoleRank(role),
+        roleBadgeColor: (() => {
+          if (isCreator) return 'bg-purple-100 text-purple-700';
+          if (isAdmin) return 'bg-orange-100 text-orange-700';
+          if (isMember) return 'bg-blue-100 text-blue-700';
+          return 'bg-gray-100 text-gray-600';
+        })(),
+      };
+    }
+
+    // Permissions pour workspace et espace
+    const canInvite = (resourceType === 'espace' || resourceType === 'workspace') 
       ? (isCreator || isAdmin)
-      : (isCreator || isAdmin); // workspace aussi
+      : (isCreator || isAdmin);
 
     return {
-      // Permissions de base
       canRead: !!role,
       canCreateContent: isCreator || isAdmin || isMember,
       canManageMembers: isCreator || isAdmin,
-      canInviteMembers: canInvite,  // 🔧 CORRECTION: dépend du resourceType
-      
-      // DELETE: seul le Créateur peut supprimer la ressource racine
-      // 🔧 CORRECTION: Pour les espaces/listes, l'Admin peut supprimer si ce n'est pas la racine de son périmètre
+      canInviteMembers: canInvite,
       canDelete: isCreator || (isAdmin && !isRootResource),
-      
-      // Modification: Admin, Créateur et Membre peuvent modifier
       canEdit: isCreator || isAdmin || isMember,
-      
-      // Menu contextuel: Admin et Créateur le voient, Invité non
       canShowContextMenu: isCreator || isAdmin,
-      
-      // Gestion des listes: Admin et Créateur
       canManageListe: (resourceType === 'espace' || resourceType === 'workspace') 
         ? (isCreator || isAdmin)
         : (isCreator || isAdmin),
-      
-      // Gestion des tâches: Admin, Créateur et Membre
       canManageTache: isCreator || isAdmin || isMember,
-      
-      // Pour l'invitation
       canInviteWithRole: (invitedRole: string) => {
         if (isCreator) return true;
         if (isAdmin) return canAdminInviteWithRole(invitedRole);
         return false;
       },
-      
       canManageTargetMember: (targetRole: string) => {
         if (isCreator) return true;
         if (isAdmin) return canAdminManageTarget(role || '', targetRole);
         return false;
       },
-      
-      // Informations sur le rôle
       roleRank: getRoleRank(role),
       isInheritable: isInheritableRole(role || ''),
       isCreator,
       isAdmin,
       isMember,
       isGuest,
-      
-      // Style
       roleBadgeColor: (() => {
         if (isCreator) return 'bg-purple-100 text-purple-700';
         if (isAdmin) return 'bg-orange-100 text-orange-700';
@@ -98,7 +104,6 @@ export function usePermissions({
   return permissions;
 }
 
-// Hook pour vérifier l'accès à une ressource spécifique
 export function useResourceAccess({
   userRole,
   resourceRole,
@@ -118,7 +123,7 @@ export function useResourceAccess({
     canWrite: isCreator || isAdmin || isMember,
     canConfigure: isCreator || isAdmin,
     canShowContextMenu: isCreator || isAdmin,
-    canDelete: isCreator, // Seul le créateur peut supprimer
+    canDelete: isCreator,
     canManageMembers: isCreator || isAdmin,
     canAssignMembers: isCreator || isAdmin,
     infoMessage: isGuest ? "⚠️ Vous êtes en mode lecture seule." : null,

@@ -197,7 +197,7 @@ def list_entreprise_workspace_members_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    _require_workspace_management_access(db, workspace_id, current_entreprise.id)
+    _require_workspace_read_access(db, workspace_id, current_entreprise.id)
     members = get_entreprise_workspace_members(db, current_entreprise.id, workspace_id)
     if members is None:
         raise HTTPException(status_code=404, detail="Workspace non trouve")

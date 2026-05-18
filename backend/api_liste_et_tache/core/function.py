@@ -2,6 +2,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from .database import get_db
 from ..models import Workspace, Espace, Membre, Liste, Tache
+from sqlalchemy.exc import IntegrityError
+from typing import Any, Optional
 
 # Constantes de rôles (selon les schémas existants)
 WORKSPACE_OWNER_ROLE = "Créateur"
@@ -16,10 +18,16 @@ WORKSPACE_READ_ROLES = {
     WORKSPACE_GUEST_ROLE,
 }
 WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
+
+# 🔧 CORRECTION: Les invités workspace peuvent lire le contenu descendant
 WORKSPACE_DESCENDANT_READ_ROLES = {
     WORKSPACE_OWNER_ROLE,
     WORKSPACE_ADMIN_ROLE,
-    WORKSPACE_GUEST_ROLE,
+    WORKSPACE_GUEST_ROLE,  # ✅ L'invité workspace peut lire
+}
+WORKSPACE_DESCENDANT_MANAGEMENT_ROLES = {
+    WORKSPACE_OWNER_ROLE,
+    WORKSPACE_ADMIN_ROLE,  # ✅ Seul Créateur/Admin peuvent gérer
 }
 
 # Rôles Espace
@@ -35,19 +43,27 @@ ESPACE_READ_ROLES = {
     ESPACE_GUEST_ROLE,
 }
 ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
+
+# 🔧 CORRECTION: Les invités espace peuvent lire le contenu descendant
 ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_OWNER_ROLE,
     ESPACE_ADMIN_ROLE,
-    ESPACE_GUEST_ROLE,
+    ESPACE_GUEST_ROLE,  # ✅ L'invité espace peut lire
+}
+ESPACE_DESCENDANT_MANAGEMENT_ROLES = {
+    ESPACE_OWNER_ROLE,
+    ESPACE_ADMIN_ROLE,  # ✅ Seul Créateur/Admin peuvent gérer
 }
 
-# Rôles Liste
+# Rôles Liste - IGNORER LE RÔLE INVITÉ
 LISTE_OWNER_ROLE = "Créateur"
 LISTE_ADMIN_ROLE = "Administrateur"
 LISTE_MEMBER_ROLE = "Membre"
-LISTE_GUEST_ROLE = "Invité"
+LISTE_GUEST_ROLE = "Invité"  # 🔧 NON UTILISÉ
+
 LISTE_MANAGEMENT_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE}
-LISTE_ADMIN_MANAGEABLE_ROLES = {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}
+LISTE_ADMIN_MANAGEABLE_ROLES = {LISTE_MEMBER_ROLE}  # 🔧 Plus que Membre (pas Invité)
+LISTE_READ_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE, LISTE_MEMBER_ROLE}  # 🔧 Sans Invité
 
 
 class Role:
@@ -152,7 +168,7 @@ def _append_inherited_candidate(
     resource_type: str,
     resource_id: str | None,
 ) -> None:
-    if role in WORKSPACE_DESCENDANT_READ_ROLES and resource_id:
+    if role and resource_id:
         candidates.append((role, resource_type, resource_id))
 
 
@@ -164,10 +180,18 @@ def _require_workspace_management_access(db: Session, workspace_id: str, current
 
 
 def _require_workspace_descendant_read_access(db: Session, workspace_id: str, current_user_id: str):
-    """Donne un accès de lecture descendante sur le contenu du workspace."""
+    """Donne un accès de lecture descendante sur le contenu du workspace (Créateur, Admin, Invité)."""
     membre = _get_workspace_member_or_403(db, workspace_id, current_user_id)
     if membre.role not in WORKSPACE_DESCENDANT_READ_ROLES:
         raise HTTPException(status_code=403, detail="Acces refuse au contenu du workspace")
+    return membre
+
+
+def _require_workspace_descendant_management_access(db: Session, workspace_id: str, current_user_id: str):
+    """Donne un accès de gestion descendante sur le contenu du workspace (Créateur, Admin uniquement)."""
+    membre = _get_workspace_member_or_403(db, workspace_id, current_user_id)
+    if membre.role not in WORKSPACE_DESCENDANT_MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="Acces refuse a la gestion du contenu du workspace")
     return membre
 
 
@@ -242,31 +266,24 @@ def get_parent_inherited_role(
         if not liste:
             raise HTTPException(status_code=404, detail="Liste non trouvee.")
 
+        # 🔧 Héritage depuis le workspace parent
         if liste.id_workspace:
             workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
             if workspace_member:
-                _append_inherited_candidate(
-                    candidates,
-                    role=workspace_member.role,
-                    resource_type=ResourceType.WORKSPACE,
-                    resource_id=liste.id_workspace,
-                )
+                candidates.append((workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace))
 
+        # 🔧 Héritage depuis l'espace parent et ses ancêtres
         parent_espace_id = liste.id_espace
         while parent_espace_id:
             parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
             if parent_member and parent_member.statut == "Actif":
-                _append_inherited_candidate(
-                    candidates,
-                    role=parent_member.role,
-                    resource_type=ResourceType.ESPACE,
-                    resource_id=parent_espace_id,
-                )
+                candidates.append((parent_member.role, ResourceType.ESPACE, parent_espace_id))
 
             parent_espace = db.query(Espace).filter(Espace.id == parent_espace_id).first()
             if not parent_espace:
                 break
 
+            # 🔧 Vérifier aussi le workspace de l'espace parent
             if parent_espace.id_workspace and not liste.id_workspace:
                 workspace_member = _get_active_workspace_membership(
                     db,
@@ -274,12 +291,8 @@ def get_parent_inherited_role(
                     user_id,
                 )
                 if workspace_member:
-                    _append_inherited_candidate(
-                        candidates,
-                        role=workspace_member.role,
-                        resource_type=ResourceType.WORKSPACE,
-                        resource_id=parent_espace.id_workspace,
-                    )
+                    candidates.append((workspace_member.role, ResourceType.WORKSPACE, parent_espace.id_workspace))
+            
             parent_espace_id = parent_espace.id_espace_parent
 
     elif target_type == ResourceType.TACHE:
@@ -287,36 +300,25 @@ def get_parent_inherited_role(
         if not tache:
             raise HTTPException(status_code=404, detail="Tache non trouvee.")
 
+        # 🔧 Vérifier le rôle direct sur la liste
         liste_member = _get_liste_member_record(db, tache.id_liste, user_id)
         if liste_member and liste_member.statut == "Actif":
-            _append_inherited_candidate(
-                candidates,
-                role=liste_member.role,
-                resource_type=ResourceType.LISTE,
-                resource_id=tache.id_liste,
-            )
+            candidates.append((liste_member.role, ResourceType.LISTE, tache.id_liste))
 
         liste = _get_liste_or_404(db, tache.id_liste)
+        
+        # 🔧 Héritage depuis le workspace
         if liste.id_workspace:
             workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
             if workspace_member:
-                _append_inherited_candidate(
-                    candidates,
-                    role=workspace_member.role,
-                    resource_type=ResourceType.WORKSPACE,
-                    resource_id=liste.id_workspace,
-                )
+                candidates.append((workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace))
 
+        # 🔧 Héritage depuis l'espace et ses ancêtres
         parent_espace_id = liste.id_espace
         while parent_espace_id:
             parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
             if parent_member and parent_member.statut == "Actif":
-                _append_inherited_candidate(
-                    candidates,
-                    role=parent_member.role,
-                    resource_type=ResourceType.ESPACE,
-                    resource_id=parent_espace_id,
-                )
+                candidates.append((parent_member.role, ResourceType.ESPACE, parent_espace_id))
 
             parent_espace = db.query(Espace).filter(Espace.id == parent_espace_id).first()
             if not parent_espace:
@@ -329,12 +331,8 @@ def get_parent_inherited_role(
                     user_id,
                 )
                 if workspace_member:
-                    _append_inherited_candidate(
-                        candidates,
-                        role=workspace_member.role,
-                        resource_type=ResourceType.WORKSPACE,
-                        resource_id=parent_espace.id_workspace,
-                    )
+                    candidates.append((workspace_member.role, ResourceType.WORKSPACE, parent_espace.id_workspace))
+            
             parent_espace_id = parent_espace.id_espace_parent
 
     else:
@@ -382,14 +380,7 @@ def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
 
 
 def _require_espace_access(db: Session, espace_id: str, current_user_id: str):
-    """
-    Vérifie l'accès au contenu d'un espace.
-
-    Autorise l'accès si l'utilisateur est :
-    - membre actif direct de l'espace
-    - membre actif du workspace parent
-    - membre actif d'un espace ancêtre
-    """
+    """Vérifie l'accès au contenu d'un espace."""
     espace = _get_espace_or_404(db, espace_id)
 
     membre_espace = _get_espace_member_record(db, espace_id, current_user_id)
@@ -449,16 +440,38 @@ def _require_espace_descendant_read_access(db: Session, espace_id: str, current_
     raise HTTPException(status_code=403, detail="Acces refuse au contenu descendant de l'espace")
 
 
-def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):
-    """
-    Vérifie l'accès de gestion à un espace.
+def _require_espace_descendant_management_access(db: Session, espace_id: str, current_user_id: str):
+    """Vérifie l'accès de gestion descendante sur les enfants d'un espace (Créateur/Admin uniquement)."""
+    espace = _get_espace_or_404(db, espace_id)
 
-    Autorise uniquement :
-    - le créateur du workspace parent
-    - un administrateur du workspace parent
-    - le créateur de l'espace
-    - un administrateur de l'espace
-    """
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
+    if (
+        espace_member
+        and espace_member.statut == "Actif"
+        and espace_member.role in ESPACE_DESCENDANT_MANAGEMENT_ROLES
+    ):
+        return espace_member
+
+    try:
+        workspace_member = _require_workspace_descendant_management_access(
+            db, espace.id_workspace, current_user_id
+        )
+        if workspace_member:
+            return workspace_member
+    except HTTPException:
+        pass
+
+    ancestor_member = _get_active_ancestor_espace_manager(
+        db, espace, current_user_id
+    )
+    if ancestor_member:
+        return ancestor_member
+
+    raise HTTPException(status_code=403, detail="Acces refuse a la gestion du contenu descendant de l'espace")
+
+
+def _require_espace_management_access(db: Session, espace_id: str, current_user_id: str):
+    """Vérifie l'accès de gestion à un espace."""
     espace = _get_espace_or_404(db, espace_id)
 
     ws = db.query(Workspace).filter(
@@ -525,14 +538,10 @@ def _get_list_management_grant(
     liste_id: str,
     current_user_id: str,
 ) -> tuple[Membre, str, str, str]:
-    """
-    Décrit l'origine du droit de gestion sur une liste.
-
-    Retourne:
-    (actor_member, actor_role, source_type, source_id)
-    """
+    """Décrit l'origine du droit de gestion sur une liste."""
     liste = _get_liste_or_404(db, liste_id)
 
+    # 1. Rôle direct sur la liste
     liste_member = _get_liste_member_record(db, liste_id, current_user_id)
     if (
         liste_member
@@ -541,58 +550,72 @@ def _get_list_management_grant(
     ):
         return liste_member, liste_member.role, ResourceType.LISTE, liste_id
 
+    # 2. Héritage depuis l'espace parent (Créateur/Admin uniquement)
     if liste.id_espace:
-        espace = _get_espace_or_404(db, liste.id_espace)
-
-        espace_member = _get_espace_member_record(db, liste.id_espace, current_user_id)
-        if (
-            espace_member
-            and espace_member.statut == "Actif"
-            and espace_member.role in ESPACE_MANAGEMENT_ROLES
-        ):
+        try:
+            espace_member = _require_espace_descendant_management_access(
+                db, liste.id_espace, current_user_id
+            )
             return espace_member, espace_member.role, ResourceType.ESPACE, liste.id_espace
+        except HTTPException:
+            pass
 
-        ancestor_manager = _get_active_ancestor_espace_manager(db, espace, current_user_id)
-        if ancestor_manager:
-            source_id = ancestor_manager.id_espace or liste.id_espace
-            return ancestor_manager, ancestor_manager.role, ResourceType.ESPACE, source_id
-
-        workspace_member = _get_active_workspace_membership(
-            db,
-            espace.id_workspace,
-            current_user_id,
-        )
-        if workspace_member and workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
-            return workspace_member, workspace_member.role, ResourceType.WORKSPACE, espace.id_workspace
-
+    # 3. Héritage depuis le workspace parent (Créateur/Admin uniquement)
     if liste.id_workspace:
-        workspace_member = _get_active_workspace_membership(
-            db,
-            liste.id_workspace,
-            current_user_id,
-        )
-        if workspace_member and workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
+        try:
+            workspace_member = _require_workspace_descendant_management_access(
+                db, liste.id_workspace, current_user_id
+            )
             return workspace_member, workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace
+        except HTTPException:
+            pass
 
-    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+    raise HTTPException(status_code=403, detail="Privileges insuffisants pour gerer cette liste")
 
 
-def _require_list_access(db: Session, liste_id: str, current_user_id: str):
-    """Vérifie l'accès opérationnel à une liste."""
+def _require_list_management_access(db: Session, liste_id: str, current_user_id: str):
+    """Vérifie l'accès de gestion d'une liste (Créateur ou Admin uniquement)."""
+    actor_member, _, _, _ = _get_list_management_grant(db, liste_id, current_user_id)
+    return actor_member
+
+
+def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
+    """Vérifie l'accès en lecture à une liste."""
     liste = _get_liste_or_404(db, liste_id)
 
+    # 1. Rôle direct sur la liste
     liste_member = _get_liste_member_record(db, liste_id, current_user_id)
-    if liste_member and liste_member.role != WORKSPACE_GUEST_ROLE:
-        return liste_member
+    if liste_member:
+        if liste_member.role == LISTE_MEMBER_ROLE:
+            return liste_member  # Membre peut lire
+        if liste_member.role in LISTE_MANAGEMENT_ROLES:
+            return liste_member  # Créateur/Admin peuvent lire
 
+    # 2. Héritage depuis l'espace parent (lecture)
     if liste.id_espace:
-        return _require_espace_management_access(db, liste.id_espace, current_user_id)
-    if liste.id_workspace:
-        workspace_member = _get_workspace_member_or_403(db, liste.id_workspace, current_user_id)
-        if workspace_member.role in WORKSPACE_MANAGEMENT_ROLES:
-            return workspace_member
+        try:
+            espace_member = _require_espace_descendant_read_access(
+                db, liste.id_espace, current_user_id
+            )
+            return espace_member
+        except HTTPException:
+            pass
 
-    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
+    # 3. Héritage depuis le workspace parent (lecture)
+    if liste.id_workspace:
+        try:
+            workspace_member = _require_workspace_descendant_read_access(
+                db, liste.id_workspace, current_user_id
+            )
+            return workspace_member
+        except HTTPException:
+            pass
+
+    raise HTTPException(status_code=403, detail="Acces non autorise a cette liste")
+
+
+# 🔧 Alias pour compatibilité (utilisé dans routes/utilisateur.py)
+_require_list_access = _require_list_read_access
 
 
 def _require_list_admin_access(db: Session, liste_id: str, current_user_id: str):
@@ -619,28 +642,31 @@ def _validate_list_member_management_permissions(
     target_member: Membre | None,
     new_role: str | None = None,
 ) -> None:
-    # Un administrateur local ou parent ne peut gérer que Membre / Invité.
-    if (
-        actor_role == LISTE_ADMIN_ROLE
-        and target_member
-        and target_member.role not in LISTE_ADMIN_MANAGEABLE_ROLES
-    ):
+    # Seul un Créateur/Admin peut gérer les membres
+    if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Seul un createur peut gerer ce membre de liste.",
+            detail="Seul un createur ou administrateur peut gerer les membres de cette liste.",
         )
 
-    if actor_role == LISTE_ADMIN_ROLE and new_role and new_role not in LISTE_ADMIN_MANAGEABLE_ROLES:
+    # Un Admin ne peut gérer que les Membres (pas les Créateurs)
+    if actor_role == LISTE_ADMIN_ROLE and target_member and target_member.role == LISTE_OWNER_ROLE:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur de liste ne peut attribuer que les roles Membre ou Invite.",
+            detail="Un administrateur ne peut pas gerer le createur de la liste.",
         )
 
-    # Le createur direct de la liste ne peut pas se retirer/s'auto-retrograder via le scope local.
+    # Un Admin ne peut pas attribuer le rôle Créateur
+    if actor_role == LISTE_ADMIN_ROLE and new_role and new_role == LISTE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur ne peut pas attribuer le role Createur.",
+        )
+
+    # Le créateur direct de la liste ne peut pas se retirer/s'auto-retrograder
     if (
         target_member
-        and
-        target_member.role == LISTE_OWNER_ROLE
+        and target_member.role == LISTE_OWNER_ROLE
         and actor_role == LISTE_OWNER_ROLE
         and actor_source_type == ResourceType.LISTE
         and actor_source_id == liste_id
@@ -658,16 +684,14 @@ def _require_list_member_management_access(db: Session, liste_id: str, current_u
 
 
 def _require_list_delete_access(db: Session, liste_id: str, current_user_id: str):
-    """
-    Un administrateur ne peut pas supprimer la liste racine où commence son périmètre.
-    Il peut supprimer les descendants de son périmètre via les tâches.
-    """
+    """Vérifie l'accès de suppression d'une liste."""
     actor_member, actor_role, source_type, source_id = _get_list_management_grant(
         db,
         liste_id,
         current_user_id,
     )
 
+    # Un administrateur ne peut pas supprimer la liste racine où commence son périmètre
     if (
         actor_role == LISTE_ADMIN_ROLE
         and source_type == ResourceType.LISTE
@@ -681,22 +705,6 @@ def _require_list_delete_access(db: Session, liste_id: str, current_user_id: str
     return actor_member
 
 
-def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
-    """Vérifie l'accès en lecture à une liste (via son espace ou son workspace)."""
-    liste = _get_liste_or_404(db, liste_id)
-
-    liste_member = _get_liste_member_record(db, liste_id, current_user_id)
-    if liste_member:
-        return liste_member
-
-    if liste.id_espace:
-        return _require_espace_descendant_read_access(db, liste.id_espace, current_user_id)
-    if liste.id_workspace:
-        return _require_workspace_descendant_read_access(db, liste.id_workspace, current_user_id)
-
-    raise HTTPException(status_code=403, detail="Liste orpheline ou acces refuse")
-
-
 def _get_tache_member_record(db: Session, tache_id: str, user_id: str) -> Membre | None:
     return (
         db.query(Membre)
@@ -707,6 +715,7 @@ def _get_tache_member_record(db: Session, tache_id: str, user_id: str) -> Membre
         )
         .first()
     )
+
 
 # -----------------------------------------------
 # Helpers d'accès — Tache
@@ -721,19 +730,92 @@ def _get_tache_or_404(db: Session, tache_id: str) -> Tache:
 
 def _require_task_access(db: Session, tache_id: str, current_user_id: str):
     """Vérifie l'accès opérationnel à une tâche."""
-    task_member = _get_tache_member_record(db, tache_id, current_user_id)
-    if task_member and task_member.role != WORKSPACE_GUEST_ROLE:
-        return task_member
-
     tache = _get_tache_or_404(db, tache_id)
-    return _require_list_access(db, tache.id_liste, current_user_id)
+    liste = _get_liste_or_404(db, tache.id_liste)
+    
+    # 1. Vérifier si l'utilisateur a accès à la liste (lecture)
+    try:
+        return _require_list_read_access(db, liste.id, current_user_id)
+    except HTTPException:
+        pass
+    
+    raise HTTPException(status_code=403, detail="Acces non autorise a cette tache")
+
+
+def _require_task_management_access(db: Session, tache_id: str, current_user_id: str):
+    """
+    Vérifie l'accès de gestion d'une tâche.
+    - Créateur/Admin de la liste : peuvent gérer toutes les tâches
+    - Membre : peut uniquement gérer les tâches qui lui sont assignées
+    """
+    tache = _get_tache_or_404(db, tache_id)
+    liste = _get_liste_or_404(db, tache.id_liste)
+    
+    # Vérifier le rôle de l'utilisateur sur la liste
+    liste_member = _get_liste_member_record(db, liste.id, current_user_id)
+    
+    if liste_member and liste_member.role in LISTE_MANAGEMENT_ROLES:
+        return True  # Créateur/Admin peuvent tout gérer
+    
+    if liste_member and liste_member.role == LISTE_MEMBER_ROLE:
+        # Le membre ne peut gérer que les tâches qui lui sont assignées
+        task_member = _get_tache_member_record(db, tache_id, current_user_id)
+        if task_member:
+            return True
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que les tâches qui vous sont assignées")
+    
+    raise HTTPException(status_code=403, detail="Acces non autorise a cette tache")
 
 
 def _require_task_read_access(db: Session, tache_id: str, current_user_id: str):
     """Vérifie l'accès en lecture à une tâche."""
-    task_member = _get_tache_member_record(db, tache_id, current_user_id)
-    if task_member:
-        return task_member
-
     tache = _get_tache_or_404(db, tache_id)
     return _require_list_read_access(db, tache.id_liste, current_user_id)
+
+
+def commit_or_raise(
+    db: Session,
+    *,
+    detail: str,
+    status_code: int = 409,
+    refresh_instance: Any | None = None,
+) -> None:
+    try:
+        db.commit()
+        if refresh_instance is not None:
+            db.refresh(refresh_instance)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+def _serialize_member(membre):
+    """Sérialise un membre pour les réponses API."""
+    utilisateur = membre.utilisateur
+    return {
+        "id": membre.id,
+        "created_at": membre.created_at,
+        "role": membre.role,
+        "statut": membre.statut,
+        "id_utilisateur": membre.id_utilisateur,
+        "id_workspace": membre.id_workspace,
+        "id_espace": membre.id_espace,
+        "id_liste": membre.id_liste,
+        "id_tache": membre.id_tache,
+        "utilisateur": (
+            {
+                "id": utilisateur.id,
+                "username": utilisateur.username,
+                "email": utilisateur.email,
+                "nom": utilisateur.nom,
+                "prenoms": utilisateur.prenoms,
+            }
+            if utilisateur
+            else None
+        ),
+    }
+
+
+def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
+    """Donne l'accès complet au workspace uniquement aux membres directs actifs."""
+    return _get_workspace_member_or_403(db, workspace_id, current_user_id)

@@ -151,7 +151,7 @@ def list_workspace_members_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Liste tous les membres d'un workspace."""
-    _require_workspace_management_access(db, workspace_id, current_user.id)
+    _require_workspace_read_access(db, workspace_id, current_user.id)
     members = get_members_of_workspace(db, workspace_id)
     return [_serialize_member(m) for m in members]
 

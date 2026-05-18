@@ -116,13 +116,8 @@ export default function MemberManagement({
       } else if (espaceId) {
         await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
       } else if (listeId) {
-        const userToAssign = members.find(m => m.email === inviteEmail);
-        if (userToAssign) {
-          await listeService.assignMember(listeId, userToAssign.id, inviteRole);
-        } else {
-          showMessage('Utilisateur non trouvé. Il doit d\'abord être membre de l\'espace ou du workspace parent.', 'error');
-          return;
-        }
+        // Pour une liste, on utilise inviteMember (envoi d'email) au lieu de assignMember
+        await listeService.inviteMember(listeId, inviteEmail, inviteRole);
       }
       await loadMembers();
       onMemberAdded?.();
@@ -132,7 +127,9 @@ export default function MemberManagement({
     } catch (err: any) {
       console.error('Erreur invitation', err);
       if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
-        showMessage('Cette personne a déjà un rôle parent qui couvre cet espace/workspace', 'error');
+        showMessage('Cette personne a déjà un rôle parent qui couvre cette ressource', 'error');
+      } else if (err.message?.includes('403')) {
+        showMessage('Vous n\'avez pas les permissions nécessaires pour inviter des membres.', 'error');
       } else {
         showMessage(err.message || 'Erreur lors de l\'invitation', 'error');
       }
@@ -143,7 +140,6 @@ export default function MemberManagement({
     const targetMember = members.find(m => m.id === userId);
     
     // L'Admin ne peut pas supprimer un autre Admin ou le Créateur
-    // Utilisation de 'as string' pour éviter l'erreur TypeScript
     if (isAdmin && targetMember && ((targetMember.role as string) === ADMIN_ROLE || (targetMember.role as string) === CREATOR_ROLE)) {
       showMessage('Vous ne pouvez pas retirer un autre administrateur ou le créateur', 'error');
       return;
@@ -212,6 +208,20 @@ export default function MemberManagement({
 
   const displayRoles = listeId ? getAvailableRolesForListe() : MANAGABLE_ROLES;
 
+  // 🔧 Déterminer le titre de la modale selon le contexte
+  const getModalTitle = () => {
+    if (listeId) return "Inviter un membre dans la liste";
+    if (workspaceId) return "Inviter un membre dans le workspace";
+    if (espaceId) return "Inviter un membre dans l'espace";
+    return "Inviter un membre";
+  };
+
+  // 🔧 Déterminer le texte du bouton d'invitation
+  const getInviteButtonText = () => {
+    if (listeId) return "Inviter";
+    return "Inviter";
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Chargement...</div>;
   }
@@ -233,14 +243,9 @@ export default function MemberManagement({
           {espaceId && 'Membres de l\'espace'}
           {listeId && 'Membres de la liste'}
         </h3>
-        {canInviteMembers && availableInvitationRoles.length > 0 && !listeId && (
+        {canInviteMembers && availableInvitationRoles.length > 0 && (
           <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Inviter
-          </Button>
-        )}
-        {listeId && canManageMembers && (
-          <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Assigner un membre
+            <UserPlus className="h-4 w-4 mr-1" /> {getInviteButtonText()}
           </Button>
         )}
       </div>
@@ -251,7 +256,7 @@ export default function MemberManagement({
           <p>Aucun membre</p>
           <p className="text-sm mt-1">
             {listeId 
-              ? 'Assignez des membres à cette liste pour qu\'ils puissent travailler sur les tâches'
+              ? 'Invitez des membres pour collaborer sur cette liste'
               : 'Invitez des membres pour commencer'}
           </p>
         </div>
@@ -297,8 +302,8 @@ export default function MemberManagement({
         </div>
       )}
 
-      {/* Modale d'invitation/assignation */}
-      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title={listeId ? "Assigner un membre" : "Inviter un membre"} size="md">
+      {/* Modale d'invitation */}
+      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title={getModalTitle()} size="md">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -313,7 +318,7 @@ export default function MemberManagement({
             />
             {listeId && (
               <p className="text-xs text-gray-400 mt-1">
-                ⚡ Le membre doit d'abord être membre de l'espace ou du workspace parent.
+                💡 Une invitation par email sera envoyée à cette personne.
               </p>
             )}
           </div>
@@ -333,8 +338,8 @@ export default function MemberManagement({
             <p className="text-xs text-gray-400 mt-1">
               {isCreator ? (
                 <>
-                  💡 <strong>Invitant</strong> : accès en lecture seule<br />
-                  💡 <strong>Administrateur</strong> : peut gérer la ressource et ses membres
+                  💡 <strong>Administrateur</strong> : peut gérer la ressource et ses membres<br />
+                  💡 <strong>Invitant</strong> : accès en lecture seule
                 </>
               ) : isAdmin ? (
                 <>

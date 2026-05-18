@@ -56,11 +56,6 @@ export default function LeftSidebar() {
   const isCreatorForSpace = isEspaceCreator || isWorkspaceCreator;
   const isGuestForSpace = isEspaceGuest || isWorkspaceGuest;
   
-  // Déterminer si l'utilisateur a un rôle hérité depuis le workspace
-  const hasWorkspaceInheritedRole = workspaceRole === ROLES.CREATOR || 
-                                     workspaceRole === ROLES.ADMIN || 
-                                     workspaceRole === ROLES.GUEST;
-  
   // Permissions pour les actions sur les espaces
   const spacePermissions = usePermissions({
     userRole: effectiveRoleForSpace,
@@ -73,7 +68,7 @@ export default function LeftSidebar() {
     resourceType: 'workspace',
   });
   
-  const canShowContextMenu = spacePermissions.canShowContextMenu || hasWorkspaceInheritedRole;
+  const canShowContextMenu = spacePermissions.canShowContextMenu;
   const canManageSpaceMembers = spacePermissions.canManageMembers || isWorkspaceAdmin || isWorkspaceCreator;
   const canDeleteSpace = spacePermissions.canDelete;
   const canManageSpaceListe = spacePermissions.canManageListe || isWorkspaceAdmin || isWorkspaceCreator;
@@ -491,6 +486,8 @@ export default function LeftSidebar() {
   const handleContextMenu = (e: React.MouseEvent, space: any) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!canShowContextMenu) return;
     
     // Calculer si l'utilisateur peut inviter dans CET espace
     let canInvite = false;
@@ -515,7 +512,7 @@ export default function LeftSidebar() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!canShowContextMenu && workspaceRole !== ROLES.GUEST) return;
+    if (!canShowContextMenu) return;
     
     setContextMenu(prev => ({ ...prev, visible: false }));
     setListContextMenu({
@@ -631,6 +628,34 @@ export default function LeftSidebar() {
           <div className="mt-4">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Espaces</h3>
             {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+          </div>
+        )}
+        {hasWorkspaceAccess && (
+          <div className="mt-6">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Projets (workspace)</h3>
+            <div className="space-y-0.5">
+              {loadingWorkspaceLists && <div className="text-sm text-gray-400 pl-2">Chargement...</div>}
+              {workspaceLists.map(list => (
+                <div
+                  key={list.id}
+                  className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                >
+                  <Link
+                    to={`/workspace/${workspaceId}/list/${list.id}`}
+                    onClick={handleLinkClick}
+                    className="flex-1 flex items-center gap-2"
+                  >
+                    <ListTodo className="h-4 w-4 text-gray-500" />
+                    <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
+                      {list.nom}
+                    </span>
+                  </Link>
+                </div>
+              ))}
+              {!loadingWorkspaceLists && workspaceLists.length === 0 && (
+                <div className="text-sm text-gray-400 pl-2">Aucun projet</div>
+              )}
+            </div>
           </div>
         )}
       </div>

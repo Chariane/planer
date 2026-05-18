@@ -19,6 +19,7 @@ import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
 import InvitationAccept from './pages/InvitationAccept';
+import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
 import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
 
@@ -35,6 +36,7 @@ function App() {
           </Route>
           {/* Route d'acceptation d'invitation (accessible sans authentification) */}
           <Route path="/invitation/accept" element={<InvitationAccept />} />
+          <Route path="/invitation/error" element={<InvitationError />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />

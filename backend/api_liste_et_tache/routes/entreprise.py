@@ -16,13 +16,12 @@ from ..core.function import (
     _get_liste_or_404,
     _get_liste_member_record,
     _get_list_member_management_grant,
-    _require_list_access,
     _require_list_admin_access,
     _require_list_delete_access,
     _require_list_member_management_access,
     _require_list_read_access,
     _get_tache_or_404,
-    _require_task_access,
+    _require_task_management_access,
     _require_task_read_access,
     _validate_list_member_management_permissions,
     _require_workspace_descendant_read_access,
@@ -210,7 +209,7 @@ def create_entreprise_tache_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     return create_tache(db, **tache_in.model_dump(exclude={"id_liste"}), id_liste=liste_id)
 
 @router.get("/{liste_id}/taches", response_model=List[TacheFullOut])
@@ -241,7 +240,7 @@ def update_entreprise_tache_endpoint(
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
-    _require_task_access(db, tache_id, current_entreprise.id)
+    _require_task_management_access(db, tache_id, current_entreprise.id)
     return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
 
 @router.delete("/taches/{tache_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -251,7 +250,7 @@ def delete_entreprise_tache_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, tache.id_liste, current_entreprise.id)
     delete_tache(db, tache_id)
     return None
 
@@ -308,7 +307,7 @@ def bulk_update_entreprise_taches_endpoint(
     
     # Sécurité : On vérifie l'accès sur la première tâche du lot
     first_tache = _get_tache_or_404(db, bulk_in.items[0].id)
-    _require_list_access(db, first_tache.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, first_tache.id_liste, current_entreprise.id)
     
     if update_taches_bulk(db, [it.model_dump(exclude_unset=True) for it in bulk_in.items]):
         return {"message": "Mise à jour groupée réussie"}
@@ -325,7 +324,7 @@ def assign_entreprise_tache_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, tache.id_liste, current_entreprise.id)
     return assign_member_to_tache(db, tache_id, utilisateur_id)
 
 @router.delete("/taches/{tache_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -336,7 +335,7 @@ def unassign_entreprise_tache_endpoint(
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_access(db, tache.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, tache.id_liste, current_entreprise.id)
     unassign_member_from_tache(db, tache_id, utilisateur_id)
     return None
 
@@ -346,7 +345,7 @@ def unassign_entreprise_tache_endpoint(
 
 @router.post("/{liste_id}/canevas", response_model=CanevasOut)
 def create_entreprise_canevas_endpoint(liste_id: str, canevas_in: CanevasCreate, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
-    _require_list_access(db, liste_id, current_entreprise.id)
+    _require_list_admin_access(db, liste_id, current_entreprise.id)
     return create_canevas(db, is_verrouille=canevas_in.is_verrouille, id_liste=liste_id)
 
 @router.get("/{liste_id}/canevas", response_model=CanevasOut)
@@ -360,14 +359,22 @@ def get_entreprise_canevas_endpoint(liste_id: str, db: Session = Depends(get_db)
 def update_entreprise_canevas_endpoint(canevas_id: str, canevas_in: CanevasUpdate, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
     can = get_canevas_by_id(db, canevas_id)
     if not can: raise HTTPException(404, "Canevas non trouve")
-    _require_list_access(db, can.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     return update_canevas(db, canevas_id, **canevas_in.model_dump(exclude_unset=True))
+
+@router.delete("/canevas/{canevas_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_entreprise_canevas_endpoint(canevas_id: str, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
+    can = get_canevas_by_id(db, canevas_id)
+    if not can: raise HTTPException(404, "Canevas non trouve")
+    _require_list_admin_access(db, can.id_liste, current_entreprise.id)
+    delete_canevas(db, canevas_id)
+    return None
 
 @router.post("/sections/{canevas_id}", response_model=SectionOut)
 def create_entreprise_section_endpoint(canevas_id: str, section_in: SectionCreate, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
     canevas = get_canevas_by_id(db, canevas_id)
     if not canevas: raise HTTPException(404, "Canevas non trouve")
-    _require_list_access(db, canevas.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, canevas.id_liste, current_entreprise.id)
     return create_section(db, titre=section_in.titre, id_canevas=canevas_id)
 
 @router.get("/sections/{canevas_id}", response_model=List[SectionOut])
@@ -382,7 +389,7 @@ def update_entreprise_section_endpoint(section_id: str, section_in: SectionUpdat
     sec = get_section_by_id(db, section_id)
     if not sec: raise HTTPException(404, "Section non trouvee")
     can = get_canevas_by_id(db, sec.id_canevas)
-    _require_list_access(db, can.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     return update_section(db, section_id, **section_in.model_dump(exclude_unset=True))
 
 @router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -390,19 +397,19 @@ def delete_entreprise_section_endpoint(section_id: str, db: Session = Depends(ge
     sec = get_section_by_id(db, section_id)
     if not sec: raise HTTPException(404, "Section non trouvee")
     can = get_canevas_by_id(db, sec.id_canevas)
-    _require_list_access(db, can.id_liste, current_entreprise.id)
+    _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     delete_section(db, section_id)
     return None
 
 @router.post("/checklists/{parent_id}", response_model=ChecklistOut)
 def create_entreprise_checklist_endpoint(parent_id: str, checklist_in: ChecklistCreate, db: Session = Depends(get_db), current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)):
     if checklist_in.id_tache:
-        _require_task_access(db, checklist_in.id_tache, current_entreprise.id)
+        _require_task_management_access(db, checklist_in.id_tache, current_entreprise.id)
     elif checklist_in.id_section:
         sec = get_section_by_id(db, checklist_in.id_section)
         if not sec: raise HTTPException(404, "Section non trouvee")
         can = get_canevas_by_id(db, sec.id_canevas)
-        _require_list_access(db, can.id_liste, current_entreprise.id)
+        _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     return create_checklist(db, **checklist_in.model_dump())
 
 @router.get("/checklists/tache/{tache_id}", response_model=List[ChecklistOut])
@@ -415,11 +422,11 @@ def update_entreprise_checklist_endpoint(checklist_id: str, checklist_in: Checkl
     chk = get_checklist_by_id(db, checklist_id)
     if not chk: raise HTTPException(404, "Checklist non trouvee")
     if chk.id_tache:
-        _require_task_access(db, chk.id_tache, current_entreprise.id)
+        _require_task_management_access(db, chk.id_tache, current_entreprise.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
-        _require_list_access(db, can.id_liste, current_entreprise.id)
+        _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     return update_checklist(db, checklist_id, **checklist_in.model_dump(exclude_unset=True))
 
 @router.delete("/checklists/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -427,10 +434,10 @@ def delete_entreprise_checklist_endpoint(checklist_id: str, db: Session = Depend
     chk = get_checklist_by_id(db, checklist_id)
     if not chk: raise HTTPException(404, "Checklist non trouvee")
     if chk.id_tache:
-        _require_task_access(db, chk.id_tache, current_entreprise.id)
+        _require_task_management_access(db, chk.id_tache, current_entreprise.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
-        _require_list_access(db, can.id_liste, current_entreprise.id)
+        _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     delete_checklist(db, checklist_id)
     return None

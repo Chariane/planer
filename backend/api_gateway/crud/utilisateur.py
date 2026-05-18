@@ -38,7 +38,8 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
             token_type = payload.get("type")
             target_email = payload.get("email", "").strip().lower()
 
-            if token_type not in ["workspace_invitation", "espace_invitation"]:
+            # 🔧 CORRECTION: Ajout du type "liste_invitation"
+            if token_type not in ["workspace_invitation", "espace_invitation", "liste_invitation"]:
                 raise HTTPException(status_code=400, detail="Type de token d'invitation invalide.")
             
             # Securite Email : On force l'email du token (Contrainte 3)
@@ -77,6 +78,7 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
             target_role = payload.get("role")
             target_workspace_id = payload.get("workspace_id")
             target_espace_id = payload.get("espace_id")
+            target_liste_id = payload.get("liste_id")  # 🔧 AJOUT: pour les invitations de liste
 
             if not target_role:
                 raise HTTPException(
@@ -101,6 +103,26 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                         id_utilisateur=new_user.id,
                         id_workspace=target_workspace_id if not target_espace_id else None,
                         id_espace=target_espace_id,
+                        role=target_role,
+                        statut="Actif",
+                    ))
+            
+            # 🔧 AJOUT: Traitement des invitations de liste
+            if target_liste_id:
+                from ..models import Liste
+                liste_exists = db.query(Liste).filter(Liste.id == target_liste_id).first()
+                if not liste_exists:
+                    raise HTTPException(status_code=404, detail="La liste de l'invitation n'existe plus.")
+                
+                existing_m = db.query(Membre).filter(
+                    Membre.id_utilisateur == new_user.id,
+                    Membre.id_liste == target_liste_id
+                ).first()
+                
+                if not existing_m:
+                    db.add(Membre(
+                        id_utilisateur=new_user.id,
+                        id_liste=target_liste_id,
                         role=target_role,
                         statut="Actif",
                     ))

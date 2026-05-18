@@ -11,12 +11,12 @@ import { checklistService } from '../../services/checklist.service';
 import { listeService } from '../../services/liste.service';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
-import { useApp } from '../../contexts/AppContext';
 import { ROLES } from '../../lib/roleHierarchy';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function RightCanevas() {
-  const { listId } = useParams();
-  const { workspaces } = useApp();
+  const { listId, workspaceId: routeWorkspaceId } = useParams();
+  const { user } = useAuth();
   const [canevas, setCanevas] = useState<EnhancedCanevas | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +42,6 @@ export default function RightCanevas() {
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Récupérer l'ID de l'utilisateur connecté
-  const getCurrentUserId = () => {
-    return localStorage.getItem('user_id');
-  };
-
   // 🔧 Récupérer les permissions avec héritage descendant
   useEffect(() => {
     const fetchPermissions = async () => {
@@ -55,7 +50,7 @@ export default function RightCanevas() {
       try {
         // 1. Récupérer les informations de la liste
         const liste = await listeService.getById(listId);
-        const currentUserId = getCurrentUserId();
+        const currentUserId = user?.id;
         
         if (!currentUserId) {
           setCanModify(false);
@@ -72,7 +67,7 @@ export default function RightCanevas() {
           if (currentMember) {
             const role = currentMember.role;
             setUserRoleDisplay(role);
-            const hasModifyRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER;
+            const hasModifyRole = role === ROLES.CREATOR || role === ROLES.ADMIN;
             if (hasModifyRole) {
               setCanModify(true);
               setIsReadOnly(false);
@@ -85,8 +80,13 @@ export default function RightCanevas() {
         }
         
         // 3. Vérifier l'héritage depuis l'espace parent
+        let resolvedWorkspaceId = liste.id_workspace || routeWorkspaceId || null;
+
         if (liste.id_espace) {
           try {
+            const espace = await espaceService.getById(liste.id_espace);
+            resolvedWorkspaceId = resolvedWorkspaceId || espace.id_workspace || null;
+
             const espaceMembres = await espaceService.getMembers(liste.id_espace);
             const currentEspaceMember = espaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
             
@@ -107,10 +107,9 @@ export default function RightCanevas() {
         }
         
         // 4. Vérifier l'héritage depuis le workspace parent
-        const workspaceId = liste.id_workspace;
-        if (workspaceId) {
+        if (resolvedWorkspaceId) {
           try {
-            const workspace = await workspaceService.getById(workspaceId);
+            const workspace = await workspaceService.getById(resolvedWorkspaceId);
             // Le créateur du workspace a tous les droits
             if (workspace.id_utilisateur === currentUserId) {
               setUserRoleDisplay('Créateur (hérité du workspace)');
@@ -121,7 +120,7 @@ export default function RightCanevas() {
             }
             
             // Vérifier si l'utilisateur est admin du workspace
-            const workspaceMembres = await workspaceService.getMembers(workspaceId);
+            const workspaceMembres = await workspaceService.getMembers(resolvedWorkspaceId);
             const currentWorkspaceMember = workspaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
             
             if (currentWorkspaceMember && currentWorkspaceMember.role === ROLES.ADMIN) {
@@ -130,6 +129,10 @@ export default function RightCanevas() {
               setIsReadOnly(false);
               setPermissionChecked(true);
               return;
+            }
+
+            if (currentWorkspaceMember && currentWorkspaceMember.role === ROLES.GUEST) {
+              setUserRoleDisplay('Invité (hérité du workspace)');
             }
           } catch (err) {
             console.log('Pas de rôle trouvé dans le workspace');
@@ -151,7 +154,7 @@ export default function RightCanevas() {
     };
     
     fetchPermissions();
-  }, [listId]);
+  }, [listId, routeWorkspaceId, user?.id]);
 
   const loadCanevas = async () => {
     if (!listId) return;
@@ -244,7 +247,7 @@ export default function RightCanevas() {
     }
   };
 
-  const toggleChecklist = async (checklist: EnhancedChecklist, sectionId: string) => {
+  const toggleChecklist = async (checklist: EnhancedChecklist) => {
     if (checklist.source !== 'manual') return;
     if (!canModify) return;
     
@@ -259,7 +262,7 @@ export default function RightCanevas() {
     }
   };
 
-  const updateChecklist = async (checklist: EnhancedChecklist, sectionId: string) => {
+  const updateChecklist = async (checklist: EnhancedChecklist) => {
     if (!editingChecklistText.trim() || !canModify) return;
     setActionLoading(`update-${checklist.id}`);
     try {
@@ -275,7 +278,7 @@ export default function RightCanevas() {
     }
   };
 
-  const deleteChecklist = async (checklistId: string, sectionId: string) => {
+  const deleteChecklist = async (checklistId: string) => {
     if (!canModify) return;
     if (!confirm('Supprimer cet élément ?')) return;
     setActionLoading(`delete-${checklistId}`);
@@ -551,7 +554,7 @@ export default function RightCanevas() {
                           )}
                           
                           <button
-                            onClick={() => toggleChecklist(checklist, section.id)}
+                            onClick={() => toggleChecklist(checklist)}
                             disabled={canevas.is_verrouille || checklist.source !== 'manual' || !canModify || actionLoading?.startsWith('toggle')}
                             className="flex-shrink-0"
                           >
@@ -569,7 +572,7 @@ export default function RightCanevas() {
                               type="text"
                               value={editingChecklistText}
                               onChange={(e) => setEditingChecklistText(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && updateChecklist(checklist, section.id)}
+                              onKeyDown={(e) => e.key === 'Enter' && updateChecklist(checklist)}
                               className="flex-1 text-sm text-gray-600 border rounded px-2 py-0.5 focus:ring-1 focus:ring-secondary"
                               autoFocus
                             />
@@ -594,7 +597,7 @@ export default function RightCanevas() {
                               )}
                               {editingChecklistId === checklist.id && (
                                 <button
-                                  onClick={() => updateChecklist(checklist, section.id)}
+                                  onClick={() => updateChecklist(checklist)}
                                   disabled={actionLoading === `update-${checklist.id}`}
                                   className="p-1 text-green-500 hover:text-green-600"
                                 >
@@ -602,7 +605,7 @@ export default function RightCanevas() {
                                 </button>
                               )}
                               <button
-                                onClick={() => deleteChecklist(checklist.id, section.id)}
+                                onClick={() => deleteChecklist(checklist.id)}
                                 disabled={actionLoading === `delete-${checklist.id}`}
                                 className="p-1 text-gray-400 hover:text-red-500"
                               >

@@ -1,10 +1,11 @@
+# backend/api_liste_et_tache/crud/checklist_canevas.py
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import func
-from ..models import Canevas, Section, Checklist
+from ..models import Canevas, Section, Checklist, Tache  # Ajout de Tache
 
 # --- CANEVAS CRUD ---
 

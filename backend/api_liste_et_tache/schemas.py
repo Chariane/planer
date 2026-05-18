@@ -979,3 +979,15 @@ class ChecklistDelete(BaseModel):
     id: str
 
 EspaceTreeOut.model_rebuild()
+# Ajouter ces classes si elles n'existent pas déjà
+
+class ListeInvitationResponse(BaseModel):
+    status: str  # "existing_user" or "guest_invitation"
+    message: str
+    email: str
+    membre: Optional[MembreOut] = None
+    token: Optional[str] = None
+
+
+class ListeInvitationAcceptRequest(BaseModel):
+    token: str = Field(..., min_length=10)

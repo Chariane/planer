@@ -8,6 +8,7 @@ import GanttView from './views/GanttView';
 import MemberManagement from '../../components/members/MemberManagement';
 import SpaceDashboard from './components/SpaceDashboard';
 import WorkspaceDashboardPanel from './components/WorkspaceDashboardPanel';
+import ListDashboard from './components/ListDashboard';
 import AssignTaskMemberModal from '../../components/modals/AssignTaskMemberModal';
 import AssignListMemberModal from '../../components/modals/AssignListMemberModal';
 import TaskFormModal from './modals/TaskFormModal';
@@ -15,6 +16,7 @@ import ListView from './views/ListView';
 import { useTasks } from './hooks/useTasks';
 import { useTaskChecklists } from './hooks/useTaskChecklists';
 import { espaceService } from '../../services/espace.service';
+import { listeService } from '../../services/liste.service';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
@@ -22,6 +24,11 @@ import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
+  
+  // États pour le nom de la liste (affiché dans le dashboard)
+  const [currentListName, setCurrentListName] = useState<string>('');
+  const [currentListWorkspaceId, setCurrentListWorkspaceId] = useState<string | null>(null);
+  const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
 
   // Récupérer le rôle dans le workspace
   const { role: userWorkspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
@@ -30,7 +37,7 @@ export default function CenterContent() {
   const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
   
   // Récupérer le rôle dans la liste (si une liste est sélectionnée)
-  const { isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
+  const { isAdmin: isListeAdmin, isCreator: isListeCreator, role: listeRole } = useResourceRole(listId, 'liste');
   
   // Déterminer le rôle effectif (priorité: liste > espace > workspace)
   const effectiveRole = userEspaceRole || userWorkspaceRole;
@@ -44,14 +51,12 @@ export default function CenterContent() {
     resourceType: spaceId ? 'espace' : 'workspace',
   });
   
-  // 🔧 CORRECTION PROBLÈME 4: Peut-on assigner des membres à la liste ?
-  // Un Admin ou Créateur de liste, ou Admin/Créateur d'espace parent, ou Admin/Créateur de workspace parent
+  // Peut-on assigner des membres à la liste ?
   const canAssignToList = (isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
   // Définir les onglets disponibles selon le rôle
   const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres')[] => {
     if (isGuest) {
-      // Les invités n'ont pas accès à l'onglet membres
       return ['liste', 'kanban', 'gantt'];
     }
     return ['liste', 'kanban', 'gantt', 'membres'];
@@ -72,6 +77,23 @@ export default function CenterContent() {
   // Hooks
   const { tasks, loading, error, loadTasks, addTask, updateTask, deleteTask } = useTasks(listId);
   const { checklists, loading: checklistLoading, addChecklist, toggleChecklist, updateChecklistText, deleteChecklist } = useTaskChecklists(editingTask?.id);
+
+  // Charger les informations de la liste pour le dashboard
+  useEffect(() => {
+    const loadListInfo = async () => {
+      if (listId) {
+        try {
+          const liste = await listeService.getById(listId);
+          setCurrentListName(liste.nom);
+          setCurrentListWorkspaceId(liste.id_workspace || null);
+          setCurrentListEspaceId(liste.id_espace || null);
+        } catch (err) {
+          console.error('Erreur chargement infos liste:', err);
+        }
+      }
+    };
+    loadListInfo();
+  }, [listId]);
 
   // Charger les membres de l'espace (seulement si l'onglet membres est disponible)
   useEffect(() => {
@@ -143,13 +165,21 @@ export default function CenterContent() {
   if (loading) return <div className="p-6 flex justify-center">Chargement des tâches...</div>;
   if (error) return <div className="p-6 flex justify-center text-red-500">{error}</div>;
 
-  // Message pour les invités (lecture seule) - mais ils peuvent voir les vues liste, kanban, gantt
-  if (isGuest) {
+  // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
+  const isListGuest = listeRole === 'Invité';
+  
+  if (isListGuest && activeTab === 'membres') {
+    // Rediriger vers l'onglet liste si l'invité essaie d'accéder aux membres
+    setActiveTab('liste');
+  }
+
+  // Vue invité (lecture seule) - mais ils peuvent voir les vues liste, kanban, gantt
+  if (isGuest || isListGuest) {
     return (
       <div className="p-6">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <p className="text-sm text-blue-800">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
+            👁️ Vous êtes en mode <strong>lecture seule</strong> {isListGuest ? 'dans cette liste' : 'dans cet espace'}.
           </p>
           <p className="text-xs text-blue-600 mt-1">
             Vous pouvez consulter les tâches et utiliser les vues, mais vous ne pouvez pas créer, modifier ou supprimer des éléments.
@@ -158,7 +188,7 @@ export default function CenterContent() {
 
         {/* Onglets pour les invités (sans l'onglet membres) */}
         <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
-          {availableTabs.map(tab => (
+          {availableTabs.filter(tab => tab !== 'membres').map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -226,7 +256,6 @@ export default function CenterContent() {
           <Button variant="primary" size="sm" onClick={openCreateTask}>
             <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
           </Button>
-          {/* 🔧 CORRECTION: Bouton "Assigner membre à la liste" - utilisant la nouvelle variable corrigée */}
           {canAssignToList && (
             <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
               <UserPlus className="h-4 w-4 mr-1" /> Ajouter membre à la liste
@@ -253,17 +282,12 @@ export default function CenterContent() {
       {activeTab === 'gantt' && <GanttView tasks={tasks} />}
 
       {activeTab === 'membres' && (
-        spaceId && spaceId !== 'list' ? (
-          <MemberManagement 
-            espaceId={spaceId} 
-            currentUserRole={userEspaceRole || userWorkspaceRole}
-          />
-        ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-lg font-medium text-gray-500">Aucun espace sélectionné</p>
-          </div>
-        )
+        <MemberManagement 
+          listeId={listId}
+          espaceId={spaceId && spaceId !== 'list' ? spaceId : undefined}
+          workspaceId={workspaceId || undefined}
+          currentUserRole={listeRole || userEspaceRole || userWorkspaceRole}
+        />
       )}
 
       {/* Modales - visibles uniquement pour Admin et Créateur */}

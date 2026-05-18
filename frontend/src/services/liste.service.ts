@@ -51,7 +51,9 @@ export const listeService = {
     }),
   
   // ========== Gestion des membres ==========
-  // Le rôle par défaut est "Membre" pour l'assignation à une liste
+  getMembers: (listeId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/list_members_liste`),
+  
   assignMember: (listeId: string, utilisateurId: string, role: string = 'Membre') =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/assign/${utilisateurId}/assign_liste`, { 
       method: 'POST',
@@ -63,6 +65,22 @@ export const listeService = {
       method: 'DELETE' 
     }),
   
-  getMembers: (listeId: string) =>
-    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/list_members_liste`),
+  // ========== Invitations ==========
+  inviteMember: (listeId: string, email: string, role: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/invite_member_liste`, { 
+      method: 'POST', 
+      body: JSON.stringify({ email, role }) 
+    }),
+  
+  acceptInvitation: (token: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/invitations/accept`, { 
+      method: 'POST', 
+      body: JSON.stringify({ token }) 
+    }),
+  
+  // ========== Actions utilisateur ==========
+  leaveListe: (listeId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/leave`, { 
+      method: 'POST' 
+    }),
 };

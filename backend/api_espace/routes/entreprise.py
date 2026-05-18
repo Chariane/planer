@@ -219,7 +219,7 @@ def list_entreprise_espace_members_endpoint(
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    _require_espace_management_access(db, espace_id, espace.id_workspace, current_entreprise.id)
+    _require_espace_access(db, espace_id, espace.id_workspace, current_entreprise.id)
     return [_serialize_member(m) for m in members]
 
 # Inviter un membre dans un espace entreprise

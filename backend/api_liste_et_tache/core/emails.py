@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/core/emails.py
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from ..schemas import EmailSchema
 from .security import config_data
@@ -21,7 +22,8 @@ conf = ConnectionConfig(
 front_base_url = config_data.get("FRONT_BASE_URL")
 front_account_verification_url = config_data.get("FRONT_ACCOUNT_VERIFICATION_URL")
 front_password_reset_url = config_data.get("FRONT_PASSWORD_RESET_URL")
-
+front_register_url = config_data.get("FRONT_REGISTER_URL", "/register")
+back_base_url = str(config_data.get("BACK_BASE_URL", "http://localhost:8004")).strip("'").strip('"').strip()
 
 
 async def send_verification_email(username: str, email: EmailSchema, token: str):
@@ -185,6 +187,63 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
         recipients=email,  # Liste des destinataires. Ici, un seul.
         body=template,
         subtype=MessageType.html
+    )
+
+    the_email = FastMail(conf)
+    await the_email.send_message(message=message)
+
+    return token
+
+
+async def send_liste_invitation_email(
+    inviter_username: str,
+    invited_username: str,
+    email: str,
+    liste_name: str,
+    role: str,
+    token: str,
+    is_guest: bool = False,
+):
+    if is_guest:
+        invitation_link = f"{front_base_url}{front_register_url}?invitation_token={token}"
+    else:
+        invitation_link = f"{back_base_url}/listes/invitations/accept-from-email?token={token}"
+    
+    template = f"""
+        <!DOCTYPE html>
+            <html lang="fr">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Invitation Liste - K-Planer</title>
+            </head>
+            <body style="background-color:#faf4f4;font-family:Arial,sans-serif;">
+                <div style="max-width:600px;margin:auto;padding:20px;">
+                    <div style="background:#ffffff;border-radius:8px;padding:24px;box-shadow:0 0 10px rgba(0,0,0,0.08);">
+                        <h2 style="color:#264a67;">Invitation à rejoindre une liste</h2>
+                        <p>Bonjour <strong>{invited_username}</strong>,</p>
+                        <p><strong>{inviter_username}</strong> vous invite à rejoindre la liste <strong>{liste_name}</strong> sur K-Planer.</p>
+                        <p>Rôle proposé : <strong>{role}</strong>.</p>
+                        <p>Pour accepter l'invitation, cliquez sur le lien ci-dessous :</p>
+                        <p style="text-align:center;margin:30px 0;">
+                            <a href="{invitation_link}" style="background-color:#264a67;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">
+                                Accepter l'invitation
+                            </a>
+                        </p>
+                        <p style="font-size:0.9em;color:#666666;">Si le bouton ne fonctionne pas, vous pouvez copier ce lien : <br>{invitation_link}</p>
+                        <hr style="border:none;border-top:1px solid #eeeeee;margin:20px 0;">
+                        <p style="font-size:0.8em;color:#999999;">Ceci est un message automatique, merci de ne pas y répondre.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+    """
+
+    message = MessageSchema(
+        subject=f"K-Planer - Invitation dans la liste {liste_name}",
+        recipients=[email],
+        body=template,
+        subtype=MessageType.html,
     )
 
     the_email = FastMail(conf)

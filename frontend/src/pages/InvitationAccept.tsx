@@ -10,10 +10,12 @@ import { useAuth } from '../contexts/AuthContext';
 export default function InvitationAccept() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invitationType, setInvitationType] = useState<'workspace' | 'espace' | null>(null);
+  const [acceptSuccess, setAcceptSuccess] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState(5);
   const token = searchParams.get('token');
 
   useEffect(() => {
@@ -59,10 +61,17 @@ export default function InvitationAccept() {
         return;
       }
 
-      // Si connecté, accepter l'invitation
+      // Si l'utilisateur est authentifié, on accepte l'invitation puis on le déconnecte et redirige vers la connexion
       setLoading(true);
       const isWorkspaceToken = payload?.type === 'workspace_invitation' || payload?.scope === 'workspace_invitation_accept';
       const isEspaceToken = payload?.type === 'espace_invitation' || payload?.scope === 'espace_invitation_accept';
+
+      const performLogoutAndRedirect = () => {
+        // Déconnecter l'utilisateur
+        logout();
+        // Rediriger vers la page de connexion avec le token d'invitation
+        navigate(`/login?invitation_token=${encodeURIComponent(token)}`);
+      };
 
       try {
         if (isWorkspaceToken) {
@@ -70,68 +79,120 @@ export default function InvitationAccept() {
           const result = await workspaceService.acceptInvitation(token);
           console.log('✅ Invitation workspace acceptée:', result);
           setInvitationType('workspace');
+          setAcceptSuccess(true);
           sessionStorage.removeItem('pendingInvitation');
-          // Le résultat peut être enveloppé dans .membre ou directement plat
-          const workspaceId = result.id_workspace || result.membre?.id_workspace || result.workspace_id;
-          if (workspaceId) {
-            navigate(`/workspace/${workspaceId}`);
-          } else {
-            navigate('/dashboard');
-          }
+          
+          // Redirection vers la page de connexion après 5 secondes avec déconnexion
+          let countdown = 5;
+          const interval = setInterval(() => {
+            countdown--;
+            setRedirectCountdown(countdown);
+            if (countdown <= 0) {
+              clearInterval(interval);
+              performLogoutAndRedirect();
+            }
+          }, 1000);
+          
         } else if (isEspaceToken) {
           console.log('📤 Acceptation espace via token espace...');
           const result = await espaceService.acceptInvitation(token);
           console.log('✅ Invitation espace acceptée:', result);
           setInvitationType('espace');
+          setAcceptSuccess(true);
           sessionStorage.removeItem('pendingInvitation');
-          // Réponse API = objet Membre plat avec id_espace, id_workspace etc.
-          const espaceId = result.id_espace || result.membre?.id_espace || result.espace_id;
-          if (espaceId) {
-            navigate(`/espace/${espaceId}`);
-          } else {
-            navigate('/dashboard');
-          }
+          
+          // Redirection vers la page de connexion après 5 secondes avec déconnexion
+          let countdown = 5;
+          const interval = setInterval(() => {
+            countdown--;
+            setRedirectCountdown(countdown);
+            if (countdown <= 0) {
+              clearInterval(interval);
+              performLogoutAndRedirect();
+            }
+          }, 1000);
+          
         } else {
           console.log('❌ Type de token inconnu, tentative workspace puis espace...');
           try {
             const result = await workspaceService.acceptInvitation(token);
             console.log('✅ Invitation workspace acceptée:', result);
             setInvitationType('workspace');
+            setAcceptSuccess(true);
             sessionStorage.removeItem('pendingInvitation');
-            const workspaceId = result.id_workspace || result.membre?.id_workspace || result.workspace_id;
-            if (workspaceId) {
-              navigate(`/workspace/${workspaceId}`);
-            } else {
-              navigate('/dashboard');
-            }
+            
+            let countdown = 5;
+            const interval = setInterval(() => {
+              countdown--;
+              setRedirectCountdown(countdown);
+              if (countdown <= 0) {
+                clearInterval(interval);
+                performLogoutAndRedirect();
+              }
+            }, 1000);
+            
           } catch (workspaceErr) {
             console.log('❌ Échec workspace, tentative espace...');
             const result = await espaceService.acceptInvitation(token);
             console.log('✅ Invitation espace acceptée:', result);
             setInvitationType('espace');
+            setAcceptSuccess(true);
             sessionStorage.removeItem('pendingInvitation');
-            const espaceId = result.id_espace || result.membre?.id_espace || result.espace_id;
-            if (espaceId) {
-              navigate(`/espace/${espaceId}`);
-            } else {
-              navigate('/dashboard');
-            }
+            
+            let countdown = 5;
+            const interval = setInterval(() => {
+              countdown--;
+              setRedirectCountdown(countdown);
+              if (countdown <= 0) {
+                clearInterval(interval);
+                performLogoutAndRedirect();
+              }
+            }, 1000);
           }
         }
       } catch (inviteErr: any) {
         console.error('❌ Erreur acceptation invitation :', inviteErr);
+        setLoading(false);
         if (inviteErr.message?.includes('Token d\'invitation invalide')) {
           setError('Le lien d\'invitation est invalide ou a expiré.');
         } else {
           setError(inviteErr.message || 'Invitation invalide ou expirée');
         }
-      } finally {
-        setLoading(false);
       }
     };
 
     handleInvitation();
-  }, [token, navigate, isAuthenticated, authLoading]);
+  }, [token, navigate, isAuthenticated, authLoading, logout]);
+
+  // Affichage du message de succès avec compte à rebours
+  if (acceptSuccess) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <GlassCard className="p-8 text-center max-w-md">
+          <div className="text-green-500 text-5xl mb-4">✓</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">
+            Invitation acceptée !
+          </h2>
+          <p className="text-gray-600 mb-4">
+            Vous avez rejoint avec succès{' '}
+            {invitationType === 'workspace' ? 'le workspace' : 'l\'espace'}.
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Pour des raisons de sécurité, vous allez être déconnecté(e).
+          </p>
+          <p className="text-sm text-secondary font-medium">
+            Redirection vers la page de connexion dans {redirectCountdown} secondes...
+          </p>
+          <div className="mt-4 w-full bg-gray-200 rounded-full h-1.5">
+            <div 
+              className="bg-secondary h-1.5 rounded-full transition-all duration-1000"
+              style={{ width: `${(redirectCountdown / 5) * 100}%` }}
+            />
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -162,21 +223,6 @@ export default function InvitationAccept() {
     );
   }
 
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <GlassCard className="p-8 text-center max-w-md">
-        <div className="text-green-500 text-5xl mb-4">✓</div>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">
-          Invitation acceptée !
-        </h2>
-        <p className="text-gray-600 mb-4">
-          Vous avez rejoint avec succès{' '}
-          {invitationType === 'workspace' ? 'le workspace' : 'l\'espace'}.
-        </p>
-        <p className="text-sm text-gray-500">
-          Redirection en cours...
-        </p>
-      </GlassCard>
-    </div>
-  );
+  // Ce return ne devrait pas être atteint normalement
+  return null;
 }

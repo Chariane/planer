@@ -15,9 +15,6 @@ interface SpaceDashboardProps {
   onMemberInvited?: () => void;
 }
 
-// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
-const INVITATION_ROLES = ['Invité', 'Administrateur'];
-
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
@@ -63,10 +60,10 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   // Récupérer le rôle dans l'espace
   const { isGuest: isEspaceGuest, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId, 'espace');
   
-  // 🔧 Récupérer le rôle dans le workspace parent
+  // Récupérer le rôle dans le workspace parent
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(spaceWorkspaceId || undefined);
   
-  // 🔧 CORRECTION: Un utilisateur peut inviter s'il est:
+  // Un utilisateur peut inviter s'il est:
   // - Créateur ou Admin de l'espace directement
   // - OU Créateur ou Admin du workspace parent (héritage)
   const canInviteMembers = isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator;
@@ -90,22 +87,26 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       setSpaceName(spaceData.nom);
       setSpaceWorkspaceId(spaceData.id_workspace || null);
 
-      // 2. Charger les membres
+      // 2. Charger les membres pour tout utilisateur ayant accès en lecture à l'espace.
       let formattedMembers: Member[] = [];
+      let membersCount = 0;
+
       try {
         const membersData = await espaceService.getMembers(spaceId);
         formattedMembers = membersData.map((m: any) => ({
-          id: m.id,
+          id: m.id_utilisateur || m.utilisateur?.id || m.id,
           name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
           email: m.utilisateur?.email || '',
           role: m.role,
         }));
+        membersCount = formattedMembers.length;
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
         if (err.status === 403) {
           console.log('Accès refusé pour voir les membres - affichage limité');
         }
       }
+
       setMembers(formattedMembers);
 
       // 3. Charger les listes
@@ -129,7 +130,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       setStats({
         subSpacesCount,
         listsCount,
-        membersCount: formattedMembers.length,
+        membersCount: membersCount,
       });
     } catch (err) {
       console.error('Erreur chargement espace:', err);
@@ -202,7 +203,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           <h1 className="text-2xl font-bold text-gray-800">{spaceName}</h1>
           <p className="text-gray-500 mt-1">Tableau de bord de l'espace</p>
         </div>
-        {/* 🔧 Bouton Inviter - visible pour Créateur/Admin workspace OU Créateur/Admin espace */}
+        {/* Bouton Inviter - visible pour Créateur/Admin workspace OU Créateur/Admin espace */}
         {canInviteMembers && availableRoles.length > 0 && (
           <div className="flex items-center gap-2">
             <Button onClick={() => setIsInviteModalOpen(true)}>
@@ -252,13 +253,13 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </GlassCard>
       </div>
 
-      {/* Liste des membres */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Membres de l'espace
-        </h3>
-        {members.length > 0 ? (
+      {/* Liste des membres - visible pour tout utilisateur ayant accès en lecture */}
+      {members.length > 0 ? (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Membres de l'espace
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {members.map(member => (
               <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
@@ -266,25 +267,33 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                   <p className="font-medium text-gray-800">{member.name}</p>
                   <p className="text-sm text-gray-500">{member.email}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700' :
-                    member.role === 'Créateur' ? 'bg-purple-100 text-purple-700' :
-                      'bg-gray-100 text-gray-600'
-                  }`}>
-                  {member.role}
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700'
+                    : member.role === 'Créateur' ? 'bg-purple-100 text-purple-700'
+                      : member.role === 'Invité' ? 'bg-gray-100 text-gray-500'
+                        : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {member.role === 'Invité' ? '👁️ Invité' : member.role === 'Membre' ? '👤 Membre' : member.role === 'Administrateur' ? '🔐 Admin' : '👑 Créateur'}
                 </span>
               </GlassCard>
             ))}
           </div>
-        ) : (
+        </div>
+      ) : (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Membres de l'espace
+          </h3>
           <GlassCard className="p-4">
             <div className="text-center text-gray-400 py-4">
               <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Impossible de charger la liste des membres</p>
-              <p className="text-sm mt-1">Vous n'avez pas les droits nécessaires pour voir les membres de cet espace.</p>
+              <p>Aucun membre pour le moment</p>
+              {canInviteMembers && <p className="text-sm mt-1">Invitez des membres pour collaborer sur cet espace</p>}
             </div>
           </GlassCard>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Liste des sous-espaces */}
       <div>

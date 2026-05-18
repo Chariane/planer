@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/crud/tache.py
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import asc, desc
 from fastapi import HTTPException, status
@@ -120,11 +121,21 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
 
 
 def delete_tache(db: Session, tache_id: str) -> bool:
+    from ..models import Checklist
+    
     tache = get_tache_by_id(db, tache_id)
     if not tache:
         return False
     
+    # Supprimer les checklists de la tâche
+    db.query(Checklist).filter(Checklist.id_tache == tache_id).delete(synchronize_session=False)
+    
+    # Supprimer les membres assignés à la tâche
+    db.query(Membre).filter(Membre.id_tache == tache_id).delete(synchronize_session=False)
+    
+    # Supprimer la tâche
     db.delete(tache)
+    
     try:
         db.commit()
     except Exception:

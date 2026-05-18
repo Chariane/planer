@@ -561,6 +561,17 @@ def get_owned_workspace_ids(db: Session, user_id: str) -> Set[str]:
     return {row[0] for row in owned_ids}
 
 
+def get_admin_workspace_ids(db: Session, user_id: str) -> Set[str]:
+    """Récupère les IDs des workspaces où l'utilisateur est Administrateur."""
+    admin_memberships = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.id_workspace.isnot(None),
+        Membre.role == Role.ADMIN,
+        Membre.statut == Status.ACTIVE
+    ).all()
+    return {m.id_workspace for m in admin_memberships}
+
+
 def get_user_memberships_by_type(
     db: Session,
     user_id: str,
@@ -649,6 +660,90 @@ def _is_from_owned_workspace(membre: Membre, owned_ids: Set[str]) -> bool:
             return membre.tache.liste.espace.id_workspace in owned_ids
     
     return False
+
+
+def get_excluded_workspace_ids(db: Session, user_id: str) -> Set[str]:
+    """Récupère les IDs des workspaces à exclure (Créateur ou Admin)."""
+    owned_ids = get_owned_workspace_ids(db, user_id)
+    admin_ids = get_admin_workspace_ids(db, user_id)
+    return owned_ids.union(admin_ids)
+
+
+def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
+    """Espaces rejoints directement (hors workspaces possédés ou dont on est admin)."""
+    excluded_ids = get_excluded_workspace_ids(db, user_id)
+    
+    memberships = get_user_memberships_by_type(
+        db, user_id, ResourceType.ESPACE, exclude_owned_workspaces=False
+    )
+    
+    filtered = []
+    for m in memberships:
+        espace = m.espace
+        if not espace:
+            continue
+        if espace.id_workspace and espace.id_workspace in excluded_ids:
+            continue
+        filtered.append(m)
+    
+    return [_serialize_resource_membership(m, ResourceType.ESPACE) for m in filtered]
+
+
+def get_joined_listes(db: Session, user_id: str) -> List[dict]:
+    """Listes rejointes directement (hors workspaces possédés ou dont on est admin)."""
+    excluded_ids = get_excluded_workspace_ids(db, user_id)
+    
+    memberships = get_user_memberships_by_type(
+        db, user_id, ResourceType.LISTE, exclude_owned_workspaces=False
+    )
+    
+    filtered = []
+    for m in memberships:
+        liste = m.liste
+        if not liste:
+            continue
+        
+        liste_workspace_id = None
+        if liste.id_workspace:
+            liste_workspace_id = liste.id_workspace
+        elif liste.espace:
+            liste_workspace_id = liste.espace.id_workspace
+        
+        if liste_workspace_id and liste_workspace_id in excluded_ids:
+            continue
+        
+        filtered.append(m)
+    
+    return [_serialize_resource_membership(m, ResourceType.LISTE) for m in filtered]
+
+
+def get_joined_taches(db: Session, user_id: str) -> List[dict]:
+    """Tâches rejointes directement (hors workspaces possédés ou dont on est admin)."""
+    excluded_ids = get_excluded_workspace_ids(db, user_id)
+    
+    memberships = get_user_memberships_by_type(
+        db, user_id, ResourceType.TACHE, exclude_owned_workspaces=False
+    )
+    
+    filtered = []
+    for m in memberships:
+        tache = m.tache
+        if not tache or not tache.liste:
+            continue
+        
+        liste = tache.liste
+        liste_workspace_id = None
+        if liste.id_workspace:
+            liste_workspace_id = liste.id_workspace
+        elif liste.espace:
+            liste_workspace_id = liste.espace.id_workspace
+        
+        if liste_workspace_id and liste_workspace_id in excluded_ids:
+            continue
+        
+        filtered.append(m)
+    
+    return [_serialize_resource_membership(m, ResourceType.TACHE) for m in filtered]
 
 
 # ============================================================================
@@ -775,30 +870,6 @@ def get_joined_workspaces(db: Session, user_id: str) -> List[dict]:
         db, user_id, ResourceType.WORKSPACE, exclude_owned_workspaces=True
     )
     return [_serialize_workspace(m.workspace, membre=m) for m in memberships]
-
-
-def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
-    """Espaces rejoints directement (hors workspaces possédés)."""
-    memberships = get_user_memberships_by_type(
-        db, user_id, ResourceType.ESPACE, exclude_owned_workspaces=True
-    )
-    return [_serialize_resource_membership(m, ResourceType.ESPACE) for m in memberships]
-
-
-def get_joined_listes(db: Session, user_id: str) -> List[dict]:
-    """Listes rejointes directement (hors workspaces possédés)."""
-    memberships = get_user_memberships_by_type(
-        db, user_id, ResourceType.LISTE, exclude_owned_workspaces=True
-    )
-    return [_serialize_resource_membership(m, ResourceType.LISTE) for m in memberships]
-
-
-def get_joined_taches(db: Session, user_id: str) -> List[dict]:
-    """Tâches rejointes directement (hors workspaces possédés)."""
-    memberships = get_user_memberships_by_type(
-        db, user_id, ResourceType.TACHE, exclude_owned_workspaces=True
-    )
-    return [_serialize_resource_membership(m, ResourceType.TACHE) for m in memberships]
 
 
 def get_user_navigation_data(db: Session, user_id: str) -> dict:

@@ -1,7 +1,7 @@
 # backend/api_liste_et_tache/crud/canevas_enhanced.py
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..models import Canevas, Section, Tache, Liste
 from ..crud.checklist_canevas import get_checklists_for_section, get_checklists_for_tache
 
