@@ -1,5 +1,5 @@
 // frontend/src/pages/app/hooks/useTaskChecklists.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { tacheService } from '../../../services/tache.service';
 
 interface TaskChecklist {
@@ -25,6 +25,14 @@ export function useTaskChecklists(taskId: string | undefined, onStatusChange?: (
       console.error('Erreur chargement checklists:', err);
     }
   }, [taskId]);
+
+  useEffect(() => {
+    if (!taskId) {
+      setChecklists([]);
+      return;
+    }
+    loadChecklists();
+  }, [taskId, loadChecklists]);
 
   const addChecklist = useCallback(async (texte: string) => {
     if (!taskId || !texte.trim()) return;

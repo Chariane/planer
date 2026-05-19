@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
 import type { TacheFilters } from '../../../services/tache.service';
+import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
 import type { Task, Member } from '../../../types';
 
 function transformTask(apiTask: any): Task {
@@ -57,8 +58,8 @@ export function useTasks(listId: string | undefined) {
             const taskMembers = await tacheService.getMembers(task.id);
             const assignees = taskMembers.map((m: any) => ({
               id: m.id_utilisateur || m.id,
-              name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
-              email: m.utilisateur?.email || '',
+              name: getMemberDisplayName(m),
+              email: getMemberEmail(m),
               role: m.role || 'Membre',
             }));
             return { ...task, assignees };
@@ -121,6 +122,18 @@ export function useTasks(listId: string | undefined) {
     }
   };
 
+  const updateTaskStatus = async (taskId: string, status: Task['status']) => {
+    if (!taskId) return;
+
+    try {
+      await tacheService.update(taskId, { statut: status });
+      await loadTasks();
+    } catch (err) {
+      console.error('Erreur mise à jour du statut de la tâche:', err);
+      throw err;
+    }
+  };
+
   const deleteTask = async (taskId: string) => {
     if (!taskId) return;
     try {
@@ -148,6 +161,7 @@ export function useTasks(listId: string | undefined) {
     loadTasks, 
     addTask, 
     updateTask, 
+    updateTaskStatus,
     deleteTask,
     updateFilters,
     clearFilters

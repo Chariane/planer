@@ -17,9 +17,9 @@ export interface EnhancedChecklist {
   is_checked: boolean;
   source: 'manual' | 'task';
   task_id?: string;
-  task_title?: string;
-  due_date?: string;
-  section_id?: string;
+  task_title?: string | null;
+  due_date?: string | null;
+  section_id?: string | null;
 }
 
 export interface EnhancedSection {

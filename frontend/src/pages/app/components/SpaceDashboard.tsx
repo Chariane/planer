@@ -10,6 +10,7 @@ import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { useNavigationStore } from '../../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
+import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
 import type { Member } from '../../../types';
 
 interface SpaceDashboardProps {
@@ -152,8 +153,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         const membersData = await espaceService.getMembers(spaceId);
         formattedMembers = membersData.map((m: any) => ({
           id: m.id_utilisateur || m.utilisateur?.id || m.id,
-          name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role,
         }));
         membersCount = formattedMembers.length;

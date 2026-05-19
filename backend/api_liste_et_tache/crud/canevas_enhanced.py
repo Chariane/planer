@@ -80,6 +80,8 @@ def get_task_checklists_for_period(
     for task in tasks:
         checklists = get_checklists_for_tache(db, task.id)
         for checklist in checklists:
+            if checklist.id_section:
+                continue
             task_checklists.append({
                 "id": checklist.id,
                 "texte": f"[{task.titre}] {checklist.texte}",
@@ -87,7 +89,8 @@ def get_task_checklists_for_period(
                 "source": "task",
                 "task_id": task.id,
                 "task_title": task.titre,
-                "due_date": task.date_fin_prevue.isoformat() if task.date_fin_prevue else None
+                "due_date": task.date_fin_prevue.isoformat() if task.date_fin_prevue else None,
+                "section_id": checklist.id_section
             })
     
     return task_checklists
@@ -124,13 +127,26 @@ def get_enhanced_canevas(db: Session, liste_id: str) -> Dict[str, Any]:
         
         all_checklists = []
         for cl in manual_checklists:
-            all_checklists.append({
-                "id": cl.id,
-                "texte": cl.texte,
-                "is_checked": cl.is_checked,
-                "source": "manual",
-                "section_id": section.id
-            })
+            if cl.id_tache:
+                task = db.query(Tache).filter(Tache.id == cl.id_tache).first()
+                all_checklists.append({
+                    "id": cl.id,
+                    "texte": f"[{task.titre}] {cl.texte}" if task else cl.texte,
+                    "is_checked": cl.is_checked,
+                    "source": "task",
+                    "task_id": cl.id_tache,
+                    "task_title": task.titre if task else None,
+                    "due_date": task.date_fin_prevue.isoformat() if task and task.date_fin_prevue else None,
+                    "section_id": section.id
+                })
+            else:
+                all_checklists.append({
+                    "id": cl.id,
+                    "texte": cl.texte,
+                    "is_checked": cl.is_checked,
+                    "source": "manual",
+                    "section_id": section.id
+                })
         for cl in task_checklists:
             all_checklists.append(cl)
         

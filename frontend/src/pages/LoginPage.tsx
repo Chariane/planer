@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [challengeToken, setChallengeToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const invitationToken = searchParams.get('invitation_token') || sessionStorage.getItem('pendingInvitation');
+  const acceptedInvitationType = searchParams.get('accepted');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +91,11 @@ export default function LoginPage() {
         <div className="h-12 w-12 rounded-xl bg-secondary flex items-center justify-center font-bold text-white text-xl mx-auto mb-4">KP</div>
         <h1 className="text-2xl font-bold text-gray-800">Connexion</h1>
         <p className="text-gray-500 mt-1">Accédez à votre espace de travail</p>
-        {invitationToken && (
+        {acceptedInvitationType ? (
+          <div className="mt-3 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+            Invitation acceptée : connectez-vous pour accéder à votre espace de travail.
+          </div>
+        ) : invitationToken && (
           <div className="mt-3 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
             Invitation détectée : connectez-vous pour finaliser votre adhésion.
           </div>

@@ -2,6 +2,7 @@
 
 from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from ..core.emails import send_workspace_invitation_email
@@ -19,7 +20,7 @@ from ..core.function import (
     get_workspace_local_resources,
     render_invitation_html_page
 )
-from ..core.security import get_current_user, decode_invitation_token
+from ..core.security import get_current_user, decode_invitation_token, config_data
 from ..crud.utilisateur import (
     accept_workspace_invitation,
     cancel_workspace_invitation,
@@ -263,6 +264,10 @@ def accept_workspace_invitation_from_email(
     Retourne une page HTML avec le resultat.
     """
 
+    front_base_url = str(config_data.get("FRONT_BASE_URL", "http://localhost:5173")).strip("'").strip('"').strip()
+    accepted_redirect_url = f"{front_base_url}/invitation/accept?token={token}&status=success&type=workspace"
+    already_member_redirect_url = f"{front_base_url}/invitation/accept?token={token}&status=already_member&type=workspace"
+
     # 1. Décodage du token
     payload = decode_invitation_token(token)
     if not payload:
@@ -289,14 +294,7 @@ def accept_workspace_invitation_from_email(
     if target_workspace_id:
         existing = get_workspace_member(db, target_workspace_id, user_id)
         if existing and existing.statut == "Actif":
-            workspace = get_workspace_by_id(db, target_workspace_id)
-            workspace_nom = workspace.nom if workspace else "le workspace"
-            return render_invitation_html_page(
-                title="Invitation déjà acceptée",
-                icon="✅",
-                message=f"Vous êtes déjà membre actif du workspace « {workspace_nom} ».",
-                sub_message="Connectez-vous sur K-Planer pour accéder à votre workspace de travail."
-            )
+            return RedirectResponse(url=already_member_redirect_url, status_code=302)
 
     # 4. Accepter l'invitation via le CRUD existant
     try:
@@ -306,24 +304,10 @@ def accept_workspace_invitation_from_email(
             user_id=user_id,
             invitation_token=token
         )
-        workspace = get_workspace_by_id(db, membre.id_workspace) if membre.id_workspace else None
-        workspace_nom = workspace.nom if workspace else "le workspace"
-        return render_invitation_html_page(
-            title="Invitation acceptée !",
-            icon="🎉",
-            message=f"Vous avez rejoint le workspace « {workspace_nom} » avec succès.",
-            sub_message="Connectez-vous sur K-Planer pour accéder à votre nouveau workspace de travail."
-        )
+        return RedirectResponse(url=accepted_redirect_url, status_code=302)
     except HTTPException as e:
         if e.status_code == 409:
-            workspace = get_workspace_by_id(db, target_workspace_id) if target_workspace_id else None
-            workspace_nom = workspace.nom if workspace else "le workspace"
-            return render_invitation_html_page(
-                title="Invitation déjà acceptée",
-                icon="✅",
-                message=f"Vous êtes déjà membre actif du workspace « {workspace_nom} ».",
-                sub_message="Connectez-vous sur K-Planer pour accéder à votre workspace de travail."
-            )
+            return RedirectResponse(url=already_member_redirect_url, status_code=302)
         return render_invitation_html_page(
             title="Erreur",
             icon="❌",

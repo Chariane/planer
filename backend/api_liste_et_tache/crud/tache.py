@@ -1,6 +1,6 @@
 # backend/api_liste_et_tache/crud/tache.py
 from sqlalchemy.orm import Session, selectinload, joinedload
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, func
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -47,15 +47,48 @@ def get_taches_for_liste(
     taches = query.all()
     
     # Calcul de la progression pour chaque tâche
+    statuses_changed = False
     for t in taches:
         total = len(t.checklists)
         if total > 0:
             checked = len([c for c in t.checklists if c.is_checked])
             t.progression = round((checked / total) * 100, 2)
+            expected_status = _status_from_checklist_counts(checked, total)
+            if t.statut != expected_status:
+                t.statut = expected_status
+                t.statut_date = datetime.now()
+                statuses_changed = True
         else:
             t.progression = 0.0
+            if t.statut != "en attente":
+                t.statut = "en attente"
+                t.statut_date = datetime.now()
+                statuses_changed = True
+
+    if statuses_changed:
+        db.commit()
             
     return taches
+
+
+def _ensure_unique_tache_sibling_name(
+    db: Session,
+    *,
+    titre: str,
+    id_liste: str,
+    exclude_id: Optional[str] = None,
+) -> None:
+    query = db.query(Tache).filter(
+        Tache.id_liste == id_liste,
+        func.lower(func.trim(Tache.titre)) == titre.strip().lower(),
+    )
+    if exclude_id:
+        query = query.filter(Tache.id != exclude_id)
+    if query.first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une tache portant ce nom existe deja dans cette liste.",
+        )
 
 
 def create_tache(
@@ -69,6 +102,8 @@ def create_tache(
     ordre_affichage: Optional[int] = 0,
     id_liste: Optional[str] = None,
 ) -> Tache:
+    if id_liste:
+        _ensure_unique_tache_sibling_name(db, titre=titre, id_liste=id_liste)
     now = datetime.now()
     tache = Tache(
         titre=titre,
@@ -98,6 +133,16 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
     tache = get_tache_by_id(db, tache_id)
     if not tache:
         return None
+
+    target_titre = kwargs.get("titre", tache.titre)
+    target_liste_id = kwargs.get("id_liste", tache.id_liste)
+    if any(key in kwargs for key in ("titre", "id_liste")):
+        _ensure_unique_tache_sibling_name(
+            db,
+            titre=target_titre,
+            id_liste=target_liste_id,
+            exclude_id=tache.id,
+        )
     
     status_changed = False
     if "statut" in kwargs and kwargs["statut"] != tache.statut:
@@ -163,6 +208,22 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
     if not tache:
         raise HTTPException(status_code=404, detail="Tache introuvable.")
 
+    liste_member = db.query(Membre).filter(
+        Membre.id_liste == tache.id_liste,
+        Membre.id_utilisateur == utilisateur_id,
+        Membre.statut == "Actif",
+    ).first()
+    if not liste_member:
+        raise HTTPException(
+            status_code=403,
+            detail="Seuls les utilisateurs avec le role Membre dans la liste peuvent etre assignes a une tache.",
+        )
+    if liste_member.role != "Membre":
+        raise HTTPException(
+            status_code=403,
+            detail="Seuls les utilisateurs avec le role Membre dans la liste peuvent etre assignes a une tache.",
+        )
+
     # On vérifie si l'assignation existe déjà pour éviter les doublons
     existing = db.query(Membre).filter(
         Membre.id_tache == tache_id,
@@ -203,7 +264,12 @@ def unassign_member_from_tache(db: Session, tache_id: str, utilisateur_id: str) 
 
 def get_tache_members(db: Session, tache_id: str) -> List[Membre]:
     """Récupère tous les membres assignés à une tâche."""
-    return db.query(Membre).filter(Membre.id_tache == tache_id).all()
+    return (
+        db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
+        .filter(Membre.id_tache == tache_id)
+        .all()
+    )
 
 
 def get_taches_kanban(db: Session, liste_id: str) -> dict:
@@ -238,6 +304,14 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
     return kanban
 
 # backend/api_liste_et_tache/crud/tache.py
+def _status_from_checklist_counts(checked_count: int, total: int) -> str:
+    if total <= 0 or checked_count <= 0:
+        return "en attente"
+    if checked_count >= total:
+        return "terminé"
+    return "en cours"
+
+
 def update_tache_status_based_on_checklists(db: Session, tache_id: str):
     """Met à jour le statut d'une tâche en fonction de ses checklists"""
     from ..models import Checklist
@@ -248,27 +322,21 @@ def update_tache_status_based_on_checklists(db: Session, tache_id: str):
     if not checklists:
         return
     
-    # Vérifier si toutes les checklists sont cochées
-    all_checked = all(c.is_checked for c in checklists)
+    checked_count = sum(1 for c in checklists if c.is_checked)
+    total = len(checklists)
     
     # Récupérer la tâche
     tache = get_tache_by_id(db, tache_id)
     if not tache:
         return
     
-    # Si toutes sont cochées et la tâche n'est pas déjà terminée
-    if all_checked and tache.statut != "terminé":
-        tache.statut = "terminé"
+    next_status = _status_from_checklist_counts(checked_count, total)
+
+    if tache.statut != next_status:
+        tache.statut = next_status
         tache.statut_date = datetime.now()
         db.commit()
-        print(f"✅ Tâche {tache_id} automatiquement marquée comme terminée")
-    
-    # Optionnel : Si certaines ne sont pas cochées et que la tâche est terminée, repasser en "en cours"
-    elif not all_checked and tache.statut == "terminé":
-        tache.statut = "en cours"
-        tache.statut_date = datetime.now()
-        db.commit()
-        print(f"🔄 Tâche {tache_id} repassée en cours (checklists incomplètes)")
+        print(f"🔄 Tâche {tache_id} automatiquement passée au statut {next_status}")
         
 
 def update_taches_bulk(db: Session, items: List[dict]) -> bool:

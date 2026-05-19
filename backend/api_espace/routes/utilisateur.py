@@ -1,5 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.function import (
@@ -19,7 +20,7 @@ from ..core.function import (
     _require_workspace_read_access,
     render_invitation_html_page,
 )
-from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM
+from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM, config_data
 from ..core.emails import send_espace_invitation_email
 from ..crud.utilisateur import (
     create_espace,
@@ -322,6 +323,10 @@ def accept_espace_invitation_from_email(
     Retourne une page HTML avec le resultat.
     """
 
+    front_base_url = str(config_data.get("FRONT_BASE_URL", "http://localhost:5173")).strip("'").strip('"').strip()
+    accepted_redirect_url = f"{front_base_url}/invitation/accept?token={token}&status=success&type=espace"
+    already_member_redirect_url = f"{front_base_url}/invitation/accept?token={token}&status=already_member&type=espace"
+
     # 1. Décodage du token
     payload = decode_invitation_token(token)
     if not payload:
@@ -348,14 +353,7 @@ def accept_espace_invitation_from_email(
     if target_espace_id:
         existing = get_espace_member(db, target_espace_id, user_id)
         if existing and existing.statut == "Actif":
-            espace = get_espace_by_id(db, target_espace_id)
-            espace_nom = espace.nom if espace else "l'espace"
-            return render_invitation_html_page(
-                title="Invitation déjà acceptée",
-                icon="✅",
-                message=f"Vous êtes déjà membre actif de l'espace « {espace_nom} ».",
-                sub_message="Connectez-vous sur K-Planer pour accéder à votre espace de travail."
-            )
+            return RedirectResponse(url=already_member_redirect_url, status_code=302)
 
     # 4. Accepter l'invitation via le CRUD existant
     try:
@@ -365,24 +363,10 @@ def accept_espace_invitation_from_email(
             user_id=user_id,
             invitation_token=token
         )
-        espace = get_espace_by_id(db, membre.id_espace) if membre.id_espace else None
-        espace_nom = espace.nom if espace else "l'espace"
-        return render_invitation_html_page(
-            title="Invitation acceptée !",
-            icon="🎉",
-            message=f"Vous avez rejoint l'espace « {espace_nom} » avec succès.",
-            sub_message="Connectez-vous sur K-Planer pour accéder à votre nouvel espace de travail."
-        )
+        return RedirectResponse(url=accepted_redirect_url, status_code=302)
     except HTTPException as e:
         if e.status_code == 409:
-            espace = get_espace_by_id(db, target_espace_id) if target_espace_id else None
-            espace_nom = espace.nom if espace else "l'espace"
-            return render_invitation_html_page(
-                title="Invitation déjà acceptée",
-                icon="✅",
-                message=f"Vous êtes déjà membre actif de l'espace « {espace_nom} ».",
-                sub_message="Connectez-vous sur K-Planer pour accéder à votre espace de travail."
-            )
+            return RedirectResponse(url=already_member_redirect_url, status_code=302)
         return render_invitation_html_page(
             title="Erreur",
             icon="❌",

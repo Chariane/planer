@@ -49,6 +49,9 @@ interface ListViewProps {
   onAssignTask: (task: Task) => void;
   getTaskProgress: (task: Task) => number;
   readOnly?: boolean;
+  canEditTask?: (task: Task) => boolean;
+  canDeleteTask?: (task: Task) => boolean;
+  canAssignTask?: (task: Task) => boolean;
 }
 
 // Composant de détail d'une tâche
@@ -187,6 +190,9 @@ export default function ListView({
   onAssignTask,
   getTaskProgress,
   readOnly = false,
+  canEditTask,
+  canDeleteTask,
+  canAssignTask,
 }: ListViewProps) {
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
@@ -303,7 +309,25 @@ export default function ListView({
                             </td>
                             <td className="py-3 text-gray-500">{task.dueDate || '—'}</td>
                             <td className="py-3" onClick={(e) => e.stopPropagation()}>
-                              {!readOnly && (
+                              {(() => {
+                                const showAssign = canAssignTask ? canAssignTask(task) : !readOnly;
+                                const showEdit = canEditTask ? canEditTask(task) : !readOnly;
+                                const showDelete = canDeleteTask ? canDeleteTask(task) : !readOnly;
+                                const showMenu = showAssign || showEdit || showDelete;
+
+                                if (!showMenu) {
+                                  return (
+                                    <button
+                                      onClick={() => openTaskDetail(task)}
+                                      className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                                      title="Voir les détails"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </button>
+                                  );
+                                }
+
+                                return (
                                 <div className="relative">
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === task.id ? null : task.id); }}
@@ -313,37 +337,35 @@ export default function ListView({
                                   </button>
                                   {openMenuId === task.id && (
                                     <div className="absolute right-0 top-8 z-10 flex flex-col bg-white shadow-lg rounded-lg w-32 border">
-                                      <button
-                                        onClick={() => { onAssignTask(task); setOpenMenuId(null); }}
-                                        className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                      >
-                                        <UserPlus className="h-3 w-3" /> Assigner
-                                      </button>
-                                      <button
-                                        onClick={() => { onEditTask(task); setOpenMenuId(null); }}
-                                        className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                      >
-                                        <Edit className="h-3 w-3" /> Modifier
-                                      </button>
-                                      <button
-                                        onClick={() => { onDeleteTask(task.id); setOpenMenuId(null); }}
-                                        className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
-                                      >
-                                        <Trash className="h-3 w-3" /> Supprimer
-                                      </button>
+                                      {showAssign && (
+                                        <button
+                                          onClick={() => { onAssignTask(task); setOpenMenuId(null); }}
+                                          className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                        >
+                                          <UserPlus className="h-3 w-3" /> Assigner
+                                        </button>
+                                      )}
+                                      {showEdit && (
+                                        <button
+                                          onClick={() => { onEditTask(task); setOpenMenuId(null); }}
+                                          className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                        >
+                                          <Edit className="h-3 w-3" /> Modifier
+                                        </button>
+                                      )}
+                                      {showDelete && (
+                                        <button
+                                          onClick={() => { onDeleteTask(task.id); setOpenMenuId(null); }}
+                                          className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
+                                        >
+                                          <Trash className="h-3 w-3" /> Supprimer
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </div>
-                              )}
-                              {readOnly && (
-                                <button
-                                  onClick={() => openTaskDetail(task)}
-                                  className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                                  title="Voir les détails"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </button>
-                              )}
+                                );
+                              })()}
                             </td>
                           </tr>
                         );

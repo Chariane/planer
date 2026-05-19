@@ -1,6 +1,6 @@
 // frontend/src/pages/app/RightCanevas.tsx
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { 
   ChevronDown, ChevronRight, CheckCircle, Circle, Edit, X, 
   Target, Sparkles, Plus, Trash2, Save, AlertCircle, Loader2 
@@ -9,13 +9,28 @@ import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '..
 import { sectionService } from '../../services/section.service';
 import { checklistService } from '../../services/checklist.service';
 import { listeService } from '../../services/liste.service';
+import { tacheService } from '../../services/tache.service';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { useAuth } from '../../contexts/AuthContext';
+import { useActiveResource } from '../../contexts/ActiveResourceContext';
+
+type AddChecklistMode = 'manual' | 'task';
+
+interface TaskChecklistOption {
+  id: string;
+  text: string;
+  taskTitle: string;
+  isChecked: boolean;
+}
 
 export default function RightCanevas() {
-  const { listId, workspaceId: routeWorkspaceId } = useParams();
+  const { pathname } = useLocation();
+  const { id: flatRouteId, listId: legacyListId, workspaceId: legacyWorkspaceId } = useParams();
+  const { listId: activeListId, workspaceId: activeWorkspaceId } = useActiveResource();
+  const listId = activeListId || legacyListId || (pathname.startsWith('/liste/') ? flatRouteId : undefined);
+  const routeWorkspaceId = activeWorkspaceId || legacyWorkspaceId;
   const { user } = useAuth();
   const [canevas, setCanevas] = useState<EnhancedCanevas | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +53,10 @@ export default function RightCanevas() {
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [newChecklistText, setNewChecklistText] = useState('');
   const [addingChecklistToSection, setAddingChecklistToSection] = useState<string | null>(null);
+  const [addChecklistMode, setAddChecklistMode] = useState<AddChecklistMode>('manual');
+  const [taskChecklistOptions, setTaskChecklistOptions] = useState<TaskChecklistOption[]>([]);
+  const [loadingTaskChecklistOptions, setLoadingTaskChecklistOptions] = useState(false);
+  const [selectedTaskChecklistId, setSelectedTaskChecklistId] = useState('');
   
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -74,6 +93,10 @@ export default function RightCanevas() {
               setPermissionChecked(true);
               return;
             }
+            setCanModify(false);
+            setIsReadOnly(true);
+            setPermissionChecked(true);
+            return;
           }
         } catch (err) {
           console.log('Pas de membre direct trouvé, vérification héritage...');
@@ -264,8 +287,73 @@ export default function RightCanevas() {
     }
   };
 
+  const loadTaskChecklistOptions = async () => {
+    if (!listId) return;
+    setLoadingTaskChecklistOptions(true);
+    try {
+      const tasks = await tacheService.getByListe(listId);
+      const normalizedTasks = Array.isArray(tasks) ? tasks : [];
+      const options: TaskChecklistOption[] = [];
+
+      for (const task of normalizedTasks) {
+        const taskTitle = task.titre || task.title || 'Tâche';
+        const checklists = Array.isArray(task.checklists)
+          ? task.checklists
+          : await checklistService.getByTache(task.id);
+
+        for (const checklist of checklists || []) {
+          if (checklist.id_section) continue;
+          options.push({
+            id: checklist.id,
+            text: checklist.texte,
+            taskTitle,
+            isChecked: Boolean(checklist.is_checked),
+          });
+        }
+      }
+
+      setTaskChecklistOptions(options);
+      setSelectedTaskChecklistId(options[0]?.id || '');
+    } catch (err) {
+      console.error('Erreur chargement des checklists de tâches:', err);
+      setTaskChecklistOptions([]);
+      setSelectedTaskChecklistId('');
+    } finally {
+      setLoadingTaskChecklistOptions(false);
+    }
+  };
+
+  const openAddChecklist = async (sectionId: string) => {
+    setAddingChecklistToSection(sectionId);
+    setAddChecklistMode('manual');
+    setNewChecklistText('');
+    setSelectedTaskChecklistId('');
+    await loadTaskChecklistOptions();
+  };
+
+  const cancelAddChecklist = () => {
+    setAddingChecklistToSection(null);
+    setAddChecklistMode('manual');
+    setNewChecklistText('');
+    setSelectedTaskChecklistId('');
+  };
+
+  const linkTaskChecklistToSection = async (sectionId: string) => {
+    if (!selectedTaskChecklistId || !canModify) return;
+    setActionLoading(`link-checklist-${sectionId}`);
+    try {
+      await checklistService.update(selectedTaskChecklistId, { id_section: sectionId });
+      await loadCanevas();
+      cancelAddChecklist();
+    } catch (err) {
+      console.error('Erreur ajout checklist de tâche dans la section:', err);
+      alert('Erreur lors de l\'ajout de la checklist de tâche');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const toggleChecklist = async (checklist: EnhancedChecklist) => {
-    if (checklist.source !== 'manual') return;
     if (!canModify) return;
     
     setActionLoading(`toggle-${checklist.id}`);
@@ -572,7 +660,7 @@ export default function RightCanevas() {
                           
                           <button
                             onClick={() => toggleChecklist(checklist)}
-                            disabled={canevas.is_verrouille || checklist.source !== 'manual' || !canModify || actionLoading?.startsWith('toggle')}
+                            disabled={canevas.is_verrouille || !canModify || actionLoading?.startsWith('toggle')}
                             className="flex-shrink-0"
                           >
                             {actionLoading === `toggle-${checklist.id}` ? (
@@ -636,34 +724,90 @@ export default function RightCanevas() {
                       {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">
                           {addingChecklistToSection === section.id ? (
-                            <div className="flex items-center gap-2">
-                              <Circle className="h-4 w-4 text-gray-300" />
-                              <input
-                                type="text"
-                                placeholder="Nouvel élément de checklist..."
-                                value={newChecklistText}
-                                onChange={(e) => setNewChecklistText(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && addChecklist(section.id)}
-                                className="flex-1 text-sm border-b border-gray-200 focus:border-secondary outline-none py-1"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => addChecklist(section.id)}
-                                disabled={actionLoading === `add-checklist-${section.id}`}
-                                className="text-secondary text-xs hover:underline"
-                              >
-                                {actionLoading === `add-checklist-${section.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
-                              </button>
-                              <button
-                                onClick={() => setAddingChecklistToSection(null)}
-                                className="text-gray-400 text-xs hover:text-gray-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                            <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setAddChecklistMode('manual')}
+                                  className={`px-2 py-1 text-xs rounded-md ${addChecklistMode === 'manual' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                  Créer
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAddChecklistMode('task')}
+                                  className={`px-2 py-1 text-xs rounded-md ${addChecklistMode === 'task' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                  Depuis une tâche
+                                </button>
+                                <button
+                                  onClick={cancelAddChecklist}
+                                  className="ml-auto p-1 text-gray-400 hover:text-gray-600"
+                                  title="Annuler"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+
+                              {addChecklistMode === 'manual' ? (
+                                <div className="flex items-center gap-2">
+                                  <Circle className="h-4 w-4 text-gray-300" />
+                                  <input
+                                    type="text"
+                                    placeholder="Nouvel élément de checklist..."
+                                    value={newChecklistText}
+                                    onChange={(e) => setNewChecklistText(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && addChecklist(section.id)}
+                                    className="flex-1 text-sm border-b border-gray-200 bg-transparent focus:border-secondary outline-none py-1"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => addChecklist(section.id)}
+                                    disabled={actionLoading === `add-checklist-${section.id}`}
+                                    className="text-secondary text-xs hover:underline"
+                                  >
+                                    {actionLoading === `add-checklist-${section.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {loadingTaskChecklistOptions ? (
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Chargement des checklists...
+                                    </div>
+                                  ) : taskChecklistOptions.length === 0 ? (
+                                    <p className="text-xs text-gray-400">
+                                      Aucune checklist de tâche disponible à rattacher.
+                                    </p>
+                                  ) : (
+                                    <>
+                                      <select
+                                        value={selectedTaskChecklistId}
+                                        onChange={(e) => setSelectedTaskChecklistId(e.target.value)}
+                                        className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-1 focus:ring-secondary"
+                                      >
+                                        {taskChecklistOptions.map(option => (
+                                          <option key={option.id} value={option.id}>
+                                            {option.taskTitle} / {option.text}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={() => linkTaskChecklistToSection(section.id)}
+                                        disabled={!selectedTaskChecklistId || actionLoading === `link-checklist-${section.id}`}
+                                        className="text-secondary text-xs hover:underline disabled:text-gray-300 disabled:no-underline"
+                                      >
+                                        {actionLoading === `link-checklist-${section.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter à la section'}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <button
-                              onClick={() => setAddingChecklistToSection(section.id)}
+                              onClick={() => openAddChecklist(section.id)}
                               className="flex items-center gap-1 text-xs text-gray-400 hover:text-secondary transition"
                             >
                               <Plus className="h-3 w-3" /> Ajouter un élément

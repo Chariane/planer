@@ -40,6 +40,29 @@ def get_liste_member_record(db: Session, liste_id: str, user_id: str) -> Optiona
     ).first()
 
 
+def _ensure_unique_liste_sibling_name(
+    db: Session,
+    *,
+    nom: str,
+    id_espace: Optional[str],
+    id_workspace: Optional[str],
+    exclude_id: Optional[str] = None,
+) -> None:
+    normalized_name = nom.strip().lower()
+    query = db.query(Liste).filter(func.lower(func.trim(Liste.nom)) == normalized_name)
+    if id_espace:
+        query = query.filter(Liste.id_espace == id_espace)
+    else:
+        query = query.filter(Liste.id_workspace == id_workspace, Liste.id_espace.is_(None))
+    if exclude_id:
+        query = query.filter(Liste.id != exclude_id)
+    if query.first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une liste portant ce nom existe deja dans ce parent.",
+        )
+
+
 LISTE_ALLOWED_ROLES = {
     LISTE_OWNER_ROLE,
     LISTE_ADMIN_ROLE,
@@ -56,6 +79,12 @@ def create_liste(
     id_workspace: str = None,
     creator_user_id: str | None = None,
 ) -> Liste:
+    _ensure_unique_liste_sibling_name(
+        db,
+        nom=nom,
+        id_espace=id_espace,
+        id_workspace=id_workspace,
+    )
     # 1. Créer la liste
     liste = Liste(
         nom=nom, 
@@ -101,6 +130,18 @@ def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         return None
+
+    target_nom = kwargs.get("nom", liste.nom)
+    target_espace_id = kwargs.get("id_espace", liste.id_espace)
+    target_workspace_id = kwargs.get("id_workspace", liste.id_workspace)
+    if any(key in kwargs for key in ("nom", "id_espace", "id_workspace")):
+        _ensure_unique_liste_sibling_name(
+            db,
+            nom=target_nom,
+            id_espace=target_espace_id,
+            id_workspace=target_workspace_id,
+            exclude_id=liste.id,
+        )
     
     for key, value in kwargs.items():
         if hasattr(liste, key) and value is not None:
@@ -292,7 +333,12 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
 
 def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
     """Recupere tous les membres assignes directement a une liste."""
-    return db.query(Membre).filter(Membre.id_liste == liste_id).all()
+    return (
+        db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
+        .filter(Membre.id_liste == liste_id)
+        .all()
+    )
 
 
 # ============================================================================
@@ -359,6 +405,7 @@ def invite_member_to_liste(db: Session, liste_id: str, membre_in: WorkspaceMembe
                 "liste_id": liste_id,
                 "workspace_id": liste.id_workspace,
                 "espace_id": liste.id_espace,
+                "role": membre_in.role,
                 "type": TOKEN_TYPE
             },
             expires_delta=timedelta(days=7),
@@ -424,7 +471,9 @@ def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) ->
         raise HTTPException(status_code=403, detail="Cet email d'invitation ne correspond pas au vôtre.")
     
     existing_member = get_liste_member_record(db, target_liste_id, user_id)
-    invited_role = payload.get("role", LISTE_MEMBER_ROLE)
+    invited_role = payload.get("role") or (
+        existing_member.role if existing_member and existing_member.statut != "Actif" else LISTE_MEMBER_ROLE
+    )
     
     # Valider la hiérarchie des rôles
     validate_role_hierarchy(

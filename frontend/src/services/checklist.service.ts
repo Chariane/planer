@@ -37,7 +37,7 @@ export const checklistService = {
     }),
   
   // Modifier une checklist
-  update: (checklistId: string, data: { texte?: string; is_checked?: boolean }) =>
+  update: (checklistId: string, data: { texte?: string; is_checked?: boolean; id_section?: string | null; id_tache?: string | null }) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { 
       method: 'PUT', 
       body: JSON.stringify(data) 

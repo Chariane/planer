@@ -179,6 +179,21 @@ export default function LeftSidebar() {
     return result;
   };
 
+  const normalizeName = (value: string) => value.trim().toLowerCase();
+
+  const getSiblingSpaces = (parentId: string | null): any[] => {
+    const workspaceData = workspaces.find(w => w.id === workspaceId);
+    if (!workspaceData?.espaces) return [];
+    if (!parentId) {
+      return workspaceData.espaces.filter((space: any) => !space.id_espace_parent);
+    }
+    const parent = getAllSpacesFromTree(workspaceData.espaces).find((space: any) => space.id === parentId);
+    return parent?.sous_espaces || [];
+  };
+
+  const hasSiblingName = (items: any[], name: string, excludeId?: string) =>
+    items.some(item => item.id !== excludeId && normalizeName(item.nom || '') === normalizeName(name));
+
   const findSpacePath = (items: any[] | undefined, targetId: string, path: any[] = []): any[] | null => {
     if (!items) return null;
     for (const item of items) {
@@ -366,6 +381,10 @@ export default function LeftSidebar() {
 
   const handleCreateSpace = async () => {
     if (!newSpaceName.trim() || !workspaceId) return;
+    if (hasSiblingName(getSiblingSpaces(parentSpaceId), newSpaceName)) {
+      showMessage('Un espace portant ce nom existe déjà dans ce parent.', 'error');
+      return;
+    }
     try {
       await addEspace(workspaceId, {
         nom: newSpaceName,
@@ -375,9 +394,9 @@ export default function LeftSidebar() {
       await loadEspacesTree(workspaceId);
       setIsCreateSpaceModalOpen(false);
       showMessage(`Espace "${newSpaceName}" créé avec succès`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur création espace', error);
-      showMessage('Erreur lors de la création de l\'espace', 'error');
+      showMessage(error.message || 'Erreur lors de la création de l\'espace', 'error');
     }
   };
 
@@ -391,14 +410,18 @@ export default function LeftSidebar() {
 
   const handleEditSpace = async () => {
     if (!editSpaceName.trim() || !editingSpace) return;
+    if (hasSiblingName(getSiblingSpaces(editingSpace.id_espace_parent || null), editSpaceName, editingSpace.id)) {
+      showMessage('Un espace portant ce nom existe déjà dans ce parent.', 'error');
+      return;
+    }
     try {
       await updateEspace(editingSpace.id, { nom: editSpaceName, description: editSpaceDesc });
       if (workspaceId) await loadEspacesTree(workspaceId);
       setIsEditSpaceModalOpen(false);
       showMessage(`Espace "${editSpaceName}" modifié avec succès`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur modification espace', error);
-      showMessage('Erreur lors de la modification de l\'espace', 'error');
+      showMessage(error.message || 'Erreur lors de la modification de l\'espace', 'error');
     }
   };
 
@@ -438,6 +461,11 @@ export default function LeftSidebar() {
 
   const handleCreateList = async () => {
     if (!newListName.trim()) return;
+    const siblingLists = selectedSpaceId ? (listsBySpace[selectedSpaceId] || []) : workspaceLists;
+    if (hasSiblingName(siblingLists, newListName)) {
+      showMessage('Une liste portant ce nom existe déjà dans ce parent.', 'error');
+      return;
+    }
     try {
       if (selectedSpaceId) {
         await addListe(selectedSpaceId, { nom: newListName, description: newListDesc });
@@ -468,6 +496,13 @@ export default function LeftSidebar() {
 
   const handleEditList = async () => {
     if (!editListName.trim() || !editingList) return;
+    const siblingLists = editingList.isWorkspaceList
+      ? workspaceLists
+      : (listsBySpace[editingList.parentSpaceId] || []);
+    if (hasSiblingName(siblingLists, editListName, editingList.id)) {
+      showMessage('Une liste portant ce nom existe déjà dans ce parent.', 'error');
+      return;
+    }
     try {
       await updateListe(editingList.id, { nom: editListName, description: editListDesc });
       if (editingList.isWorkspaceList) {
@@ -477,9 +512,9 @@ export default function LeftSidebar() {
       }
       setIsEditListModalOpen(false);
       showMessage(`Liste "${editListName}" modifiée avec succès`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur modification liste', error);
-      showMessage('Erreur lors de la modification de la liste', 'error');
+      showMessage(error.message || 'Erreur lors de la modification de la liste', 'error');
     }
   };
 

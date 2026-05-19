@@ -8,6 +8,7 @@ import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
 import type { Member } from '../../../types';
 
 interface WorkspaceDashboardPanelProps {
@@ -95,8 +96,8 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         const membersData = await workspaceService.getMembers(workspaceId);
         formattedMembers = membersData.map((m: any) => ({
           id: m.id_utilisateur || m.utilisateur?.id || m.id,
-          name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role,
         }));
         membersCount = formattedMembers.length;

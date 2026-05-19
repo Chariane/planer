@@ -1,9 +1,10 @@
 // frontend/src/components/modals/AssignTaskMemberModal.tsx
 import { useState, useEffect } from 'react';
 import { tacheService } from '../../services/tache.service';
-import { espaceService } from '../../services/espace.service';
+import { listeService } from '../../services/liste.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
 
 interface AssignTaskMemberModalProps {
   tacheId: string;
@@ -33,7 +34,7 @@ export default function AssignTaskMemberModal({
   const [loading, setLoading] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
 
-  // Charger les membres disponibles depuis une liste ou un espace
+  // Charger les membres disponibles directement depuis la liste.
   useEffect(() => {
     if (!isOpen || !listeId) return;
 
@@ -41,20 +42,16 @@ export default function AssignTaskMemberModal({
       setLoading(true);
       setMemberError(null);
       try {
-        // Essayer de récupérer la liste pour trouver l'espace parent
-        const liste = await import('../../services/liste.service').then(s => s.listeService.getById(listeId));
-        let espaceId = liste.id_espace;
-        
-        if (espaceId) {
-          const spaceMembers = await espaceService.getMembers(espaceId);
-          const formattedMembers: Member[] = spaceMembers.map((m: any) => ({
+        const listMembers = await listeService.getMembers(listeId);
+        const formattedMembers: Member[] = listMembers
+          .filter((m: any) => m.role === 'Membre')
+          .map((m: any) => ({
             id: m.id_utilisateur || m.id,
-            name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-            email: m.utilisateur?.email || '',
+            name: getMemberDisplayName(m),
+            email: getMemberEmail(m),
             role: m.role,
           }));
-          setMembers(formattedMembers);
-        }
+        setMembers(formattedMembers);
       } catch (err) {
         console.error('Erreur chargement membres:', err);
         setMemberError('Impossible de charger les membres');
@@ -75,8 +72,8 @@ export default function AssignTaskMemberModal({
         const taskMembers = await tacheService.getMembers(tacheId);
         const formatted = taskMembers.map((m: any) => ({
           id: m.id_utilisateur || m.id,
-          name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role || 'Membre',
         }));
         setAssignedMembers(formatted);
@@ -185,7 +182,7 @@ export default function AssignTaskMemberModal({
 
         {availableMembers.length === 0 && assignedMembers.length === 0 && !loading && (
           <div className="text-center text-gray-400 py-4">
-            Aucun membre disponible. Invitez d'abord des membres dans l'espace.
+            Aucun membre avec le rôle Membre disponible. Ajoutez d'abord des membres à la liste.
           </div>
         )}
 

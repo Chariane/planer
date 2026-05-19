@@ -677,7 +677,7 @@ class TacheOut(TacheBase):
     model_config = ConfigDict(from_attributes=True)
 
 class TacheFullOut(TacheOut):
-    membres: List["WorkspaceMemberUserOut"] = []
+    membres: List["WorkspaceMemberOut"] = []
     checklists: List["ChecklistOut"] = []
 
 class TacheDelete(BaseModel):
@@ -1034,6 +1034,8 @@ class ChecklistOut(ChecklistBase):
 class ChecklistDelete(BaseModel):
     id: str
 
+TacheFullOut.model_rebuild()
+TacheKanbanOut.model_rebuild()
 EspaceTreeOut.model_rebuild()
 # Ajouter ces classes si elles n'existent pas déjà
 

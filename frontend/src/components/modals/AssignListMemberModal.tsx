@@ -7,6 +7,8 @@ import { workspaceService } from '../../services/workspace.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { getRoleLabel } from '../../lib/roleHierarchy';
+import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
+import { useResourceRole } from '../../hooks/useResourceRole';
 
 interface AssignListMemberModalProps {
   listeId: string;
@@ -26,6 +28,7 @@ interface Member {
 
 // Rôles disponibles pour l'ajout à une liste (sans Créateur)
 const AVAILABLE_ROLES = ['Membre', 'Administrateur'];
+const LIST_ADMIN_AVAILABLE_ROLES = ['Membre'];
 
 type TabType = 'invited' | 'external';
 
@@ -37,6 +40,7 @@ export default function AssignListMemberModal({
   onClose,
   onSuccess,
 }: AssignListMemberModalProps) {
+  const { role: directListRole } = useResourceRole(listeId, 'liste');
   const [activeTab, setActiveTab] = useState<TabType>('invited');
   const [invitedMembers, setInvitedMembers] = useState<Member[]>([]);
   const [listMembers, setListMembers] = useState<Member[]>([]);
@@ -48,6 +52,17 @@ export default function AssignListMemberModal({
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const isDirectListAdmin = directListRole === 'Administrateur';
+  const availableRoles = isDirectListAdmin ? LIST_ADMIN_AVAILABLE_ROLES : AVAILABLE_ROLES;
+
+  useEffect(() => {
+    if (!availableRoles.includes(selectedRole)) {
+      setSelectedRole('Membre');
+    }
+    if (!availableRoles.includes(inviteRole)) {
+      setInviteRole('Membre');
+    }
+  }, [availableRoles, selectedRole, inviteRole]);
 
   // Charger les membres invités (rôle "Invité") depuis l'espace ou le workspace parent
   useEffect(() => {
@@ -70,14 +85,14 @@ export default function AssignListMemberModal({
         
         const formattedMembers: Member[] = filteredMembers.map((m: any) => ({
           id: m.id_utilisateur || m.id,
-          name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role,
         }));
         setInvitedMembers(formattedMembers);
       } catch (err) {
-        console.error('Erreur chargement membres invités:', err);
-        setError('Impossible de charger les membres invités');
+        console.warn('Membres invités parent non accessibles:', err);
+        setInvitedMembers([]);
       } finally {
         setLoading(false);
       }
@@ -95,8 +110,8 @@ export default function AssignListMemberModal({
         const members = await listeService.getMembers(listeId);
         const formatted = members.map((m: any) => ({
           id: m.id_utilisateur || m.id,
-          name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role || 'Membre',
         }));
         setListMembers(formatted);
@@ -128,14 +143,15 @@ export default function AssignListMemberModal({
     setSuccessMessage(null);
 
     try {
-      await listeService.assignMember(listeId, selectedMemberId, selectedRole);
+      const roleToAssign = availableRoles.includes(selectedRole) ? selectedRole : 'Membre';
+      await listeService.assignMember(listeId, selectedMemberId, roleToAssign);
       
       const newMember = invitedMembers.find(m => m.id === selectedMemberId);
       if (newMember) {
-        setListMembers(prev => [...prev, { ...newMember, role: selectedRole }]);
+        setListMembers(prev => [...prev, { ...newMember, role: roleToAssign }]);
       }
       
-      setSuccessMessage(`Membre ajouté avec le rôle ${getRoleLabel(selectedRole)}`);
+      setSuccessMessage(`Membre ajouté avec le rôle ${getRoleLabel(roleToAssign)}`);
       setSelectedMemberId('');
       setSelectedRole('Membre');
       
@@ -170,8 +186,9 @@ export default function AssignListMemberModal({
     setSuccessMessage(null);
 
     try {
-      await listeService.inviteMember(listeId, inviteEmail, inviteRole);
-      setSuccessMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(inviteRole)}`);
+      const roleToInvite = availableRoles.includes(inviteRole) ? inviteRole : 'Membre';
+      await listeService.inviteMember(listeId, inviteEmail, roleToInvite);
+      setSuccessMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(roleToInvite)}`);
       setInviteEmail('');
       setInviteRole('Membre');
       
@@ -268,7 +285,7 @@ export default function AssignListMemberModal({
               <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-lg">
                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Aucun membre invité disponible</p>
-                <p className="text-xs mt-1">Invitez d'abord des personnes dans l'espace ou le workspace parent</p>
+                <p className="text-xs mt-1">Vous pouvez ajouter une personne avec l'onglet invitation externe</p>
               </div>
             ) : (
               <>
@@ -302,12 +319,14 @@ export default function AssignListMemberModal({
                     onChange={(e) => setSelectedRole(e.target.value)}
                     className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
                   >
-                    {AVAILABLE_ROLES.map(role => (
+                    {availableRoles.map(role => (
                       <option key={role} value={role}>{getRoleLabel(role)}</option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    Le rôle que le membre aura dans cette liste
+                    {isDirectListAdmin
+                      ? 'En tant qu’administrateur direct de cette liste, vous pouvez uniquement attribuer le rôle Membre.'
+                      : 'Le rôle que le membre aura dans cette liste'}
                   </p>
                 </div>
 
@@ -351,12 +370,14 @@ export default function AssignListMemberModal({
                 onChange={(e) => setInviteRole(e.target.value)}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
               >
-                {AVAILABLE_ROLES.map(role => (
+                {availableRoles.map(role => (
                   <option key={role} value={role}>{getRoleLabel(role)}</option>
                 ))}
               </select>
               <p className="text-xs text-gray-400 mt-1">
-                Le rôle que la personne aura dans cette liste après acceptation
+                {isDirectListAdmin
+                  ? 'En tant qu’administrateur direct de cette liste, vous pouvez uniquement attribuer le rôle Membre.'
+                  : 'Le rôle que la personne aura dans cette liste après acceptation'}
               </p>
             </div>
 

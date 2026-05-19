@@ -1,13 +1,14 @@
 // frontend/src/pages/app/CenterContent.tsx
 import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
-import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo } from 'lucide-react';
+import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
 import MemberManagement from '../../components/members/MemberManagement';
 import SpaceDashboard from './components/SpaceDashboard';
 import WorkspaceDashboardPanel from './components/WorkspaceDashboardPanel';
+import PlannerToolsPanel from './components/PlannerToolsPanel';
 import AssignTaskMemberModal from '../../components/modals/AssignTaskMemberModal';
 import AssignListMemberModal from '../../components/modals/AssignListMemberModal';
 import TaskFormModal from './modals/TaskFormModal';
@@ -21,10 +22,13 @@ import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
+import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
+  const { user } = useAuth();
   
   const [currentListWorkspaceId, setCurrentListWorkspaceId] = useState<string | null>(null);
   const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
@@ -60,35 +64,41 @@ export default function CenterContent() {
   // Permissions
   const { canCreateContent } = usePermissions({
     userRole: effectiveRole,
-    resourceType: spaceId ? 'espace' : 'workspace',
+    resourceType: listId ? 'liste' : spaceId ? 'espace' : 'workspace',
   });
   
   // Peut-on assigner des membres à la liste ?
   const canAssignToList = (isAdmin || isCreator || isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
   // Définir les onglets disponibles selon le rôle
-  const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres')[] => {
+  const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres' | 'outils')[] => {
     if (isGuest) {
-      return ['liste', 'kanban', 'gantt'];
+      return ['liste', 'kanban', 'gantt', 'outils'];
     }
-    return ['liste', 'kanban', 'gantt', 'membres'];
+    return ['liste', 'kanban', 'gantt', 'membres', 'outils'];
   };
 
   const availableTabs = getAvailableTabs();
   
   // States
-  const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres'>(availableTabs[0]);
+  const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres' | 'outils'>(availableTabs[0]);
   const [members, setMembers] = useState<Member[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isTaskModalLimited, setIsTaskModalLimited] = useState(false);
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
   const [isAssignTaskModalOpen, setIsAssignTaskModalOpen] = useState(false);
   const [isAssignListModalOpen, setIsAssignListModalOpen] = useState(false);
 
   // Hooks
-  const { tasks, loading, error, loadTasks, addTask, updateTask, deleteTask } = useTasks(listId);
-  const { checklists, loading: checklistLoading, addChecklist, toggleChecklist, updateChecklistText, deleteChecklist } = useTaskChecklists(editingTask?.id);
+  const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask } = useTasks(listId);
+  const { checklists, loading: checklistLoading, addChecklist, toggleChecklist, updateChecklistText, deleteChecklist } = useTaskChecklists(
+    editingTask?.id,
+    () => {
+      loadTasks();
+    }
+  );
 
   // Charger les informations de la liste pour le dashboard
   useEffect(() => {
@@ -110,6 +120,7 @@ export default function CenterContent() {
     const resolveListInheritedSpaceRole = async () => {
       setListInheritedSpaceRole(null);
       if (!currentListEspaceId) return;
+      if (listeRole) return;
 
       const hierarchy = await espaceService.getHierarchy(currentListEspaceId).catch(() => []);
       const roleCandidates = (Array.isArray(hierarchy) ? hierarchy : []).map((space: any) => {
@@ -125,6 +136,12 @@ export default function CenterContent() {
     resolveListInheritedSpaceRole();
   }, [currentListEspaceId, joinedEspaces]);
 
+  useEffect(() => {
+    if (!canAssignToList && isAssignListModalOpen) {
+      setIsAssignListModalOpen(false);
+    }
+  }, [canAssignToList, isAssignListModalOpen]);
+
   // Charger les membres de l'espace (seulement si l'onglet membres est disponible)
   useEffect(() => {
     if (!isGuest && spaceId && spaceId !== 'list') {
@@ -132,8 +149,8 @@ export default function CenterContent() {
         .then(data => {
           setMembers(data.map((m: any) => ({
             id: m.id_utilisateur || m.id,
-            name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-            email: m.utilisateur?.email || '',
+            name: getMemberDisplayName(m),
+            email: getMemberEmail(m),
             role: m.role,
           })));
         })
@@ -150,36 +167,118 @@ export default function CenterContent() {
     return Math.round((checked / taskChecklists.length) * 100);
   };
 
+  const renderListProgressSummary = () => {
+    if (!listId || tasks.length === 0) return null;
+
+    const pendingCount = tasks.filter(task => task.status === 'en attente').length;
+    const inProgressCount = tasks.filter(task => task.status === 'en cours').length;
+    const doneCount = tasks.filter(task => task.status === 'terminé').length;
+    const blockedCount = tasks.filter(task => task.status === 'bloqué').length;
+    const averageProgress = Math.round(
+      tasks.reduce((total, task) => total + getTaskProgress(task), 0) / tasks.length
+    );
+    const done = (doneCount / tasks.length) * 100;
+    const inProgress = done + (inProgressCount / tasks.length) * 100;
+    const blocked = inProgress + (blockedCount / tasks.length) * 100;
+    const statusGradient = `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
+
+    return (
+      <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div
+          className="h-20 w-20 rounded-full flex items-center justify-center"
+          style={{ background: statusGradient }}
+          title={`Avancement moyen : ${averageProgress}%`}
+        >
+          <div className="h-14 w-14 rounded-full bg-white flex items-center justify-center">
+            <span className="text-base font-bold text-gray-800">{averageProgress}%</span>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Avancement de la liste</p>
+          <p className="text-xs text-gray-500 mt-1">{tasks.length} tâche{tasks.length > 1 ? 's' : ''}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">{pendingCount} en attente</span>
+            <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">{inProgressCount} en cours</span>
+            <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{doneCount} terminée{doneCount > 1 ? 's' : ''}</span>
+            {blockedCount > 0 && (
+              <span className="px-2 py-1 rounded-full bg-red-100 text-red-700">{blockedCount} bloquée{blockedCount > 1 ? 's' : ''}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const openCreateTask = () => {
     if (!canCreateContent) return;
     setEditingTask(null);
+    setIsTaskModalLimited(false);
     setIsTaskModalOpen(true);
   };
 
+  const canOperateAssignedTask = (task: Task): boolean => {
+    return !!user?.id && task.assignees.some(assignee => assignee.id === user.id);
+  };
+
   const openEditTask = (task: Task) => {
-    if (!canCreateContent) return;
+    if (!canCreateContent && !canOperateAssignedTask(task)) return;
     setEditingTask(task);
+    setIsTaskModalLimited(!canCreateContent && canOperateAssignedTask(task));
     setIsTaskModalOpen(true);
   };
 
   const handleTaskSubmit = async (formData: any) => {
-    if (!canCreateContent) return;
-    if (editingTask) {
-      await updateTask({ ...editingTask, ...formData });
-    } else {
-      await addTask({ ...formData, listId: listId! });
+    try {
+      if (isTaskModalLimited && editingTask) {
+        await updateTaskStatus(editingTask.id, formData.status);
+        setIsTaskModalOpen(false);
+        setEditingTask(null);
+        setIsTaskModalLimited(false);
+        return;
+      }
+
+      if (!canCreateContent) return;
+      if (editingTask) {
+        await updateTask({ ...editingTask, ...formData });
+      } else {
+        await addTask({ ...formData, listId: listId! });
+      }
+      setIsTaskModalOpen(false);
+      setEditingTask(null);
+      setIsTaskModalLimited(false);
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors de l’enregistrement de la tâche');
     }
-    setIsTaskModalOpen(false);
-    setEditingTask(null);
   };
 
   // Si aucune liste n'est sélectionnée
   if (!listId) {
     if (spaceId && spaceId !== 'list') {
-      return <div className="p-6"><SpaceDashboard spaceId={spaceId} /></div>;
+      return (
+        <div className="p-6 space-y-6">
+          <SpaceDashboard spaceId={spaceId} />
+          <PlannerToolsPanel
+            workspaceId={workspaceId}
+            espaceId={spaceId}
+            currentUserId={user?.id}
+            effectiveRole={userEspaceRole || userWorkspaceRole}
+            tasks={[]}
+          />
+        </div>
+      );
     }
     if (workspaceId) {
-      return <div className="p-6"><WorkspaceDashboardPanel workspaceId={workspaceId} /></div>;
+      return (
+        <div className="p-6 space-y-6">
+          <WorkspaceDashboardPanel workspaceId={workspaceId} />
+          <PlannerToolsPanel
+            workspaceId={workspaceId}
+            currentUserId={user?.id}
+            effectiveRole={userWorkspaceRole}
+            tasks={[]}
+          />
+        </div>
+      );
     }
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -216,6 +315,8 @@ export default function CenterContent() {
           </p>
         </div>
 
+        {renderListProgressSummary()}
+
         {/* Onglets pour les invités (sans l'onglet membres) */}
         <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
           {availableTabs.filter(tab => tab !== 'membres').map(tab => (
@@ -229,9 +330,11 @@ export default function CenterContent() {
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
               {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
               {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
+              {tab === 'outils' && <Wrench className="w-4 h-4" />}
               {tab === 'liste' && 'Vue liste'}
               {tab === 'kanban' && 'Vue Kanban'}
               {tab === 'gantt' && 'Diagramme de Gantt'}
+              {tab === 'outils' && 'Outils'}
             </button>
           ))}
         </div>
@@ -252,12 +355,24 @@ export default function CenterContent() {
 
         {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => {}} />}
         {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+        {activeTab === 'outils' && (
+          <PlannerToolsPanel
+            workspaceId={currentListWorkspaceId || workspaceId}
+            espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+            listeId={listId}
+            currentUserId={user?.id}
+            effectiveRole={effectiveRole}
+            tasks={tasks}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="p-6">
+      {renderListProgressSummary()}
+
       {/* Onglets */}
       <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
         {availableTabs.map(tab => (
@@ -272,10 +387,12 @@ export default function CenterContent() {
             {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
             {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
             {tab === 'membres' && <Users className="w-4 h-4" />}
+            {tab === 'outils' && <Wrench className="w-4 h-4" />}
             {tab === 'liste' && 'Vue liste'}
             {tab === 'kanban' && 'Vue Kanban'}
             {tab === 'gantt' && 'Diagramme de Gantt'}
             {tab === 'membres' && 'Membres'}
+            {tab === 'outils' && 'Outils'}
           </button>
         ))}
       </div>
@@ -300,16 +417,29 @@ export default function CenterContent() {
           tasks={tasks}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          onEditTask={canCreateContent ? openEditTask : () => {}}
+          onEditTask={openEditTask}
           onDeleteTask={canCreateContent ? deleteTask : () => {}}
           onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
           getTaskProgress={getTaskProgress}
           readOnly={!canCreateContent}
+          canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
+          canDeleteTask={() => canCreateContent}
+          canAssignTask={() => canCreateContent}
         />
       )}
 
       {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={canCreateContent ? updateTask : () => {}} />}
       {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+      {activeTab === 'outils' && (
+        <PlannerToolsPanel
+          workspaceId={currentListWorkspaceId || workspaceId}
+          espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+          listeId={listId}
+          currentUserId={user?.id}
+          effectiveRole={effectiveRole}
+          tasks={tasks}
+        />
+      )}
 
       {activeTab === 'membres' && (
         <MemberManagement 
@@ -320,39 +450,44 @@ export default function CenterContent() {
         />
       )}
 
-      {/* Modales - visibles uniquement pour Admin et Créateur */}
-      {(isAdmin || isCreator) && (
+      {/* Modales */}
+      {(isAdmin || isCreator || isTaskModalLimited) && (
         <>
           <TaskFormModal
             isOpen={isTaskModalOpen}
-            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); }}
+            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); setIsTaskModalLimited(false); }}
             editingTask={editingTask}
             members={members}
             checklists={checklists}
             checklistLoading={checklistLoading}
             onAddChecklist={addChecklist}
             onToggleChecklist={toggleChecklist}
-            onUpdateChecklistText={updateChecklistText}
-            onDeleteChecklist={deleteChecklist}
+            onUpdateChecklistText={isTaskModalLimited ? async () => {} : updateChecklistText}
+            onDeleteChecklist={isTaskModalLimited ? async () => {} : deleteChecklist}
             onSubmit={handleTaskSubmit}
+            limitedOperational={isTaskModalLimited}
           />
 
-          <AssignTaskMemberModal
-            tacheId={selectedTaskForAssignment?.id || ''}
-            listeId={listId}
-            isOpen={isAssignTaskModalOpen}
-            onClose={() => { setIsAssignTaskModalOpen(false); setSelectedTaskForAssignment(null); }}
-            onSuccess={loadTasks}
-          />
+          {(isAdmin || isCreator) && (
+            <>
+              <AssignTaskMemberModal
+                tacheId={selectedTaskForAssignment?.id || ''}
+                listeId={listId}
+                isOpen={isAssignTaskModalOpen}
+                onClose={() => { setIsAssignTaskModalOpen(false); setSelectedTaskForAssignment(null); }}
+                onSuccess={loadTasks}
+              />
 
-          <AssignListMemberModal
-            listeId={listId}
-            espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
-            workspaceId={currentListWorkspaceId || workspaceId || undefined}
-            isOpen={isAssignListModalOpen}
-            onClose={() => setIsAssignListModalOpen(false)}
-            onSuccess={loadTasks}
-          />
+              <AssignListMemberModal
+                listeId={listId}
+                espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+                workspaceId={currentListWorkspaceId || workspaceId || undefined}
+                isOpen={isAssignListModalOpen}
+                onClose={() => setIsAssignListModalOpen(false)}
+                onSuccess={loadTasks}
+              />
+            </>
+          )}
         </>
       )}
     </div>

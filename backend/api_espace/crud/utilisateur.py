@@ -147,6 +147,32 @@ def get_sub_espaces_for_parent(db: Session, parent_id: str) -> List[Espace]:
     return db.query(Espace).filter(Espace.id_espace_parent == parent_id).all()
 
 
+def _ensure_unique_espace_sibling_name(
+    db: Session,
+    *,
+    nom: str,
+    id_workspace: str,
+    id_espace_parent: Optional[str],
+    exclude_id: Optional[str] = None,
+) -> None:
+    normalized_name = nom.strip().lower()
+    query = db.query(Espace).filter(
+        Espace.id_workspace == id_workspace,
+        func.lower(func.trim(Espace.nom)) == normalized_name,
+    )
+    if id_espace_parent:
+        query = query.filter(Espace.id_espace_parent == id_espace_parent)
+    else:
+        query = query.filter(Espace.id_espace_parent.is_(None))
+    if exclude_id:
+        query = query.filter(Espace.id != exclude_id)
+    if query.first():
+        raise HTTPException(
+            status_code=409,
+            detail="Un espace portant ce nom existe deja dans ce parent.",
+        )
+
+
 def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional[str] = None) -> List[dict]:
     """
     Récupère tout le contenu d'un workspace sous forme d'arborescence.
@@ -251,6 +277,12 @@ def get_espaces_where_admin(db: Session, user_id: str) -> List[Espace]:
 
 
 def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) -> Espace:
+    _ensure_unique_espace_sibling_name(
+        db,
+        nom=espace_in.nom,
+        id_workspace=espace_in.id_workspace,
+        id_espace_parent=espace_in.id_espace_parent,
+    )
     espace = Espace(
         **espace_in.model_dump(exclude_none=True),
     )
@@ -283,6 +315,17 @@ def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate) -> Optio
     if not espace:
         return None
     update_data = espace_in.model_dump(exclude_unset=True)
+    target_nom = update_data.get("nom", espace.nom)
+    target_workspace_id = update_data.get("id_workspace", espace.id_workspace)
+    target_parent_id = update_data.get("id_espace_parent", espace.id_espace_parent)
+    if any(key in update_data for key in ("nom", "id_workspace", "id_espace_parent")):
+        _ensure_unique_espace_sibling_name(
+            db,
+            nom=target_nom,
+            id_workspace=target_workspace_id,
+            id_espace_parent=target_parent_id,
+            exclude_id=espace.id,
+        )
     for key, value in update_data.items():
         setattr(espace, key, value)
     commit_or_raise(

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
+import { listeService } from '../services/liste.service';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,10 +14,12 @@ export default function InvitationAccept() {
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [invitationType, setInvitationType] = useState<'workspace' | 'espace' | null>(null);
+  const [invitationType, setInvitationType] = useState<'workspace' | 'espace' | 'liste' | null>(null);
   const [acceptSuccess, setAcceptSuccess] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(5);
   const token = searchParams.get('token');
+  const status = searchParams.get('status');
+  const redirectedType = searchParams.get('type') as 'workspace' | 'espace' | 'liste' | null;
 
   useEffect(() => {
     const handleInvitation = async () => {
@@ -46,6 +49,37 @@ export default function InvitationAccept() {
       }
 
       const isExistingUserInvitation = Boolean(payload?.sub);
+      const performLogoutAndRedirect = () => {
+        // Déconnecter l'utilisateur
+        logout();
+        // Rediriger vers la page de connexion avec le token d'invitation
+        navigate(`/login?invitation_token=${encodeURIComponent(token)}`);
+      };
+
+      const startAcceptedRedirect = () => {
+        let countdown = 5;
+        const interval = setInterval(() => {
+          countdown--;
+          setRedirectCountdown(countdown);
+          if (countdown <= 0) {
+            clearInterval(interval);
+            performLogoutAndRedirect();
+          }
+        }, 1000);
+      };
+
+      const showAccepted = (type: 'workspace' | 'espace' | 'liste') => {
+        setInvitationType(type);
+        setAcceptSuccess(true);
+        setLoading(false);
+        sessionStorage.removeItem('pendingInvitation');
+        startAcceptedRedirect();
+      };
+
+      if (status === 'success' || status === 'already_member') {
+        showAccepted(redirectedType || 'liste');
+        return;
+      }
 
       // Si l'utilisateur n'est pas connecté, on distingue les deux cas :
       // - utilisateur existant -> connexion
@@ -65,89 +99,39 @@ export default function InvitationAccept() {
       setLoading(true);
       const isWorkspaceToken = payload?.type === 'workspace_invitation' || payload?.scope === 'workspace_invitation_accept';
       const isEspaceToken = payload?.type === 'espace_invitation' || payload?.scope === 'espace_invitation_accept';
-
-      const performLogoutAndRedirect = () => {
-        // Déconnecter l'utilisateur
-        logout();
-        // Rediriger vers la page de connexion avec le token d'invitation
-        navigate(`/login?invitation_token=${encodeURIComponent(token)}`);
-      };
+      const isListeToken = payload?.type === 'liste_invitation' || payload?.scope === 'liste_invitation_accept';
 
       try {
         if (isWorkspaceToken) {
           console.log('📤 Acceptation workspace via token workspace...');
           const result = await workspaceService.acceptInvitation(token);
           console.log('✅ Invitation workspace acceptée:', result);
-          setInvitationType('workspace');
-          setAcceptSuccess(true);
-          sessionStorage.removeItem('pendingInvitation');
-          
-          // Redirection vers la page de connexion après 5 secondes avec déconnexion
-          let countdown = 5;
-          const interval = setInterval(() => {
-            countdown--;
-            setRedirectCountdown(countdown);
-            if (countdown <= 0) {
-              clearInterval(interval);
-              performLogoutAndRedirect();
-            }
-          }, 1000);
+          showAccepted('workspace');
           
         } else if (isEspaceToken) {
           console.log('📤 Acceptation espace via token espace...');
           const result = await espaceService.acceptInvitation(token);
           console.log('✅ Invitation espace acceptée:', result);
-          setInvitationType('espace');
-          setAcceptSuccess(true);
-          sessionStorage.removeItem('pendingInvitation');
+          showAccepted('espace');
           
-          // Redirection vers la page de connexion après 5 secondes avec déconnexion
-          let countdown = 5;
-          const interval = setInterval(() => {
-            countdown--;
-            setRedirectCountdown(countdown);
-            if (countdown <= 0) {
-              clearInterval(interval);
-              performLogoutAndRedirect();
-            }
-          }, 1000);
+        } else if (isListeToken) {
+          console.log('📤 Acceptation liste via token liste...');
+          const result = await listeService.acceptInvitation(token);
+          console.log('✅ Invitation liste acceptée:', result);
+          showAccepted('liste');
           
         } else {
           console.log('❌ Type de token inconnu, tentative workspace puis espace...');
           try {
             const result = await workspaceService.acceptInvitation(token);
             console.log('✅ Invitation workspace acceptée:', result);
-            setInvitationType('workspace');
-            setAcceptSuccess(true);
-            sessionStorage.removeItem('pendingInvitation');
-            
-            let countdown = 5;
-            const interval = setInterval(() => {
-              countdown--;
-              setRedirectCountdown(countdown);
-              if (countdown <= 0) {
-                clearInterval(interval);
-                performLogoutAndRedirect();
-              }
-            }, 1000);
+            showAccepted('workspace');
             
           } catch (workspaceErr) {
             console.log('❌ Échec workspace, tentative espace...');
             const result = await espaceService.acceptInvitation(token);
             console.log('✅ Invitation espace acceptée:', result);
-            setInvitationType('espace');
-            setAcceptSuccess(true);
-            sessionStorage.removeItem('pendingInvitation');
-            
-            let countdown = 5;
-            const interval = setInterval(() => {
-              countdown--;
-              setRedirectCountdown(countdown);
-              if (countdown <= 0) {
-                clearInterval(interval);
-                performLogoutAndRedirect();
-              }
-            }, 1000);
+            showAccepted('espace');
           }
         }
       } catch (inviteErr: any) {
@@ -162,7 +146,7 @@ export default function InvitationAccept() {
     };
 
     handleInvitation();
-  }, [token, navigate, isAuthenticated, authLoading, logout]);
+  }, [token, status, redirectedType, navigate, isAuthenticated, authLoading, logout]);
 
   // Affichage du message de succès avec compte à rebours
   if (acceptSuccess) {
@@ -175,7 +159,11 @@ export default function InvitationAccept() {
           </h2>
           <p className="text-gray-600 mb-4">
             Vous avez rejoint avec succès{' '}
-            {invitationType === 'workspace' ? 'le workspace' : 'l\'espace'}.
+            {invitationType === 'workspace'
+              ? 'le workspace'
+              : invitationType === 'liste'
+                ? 'la liste'
+                : 'l\'espace'}.
           </p>
           <p className="text-sm text-gray-500 mb-4">
             Pour des raisons de sécurité, vous allez être déconnecté(e).

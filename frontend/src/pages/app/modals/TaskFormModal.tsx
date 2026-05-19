@@ -44,6 +44,7 @@ interface TaskFormModalProps {
   onUpdateChecklistText: (checklistId: string, newText: string) => Promise<void>;
   onDeleteChecklist: (checklistId: string) => Promise<void>;
   onSubmit: (data: any) => Promise<void>;
+  limitedOperational?: boolean;
 }
 
 export default function TaskFormModal({
@@ -58,8 +59,10 @@ export default function TaskFormModal({
   onUpdateChecklistText,
   onDeleteChecklist,
   onSubmit,
+  limitedOperational = false,
 }: TaskFormModalProps) {
   const getTodayDate = () => new Date().toISOString().split('T')[0];
+  const canEditTaskFields = !limitedOperational;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -100,23 +103,26 @@ export default function TaskFormModal({
     if (!title.trim()) return;
     const assigneeMembers = members.filter(m => assignedMemberIds.includes(m.id));
     await onSubmit({
-      title,
-      description,
-      startDate,
-      dueDate,
-      status,
-      priority,
-      assignees: assigneeMembers,
-      checklists,
-    });
-    onClose();
+        title,
+        description,
+        startDate,
+        dueDate,
+        status,
+        priority,
+        assignees: assigneeMembers,
+        checklists,
+      });
   };
 
   const handleAddChecklist = async () => {
     if (!newChecklistText.trim()) return;
-    await onAddChecklist(newChecklistText);
-    setNewChecklistText('');
-    setIsAddingChecklist(false);
+    try {
+      await onAddChecklist(newChecklistText);
+      setNewChecklistText('');
+      setIsAddingChecklist(false);
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors de l’ajout de la checklist');
+    }
   };
 
   return (
@@ -131,6 +137,7 @@ export default function TaskFormModal({
             placeholder="Ex: Implémenter l'authentification"
             value={title}
             onChange={e => setTitle(e.target.value)}
+            disabled={!canEditTaskFields}
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
             autoFocus
           />
@@ -143,6 +150,7 @@ export default function TaskFormModal({
             rows={3}
             value={description}
             onChange={e => setDescription(e.target.value)}
+            disabled={!canEditTaskFields}
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
           />
         </div>
@@ -154,6 +162,7 @@ export default function TaskFormModal({
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
+              disabled={!canEditTaskFields}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
             />
           </div>
@@ -163,6 +172,7 @@ export default function TaskFormModal({
               type="date"
               value={dueDate}
               onChange={e => setDueDate(e.target.value)}
+              disabled={!canEditTaskFields}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
             />
           </div>
@@ -188,6 +198,7 @@ export default function TaskFormModal({
           <select
             value={priority}
             onChange={e => setPriority(e.target.value as Task['priority'])}
+            disabled={!canEditTaskFields}
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
           >
             {priorityOptions.map(opt => (
@@ -196,8 +207,29 @@ export default function TaskFormModal({
           </select>
         </div>
 
+        {editingTask && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Membres assignés</label>
+            {editingTask.assignees.length > 0 ? (
+              <div className="flex flex-wrap gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                {editingTask.assignees.map(member => (
+                  <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs text-gray-700 shadow-sm">
+                    <span className="font-medium">{member.name}</span>
+                    {member.email && <span className="text-gray-400">({member.email})</span>}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-sm text-gray-400">
+                Aucun membre assigné
+              </p>
+            )}
+          </div>
+        )}
+
+        {canEditTaskFields && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Membres assignés</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Modifier les membres assignés</label>
           <select
             multiple
             value={assignedMemberIds}
@@ -215,6 +247,7 @@ export default function TaskFormModal({
           </select>
           <p className="text-xs text-gray-400 mt-1">Maintenez Ctrl (ou Cmd) pour sélectionner plusieurs</p>
         </div>
+        )}
 
         <div className="border-t border-gray-100 pt-4">
           <div className="flex items-center justify-between mb-3">
@@ -249,7 +282,7 @@ export default function TaskFormModal({
                     onKeyDown={(e) => e.key === 'Enter' && onUpdateChecklistText(checklist.id, editingChecklistText).then(() => {
                       setEditingChecklistId(null);
                       setEditingChecklistText('');
-                    })}
+                    }).catch((err: any) => alert(err?.message || 'Erreur lors de la modification de la checklist'))}
                     className="flex-1 text-sm border rounded px-2 py-1 focus:ring-1 focus:ring-secondary"
                     autoFocus
                   />
@@ -260,7 +293,7 @@ export default function TaskFormModal({
                 )}
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                  {editingChecklistId !== checklist.id && (
+                  {canEditTaskFields && editingChecklistId !== checklist.id && (
                     <button
                       onClick={() => {
                         setEditingChecklistId(checklist.id);
@@ -271,12 +304,12 @@ export default function TaskFormModal({
                       <Edit className="h-3 w-3" />
                     </button>
                   )}
-                  {editingChecklistId === checklist.id && (
+                  {canEditTaskFields && editingChecklistId === checklist.id && (
                     <button
                       onClick={() => onUpdateChecklistText(checklist.id, editingChecklistText).then(() => {
                         setEditingChecklistId(null);
                         setEditingChecklistText('');
-                      })}
+                      }).catch((err: any) => alert(err?.message || 'Erreur lors de la modification de la checklist'))}
                       disabled={checklistLoading === `edit-${checklist.id}`}
                       className="p-1 text-green-500 hover:text-green-600"
                     >
@@ -289,17 +322,19 @@ export default function TaskFormModal({
                       )}
                     </button>
                   )}
-                  <button
-                    onClick={() => onDeleteChecklist(checklist.id)}
-                    disabled={checklistLoading === `delete-${checklist.id}`}
-                    className="p-1 text-gray-400 hover:text-red-500"
-                  >
-                    {checklistLoading === `delete-${checklist.id}` ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Trash className="h-3 w-3" />
-                    )}
-                  </button>
+                  {canEditTaskFields && (
+                    <button
+                      onClick={() => onDeleteChecklist(checklist.id)}
+                      disabled={checklistLoading === `delete-${checklist.id}`}
+                      className="p-1 text-gray-400 hover:text-red-500"
+                    >
+                      {checklistLoading === `delete-${checklist.id}` ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash className="h-3 w-3" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

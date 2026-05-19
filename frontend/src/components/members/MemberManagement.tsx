@@ -7,7 +7,9 @@ import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useResourceRole } from '../../hooks/useResourceRole';
 import { getRoleLabel, getAvailableInvitationRoles } from '../../lib/roleHierarchy';
+import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
 import type { Member } from '../../types';
 
 interface MemberManagementProps {
@@ -65,11 +67,14 @@ export default function MemberManagement({
   };
 
   // Permissions
-  const resourceType = workspaceId ? 'workspace' : espaceId ? 'espace' : 'liste';
+  const resourceType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
+  const { role: directListRole } = useResourceRole(listeId, 'liste');
   const { canManageMembers, canInviteMembers, isAdmin, isCreator } = usePermissions({
     userRole: currentUserRole,
     resourceType: resourceType,
   });
+  const isDirectListAdmin = !!listeId && directListRole === ADMIN_ROLE;
+  const canChangeMemberRoles = canManageMembers && !isDirectListAdmin;
 
   // Rôles disponibles pour l'invitation (selon le rôle de l'inviteur)
   const availableInvitationRoles = getAvailableInvitationRoles(currentUserRole || '');
@@ -78,12 +83,12 @@ export default function MemberManagement({
     setLoading(true);
     try {
       let data;
-      if (workspaceId) {
-        data = await workspaceService.getMembers(workspaceId);
+      if (listeId) {
+        data = await listeService.getMembers(listeId);
       } else if (espaceId) {
         data = await espaceService.getMembers(espaceId);
-      } else if (listeId) {
-        data = await listeService.getMembers(listeId);
+      } else if (workspaceId) {
+        data = await workspaceService.getMembers(workspaceId);
       } else {
         setMembers([]);
         setLoading(false);
@@ -92,8 +97,8 @@ export default function MemberManagement({
       
       setMembers(data.map((m: any) => ({
         id: m.id_utilisateur || m.utilisateur?.id || m.id,
-        name: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
-        email: m.utilisateur?.email || '',
+        name: getMemberDisplayName(m),
+        email: getMemberEmail(m),
         role: m.role,
       })));
     } catch (err) {
@@ -111,13 +116,13 @@ export default function MemberManagement({
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
     try {
-      if (workspaceId) {
-        await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
-      } else if (espaceId) {
-        await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
-      } else if (listeId) {
+      if (listeId) {
         // Pour une liste, on utilise inviteMember (envoi d'email) au lieu de assignMember
         await listeService.inviteMember(listeId, inviteEmail, inviteRole);
+      } else if (espaceId) {
+        await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
+      } else if (workspaceId) {
+        await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
       }
       await loadMembers();
       onMemberAdded?.();
@@ -147,12 +152,12 @@ export default function MemberManagement({
     
     if (!confirm('Retirer ce membre ?')) return;
     try {
-      if (workspaceId) {
-        await workspaceService.removeMember(workspaceId, userId);
+      if (listeId) {
+        await listeService.unassignMember(listeId, userId);
       } else if (espaceId) {
         await espaceService.removeMember(espaceId, userId);
-      } else if (listeId) {
-        await listeService.unassignMember(listeId, userId);
+      } else if (workspaceId) {
+        await workspaceService.removeMember(workspaceId, userId);
       }
       await loadMembers();
       showMessage('Membre retiré avec succès', 'success');
@@ -164,26 +169,36 @@ export default function MemberManagement({
 
   const handleChangeRole = async (userId: string, newRole: string) => {
     const targetMember = members.find(m => m.id === userId);
+
+    if (newRole === CREATOR_ROLE) {
+      showMessage('Le rôle Créateur ne peut pas être attribué manuellement', 'error');
+      return;
+    }
+
+    if (listeId && isDirectListAdmin) {
+      showMessage('Un administrateur direct de liste ne peut pas modifier le rôle d’un membre', 'error');
+      return;
+    }
     
     // L'Admin ne peut pas modifier un autre Admin ou le Créateur
-    if (isAdmin && targetMember && ((targetMember.role as string) === ADMIN_ROLE || (targetMember.role as string) === CREATOR_ROLE)) {
+    if (!listeId && isAdmin && targetMember && ((targetMember.role as string) === ADMIN_ROLE || (targetMember.role as string) === CREATOR_ROLE)) {
       showMessage('Vous ne pouvez pas modifier le rôle d\'un autre administrateur ou du créateur', 'error');
       return;
     }
     
     // L'Admin ne peut pas promouvoir quelqu'un au rôle Administrateur
-    if (isAdmin && newRole === ADMIN_ROLE) {
+    if (!listeId && isAdmin && newRole === ADMIN_ROLE) {
       showMessage('Vous ne pouvez pas promouvoir un membre au rôle Administrateur', 'error');
       return;
     }
     
     try {
-      if (workspaceId) {
-        await workspaceService.updateMemberRole(workspaceId, userId, newRole);
+      if (listeId) {
+        await listeService.assignMember(listeId, userId, newRole);
       } else if (espaceId) {
         await espaceService.updateMemberRole(espaceId, userId, newRole);
-      } else if (listeId) {
-        await listeService.assignMember(listeId, userId, newRole);
+      } else if (workspaceId) {
+        await workspaceService.updateMemberRole(workspaceId, userId, newRole);
       }
       await loadMembers();
       showMessage(`Rôle modifié avec succès`, 'success');
@@ -191,6 +206,8 @@ export default function MemberManagement({
       console.error('Erreur modification rôle', err);
       if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
         showMessage('Ce rôle est déjà couvert par un rôle parent', 'error');
+      } else if (err.message?.includes('403') || err.message?.includes('Créateur') || err.message?.includes('Createur')) {
+        showMessage(err.message, 'error');
       } else {
         showMessage('Erreur lors de la modification du rôle', 'error');
       }
@@ -201,8 +218,7 @@ export default function MemberManagement({
 
   // Pour les listes, les rôles disponibles pour l'assignation
   const getAvailableRolesForListe = () => {
-    if (isCreator) return ['Membre', 'Administrateur', 'Créateur'];
-    if (isAdmin) return ['Membre', 'Invité'];
+    if (isCreator || isAdmin) return ['Membre', 'Administrateur'];
     return ['Membre'];
   };
 
@@ -239,11 +255,11 @@ export default function MemberManagement({
 
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-gray-800">
-          {workspaceId && 'Membres du workspace'}
-          {espaceId && 'Membres de l\'espace'}
           {listeId && 'Membres de la liste'}
+          {!listeId && espaceId && 'Membres de l\'espace'}
+          {!listeId && !espaceId && workspaceId && 'Membres du workspace'}
         </h3>
-        {canInviteMembers && availableInvitationRoles.length > 0 && (
+        {!listeId && canInviteMembers && availableInvitationRoles.length > 0 && (
           <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
             <UserPlus className="h-4 w-4 mr-1" /> {getInviteButtonText()}
           </Button>
@@ -272,13 +288,13 @@ export default function MemberManagement({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {!isCreatorMember(member.role) && canManageMembers && (
+                {!isCreatorMember(member.role) && canChangeMemberRoles && (
                   <>
                     <select
                       value={member.role}
                       onChange={(e) => handleChangeRole(member.id, e.target.value)}
                       className="text-sm border rounded px-2 py-1"
-                      disabled={isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
+                      disabled={!listeId && isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
                     >
                       {displayRoles.map(r => (
                         <option key={r} value={r}>{getRoleLabel(r)}</option>
@@ -287,11 +303,14 @@ export default function MemberManagement({
                     <button
                       onClick={() => handleRemoveMember(member.id)}
                       className="p-1 text-red-500 hover:bg-red-50 rounded"
-                      disabled={isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
+                      disabled={!listeId && isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </>
+                )}
+                {!isCreatorMember(member.role) && canManageMembers && !canChangeMemberRoles && (
+                  <span className="text-xs text-gray-400 italic">Modification verrouillée</span>
                 )}
                 {isCreatorMember(member.role) && (
                   <span className="text-xs text-gray-400 italic">Créateur</span>

@@ -672,11 +672,23 @@ def _validate_list_member_management_permissions(
             detail="Un administrateur ne peut pas gerer le createur de la liste.",
         )
 
-    # Un Admin ne peut pas attribuer le rôle Créateur
-    if actor_role == LISTE_ADMIN_ROLE and new_role and new_role == LISTE_OWNER_ROLE:
+    # Le rôle Créateur est un rôle système : il n'est jamais attribué manuellement.
+    if new_role and new_role == LISTE_OWNER_ROLE:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut pas attribuer le role Createur.",
+            detail="Le role Createur ne peut pas etre attribue manuellement.",
+        )
+
+    if (
+        actor_role == LISTE_ADMIN_ROLE
+        and actor_source_type == ResourceType.LISTE
+        and actor_source_id == liste_id
+        and target_member is not None
+        and new_role
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur direct de liste ne peut pas modifier le role d'un membre existant.",
         )
 
     # Le créateur direct de la liste ne peut pas se retirer/s'auto-retrograder
@@ -744,6 +756,18 @@ def _get_tache_or_404(db: Session, tache_id: str) -> Tache:
     return tache
 
 
+def _get_active_task_assignment(db: Session, tache_id: str, current_user_id: str) -> Membre | None:
+    return (
+        db.query(Membre)
+        .filter(
+            Membre.id_tache == tache_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+
 def _require_task_access(db: Session, tache_id: str, current_user_id: str):
     """Vérifie l'accès opérationnel à une tâche."""
     tache = _get_tache_or_404(db, tache_id)
@@ -762,7 +786,7 @@ def _require_task_management_access(db: Session, tache_id: str, current_user_id:
     """
     Vérifie l'accès de gestion d'une tâche.
     - Créateur/Admin de la liste, du workspace ou d'un espace parent : peuvent gérer toutes les tâches
-    - Membre : peut uniquement gérer les tâches qui lui sont assignées
+    - Membre direct de liste : lecture seule, même sur les tâches assignées
     """
     tache = _get_tache_or_404(db, tache_id)
     liste = _get_liste_or_404(db, tache.id_liste)
@@ -773,16 +797,26 @@ def _require_task_management_access(db: Session, tache_id: str, current_user_id:
     except HTTPException:
         pass
     
-    # Vérifier le rôle de l'utilisateur sur la liste
-    liste_member = _get_liste_member_record(db, liste.id, current_user_id)
-    
-    if liste_member and liste_member.role == LISTE_MEMBER_ROLE:
-        # Le membre ne peut gérer que les tâches qui lui sont assignées
-        task_member = _get_tache_member_record(db, tache_id, current_user_id)
-        if task_member:
-            return True
-        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que les tâches qui vous sont assignées")
-    
+    raise HTTPException(status_code=403, detail="Acces non autorise a cette tache")
+
+
+def _require_assigned_task_operational_access(db: Session, tache_id: str, current_user_id: str):
+    """
+    Donne un accès opérationnel limité à la tâche :
+    - Créateur/Admin de la liste ou parent : accès opérationnel accepté
+    - Membre directement assigné à la tâche : peut agir sur son statut et ses checklists
+    """
+    tache = _get_tache_or_404(db, tache_id)
+
+    try:
+        _get_list_management_grant(db, tache.id_liste, current_user_id)
+        return True
+    except HTTPException:
+        pass
+
+    if _get_active_task_assignment(db, tache_id, current_user_id):
+        return True
+
     raise HTTPException(status_code=403, detail="Acces non autorise a cette tache")
 
 

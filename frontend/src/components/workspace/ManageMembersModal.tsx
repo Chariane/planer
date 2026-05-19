@@ -5,6 +5,7 @@ import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { espaceService } from '../../services/espace.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
 
 interface Member {
   id: string;
@@ -40,8 +41,8 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
       const normalizedMembers: Member[] = data.map((m: any) => ({
         id: m.id,
         user_id: m.id_utilisateur || m.id,
-        username: m.utilisateur?.username || m.utilisateur?.nom || 'Inconnu',
-        email: m.utilisateur?.email || '',
+        username: getMemberDisplayName(m),
+        email: getMemberEmail(m),
         role: m.role,
         statut: m.statut,
       }));

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ..core.emails import send_liste_invitation_email
@@ -24,6 +24,7 @@ from ..core.function import (
     _require_list_member_management_access,
     _require_list_read_access,
     _get_tache_or_404,
+    _require_assigned_task_operational_access,
     _require_task_management_access,
     _require_task_read_access,
     _validate_list_member_management_permissions,
@@ -118,6 +119,7 @@ from ..schemas import (
     FichierUpdate,
     MessageResponse,
     MembreOut,
+    WorkspaceMemberOut,
     RapportCreate,
     RapportOut,
     RapportUpdate,
@@ -132,7 +134,7 @@ from ..schemas import (
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
     WorkspaceMemberInvite,
 )
-from ..models import Liste
+from ..models import Liste, Utilisateur
 
 router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
 
@@ -252,7 +254,7 @@ def delete_liste_endpoint(
 def assign_liste_endpoint(
     liste_id: str,
     utilisateur_id: str,
-    role: str = LISTE_MEMBER_ROLE,
+    role: str = Body(LISTE_MEMBER_ROLE, embed=True),
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
@@ -294,14 +296,14 @@ def unassign_liste_endpoint(
     unassign_member_from_liste(db, liste_id, utilisateur_id)
     return None
 
-@router.get("/{liste_id}/list_members_liste", response_model=List[MembreOut])
+@router.get("/{liste_id}/list_members_liste", response_model=List[WorkspaceMemberOut])
 def get_liste_members_endpoint(
     liste_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_member_management_access(db, liste_id, current_user.id)
-    return get_liste_members(db, liste_id)
+    _require_list_read_access(db, liste_id, current_user.id)
+    return [_serialize_member(membre) for membre in get_liste_members(db, liste_id)]
 
 # -----------------------------------------------------------------------------
 # TACHES
@@ -354,8 +356,20 @@ def update_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_task_management_access(db, tache_id, current_user.id)
-    return update_tache(db, tache_id, **tache_in.model_dump(exclude_unset=True))
+    updates = tache_in.model_dump(exclude_unset=True)
+    try:
+        _require_task_management_access(db, tache_id, current_user.id)
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        _require_assigned_task_operational_access(db, tache_id, current_user.id)
+        forbidden_fields = set(updates) - {"statut"}
+        if forbidden_fields:
+            raise HTTPException(
+                status_code=403,
+                detail="Un membre assigne peut uniquement modifier le statut de la tache.",
+            ) from exc
+    return update_tache(db, tache_id, **updates)
 
 @router.delete("/taches/{tache_id}/delete_tache", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tache_endpoint(
@@ -448,14 +462,14 @@ def unassign_tache_endpoint(
     unassign_member_from_tache(db, tache_id, utilisateur_id)
     return None
 
-@router.get("/taches/{tache_id}/list_members_tache", response_model=List[MembreOut])
+@router.get("/taches/{tache_id}/list_members_tache", response_model=List[WorkspaceMemberOut])
 def get_tache_members_endpoint(
     tache_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     _require_task_read_access(db, tache_id, current_user.id)
-    return get_tache_members(db, tache_id)
+    return [_serialize_member(membre) for membre in get_tache_members(db, tache_id)]
 
 # -----------------------------------------------------------------------------
 # CANEVAS, SECTIONS
@@ -545,7 +559,7 @@ def create_checklist_for_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_task_management_access(db, tache_id, current_user.id)
+    _require_assigned_task_operational_access(db, tache_id, current_user.id)
     return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_tache=tache_id)
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
@@ -563,7 +577,7 @@ def update_task_status_from_checklists_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_task_management_access(db, tache_id, current_user.id)
+    _require_assigned_task_operational_access(db, tache_id, current_user.id)
     from ..crud.tache import update_tache_status_based_on_checklists
     update_tache_status_based_on_checklists(db, tache_id)
     return {"message": "Statut mis à jour avec succès"}
@@ -626,13 +640,25 @@ def update_checklist_endpoint(
     chk = get_checklist_by_id(db, checklist_id)
     if not chk:
         raise HTTPException(404, "Checklist non trouvee")
+    updates = checklist_in.model_dump(exclude_unset=True)
     if chk.id_tache:
-        _require_task_management_access(db, chk.id_tache, current_user.id)
+        try:
+            _require_task_management_access(db, chk.id_tache, current_user.id)
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            _require_assigned_task_operational_access(db, chk.id_tache, current_user.id)
+            forbidden_fields = set(updates) - {"is_checked"}
+            if forbidden_fields:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un membre assigne peut uniquement modifier le statut d'une checklist de tache.",
+                ) from exc
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
         _require_list_admin_access(db, can.id_liste, current_user.id)
-    return update_checklist(db, checklist_id, **checklist_in.model_dump(exclude_unset=True))
+    return update_checklist(db, checklist_id, **updates)
 
 @router.delete("/checklists/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_checklist_endpoint(
@@ -1227,6 +1253,22 @@ def invite_liste_member(
         raise HTTPException(status_code=404, detail="Liste non trouvée")
     
     _require_list_member_management_access(db, liste_id, current_user.id)
+    _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
+        db, liste_id, current_user.id
+    )
+    target_user = None
+    if membre_in.email:
+        target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
+    elif membre_in.username:
+        target_user = db.query(Utilisateur).filter(Utilisateur.username == membre_in.username).first()
+    _validate_list_member_management_permissions(
+        liste_id=liste_id,
+        actor_role=actor_role,
+        actor_source_type=actor_source_type,
+        actor_source_id=actor_source_id,
+        target_member=_get_liste_member_record(db, liste_id, target_user.id) if target_user else None,
+        new_role=membre_in.role,
+    )
     
     result = invite_member_to_liste(db, liste_id, membre_in)
     email_target = membre_in.email or membre_in.username
@@ -1272,7 +1314,7 @@ def invite_liste_member(
             "token": token
         }
 
-@router.post("/listes/invitations/accept", response_model=MembreOut)
+@router.post("/invitations/accept", response_model=MembreOut)
 def accept_liste_invitation_endpoint(
     invitation_in: dict,
     db: Session = Depends(get_db),
@@ -1290,7 +1332,7 @@ def accept_liste_invitation_endpoint(
     )
     return _serialize_member(membre)
 
-@router.get("/listes/invitations/accept-from-email")
+@router.get("/invitations/accept-from-email")
 def accept_liste_invitation_from_email(
     token: str,
     db: Session = Depends(get_db),

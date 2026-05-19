@@ -5,8 +5,10 @@ import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
 import { listeService } from '../../../services/liste.service';
+import { tacheService } from '../../../services/tache.service';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
 import type { Member } from '../../../types';
 
 interface ListDashboardProps {
@@ -41,6 +43,10 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const [stats, setStats] = useState({
     membersCount: 0,
     tasksCount: 0,
+    pendingTasksCount: 0,
+    inProgressTasksCount: 0,
+    doneTasksCount: 0,
+    listProgress: 0,
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,11 +66,11 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator;
   
   const getAvailableRoles = () => {
-    if (isWorkspaceCreator || isWorkspaceAdmin || isListeCreator) {
-      return ['Invité', 'Administrateur'];
-    }
     if (isListeAdmin) {
-      return ['Membre', 'Invité'];
+      return ['Membre'];
+    }
+    if (isListeCreator || isWorkspaceCreator || isWorkspaceAdmin) {
+      return ['Invité', 'Administrateur'];
     }
     return [];
   };
@@ -77,8 +83,8 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         const membersData = await listeService.getMembers(listId);
         formattedMembers = membersData.map((m: any) => ({
           id: m.id_utilisateur || m.utilisateur?.id || m.id,
-          name: m.utilisateur?.nom || m.utilisateur?.username || 'Inconnu',
-          email: m.utilisateur?.email || '',
+          name: getMemberDisplayName(m),
+          email: getMemberEmail(m),
           role: m.role,
         }));
       } catch (err: any) {
@@ -86,9 +92,28 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       }
       setMembers(formattedMembers);
 
+      let tasks: any[] = [];
+      try {
+        const tasksData = await tacheService.getByListe(listId);
+        tasks = Array.isArray(tasksData) ? tasksData : [];
+      } catch (err: any) {
+        console.warn('Impossible de charger les tâches:', err);
+      }
+
+      const pendingTasksCount = tasks.filter(task => task.statut === 'en attente').length;
+      const inProgressTasksCount = tasks.filter(task => task.statut === 'en cours').length;
+      const doneTasksCount = tasks.filter(task => task.statut === 'terminé').length;
+      const listProgress = tasks.length > 0
+        ? Math.round(tasks.reduce((total, task) => total + Number(task.progression || 0), 0) / tasks.length)
+        : 0;
+
       setStats({
         membersCount: formattedMembers.length,
-        tasksCount: 0,
+        tasksCount: tasks.length,
+        pendingTasksCount,
+        inProgressTasksCount,
+        doneTasksCount,
+        listProgress,
       });
     } catch (err) {
       console.error('Erreur chargement liste:', err);
@@ -100,6 +125,13 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   useEffect(() => {
     loadData();
   }, [listId]);
+
+  useEffect(() => {
+    const roles = getAvailableRoles();
+    if (roles.length > 0 && !roles.includes(inviteRole)) {
+      setInviteRole(roles[0]);
+    }
+  }, [isWorkspaceCreator, isWorkspaceAdmin, isListeCreator, isListeAdmin, inviteRole]);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -131,6 +163,12 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   }
 
   const availableRoles = getAvailableRoles();
+  const statusGradient = (() => {
+    if (stats.tasksCount === 0) return '#e5e7eb';
+    const done = (stats.doneTasksCount / stats.tasksCount) * 100;
+    const inProgress = done + (stats.inProgressTasksCount / stats.tasksCount) * 100;
+    return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #e5e7eb ${inProgress}% 100%)`;
+  })();
 
   return (
     <div className="space-y-6">
@@ -175,7 +213,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <GlassCard className="p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
@@ -196,6 +234,30 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
             <div>
               <p className="text-sm text-gray-500">Tâches</p>
               <p className="text-2xl font-bold text-gray-800">{stats.tasksCount}</p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div
+              className="h-16 w-16 rounded-full flex items-center justify-center"
+              style={{
+                background: statusGradient,
+              }}
+              title={`Avancement moyen : ${stats.listProgress}%`}
+            >
+              <div className="h-11 w-11 rounded-full bg-white flex items-center justify-center">
+                <span className="text-sm font-bold text-gray-800">{stats.listProgress}%</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-gray-500">Avancement</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">{stats.pendingTasksCount} en attente</span>
+                <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">{stats.inProgressTasksCount} en cours</span>
+                <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{stats.doneTasksCount} terminées</span>
+              </div>
             </div>
           </div>
         </GlassCard>

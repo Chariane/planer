@@ -102,7 +102,46 @@ def get_checklists_for_section(db: Session, section_id: str) -> List[Checklist]:
 def get_checklists_for_tache(db: Session, tache_id: str) -> List[Checklist]:
     return db.query(Checklist).filter(Checklist.id_tache == tache_id).all()
 
+def _ensure_unique_checklist_sibling_name(
+    db: Session,
+    *,
+    texte: str,
+    id_section: Optional[str],
+    id_tache: Optional[str],
+    exclude_id: Optional[str] = None,
+) -> None:
+    base_query = db.query(Checklist).filter(func.lower(func.trim(Checklist.texte)) == texte.strip().lower())
+    found_parent = None
+    if id_tache:
+        query = base_query.filter(Checklist.id_tache == id_tache)
+        if exclude_id:
+            query = query.filter(Checklist.id != exclude_id)
+        if query.first():
+            found_parent = "cette tache"
+    if id_section and not id_tache and not found_parent:
+        query = base_query.filter(
+            Checklist.id_section == id_section,
+            Checklist.id_tache.is_(None),
+        )
+        if exclude_id:
+            query = query.filter(Checklist.id != exclude_id)
+        if query.first():
+            found_parent = "cette section"
+    if not id_tache and not id_section:
+        return
+    if found_parent:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Une checklist portant ce nom existe deja dans {found_parent}.",
+        )
+
 def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:
+    _ensure_unique_checklist_sibling_name(
+        db,
+        texte=texte,
+        id_section=id_section,
+        id_tache=id_tache,
+    )
     now = datetime.now()
     checklist = Checklist(
         texte=texte, 
@@ -135,6 +174,18 @@ def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Check
     checklist = get_checklist_by_id(db, checklist_id)
     if not checklist:
         return None
+
+    target_texte = kwargs.get("texte", checklist.texte)
+    target_section_id = kwargs.get("id_section", checklist.id_section)
+    target_tache_id = kwargs.get("id_tache", checklist.id_tache)
+    if any(key in kwargs for key in ("texte", "id_section", "id_tache")):
+        _ensure_unique_checklist_sibling_name(
+            db,
+            texte=target_texte,
+            id_section=target_section_id,
+            id_tache=target_tache_id,
+            exclude_id=checklist.id,
+        )
     
     for key, value in kwargs.items():
         if hasattr(checklist, key) and value is not None:
