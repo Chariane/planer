@@ -7,6 +7,7 @@ from ..core.security import get_current_active_entreprise
 from ..core.function import (
     LISTE_MEMBER_ROLE,
     _get_workspace_or_404,
+    _require_attachment_target_read_access,
     _require_workspace_management_access,
     _get_workspace_member_or_403,
     _get_espace_or_404,
@@ -25,6 +26,15 @@ from ..core.function import (
     _require_task_read_access,
     _validate_list_member_management_permissions,
     _require_workspace_descendant_read_access,
+)
+from ..crud.fichier import (
+    create_file_attachment,
+    create_file_share_token,
+    delete_file_attachment,
+    get_file_by_id,
+    list_accessible_files,
+    resolve_file_share_token,
+    update_file_attachment,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -48,9 +58,24 @@ from ..crud.tache import (
     get_taches_kanban,
     update_taches_bulk
 )
+from ..crud.search import (
+    global_search,
+    search_checklists,
+    search_espaces,
+    search_files,
+    search_lists,
+    search_members,
+    search_sections,
+    search_tasks,
+)
 from ..models import Tache
 
 from ..schemas import (
+    FichierAttachmentCreate,
+    FichierOut,
+    FichierShareCreate,
+    FichierShareOut,
+    FichierUpdate,
     ListeCreate, ListeOut, ListeUpdate,
     TacheCreate, TacheOut, TacheUpdate,
     MembreOut, UtilisateurOut,
@@ -74,6 +99,25 @@ def _can_read_liste_silently(db: Session, liste_id: str, user_id: str) -> bool:
         return True
     except HTTPException:
         return False
+
+
+def _validate_search_scope(
+    db: Session,
+    user_id: str,
+    *,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    tache_id: Optional[str] = None,
+) -> None:
+    if workspace_id:
+        _require_workspace_descendant_read_access(db, workspace_id, user_id)
+    if espace_id:
+        _require_espace_descendant_read_access(db, espace_id, user_id)
+    if liste_id:
+        _require_list_read_access(db, liste_id, user_id)
+    if tache_id:
+        _require_task_read_access(db, tache_id, user_id)
 
 
 # -----------------------------------------------------------------------------
@@ -457,3 +501,338 @@ def delete_entreprise_checklist_endpoint(checklist_id: str, db: Session = Depend
         _require_list_admin_access(db, can.id_liste, current_entreprise.id)
     delete_checklist(db, checklist_id)
     return None
+
+
+# -----------------------------------------------------------------------------
+# RECHERCHE & FICHIERS
+# -----------------------------------------------------------------------------
+
+@router.get("/search/global")
+def entreprise_global_search_endpoint(
+    q: str,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(
+        db,
+        current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+    )
+    return global_search(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+    )
+
+
+@router.get("/search/tasks")
+def entreprise_search_tasks_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    statut: Optional[str] = None,
+    priorite: Optional[str] = None,
+    membre_id: Optional[str] = None,
+    has_files: Optional[bool] = None,
+    has_checklists: Optional[bool] = None,
+    overdue: Optional[bool] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return search_tasks(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        statut=statut,
+        priorite=priorite,
+        membre_id=membre_id,
+        has_files=has_files,
+        has_checklists=has_checklists,
+        overdue=overdue,
+        limit=limit,
+    )
+
+
+@router.get("/search/lists")
+def entreprise_search_lists_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    creator_id: Optional[str] = None,
+    has_files: Optional[bool] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id)
+    return search_lists(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        creator_id=creator_id,
+        has_files=has_files,
+        limit=limit,
+    )
+
+
+@router.get("/search/espaces")
+def entreprise_search_espaces_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    parent_espace_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=parent_espace_id)
+    return search_espaces(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        parent_espace_id=parent_espace_id,
+        limit=limit,
+    )
+
+
+@router.get("/search/sections")
+def entreprise_search_sections_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return search_sections(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        limit=limit,
+    )
+
+
+@router.get("/search/checklists")
+def entreprise_search_checklists_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    tache_id: Optional[str] = None,
+    is_checked: Optional[bool] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(
+        db,
+        current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+    )
+    return search_checklists(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+        is_checked=is_checked,
+        limit=limit,
+    )
+
+
+@router.get("/search/members")
+def entreprise_search_members_endpoint(
+    q: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    tache_id: Optional[str] = None,
+    role: Optional[str] = None,
+    statut: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(
+        db,
+        current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+    )
+    return search_members(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+        role=role,
+        statut=statut,
+        limit=limit,
+    )
+
+
+@router.get("/search/files")
+def entreprise_search_files_endpoint(
+    q: Optional[str] = None,
+    type_fichier: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    tache_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(
+        db,
+        current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+    )
+    return search_files(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        type_fichier=type_fichier,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        tache_id=tache_id,
+        limit=limit,
+    )
+
+
+@router.post("/files", response_model=FichierOut, status_code=status.HTTP_201_CREATED)
+def entreprise_create_file_endpoint(
+    file_in: FichierAttachmentCreate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return create_file_attachment(
+        db,
+        current_user_id=current_entreprise.id,
+        **file_in.model_dump(),
+    )
+
+
+@router.get("/files", response_model=List[FichierOut])
+def entreprise_list_files_endpoint(
+    q: Optional[str] = None,
+    type_fichier: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    if bool(target_type) != bool(target_id):
+        raise HTTPException(status_code=400, detail="Fournissez target_type et target_id ensemble.")
+    if target_type and target_id:
+        _require_attachment_target_read_access(db, target_type, target_id, current_entreprise.id)
+    return list_accessible_files(
+        db,
+        current_user_id=current_entreprise.id,
+        q=q,
+        type_fichier=type_fichier,
+        scope_type=target_type,
+        scope_id=target_id,
+        limit=limit,
+    )
+
+
+@router.get("/files/{file_id}", response_model=FichierOut)
+def entreprise_get_file_endpoint(
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    fichier = get_file_by_id(db, file_id)
+    if not fichier:
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+    target_type = (fichier.meta_donnees or {}).get("target_type")
+    target_id = (fichier.meta_donnees or {}).get("target_id")
+    if not target_type or not target_id:
+        raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache.")
+    _require_attachment_target_read_access(db, target_type, target_id, current_entreprise.id)
+    return fichier
+
+
+@router.put("/files/{file_id}", response_model=FichierOut)
+def entreprise_update_file_endpoint(
+    file_id: str,
+    file_in: FichierUpdate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return update_file_attachment(
+        db,
+        file_id=file_id,
+        current_user_id=current_entreprise.id,
+        **file_in.model_dump(exclude_unset=True),
+    )
+
+
+@router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def entreprise_delete_file_endpoint(
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    delete_file_attachment(db, file_id=file_id, current_user_id=current_entreprise.id)
+    return None
+
+
+@router.post("/files/{file_id}/share", response_model=FichierShareOut)
+def entreprise_share_file_endpoint(
+    file_id: str,
+    share_in: FichierShareCreate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return create_file_share_token(
+        db,
+        file_id=file_id,
+        current_user_id=current_entreprise.id,
+        expires_in_hours=share_in.expires_in_hours,
+        allow_download=share_in.allow_download,
+    )
+
+
+@router.get("/files/share/resolve")
+def entreprise_resolve_file_share_endpoint(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    return resolve_file_share_token(db, token)

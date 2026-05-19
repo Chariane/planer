@@ -842,6 +842,33 @@ class FichierOut(FichierBase):
 class FichierDelete(BaseModel):
     id: str
 
+
+class FichierAttachmentCreate(FichierBase):
+    target_type: str = Field(..., min_length=1, max_length=20)
+    target_id: str = Field(..., min_length=1, max_length=12)
+
+    @field_validator("target_type")
+    @classmethod
+    def validate_target_type(cls, value: str) -> str:
+        allowed = {"workspace", "espace", "liste", "tache", "canevas", "section", "checklist"}
+        target_type = value.strip().lower()
+        if target_type not in allowed:
+            allowed_values = ", ".join(sorted(allowed))
+            raise ValueError(f"Type de cible invalide. Valeurs autorisees: {allowed_values}.")
+        return target_type
+
+
+class FichierShareCreate(BaseModel):
+    expires_in_hours: int = Field(default=24, ge=1, le=168)
+    allow_download: bool = Field(default=True)
+
+
+class FichierShareOut(BaseModel):
+    token: str
+    expires_at: datetime
+    file_id: str
+    allow_download: bool
+
 # Rapport
 class RapportBase(BaseModel):
     titre: str = Field(..., min_length=1, max_length=150)

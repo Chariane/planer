@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from .database import get_db
-from ..models import Workspace, Espace, Membre, Liste, Tache
+from ..models import Workspace, Espace, Membre, Liste, Tache, Canevas, Section, Checklist, Fichier
 from sqlalchemy.exc import IntegrityError
 from typing import Any, Optional
 
@@ -55,15 +55,15 @@ ESPACE_DESCENDANT_MANAGEMENT_ROLES = {
     ESPACE_ADMIN_ROLE,  # ✅ Seul Créateur/Admin peuvent gérer
 }
 
-# Rôles Liste - IGNORER LE RÔLE INVITÉ
+# Rôles Liste
 LISTE_OWNER_ROLE = "Créateur"
 LISTE_ADMIN_ROLE = "Administrateur"
 LISTE_MEMBER_ROLE = "Membre"
-LISTE_GUEST_ROLE = "Invité"  # 🔧 NON UTILISÉ
+LISTE_GUEST_ROLE = "Invité"
 
 LISTE_MANAGEMENT_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE}
-LISTE_ADMIN_MANAGEABLE_ROLES = {LISTE_MEMBER_ROLE}  # 🔧 Plus que Membre (pas Invité)
-LISTE_READ_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE, LISTE_MEMBER_ROLE}  # 🔧 Sans Invité
+LISTE_ADMIN_MANAGEABLE_ROLES = {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}
+LISTE_READ_ROLES = {LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE, LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}
 
 
 class Role:
@@ -78,6 +78,10 @@ class ResourceType:
     ESPACE = "espace"
     LISTE = "liste"
     TACHE = "tache"
+    CANEVAS = "canevas"
+    SECTION = "section"
+    CHECKLIST = "checklist"
+    FICHIER = "fichier"
 
 
 ROLE_HIERARCHY = {
@@ -822,3 +826,326 @@ def _serialize_member(membre):
 def _require_workspace_read_access(db: Session, workspace_id: str, current_user_id: str):
     """Donne l'accès complet au workspace uniquement aux membres directs actifs."""
     return _get_workspace_member_or_403(db, workspace_id, current_user_id)
+
+
+def _get_canevas_or_404(db: Session, canevas_id: str) -> Canevas:
+    canevas = db.query(Canevas).filter(Canevas.id == canevas_id).first()
+    if not canevas:
+        raise HTTPException(status_code=404, detail="Canevas non trouve")
+    return canevas
+
+
+def _get_section_or_404(db: Session, section_id: str) -> Section:
+    section = db.query(Section).filter(Section.id == section_id).first()
+    if not section:
+        raise HTTPException(status_code=404, detail="Section non trouvee")
+    return section
+
+
+def _get_checklist_or_404(db: Session, checklist_id: str) -> Checklist:
+    checklist = db.query(Checklist).filter(Checklist.id == checklist_id).first()
+    if not checklist:
+        raise HTTPException(status_code=404, detail="Checklist non trouvee")
+    return checklist
+
+
+def _get_fichier_or_404(db: Session, file_id: str) -> Fichier:
+    fichier = db.query(Fichier).filter(Fichier.id == file_id).first()
+    if not fichier:
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+    return fichier
+
+
+def _require_canevas_access(db: Session, canevas_id: str, current_user_id: str):
+    canevas = _get_canevas_or_404(db, canevas_id)
+    return _require_list_access(db, canevas.id_liste, current_user_id)
+
+
+def _require_canevas_read_access(db: Session, canevas_id: str, current_user_id: str):
+    canevas = _get_canevas_or_404(db, canevas_id)
+    return _require_list_read_access(db, canevas.id_liste, current_user_id)
+
+
+def _require_section_access(db: Session, section_id: str, current_user_id: str):
+    section = _get_section_or_404(db, section_id)
+    canevas = _get_canevas_or_404(db, section.id_canevas)
+    return _require_list_access(db, canevas.id_liste, current_user_id)
+
+
+def _require_section_read_access(db: Session, section_id: str, current_user_id: str):
+    section = _get_section_or_404(db, section_id)
+    canevas = _get_canevas_or_404(db, section.id_canevas)
+    return _require_list_read_access(db, canevas.id_liste, current_user_id)
+
+
+def _require_checklist_access(db: Session, checklist_id: str, current_user_id: str):
+    checklist = _get_checklist_or_404(db, checklist_id)
+    if checklist.id_tache:
+        return _require_task_management_access(db, checklist.id_tache, current_user_id)
+    if checklist.id_section:
+        return _require_section_access(db, checklist.id_section, current_user_id)
+    raise HTTPException(status_code=403, detail="Checklist orpheline ou acces refuse")
+
+
+def _require_checklist_read_access(db: Session, checklist_id: str, current_user_id: str):
+    checklist = _get_checklist_or_404(db, checklist_id)
+    if checklist.id_tache:
+        return _require_task_read_access(db, checklist.id_tache, current_user_id)
+    if checklist.id_section:
+        return _require_section_read_access(db, checklist.id_section, current_user_id)
+    raise HTTPException(status_code=403, detail="Checklist orpheline ou acces refuse")
+
+
+def _get_direct_target_membership(
+    db: Session,
+    user_id: str,
+    target_type: str,
+    target_id: str,
+) -> Membre | None:
+    filters = {
+        ResourceType.WORKSPACE: Membre.id_workspace == target_id,
+        ResourceType.ESPACE: Membre.id_espace == target_id,
+        ResourceType.LISTE: Membre.id_liste == target_id,
+        ResourceType.TACHE: Membre.id_tache == target_id,
+    }
+    membership_filter = filters.get(target_type)
+    if membership_filter is None:
+        return None
+    return (
+        db.query(Membre)
+        .filter(
+            membership_filter,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+
+
+def _resolve_resource_hierarchy(db: Session, resource_type: str, resource_id: str) -> dict[str, Any]:
+    if resource_type == ResourceType.WORKSPACE:
+        workspace = _get_workspace_or_404(db, resource_id)
+        return {
+            "resource_type": resource_type,
+            "resource_id": workspace.id,
+            "workspace_id": workspace.id,
+            "espace_ids": [],
+            "liste_id": None,
+            "tache_id": None,
+            "canevas_id": None,
+            "section_id": None,
+        }
+
+    if resource_type == ResourceType.ESPACE:
+        espace = _get_espace_or_404(db, resource_id)
+        espace_ids = [espace.id]
+        parent_id = espace.id_espace_parent
+        while parent_id:
+            parent = _get_espace_or_404(db, parent_id)
+            espace_ids.append(parent.id)
+            parent_id = parent.id_espace_parent
+        return {
+            "resource_type": resource_type,
+            "resource_id": espace.id,
+            "workspace_id": espace.id_workspace,
+            "espace_ids": espace_ids,
+            "liste_id": None,
+            "tache_id": None,
+            "canevas_id": None,
+            "section_id": None,
+        }
+
+    if resource_type == ResourceType.LISTE:
+        liste = _get_liste_or_404(db, resource_id)
+        espace_ids: list[str] = []
+        workspace_id = liste.id_workspace
+        if liste.id_espace:
+            espace_hierarchy = _resolve_resource_hierarchy(db, ResourceType.ESPACE, liste.id_espace)
+            espace_ids = espace_hierarchy["espace_ids"]
+            workspace_id = espace_hierarchy["workspace_id"]
+        return {
+            "resource_type": resource_type,
+            "resource_id": liste.id,
+            "workspace_id": workspace_id,
+            "espace_ids": espace_ids,
+            "liste_id": liste.id,
+            "tache_id": None,
+            "canevas_id": None,
+            "section_id": None,
+        }
+
+    if resource_type == ResourceType.TACHE:
+        tache = _get_tache_or_404(db, resource_id)
+        hierarchy = _resolve_resource_hierarchy(db, ResourceType.LISTE, tache.id_liste)
+        hierarchy["resource_type"] = resource_type
+        hierarchy["resource_id"] = tache.id
+        hierarchy["tache_id"] = tache.id
+        return hierarchy
+
+    if resource_type == ResourceType.CANEVAS:
+        canevas = _get_canevas_or_404(db, resource_id)
+        hierarchy = _resolve_resource_hierarchy(db, ResourceType.LISTE, canevas.id_liste)
+        hierarchy["resource_type"] = resource_type
+        hierarchy["resource_id"] = canevas.id
+        hierarchy["canevas_id"] = canevas.id
+        return hierarchy
+
+    if resource_type == ResourceType.SECTION:
+        section = _get_section_or_404(db, resource_id)
+        canevas = _get_canevas_or_404(db, section.id_canevas)
+        hierarchy = _resolve_resource_hierarchy(db, ResourceType.LISTE, canevas.id_liste)
+        hierarchy["resource_type"] = resource_type
+        hierarchy["resource_id"] = section.id
+        hierarchy["canevas_id"] = canevas.id
+        hierarchy["section_id"] = section.id
+        return hierarchy
+
+    if resource_type == ResourceType.CHECKLIST:
+        checklist = _get_checklist_or_404(db, resource_id)
+        if checklist.id_tache:
+            hierarchy = _resolve_resource_hierarchy(db, ResourceType.TACHE, checklist.id_tache)
+        elif checklist.id_section:
+            hierarchy = _resolve_resource_hierarchy(db, ResourceType.SECTION, checklist.id_section)
+        else:
+            raise HTTPException(status_code=404, detail="Checklist orpheline")
+        hierarchy["resource_type"] = resource_type
+        hierarchy["resource_id"] = checklist.id
+        return hierarchy
+
+    raise HTTPException(status_code=400, detail="Type de ressource non supporte")
+
+
+def _is_resource_within_scope(
+    db: Session,
+    *,
+    target_type: str,
+    target_id: str,
+    scope_type: str,
+    scope_id: str,
+) -> bool:
+    target_hierarchy = _resolve_resource_hierarchy(db, target_type, target_id)
+    if scope_type == ResourceType.WORKSPACE:
+        return target_hierarchy["workspace_id"] == scope_id
+    if scope_type == ResourceType.ESPACE:
+        return scope_id in target_hierarchy["espace_ids"]
+    if scope_type == ResourceType.LISTE:
+        return target_hierarchy["liste_id"] == scope_id
+    if scope_type == ResourceType.TACHE:
+        return target_hierarchy["tache_id"] == scope_id
+    if scope_type == ResourceType.CANEVAS:
+        return target_hierarchy["canevas_id"] == scope_id
+    if scope_type == ResourceType.SECTION:
+        return target_hierarchy["section_id"] == scope_id
+    if scope_type == ResourceType.CHECKLIST:
+        return target_type == ResourceType.CHECKLIST and target_id == scope_id
+    return False
+
+
+def _resolve_file_target_context(
+    db: Session,
+    target_type: str,
+    target_id: str,
+) -> dict[str, Any]:
+    if target_type == ResourceType.WORKSPACE:
+        _get_workspace_or_404(db, target_id)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.WORKSPACE, "anchor_id": target_id}
+    if target_type == ResourceType.ESPACE:
+        _get_espace_or_404(db, target_id)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.ESPACE, "anchor_id": target_id}
+    if target_type == ResourceType.LISTE:
+        _get_liste_or_404(db, target_id)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.LISTE, "anchor_id": target_id}
+    if target_type == ResourceType.TACHE:
+        _get_tache_or_404(db, target_id)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.TACHE, "anchor_id": target_id}
+    if target_type == ResourceType.CANEVAS:
+        canevas = _get_canevas_or_404(db, target_id)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.LISTE, "anchor_id": canevas.id_liste}
+    if target_type == ResourceType.SECTION:
+        section = _get_section_or_404(db, target_id)
+        canevas = _get_canevas_or_404(db, section.id_canevas)
+        return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.LISTE, "anchor_id": canevas.id_liste}
+    if target_type == ResourceType.CHECKLIST:
+        checklist = _get_checklist_or_404(db, target_id)
+        if checklist.id_tache:
+            return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.TACHE, "anchor_id": checklist.id_tache}
+        if checklist.id_section:
+            section = _get_section_or_404(db, checklist.id_section)
+            canevas = _get_canevas_or_404(db, section.id_canevas)
+            return {"target_type": target_type, "target_id": target_id, "anchor_type": ResourceType.LISTE, "anchor_id": canevas.id_liste}
+        raise HTTPException(status_code=404, detail="Checklist orpheline")
+    raise HTTPException(status_code=400, detail="Type de cible de fichier invalide")
+
+
+def _require_attachment_target_read_access(
+    db: Session,
+    target_type: str,
+    target_id: str,
+    current_user_id: str,
+):
+    if target_type == ResourceType.WORKSPACE:
+        return _require_workspace_descendant_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.ESPACE:
+        return _require_espace_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.LISTE:
+        return _require_list_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.TACHE:
+        return _require_task_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.CANEVAS:
+        return _require_canevas_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.SECTION:
+        return _require_section_read_access(db, target_id, current_user_id)
+    if target_type == ResourceType.CHECKLIST:
+        return _require_checklist_read_access(db, target_id, current_user_id)
+    raise HTTPException(status_code=400, detail="Type de cible de fichier invalide")
+
+
+def _require_attachment_target_write_access(
+    db: Session,
+    target_type: str,
+    target_id: str,
+    current_user_id: str,
+):
+    if target_type == ResourceType.WORKSPACE:
+        return _require_workspace_descendant_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.ESPACE:
+        return _require_espace_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.LISTE:
+        return _require_list_access(db, target_id, current_user_id)
+    if target_type == ResourceType.TACHE:
+        return _require_task_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.CANEVAS:
+        return _require_canevas_access(db, target_id, current_user_id)
+    if target_type == ResourceType.SECTION:
+        return _require_section_access(db, target_id, current_user_id)
+    if target_type == ResourceType.CHECKLIST:
+        return _require_checklist_access(db, target_id, current_user_id)
+    raise HTTPException(status_code=400, detail="Type de cible de fichier invalide")
+
+
+def _extract_file_target(file: Fichier) -> tuple[str | None, str | None]:
+    if not file.meta_donnees:
+        return None, None
+    target_type = file.meta_donnees.get("target_type")
+    target_id = file.meta_donnees.get("target_id")
+    if target_type and target_id:
+        return str(target_type), str(target_id)
+    return None, None
+
+
+def _require_file_read_access(db: Session, file_id: str, current_user_id: str):
+    fichier = _get_fichier_or_404(db, file_id)
+    target_type, target_id = _extract_file_target(fichier)
+    if not target_type or not target_id:
+        raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
+    _require_attachment_target_read_access(db, target_type, target_id, current_user_id)
+    return fichier
+
+
+def _require_file_management_access(db: Session, file_id: str, current_user_id: str):
+    fichier = _get_fichier_or_404(db, file_id)
+    target_type, target_id = _extract_file_target(fichier)
+    if not target_type or not target_id:
+        raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
+    _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
+    return fichier
