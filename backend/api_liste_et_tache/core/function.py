@@ -1,7 +1,19 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from .database import get_db
-from ..models import Workspace, Espace, Membre, Liste, Tache, Canevas, Section, Checklist, Fichier
+from ..models import (
+    Workspace,
+    Espace,
+    Membre,
+    Liste,
+    Tache,
+    Canevas,
+    Section,
+    Checklist,
+    Fichier,
+    Rapport,
+    AbsenceEtConge,
+)
 from sqlalchemy.exc import IntegrityError
 from typing import Any, Optional
 
@@ -1149,3 +1161,105 @@ def _require_file_management_access(db: Session, file_id: str, current_user_id: 
         raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
     _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
     return fichier
+
+
+def _get_member_or_404(db: Session, member_id: str) -> Membre:
+    membre = db.query(Membre).filter(Membre.id == member_id).first()
+    if not membre:
+        raise HTTPException(status_code=404, detail="Membre non trouve")
+    return membre
+
+
+def _get_member_scope_liste_id(db: Session, membre: Membre) -> str:
+    if membre.id_liste:
+        return membre.id_liste
+    if membre.id_tache:
+        return _get_tache_or_404(db, membre.id_tache).id_liste
+    raise HTTPException(
+        status_code=400,
+        detail="Ce membre n'est pas rattache a une liste exploitable pour cette operation.",
+    )
+
+
+def _require_member_read_access(db: Session, member_id: str, current_user_id: str):
+    membre = _get_member_or_404(db, member_id)
+    liste_id = _get_member_scope_liste_id(db, membre)
+    _require_list_read_access(db, liste_id, current_user_id)
+    return membre
+
+
+def _require_member_management_access(db: Session, member_id: str, current_user_id: str):
+    membre = _get_member_or_404(db, member_id)
+    liste_id = _get_member_scope_liste_id(db, membre)
+    _get_list_management_grant(db, liste_id, current_user_id)
+    return membre
+
+
+def _require_member_self_or_management_access(db: Session, member_id: str, current_user_id: str):
+    membre = _get_member_or_404(db, member_id)
+    if membre.id_utilisateur == current_user_id:
+        _require_member_read_access(db, member_id, current_user_id)
+        return membre
+    return _require_member_management_access(db, member_id, current_user_id)
+
+
+def _get_rapport_or_404(db: Session, rapport_id: str) -> Rapport:
+    rapport = db.query(Rapport).filter(Rapport.id == rapport_id).first()
+    if not rapport:
+        raise HTTPException(status_code=404, detail="Rapport non trouve")
+    return rapport
+
+
+def _get_absence_or_404(db: Session, absence_id: str) -> AbsenceEtConge:
+    absence = db.query(AbsenceEtConge).filter(AbsenceEtConge.id == absence_id).first()
+    if not absence:
+        raise HTTPException(status_code=404, detail="Absence ou conge non trouve")
+    return absence
+
+
+def _require_report_read_access(db: Session, rapport_id: str, current_user_id: str):
+    rapport = _get_rapport_or_404(db, rapport_id)
+    membre = _require_member_read_access(db, rapport.id_membre, current_user_id)
+    return rapport, membre
+
+
+def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
+    rapport = _get_rapport_or_404(db, rapport_id)
+    membre = _require_member_management_access(db, rapport.id_membre, current_user_id)
+    return rapport, membre
+
+
+def _require_report_owner_or_management_access(
+    db: Session,
+    rapport_id: str,
+    current_user_id: str,
+):
+    rapport = _get_rapport_or_404(db, rapport_id)
+    membre = _get_member_or_404(db, rapport.id_membre)
+    if membre.id_utilisateur == current_user_id:
+        _require_member_read_access(db, membre.id, current_user_id)
+        return rapport, membre, "owner"
+    _require_member_management_access(db, membre.id, current_user_id)
+    return rapport, membre, "manager"
+
+
+def _require_absence_read_access(db: Session, absence_id: str, current_user_id: str):
+    absence = _get_absence_or_404(db, absence_id)
+    membre = _require_member_read_access(db, absence.id_membre, current_user_id)
+    return absence, membre
+
+
+def _require_absence_management_access(db: Session, absence_id: str, current_user_id: str):
+    absence = _get_absence_or_404(db, absence_id)
+    membre = _require_member_management_access(db, absence.id_membre, current_user_id)
+    return absence, membre
+
+
+def _require_absence_self_or_management_access(db: Session, absence_id: str, current_user_id: str):
+    absence = _get_absence_or_404(db, absence_id)
+    membre = _get_member_or_404(db, absence.id_membre)
+    if membre.id_utilisateur == current_user_id:
+        _require_member_read_access(db, membre.id, current_user_id)
+        return absence, membre, "owner"
+    _require_member_management_access(db, membre.id, current_user_id)
+    return absence, membre, "manager"

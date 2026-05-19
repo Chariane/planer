@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -35,6 +36,26 @@ from ..crud.fichier import (
     list_accessible_files,
     resolve_file_share_token,
     update_file_attachment,
+)
+from ..crud.rapport import (
+    create_report,
+    delete_report,
+    get_report,
+    list_accessible_reports,
+    update_report,
+)
+from ..crud.absence import (
+    approve_leave,
+    cancel_leave,
+    create_leave_request,
+    delete_absence,
+    finish_leave,
+    get_absence,
+    get_absence_conflicts,
+    get_team_calendar,
+    list_accessible_absences,
+    reject_leave,
+    update_absence,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -76,6 +97,15 @@ from ..schemas import (
     FichierShareCreate,
     FichierShareOut,
     FichierUpdate,
+    RapportCreate,
+    RapportOut,
+    RapportUpdate,
+    AbsenceConflictOut,
+    AbsenceDecisionRequest,
+    AbsenceEtCongeCreate,
+    AbsenceEtCongeOut,
+    AbsenceEtCongeUpdate,
+    AbsenceCalendarOut,
     ListeCreate, ListeOut, ListeUpdate,
     TacheCreate, TacheOut, TacheUpdate,
     MembreOut, UtilisateurOut,
@@ -836,3 +866,216 @@ def entreprise_resolve_file_share_endpoint(
     db: Session = Depends(get_db),
 ):
     return resolve_file_share_token(db, token)
+
+
+# -----------------------------------------------------------------------------
+# RAPPORTS & ABSENCES
+# -----------------------------------------------------------------------------
+
+@router.post("/rapports", response_model=RapportOut, status_code=status.HTTP_201_CREATED)
+def entreprise_create_report_endpoint(
+    report_in: RapportCreate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return create_report(db, current_user_id=current_entreprise.id, **report_in.model_dump())
+
+
+@router.get("/rapports", response_model=List[dict])
+def entreprise_list_reports_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return list_accessible_reports(
+        db,
+        current_user_id=current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        member_id=member_id,
+        q=q,
+        limit=limit,
+    )
+
+
+@router.get("/rapports/{report_id}", response_model=RapportOut)
+def entreprise_get_report_endpoint(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return get_report(db, report_id=report_id, current_user_id=current_entreprise.id)
+
+
+@router.put("/rapports/{report_id}", response_model=RapportOut)
+def entreprise_update_report_endpoint(
+    report_id: str,
+    report_in: RapportUpdate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return update_report(
+        db,
+        report_id=report_id,
+        current_user_id=current_entreprise.id,
+        **report_in.model_dump(exclude_unset=True),
+    )
+
+
+@router.delete("/rapports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def entreprise_delete_report_endpoint(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    delete_report(db, report_id=report_id, current_user_id=current_entreprise.id)
+    return None
+
+
+@router.post("/absences", response_model=AbsenceEtCongeOut, status_code=status.HTTP_201_CREATED)
+def entreprise_create_absence_endpoint(
+    absence_in: AbsenceEtCongeCreate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return create_leave_request(db, current_user_id=current_entreprise.id, **absence_in.model_dump())
+
+
+@router.get("/absences", response_model=List[dict])
+def entreprise_list_absences_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+    statut: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return list_accessible_absences(
+        db,
+        current_user_id=current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        member_id=member_id,
+        statut=statut,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+
+
+@router.get("/absences/calendar", response_model=List[AbsenceCalendarOut])
+def entreprise_calendar_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    _validate_search_scope(db, current_entreprise.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return get_team_calendar(
+        db,
+        current_user_id=current_entreprise.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+
+
+@router.get("/absences/{absence_id}", response_model=AbsenceEtCongeOut)
+def entreprise_get_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return get_absence(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.put("/absences/{absence_id}", response_model=AbsenceEtCongeOut)
+def entreprise_update_absence_endpoint(
+    absence_id: str,
+    absence_in: AbsenceEtCongeUpdate,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return update_absence(
+        db,
+        absence_id=absence_id,
+        current_user_id=current_entreprise.id,
+        **absence_in.model_dump(exclude_unset=True),
+    )
+
+
+@router.post("/absences/{absence_id}/approve", response_model=AbsenceEtCongeOut)
+def entreprise_approve_absence_endpoint(
+    absence_id: str,
+    _decision: AbsenceDecisionRequest,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return approve_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.post("/absences/{absence_id}/reject", response_model=AbsenceEtCongeOut)
+def entreprise_reject_absence_endpoint(
+    absence_id: str,
+    _decision: AbsenceDecisionRequest,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return reject_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.post("/absences/{absence_id}/cancel", response_model=AbsenceEtCongeOut)
+def entreprise_cancel_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return cancel_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.post("/absences/{absence_id}/finish", response_model=AbsenceEtCongeOut)
+def entreprise_finish_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return finish_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.get("/absences/{absence_id}/conflicts", response_model=List[AbsenceConflictOut])
+def entreprise_absence_conflicts_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    return get_absence_conflicts(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+
+
+@router.delete("/absences/{absence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def entreprise_delete_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    delete_absence(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+    return None

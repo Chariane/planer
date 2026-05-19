@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse
@@ -37,6 +38,26 @@ from ..crud.fichier import (
     list_accessible_files,
     resolve_file_share_token,
     update_file_attachment,
+)
+from ..crud.rapport import (
+    create_report,
+    delete_report,
+    get_report,
+    list_accessible_reports,
+    update_report,
+)
+from ..crud.absence import (
+    approve_leave,
+    cancel_leave,
+    create_leave_request,
+    delete_absence,
+    finish_leave,
+    get_absence,
+    get_absence_conflicts,
+    get_team_calendar,
+    list_accessible_absences,
+    reject_leave,
+    update_absence,
 )
 from ..crud.liste import (
     assign_member_to_liste,
@@ -97,6 +118,15 @@ from ..schemas import (
     FichierUpdate,
     MessageResponse,
     MembreOut,
+    RapportCreate,
+    RapportOut,
+    RapportUpdate,
+    AbsenceConflictOut,
+    AbsenceDecisionRequest,
+    AbsenceEtCongeCreate,
+    AbsenceEtCongeOut,
+    AbsenceEtCongeUpdate,
+    AbsenceCalendarOut,
     CanevasOut, CanevasCreate, CanevasUpdate,
     SectionOut, SectionCreate, SectionUpdate,
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
@@ -965,6 +995,219 @@ def resolve_file_share_endpoint(
     db: Session = Depends(get_db),
 ):
     return resolve_file_share_token(db, token)
+
+
+# -----------------------------------------------------------------------------
+# RAPPORTS & ABSENCES
+# -----------------------------------------------------------------------------
+
+@router.post("/rapports", response_model=RapportOut, status_code=status.HTTP_201_CREATED)
+def create_report_endpoint(
+    report_in: RapportCreate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return create_report(db, current_user_id=current_user.id, **report_in.model_dump())
+
+
+@router.get("/rapports", response_model=List[dict])
+def list_reports_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    _validate_search_scope(db, current_user.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return list_accessible_reports(
+        db,
+        current_user_id=current_user.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        member_id=member_id,
+        q=q,
+        limit=limit,
+    )
+
+
+@router.get("/rapports/{report_id}", response_model=RapportOut)
+def get_report_endpoint(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return get_report(db, report_id=report_id, current_user_id=current_user.id)
+
+
+@router.put("/rapports/{report_id}", response_model=RapportOut)
+def update_report_endpoint(
+    report_id: str,
+    report_in: RapportUpdate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return update_report(
+        db,
+        report_id=report_id,
+        current_user_id=current_user.id,
+        **report_in.model_dump(exclude_unset=True),
+    )
+
+
+@router.delete("/rapports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report_endpoint(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    delete_report(db, report_id=report_id, current_user_id=current_user.id)
+    return None
+
+
+@router.post("/absences", response_model=AbsenceEtCongeOut, status_code=status.HTTP_201_CREATED)
+def create_absence_endpoint(
+    absence_in: AbsenceEtCongeCreate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return create_leave_request(db, current_user_id=current_user.id, **absence_in.model_dump())
+
+
+@router.get("/absences", response_model=List[dict])
+def list_absences_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+    statut: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    _validate_search_scope(db, current_user.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return list_accessible_absences(
+        db,
+        current_user_id=current_user.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        member_id=member_id,
+        statut=statut,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+
+
+@router.get("/absences/calendar", response_model=List[AbsenceCalendarOut])
+def get_calendar_endpoint(
+    workspace_id: Optional[str] = None,
+    espace_id: Optional[str] = None,
+    liste_id: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    _validate_search_scope(db, current_user.id, workspace_id=workspace_id, espace_id=espace_id, liste_id=liste_id)
+    return get_team_calendar(
+        db,
+        current_user_id=current_user.id,
+        workspace_id=workspace_id,
+        espace_id=espace_id,
+        liste_id=liste_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+
+
+@router.get("/absences/{absence_id}", response_model=AbsenceEtCongeOut)
+def get_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return get_absence(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.put("/absences/{absence_id}", response_model=AbsenceEtCongeOut)
+def update_absence_endpoint(
+    absence_id: str,
+    absence_in: AbsenceEtCongeUpdate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return update_absence(
+        db,
+        absence_id=absence_id,
+        current_user_id=current_user.id,
+        **absence_in.model_dump(exclude_unset=True),
+    )
+
+
+@router.post("/absences/{absence_id}/approve", response_model=AbsenceEtCongeOut)
+def approve_absence_endpoint(
+    absence_id: str,
+    _decision: AbsenceDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return approve_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.post("/absences/{absence_id}/reject", response_model=AbsenceEtCongeOut)
+def reject_absence_endpoint(
+    absence_id: str,
+    _decision: AbsenceDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return reject_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.post("/absences/{absence_id}/cancel", response_model=AbsenceEtCongeOut)
+def cancel_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return cancel_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.post("/absences/{absence_id}/finish", response_model=AbsenceEtCongeOut)
+def finish_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return finish_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.get("/absences/{absence_id}/conflicts", response_model=List[AbsenceConflictOut])
+def absence_conflicts_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return get_absence_conflicts(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.delete("/absences/{absence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_absence_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    delete_absence(db, absence_id=absence_id, current_user_id=current_user.id)
+    return None
 
 # -----------------------------------------------------------------------------
 # INVITATIONS DANS LES LISTES

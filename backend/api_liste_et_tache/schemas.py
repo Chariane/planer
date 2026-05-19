@@ -901,6 +901,10 @@ class RapportOut(RapportBase):
 class RapportDelete(BaseModel):
     id: str
 
+
+class RapportWorkflowAction(BaseModel):
+    commentaire: Optional[str] = None
+
 # Absence Et Conge
 class AbsenceEtCongeBase(BaseModel):
     is_absence: bool = Field(default=True)
@@ -936,6 +940,31 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
 
 class AbsenceEtCongeDelete(BaseModel):
     id: str
+
+
+class AbsenceDecisionRequest(BaseModel):
+    motif: Optional[str] = Field(None, max_length=255)
+
+
+class AbsenceCalendarOut(BaseModel):
+    id: str
+    id_membre: Optional[str] = None
+    date_debut: Optional[datetime] = None
+    date_fin: Optional[datetime] = None
+    statut: str
+    motif: Optional[str] = None
+    is_absence: bool
+    is_conge_planifie: bool
+    created_at: datetime
+
+
+class AbsenceConflictOut(BaseModel):
+    id: str
+    id_membre: Optional[str] = None
+    date_debut: Optional[datetime] = None
+    date_fin: Optional[datetime] = None
+    statut: str
+    motif: Optional[str] = None
 
 # Canevas
 class CanevasBase(BaseModel):
