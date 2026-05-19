@@ -475,21 +475,6 @@ def _require_workspace_read_access(db: Session, workspace_id: str, current_user_
     return _get_workspace_member_or_403(db, workspace_id, current_user_id)
 
 
-def _get_espace_actor_context(
-    db: Session,
-    espace_id: str,
-    current_user_id: str,
-):
-    espace = _get_espace_or_404(db, espace_id)
-    actor_member = _require_espace_management_access(
-        db,
-        espace_id,
-        espace.id_workspace,
-        current_user_id,
-    )
-    return espace, actor_member, actor_member.role
-
-
 def _get_espace_management_grant(
     db: Session,
     espace_id: str,
@@ -615,11 +600,31 @@ def _validate_espace_member_management_permissions(
         )
 
 
-def _validate_espace_invitation_permissions(actor_role: str, invited_role: str):
-    if actor_role == ESPACE_ADMIN_ROLE and invited_role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
+def _validate_espace_invitation_permissions(
+    *,
+    espace_id: str,
+    actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
+    invited_role: str,
+):
+    if actor_role != ESPACE_ADMIN_ROLE:
+        return
+
+    is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace_id
+    manageable_roles = (
+        {ESPACE_GUEST_ROLE, ESPACE_ADMIN_ROLE}
+        if is_descendant_delegation
+        else {ESPACE_GUEST_ROLE}
+    )
+
+    if invited_role not in manageable_roles:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut inviter que des membres ou invites dans l'espace.",
+            detail=(
+                "Un administrateur ne peut inviter que des invites sur sa ressource directe, "
+                "et des invites ou administrateurs dans ses descendants."
+            ),
         )
 
 
@@ -793,8 +798,20 @@ def _require_espace_invitation_access(
     current_user_id: str,
     invited_role: str,
 ):
-    espace, actor_member, actor_role = _get_espace_actor_context(db, espace_id, current_user_id)
-    _validate_espace_invitation_permissions(actor_role, invited_role)
+    espace = _get_espace_or_404(db, espace_id)
+    actor_member, actor_role, actor_source_type, actor_source_id = _get_espace_management_grant(
+        db,
+        espace_id,
+        workspace_id or espace.id_workspace,
+        current_user_id,
+    )
+    _validate_espace_invitation_permissions(
+        espace_id=espace_id,
+        actor_role=actor_role,
+        actor_source_type=actor_source_type,
+        actor_source_id=actor_source_id,
+        invited_role=invited_role,
+    )
     return espace, actor_member, actor_role
 
 

@@ -11,7 +11,7 @@ import { checklistService } from '../../services/checklist.service';
 import { listeService } from '../../services/liste.service';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
-import { ROLES } from '../../lib/roleHierarchy';
+import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function RightCanevas() {
@@ -84,16 +84,33 @@ export default function RightCanevas() {
 
         if (liste.id_espace) {
           try {
-            const espace = await espaceService.getById(liste.id_espace);
-            resolvedWorkspaceId = resolvedWorkspaceId || espace.id_workspace || null;
+            const hierarchy = await espaceService.getHierarchy(liste.id_espace);
+            const spaces = Array.isArray(hierarchy) ? hierarchy : [];
+            const currentSpace = spaces.find((space: any) => space.id === liste.id_espace) || spaces[spaces.length - 1];
+            resolvedWorkspaceId = resolvedWorkspaceId || currentSpace?.id_workspace || null;
 
-            const espaceMembres = await espaceService.getMembers(liste.id_espace);
-            const currentEspaceMember = espaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
-            
-            if (currentEspaceMember) {
-              const role = currentEspaceMember.role;
-              setUserRoleDisplay(`${role} (hérité de l'espace)`);
-              const hasModifyRole = role === ROLES.CREATOR || role === ROLES.ADMIN;
+            let bestEspaceRole: string | null = null;
+            let bestEspaceLabel: string | null = null;
+
+            for (const space of spaces) {
+              const espaceMembres = await espaceService.getMembers(space.id);
+              const currentEspaceMember = espaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
+
+              if (currentEspaceMember) {
+                const role = currentEspaceMember.role;
+                const isCurrentSpace = space.id === liste.id_espace;
+                if (isCurrentSpace || role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST) {
+                  if (getRoleRank(role) > getRoleRank(bestEspaceRole)) {
+                    bestEspaceRole = role;
+                    bestEspaceLabel = `${role} (hérité ${isCurrentSpace ? "de l'espace" : "d'un espace parent"})`;
+                  }
+                }
+              }
+            }
+
+            if (bestEspaceRole) {
+              setUserRoleDisplay(bestEspaceLabel);
+              const hasModifyRole = bestEspaceRole === ROLES.CREATOR || bestEspaceRole === ROLES.ADMIN;
               if (hasModifyRole) {
                 setCanModify(true);
                 setIsReadOnly(false);

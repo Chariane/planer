@@ -1,5 +1,5 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -8,6 +8,8 @@ import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { useNavigationStore } from '../../../store/useNavigationStore';
+import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
 import type { Member } from '../../../types';
 
 interface SpaceDashboardProps {
@@ -49,6 +51,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
+  const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
   
   // État pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -59,33 +62,87 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
 
   // Récupérer le rôle dans l'espace
   const { isGuest: isEspaceGuest, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId, 'espace');
+  const { joinedEspaces } = useNavigationStore();
   
   // Récupérer le rôle dans le workspace parent
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(spaceWorkspaceId || undefined);
   
-  // Un utilisateur peut inviter s'il est:
-  // - Créateur ou Admin de l'espace directement
-  // - OU Créateur ou Admin du workspace parent (héritage)
-  const canInviteMembers = isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator;
+  const getDirectSpaceRole = (targetSpaceId: string): string | null => {
+    return joinedEspaces.find(espace => espace.id === targetSpaceId)?.role || null;
+  };
+
+  const effectiveSpaceRole = inheritedSpaceRole
+    || (isEspaceCreator ? ROLES.CREATOR : null)
+    || (isEspaceAdmin ? ROLES.ADMIN : null)
+    || (isEspaceGuest ? ROLES.GUEST : null);
+  const isDirectSpaceAdmin = isEspaceAdmin || getDirectSpaceRole(spaceId) === ROLES.ADMIN;
+
+  // Un utilisateur peut inviter s'il est Créateur/Admin direct ou hérité de l'espace,
+  // ou Créateur/Admin du workspace parent.
+  const canInviteMembers = effectiveSpaceRole === ROLES.ADMIN
+    || effectiveSpaceRole === ROLES.CREATOR
+    || isWorkspaceAdmin
+    || isWorkspaceCreator;
   
   // Rôles disponibles pour l'invitation selon le rôle
   const getAvailableRoles = () => {
-    if (isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator) {
+    if (isWorkspaceCreator || isWorkspaceAdmin || effectiveSpaceRole === ROLES.CREATOR) {
       return ['Invité', 'Administrateur'];
     }
-    if (isEspaceAdmin) {
-      return ['Membre', 'Invité'];
+    if (effectiveSpaceRole === ROLES.ADMIN) {
+      if (isDirectSpaceAdmin) {
+        return ['Invité'];
+      }
+      return ['Invité', 'Administrateur'];
     }
     return [];
   };
 
+  const availableRoles = useMemo(
+    () => getAvailableRoles(),
+    [
+      isWorkspaceCreator,
+      isWorkspaceAdmin,
+      effectiveSpaceRole,
+      isDirectSpaceAdmin,
+    ],
+  );
+
+  useEffect(() => {
+    if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
+      setInviteRole(availableRoles[0]);
+    }
+  }, [availableRoles, inviteRole]);
+
   const loadData = async () => {
     setLoading(true);
+    setInheritedSpaceRole(null);
     try {
-      // 1. Charger les infos de l'espace
-      const spaceData = await espaceService.getById(spaceId);
+      // 1. Charger les infos de l'espace via la hiérarchie accessible.
+      // Cela évite d'appeler /get_espace sur des parents non accessibles.
+      const navigationSpace = joinedEspaces.find(espace => espace.id === spaceId);
+      const hierarchy = await espaceService.getHierarchy(spaceId).catch(() => []);
+      const spaces = Array.isArray(hierarchy) ? hierarchy : [];
+      const spaceData = spaces.find((space: any) => space.id === spaceId)
+        || navigationSpace
+        || { id: spaceId, nom: 'Espace', id_workspace: null };
+
       setSpaceName(spaceData.nom);
-      setSpaceWorkspaceId(spaceData.id_workspace || null);
+      setSpaceWorkspaceId(spaceData.id_workspace || navigationSpace?.workspace_id || null);
+
+      const roleCandidates: Array<string | null> = (spaces.length ? spaces : [spaceData])
+        .map((space: any) => {
+          const role = getDirectSpaceRole(space.id);
+          const isCurrentSpace = space.id === spaceId;
+          const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+          return isCurrentSpace || isInheritedRole ? role : null;
+        });
+
+      const resolvedInheritedRole = roleCandidates.reduce<string | null>((highest, role) => {
+        if (!role) return highest;
+        return getRoleRank(role) > getRoleRank(highest) ? role : highest;
+      }, null);
+      setInheritedSpaceRole(resolvedInheritedRole);
 
       // 2. Charger les membres pour tout utilisateur ayant accès en lecture à l'espace.
       let formattedMembers: Member[] = [];
@@ -141,7 +198,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
 
   useEffect(() => {
     loadData();
-  }, [spaceId]);
+  }, [spaceId, joinedEspaces]);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -171,8 +228,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       </div>
     );
   }
-
-  const availableRoles = getAvailableRoles();
 
   return (
     <div className="space-y-6">

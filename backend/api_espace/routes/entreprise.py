@@ -30,6 +30,7 @@ from ..crud.entreprise import (
 )
 from ..crud.utilisateur import (
     get_espace_by_id,
+    get_espace_hierarchy,
     get_espace_member,
     get_root_espaces_for_workspace,
     get_sub_espaces_for_parent,
@@ -160,6 +161,21 @@ def get_entreprise_espace_detail_endpoint(
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve ou acces refuse")
     return espace
+
+
+@router.get("/entreprise/espaces/{espace_id}/hierarchy", response_model=List[EspaceOut])
+def get_entreprise_espace_hierarchy_endpoint(
+    espace_id: str,
+    db: Session = Depends(get_db),
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+):
+    """Retourne la chaîne parent -> enfant pour un espace entreprise accessible."""
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
+    _require_espace_access(db, espace_id, espace.id_workspace, current_entreprise.id)
+    return get_espace_hierarchy(db, espace_id)
+
 
 # Modifier un espace entreprise, uniquement si l'utilisateur est admin de l'espace
 @router.put("/entreprise/espaces/{espace_id}", response_model=EspaceOut)

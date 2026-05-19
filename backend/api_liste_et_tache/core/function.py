@@ -745,17 +745,20 @@ def _require_task_access(db: Session, tache_id: str, current_user_id: str):
 def _require_task_management_access(db: Session, tache_id: str, current_user_id: str):
     """
     Vérifie l'accès de gestion d'une tâche.
-    - Créateur/Admin de la liste : peuvent gérer toutes les tâches
+    - Créateur/Admin de la liste, du workspace ou d'un espace parent : peuvent gérer toutes les tâches
     - Membre : peut uniquement gérer les tâches qui lui sont assignées
     """
     tache = _get_tache_or_404(db, tache_id)
     liste = _get_liste_or_404(db, tache.id_liste)
+
+    try:
+        _get_list_management_grant(db, liste.id, current_user_id)
+        return True
+    except HTTPException:
+        pass
     
     # Vérifier le rôle de l'utilisateur sur la liste
     liste_member = _get_liste_member_record(db, liste.id, current_user_id)
-    
-    if liste_member and liste_member.role in LISTE_MANAGEMENT_ROLES:
-        return True  # Créateur/Admin peuvent tout gérer
     
     if liste_member and liste_member.role == LISTE_MEMBER_ROLE:
         # Le membre ne peut gérer que les tâches qui lui sont assignées

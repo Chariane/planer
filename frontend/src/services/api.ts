@@ -35,9 +35,16 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     if (!response.ok) {
       let errorDetail = `Erreur HTTP ${response.status}`;
       console.error('📡 Détail erreur API:', data);
-      if (data.detail) {
-        errorDetail = typeof data.detail === 'string' 
-          ? data.detail 
+      if (Array.isArray(data.detail)) {
+        errorDetail = data.detail
+          .map((item: any) => {
+            const field = Array.isArray(item.loc) ? item.loc.filter((part: any) => part !== 'body').join('.') : '';
+            return field ? `${field}: ${item.msg}` : item.msg;
+          })
+          .join('\n');
+      } else if (data.detail) {
+        errorDetail = typeof data.detail === 'string'
+          ? data.detail
           : JSON.stringify(data.detail);
       } else {
         errorDetail = JSON.stringify(data);

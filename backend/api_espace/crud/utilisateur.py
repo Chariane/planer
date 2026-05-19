@@ -19,6 +19,22 @@ def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:
     return db.query(Espace).filter(Espace.id == espace_id).first()
 
 
+def get_espace_hierarchy(db: Session, espace_id: str) -> List[Espace]:
+    """Retourne la chaîne d'ancêtres de la racine jusqu'à l'espace ciblé."""
+    hierarchy: List[Espace] = []
+    visited_ids: set[str] = set()
+    current = get_espace_by_id(db, espace_id)
+
+    while current and current.id not in visited_ids:
+        visited_ids.add(current.id)
+        hierarchy.insert(0, current)
+        if not current.id_espace_parent:
+            break
+        current = get_espace_by_id(db, current.id_espace_parent)
+
+    return hierarchy
+
+
 def get_espaces_for_workspace(db: Session, workspace_id: str) -> List[Espace]:
     return db.query(Espace).filter(Espace.id_workspace == workspace_id).all()
 

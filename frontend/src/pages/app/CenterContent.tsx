@@ -8,7 +8,6 @@ import GanttView from './views/GanttView';
 import MemberManagement from '../../components/members/MemberManagement';
 import SpaceDashboard from './components/SpaceDashboard';
 import WorkspaceDashboardPanel from './components/WorkspaceDashboardPanel';
-import ListDashboard from './components/ListDashboard';
 import AssignTaskMemberModal from '../../components/modals/AssignTaskMemberModal';
 import AssignListMemberModal from '../../components/modals/AssignListMemberModal';
 import TaskFormModal from './modals/TaskFormModal';
@@ -20,39 +19,52 @@ import { listeService } from '../../services/liste.service';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
+import { useNavigationStore } from '../../store/useNavigationStore';
+import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
   
-  // États pour le nom de la liste (affiché dans le dashboard)
-  const [currentListName, setCurrentListName] = useState<string>('');
   const [currentListWorkspaceId, setCurrentListWorkspaceId] = useState<string | null>(null);
   const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
+  const [listInheritedSpaceRole, setListInheritedSpaceRole] = useState<string | null>(null);
+  const { joinedEspaces } = useNavigationStore();
 
   // Récupérer le rôle dans le workspace
-  const { role: userWorkspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
+  const { role: userWorkspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId);
   
   // Récupérer le rôle dans l'espace (si un espace est sélectionné)
-  const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
+  const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
   
   // Récupérer le rôle dans la liste (si une liste est sélectionnée)
   const { isAdmin: isListeAdmin, isCreator: isListeCreator, role: listeRole } = useResourceRole(listId, 'liste');
   
-  // Déterminer le rôle effectif (priorité: liste > espace > workspace)
-  const effectiveRole = userEspaceRole || userWorkspaceRole;
-  const isAdmin = isEspaceAdmin || isWorkspaceAdmin || isListeAdmin;
-  const isCreator = isEspaceCreator || isWorkspaceCreator || isListeCreator;
-  const isGuest = isEspaceGuest || isWorkspaceGuest;
+  const getHighestRole = (roles: Array<string | null | undefined>): string | null => {
+    return roles.reduce<string | null>((highest, role) => {
+      if (!role) return highest;
+      return getRoleRank(role) > getRoleRank(highest) ? role : highest;
+    }, null);
+  };
+
+  const effectiveRole = getHighestRole([
+    listeRole,
+    listInheritedSpaceRole,
+    userEspaceRole,
+    userWorkspaceRole,
+  ]);
+  const isAdmin = effectiveRole === ROLES.ADMIN;
+  const isCreator = effectiveRole === ROLES.CREATOR;
+  const isGuest = effectiveRole === ROLES.GUEST;
   
   // Permissions
-  const { canCreateContent, canManageMembers } = usePermissions({
+  const { canCreateContent } = usePermissions({
     userRole: effectiveRole,
     resourceType: spaceId ? 'espace' : 'workspace',
   });
   
   // Peut-on assigner des membres à la liste ?
-  const canAssignToList = (isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
+  const canAssignToList = (isAdmin || isCreator || isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
   // Définir les onglets disponibles selon le rôle
   const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres')[] => {
@@ -84,7 +96,6 @@ export default function CenterContent() {
       if (listId) {
         try {
           const liste = await listeService.getById(listId);
-          setCurrentListName(liste.nom);
           setCurrentListWorkspaceId(liste.id_workspace || null);
           setCurrentListEspaceId(liste.id_espace || null);
         } catch (err) {
@@ -94,6 +105,25 @@ export default function CenterContent() {
     };
     loadListInfo();
   }, [listId]);
+
+  useEffect(() => {
+    const resolveListInheritedSpaceRole = async () => {
+      setListInheritedSpaceRole(null);
+      if (!currentListEspaceId) return;
+
+      const hierarchy = await espaceService.getHierarchy(currentListEspaceId).catch(() => []);
+      const roleCandidates = (Array.isArray(hierarchy) ? hierarchy : []).map((space: any) => {
+        const role = joinedEspaces.find(espace => espace.id === space.id)?.role || null;
+        const isCurrentListSpace = space.id === currentListEspaceId;
+        const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+        return isCurrentListSpace || isInheritedRole ? role : null;
+      });
+
+      setListInheritedSpaceRole(getHighestRole(roleCandidates));
+    };
+
+    resolveListInheritedSpaceRole();
+  }, [currentListEspaceId, joinedEspaces]);
 
   // Charger les membres de l'espace (seulement si l'onglet membres est disponible)
   useEffect(() => {
@@ -166,7 +196,7 @@ export default function CenterContent() {
   if (error) return <div className="p-6 flex justify-center text-red-500">{error}</div>;
 
   // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
-  const isListGuest = listeRole === 'Invité';
+  const isListGuest = effectiveRole === ROLES.GUEST;
   
   if (isListGuest && activeTab === 'membres') {
     // Rediriger vers l'onglet liste si l'invité essaie d'accéder aux membres
@@ -284,9 +314,9 @@ export default function CenterContent() {
       {activeTab === 'membres' && (
         <MemberManagement 
           listeId={listId}
-          espaceId={spaceId && spaceId !== 'list' ? spaceId : undefined}
-          workspaceId={workspaceId || undefined}
-          currentUserRole={listeRole || userEspaceRole || userWorkspaceRole}
+          espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+          workspaceId={currentListWorkspaceId || workspaceId || undefined}
+          currentUserRole={effectiveRole}
         />
       )}
 
@@ -317,8 +347,8 @@ export default function CenterContent() {
 
           <AssignListMemberModal
             listeId={listId}
-            espaceId={spaceId && spaceId !== 'list' ? spaceId : undefined}
-            workspaceId={workspaceId || undefined}
+            espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+            workspaceId={currentListWorkspaceId || workspaceId || undefined}
             isOpen={isAssignListModalOpen}
             onClose={() => setIsAssignListModalOpen(false)}
             onSuccess={loadTasks}

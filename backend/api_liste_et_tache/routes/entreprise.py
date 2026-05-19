@@ -67,6 +67,15 @@ from ..crud.checklist_canevas import (
 
 router = APIRouter(prefix="/entreprise/listes", tags=["Entreprise Listes & Tâches"])
 
+
+def _can_read_liste_silently(db: Session, liste_id: str, user_id: str) -> bool:
+    try:
+        _require_list_read_access(db, liste_id, user_id)
+        return True
+    except HTTPException:
+        return False
+
+
 # -----------------------------------------------------------------------------
 # LISTES
 # -----------------------------------------------------------------------------
@@ -105,7 +114,14 @@ def get_entreprise_listes_endpoint(
         raise HTTPException(status_code=400, detail="Specifiez soit workspace_id, soit espace_id")
     
     if workspace_id:
-        _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
+        try:
+            _require_workspace_descendant_read_access(db, workspace_id, current_entreprise.id)
+        except HTTPException:
+            return [
+                liste
+                for liste in get_listes_for_workspace(db, workspace_id)
+                if _can_read_liste_silently(db, liste.id, current_entreprise.id)
+            ]
         return get_listes_for_workspace(db, workspace_id)
     else:
         _require_espace_descendant_read_access(db, espace_id, current_entreprise.id)

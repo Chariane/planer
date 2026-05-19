@@ -25,6 +25,7 @@ from ..crud.utilisateur import (
     create_espace,
     delete_espace,
     get_espace_by_id,
+    get_espace_hierarchy,
     get_espace_member,
     get_espace_members,
     get_espaces_for_workspace,
@@ -150,6 +151,20 @@ def get_espace_endpoint(
         raise HTTPException(status_code=404, detail="Espace non trouve")
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return espace
+
+
+@router.get("/espaces/{espace_id}/hierarchy", response_model=List[EspaceOut])
+def get_espace_hierarchy_endpoint(
+    espace_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Retourne la chaîne parent -> enfant pour un espace accessible."""
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        raise HTTPException(status_code=404, detail="Espace non trouve")
+    _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
+    return get_espace_hierarchy(db, espace_id)
 
 
 # Modifier les espaces où l'utilisateur est admin

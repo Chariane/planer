@@ -1,5 +1,5 @@
 // frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity, Briefcase, Calendar, FolderTree, ListTodo, UserPlus, Users, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -13,9 +13,6 @@ import type { Member } from '../../../types';
 interface WorkspaceDashboardPanelProps {
   workspaceId: string;
 }
-
-// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
-const INVITATION_ROLES = ['Invité', 'Administrateur'];
 
 const countSpaces = (items: any[] = []): number =>
   items.reduce((total, item) => total + 1 + countSpaces(item.sous_espaces || []), 0);
@@ -65,6 +62,16 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   // Récupérer le rôle de l'utilisateur dans ce workspace
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
+  const availableInvitationRoles = useMemo(
+    () => (isCreator ? ['Invité', 'Administrateur'] : ['Invité']),
+    [isCreator],
+  );
+
+  useEffect(() => {
+    if (!availableInvitationRoles.includes(inviteRole)) {
+      setInviteRole(availableInvitationRoles[0]);
+    }
+  }, [availableInvitationRoles, inviteRole]);
   
   const loadData = async () => {
     setLoading(true);
@@ -320,7 +327,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                 onChange={e => setInviteRole(e.target.value)}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
               >
-                {INVITATION_ROLES.map(role => (
+                {availableInvitationRoles.map(role => (
                   <option key={role} value={role}>{role}</option>
                 ))}
               </select>

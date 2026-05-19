@@ -457,10 +457,10 @@ def _validate_member_management_permissions(
 
 def _validate_invitation_permissions(actor_role: str, invited_role: str):
     """Valide que l'acteur peut inviter avec le rôle spécifié."""
-    if actor_role == Role.ADMIN and invited_role not in Role.ADMIN_MANAGEABLE_ROLES:
+    if actor_role == Role.ADMIN and invited_role != Role.GUEST:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut inviter que des membres ou invités dans le workspace.",
+            detail="Un administrateur ne peut inviter que des invites dans le workspace.",
         )
 
 
@@ -669,6 +669,33 @@ def get_excluded_workspace_ids(db: Session, user_id: str) -> Set[str]:
     return owned_ids.union(admin_ids)
 
 
+def _is_redundant_with_parent_role(
+    db: Session,
+    *,
+    user_id: str,
+    resource_type: str,
+    resource_id: str,
+    direct_role: str,
+) -> bool:
+    """
+    Indique si une ressource directe est déjà couverte par un rôle parent.
+
+    - Workspace Invité + Espace Invité : redondant, on garde seulement le parent.
+    - Workspace Invité + Espace Administrateur : non redondant, on garde l'enfant.
+    - Espace Administrateur/Créateur parent + descendant direct : redondant pour la
+      sidebar globale, la ressource reste visible dans l'arborescence.
+    """
+    inherited = get_parent_inherited_role(db, user_id, resource_type, resource_id)
+    if not inherited:
+        return False
+
+    inherited_role, _, _ = inherited
+    if inherited_role in Role.MANAGEMENT_ROLES:
+        return True
+
+    return _get_role_rank(inherited_role) >= _get_role_rank(direct_role)
+
+
 def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
     """Espaces rejoints directement (hors workspaces possédés ou dont on est admin)."""
     excluded_ids = get_excluded_workspace_ids(db, user_id)
@@ -683,6 +710,14 @@ def get_joined_espaces(db: Session, user_id: str) -> List[dict]:
         if not espace:
             continue
         if espace.id_workspace and espace.id_workspace in excluded_ids:
+            continue
+        if _is_redundant_with_parent_role(
+            db,
+            user_id=user_id,
+            resource_type=ResourceType.ESPACE,
+            resource_id=espace.id,
+            direct_role=m.role,
+        ):
             continue
         filtered.append(m)
     
@@ -710,6 +745,14 @@ def get_joined_listes(db: Session, user_id: str) -> List[dict]:
             liste_workspace_id = liste.espace.id_workspace
         
         if liste_workspace_id and liste_workspace_id in excluded_ids:
+            continue
+        if _is_redundant_with_parent_role(
+            db,
+            user_id=user_id,
+            resource_type=ResourceType.LISTE,
+            resource_id=liste.id,
+            direct_role=m.role,
+        ):
             continue
         
         filtered.append(m)
@@ -739,6 +782,14 @@ def get_joined_taches(db: Session, user_id: str) -> List[dict]:
             liste_workspace_id = liste.espace.id_workspace
         
         if liste_workspace_id and liste_workspace_id in excluded_ids:
+            continue
+        if _is_redundant_with_parent_role(
+            db,
+            user_id=user_id,
+            resource_type=ResourceType.TACHE,
+            resource_id=tache.id,
+            direct_role=m.role,
+        ):
             continue
         
         filtered.append(m)
@@ -899,7 +950,20 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
     Récupère les ressources directes (Espaces, Listes, Tâches) 
     au sein d'un workspace spécifique auxquelles l'utilisateur a un accès direct.
     """
-    workspace, _, actor_role = _require_workspace_read_access(db, workspace_id, user_id)
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace non trouvé")
+
+    workspace_member = (
+        db.query(Membre)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.id_workspace == workspace_id,
+            Membre.statut == Status.ACTIVE,
+        )
+        .first()
+    )
+    actor_role, _ = _resolve_role_and_status(workspace, workspace_member, user_id)
     
     # Récupérer tous les memberships directs de l'utilisateur
     all_memberships = db.query(Membre).filter(
@@ -909,7 +973,9 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
     ).options(
         joinedload(Membre.espace),
         joinedload(Membre.liste).joinedload(Liste.espace),
+        joinedload(Membre.liste).joinedload(Liste.workspace),
         joinedload(Membre.tache).joinedload(Tache.liste).joinedload(Liste.espace),
+        joinedload(Membre.tache).joinedload(Tache.liste).joinedload(Liste.workspace),
     ).all()
     
     espaces = []
@@ -928,7 +994,9 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
         # Listes du workspace
         elif m.id_liste and m.liste:
             liste_workspace_id = None
-            if m.liste.espace:
+            if m.liste.id_workspace:
+                liste_workspace_id = m.liste.id_workspace
+            elif m.liste.espace:
                 liste_workspace_id = m.liste.espace.id_workspace
             
             if liste_workspace_id == workspace_id:
@@ -943,7 +1011,9 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
         elif m.id_tache and m.tache and m.tache.liste:
             liste = m.tache.liste
             tache_workspace_id = None
-            if liste.espace:
+            if liste.id_workspace:
+                tache_workspace_id = liste.id_workspace
+            elif liste.espace:
                 tache_workspace_id = liste.espace.id_workspace
             
             if tache_workspace_id == workspace_id:
@@ -954,6 +1024,9 @@ def get_workspace_local_resources(db: Session, workspace_id: str, user_id: str) 
                     "id_liste": m.tache.id_liste,
                     "id_espace": liste.id_espace
                 })
+
+    if not actor_role and not espaces and not listes and not taches:
+        raise HTTPException(status_code=403, detail="Accès refusé aux ressources locales de ce workspace")
     
     return {
         "workspace_id": workspace_id,

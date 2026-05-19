@@ -13,6 +13,9 @@ export const espaceService = {
   
   getById: (id: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${id}/get_espace`),
+
+  getHierarchy: (id: string) =>
+    apiFetch(ESPACE_BASE_URL, `/espaces/${id}/hierarchy`),
   
   getSubSpaces: (espaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/children`),

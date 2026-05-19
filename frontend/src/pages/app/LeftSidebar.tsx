@@ -14,7 +14,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
-import { getRoleLabel, getAvailableInvitationRoles, ROLES } from '../../lib/roleHierarchy';
+import { getRoleLabel, getRoleRank, ROLES } from '../../lib/roleHierarchy';
 
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
@@ -40,7 +40,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 export default function LeftSidebar() {
   const { workspaceId, spaceId, listId } = useActiveResource();
   const {
-    workspaces, workspaceLocalResources, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
+    workspaces, joinedEspaces, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
     addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
 
@@ -48,13 +48,10 @@ export default function LeftSidebar() {
   const { role: workspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator, isGuest: isWorkspaceGuest } = useWorkspaceRole(workspaceId);
   
   // Récupérer le rôle dans l'espace (si un espace est sélectionné) - POUR LES ACTIONS SUR LES ESPACES
-  const { role: espaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator, isGuest: isEspaceGuest } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
+  const { role: espaceRole } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
   
   // Pour les actions sur les espaces, on utilise le rôle de l'espace (ou du workspace en fallback)
   const effectiveRoleForSpace = espaceRole || workspaceRole;
-  const isAdminForSpace = isEspaceAdmin || isWorkspaceAdmin;
-  const isCreatorForSpace = isEspaceCreator || isWorkspaceCreator;
-  const isGuestForSpace = isEspaceGuest || isWorkspaceGuest;
   
   // Permissions pour les actions sur les espaces
   const spacePermissions = usePermissions({
@@ -62,29 +59,7 @@ export default function LeftSidebar() {
     resourceType: 'espace',
   });
   
-  // Permissions pour les actions globales du workspace (création d'espaces à la racine)
-  const workspacePermissions = usePermissions({
-    userRole: workspaceRole,
-    resourceType: 'workspace',
-  });
-  
-  const canShowContextMenu = spacePermissions.canShowContextMenu;
-  const canManageSpaceMembers = spacePermissions.canManageMembers || isWorkspaceAdmin || isWorkspaceCreator;
-  const canDeleteSpace = spacePermissions.canDelete;
   const canManageSpaceListe = spacePermissions.canManageListe || isWorkspaceAdmin || isWorkspaceCreator;
-  
-  // Pour la création d'éléments dans le workspace
-  const canCreateWorkspaceContent = workspacePermissions.canCreateContent;
-  
-  // Rôles disponibles pour l'invitation
-  let availableInvitationRoles: string[] = [];
-  if (isWorkspaceCreator || isWorkspaceAdmin) {
-    availableInvitationRoles = [ROLES.ADMIN, ROLES.GUEST];
-  } else if (isEspaceCreator) {
-    availableInvitationRoles = [ROLES.ADMIN, ROLES.GUEST];
-  } else if (isEspaceAdmin) {
-    availableInvitationRoles = [ROLES.MEMBER, ROLES.GUEST];
-  }
 
   // États pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -189,7 +164,6 @@ export default function LeftSidebar() {
     return () => document.removeEventListener('mousedown', handleClickOutsideMenus);
   }, []);
 
-  const localResources = workspaceId ? workspaceLocalResources[workspaceId] : undefined;
   const hasWorkspaceAccess = !!workspaceId;
 
   // Fonction pour récupérer tous les espaces d'un arbre (récursif)
@@ -204,6 +178,88 @@ export default function LeftSidebar() {
     }
     return result;
   };
+
+  const findSpacePath = (items: any[] | undefined, targetId: string, path: any[] = []): any[] | null => {
+    if (!items) return null;
+    for (const item of items) {
+      const nextPath = [...path, item];
+      if (item.id === targetId) return nextPath;
+      const childPath = findSpacePath(item.sous_espaces, targetId, nextPath);
+      if (childPath) return childPath;
+    }
+    return null;
+  };
+
+  const getDirectSpaceRole = (targetSpaceId: string): string | null => {
+    return joinedEspaces.find(espace => espace.id === targetSpaceId)?.role || null;
+  };
+
+  const getHighestRole = (roles: Array<string | null | undefined>): string | null => {
+    return roles.reduce<string | null>((highest, role) => {
+      if (!role) return highest;
+      return getRoleRank(role) > getRoleRank(highest) ? role : highest;
+    }, null);
+  };
+
+  const getEffectiveSpaceRole = (targetSpaceId: string): string | null => {
+    const workspace = workspaces.find(ws => ws.id === workspaceId);
+    const path = findSpacePath(workspace?.espaces || [], targetSpaceId);
+    const inheritedRoles: Array<string | null> = [
+      isWorkspaceCreator ? ROLES.CREATOR : null,
+      isWorkspaceAdmin ? ROLES.ADMIN : null,
+      isWorkspaceGuest ? ROLES.GUEST : null,
+      getDirectSpaceRole(targetSpaceId),
+    ];
+
+    if (!path) return getHighestRole(inheritedRoles);
+
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const role = getDirectSpaceRole(path[index].id);
+      const isTargetSpace = index === path.length - 1;
+      const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+      if (isTargetSpace || isInheritedRole) {
+        inheritedRoles.push(role);
+      }
+    }
+
+    return getHighestRole(inheritedRoles);
+  };
+
+  const canManageSpace = (targetSpaceId: string): boolean => {
+    const role = getEffectiveSpaceRole(targetSpaceId);
+    return role === ROLES.CREATOR || role === ROLES.ADMIN;
+  };
+
+  const canDeleteTargetSpace = (targetSpaceId: string): boolean => {
+    const role = getEffectiveSpaceRole(targetSpaceId);
+    const directRole = getDirectSpaceRole(targetSpaceId);
+    if (role === ROLES.CREATOR) return true;
+    return role === ROLES.ADMIN && directRole !== ROLES.ADMIN;
+  };
+
+  const getAvailableInvitationRolesForSpace = (targetSpaceId: string | null): string[] => {
+    if (!targetSpaceId) return [];
+    if (isWorkspaceCreator || isWorkspaceAdmin) return [ROLES.ADMIN, ROLES.GUEST];
+    const role = getEffectiveSpaceRole(targetSpaceId);
+    if (role === ROLES.CREATOR) return [ROLES.ADMIN, ROLES.GUEST];
+    if (role === ROLES.ADMIN) {
+      const directRole = getDirectSpaceRole(targetSpaceId);
+      return directRole === ROLES.ADMIN
+        ? [ROLES.MEMBER, ROLES.GUEST]
+        : [ROLES.ADMIN, ROLES.MEMBER, ROLES.GUEST];
+    }
+    return [];
+  };
+
+  const canManageListContext = (parentSpaceIdParam: string | null, isWorkspaceListParam: boolean): boolean => {
+    if (isWorkspaceListParam) return isWorkspaceCreator || isWorkspaceAdmin;
+    return !!parentSpaceIdParam && canManageSpace(parentSpaceIdParam);
+  };
+
+  const selectedSpaceEffectiveRole = spaceId && spaceId !== 'list' ? getEffectiveSpaceRole(spaceId) : workspaceRole;
+  const isAdminForSpace = selectedSpaceEffectiveRole === ROLES.ADMIN || isWorkspaceAdmin;
+  const isCreatorForSpace = selectedSpaceEffectiveRole === ROLES.CREATOR || isWorkspaceCreator;
+  const isGuestForSpace = selectedSpaceEffectiveRole === ROLES.GUEST || (!selectedSpaceEffectiveRole && isWorkspaceGuest);
 
   useEffect(() => {
     if (workspaceId) {
@@ -457,6 +513,7 @@ export default function LeftSidebar() {
   };
 
   const openInviteModal = (space: any) => {
+    if (!canManageSpace(space.id)) return;
     setSelectedSpaceId(space.id);
     setInviteEmail('');
     setInviteRole(ROLES.GUEST);
@@ -487,16 +544,10 @@ export default function LeftSidebar() {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!canShowContextMenu) return;
+    if (!canManageSpace(space.id)) return;
     
     // Calculer si l'utilisateur peut inviter dans CET espace
-    let canInvite = false;
-    
-    if (isWorkspaceCreator || isWorkspaceAdmin) {
-      canInvite = true;
-    } else if (isEspaceCreator || isEspaceAdmin) {
-      canInvite = true;
-    }
+    const canInvite = canManageSpace(space.id);
     
     setListContextMenu(prev => ({ ...prev, visible: false }));
     setContextMenu({
@@ -512,7 +563,7 @@ export default function LeftSidebar() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!canShowContextMenu) return;
+    if (!canManageListContext(parentSpaceIdParam, isWorkspaceListParam)) return;
     
     setContextMenu(prev => ({ ...prev, visible: false }));
     setListContextMenu({
@@ -532,7 +583,9 @@ export default function LeftSidebar() {
 
   const renderTree = (items: any[], depth = 0) => {
     if (!items?.length) return <div className="text-sm text-gray-400 px-2 py-2">Aucun espace</div>;
-    return items.map(item => (
+    return items.map(item => {
+      const canManageCurrentSpace = canManageSpace(item.id);
+      return (
       <div key={item.id} style={{ marginLeft: depth * 16 }} className="mb-1">
         <div
           className="flex items-center justify-between group"
@@ -548,7 +601,7 @@ export default function LeftSidebar() {
             <span className="truncate">{item.nom}</span>
           </Link>
           <div className="flex items-center gap-1">
-            {canManageSpaceListe && (
+            {canManageCurrentSpace && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateListModal(item.id, undefined); }}
                 className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
@@ -557,7 +610,7 @@ export default function LeftSidebar() {
                 <ListTodo className="h-3 w-3" />
               </button>
             )}
-            {canManageSpaceListe && (
+            {canManageCurrentSpace && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateSpaceModal(item.id); }}
                 className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
@@ -605,7 +658,8 @@ export default function LeftSidebar() {
           </div>
         )}
       </div>
-    ));
+    );
+    });
   };
 
   // Message pour les invités - affichage simplifié sans actions
@@ -791,18 +845,18 @@ export default function LeftSidebar() {
           <button onClick={() => openEditSpaceModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier
           </button>
-          {canDeleteSpace && (
+          {contextMenu.space && canDeleteTargetSpace(contextMenu.space.id) && (
             <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
               <Trash2 className="h-4 w-4" /> Supprimer
             </button>
           )}
           {/* Vérification forcée pour Créateur/Admin Workspace */}
-          {(isWorkspaceCreator || isWorkspaceAdmin || contextMenu.canInvite) && availableInvitationRoles.length > 0 && (
+          {contextMenu.space && contextMenu.canInvite && getAvailableInvitationRolesForSpace(contextMenu.space.id).length > 0 && (
             <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
               <UserPlus className="h-4 w-4" /> Inviter
             </button>
           )}
-          {canManageSpaceListe && (
+          {contextMenu.space && canManageSpace(contextMenu.space.id) && (
             <button onClick={() => openCreateListModal(contextMenu.space.id, undefined)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
               <ListTodo className="h-4 w-4" /> Créer une liste
             </button>
@@ -814,7 +868,7 @@ export default function LeftSidebar() {
       )}
 
       {/* Menu contextuel pour Liste */}
-      {listContextMenu.visible && canShowContextMenu && (
+      {listContextMenu.visible && canManageListContext(listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList) && (
         <div
           ref={listMenuRef}
           className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
@@ -823,7 +877,7 @@ export default function LeftSidebar() {
           <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" /> Modifier la liste
           </button>
-          {canDeleteSpace && (
+          {canManageListContext(listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList) && (
             <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
               <Trash2 className="h-4 w-4" /> Supprimer la liste
             </button>
@@ -900,7 +954,7 @@ export default function LeftSidebar() {
               onChange={e => setInviteRole(e.target.value)}
               className="w-full p-2 border rounded-lg"
             >
-              {availableInvitationRoles.map(role => (
+              {getAvailableInvitationRolesForSpace(selectedSpaceId).map(role => (
                 <option key={role} value={role}>{getRoleLabel(role)}</option>
               ))}
             </select>

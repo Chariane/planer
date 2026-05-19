@@ -49,12 +49,27 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const username = form.username.trim();
+    const email = form.email.trim().toLowerCase();
+    const usernameRegex = /^[a-zA-Z0-9_.-]{3,30}$/;
+
+    if (!usernameRegex.test(username)) {
+      setError("Le nom d'utilisateur doit contenir 3 à 30 caractères : lettres, chiffres, point, tiret ou underscore uniquement.");
+      return;
+    }
+
+    if (form.password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+
     try {
       const registerData = {
-        username: form.username,
-        email: form.email,
+        username,
+        email,
         password: form.password,
-        invitation_token: invitationToken
+        ...(invitationToken ? { invitation_token: invitationToken } : {}),
       };
       
       console.log('📤 Envoi inscription avec invitation_token:', invitationToken ? 'Oui' : 'Non');
@@ -67,7 +82,7 @@ export default function RegisterPage() {
       
       // Rediriger vers la page de vérification email
       // L'utilisateur devra vérifier son email puis se connecter
-      navigate(`/verify-email?email=${encodeURIComponent(form.email)}`);
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur d’inscription');
     }
@@ -111,8 +126,13 @@ export default function RegisterPage() {
               onChange={e => setForm({...form, username: e.target.value})} 
               className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent" 
               required 
+              minLength={3}
+              maxLength={30}
+              pattern="[A-Za-z0-9_.-]+"
+              title="3 à 30 caractères : lettres, chiffres, point, tiret ou underscore uniquement"
             />
           </div>
+          <p className="text-xs text-gray-400 mt-1">3 à 30 caractères, sans espace.</p>
         </div>
         
         <div>
