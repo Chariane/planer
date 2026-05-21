@@ -1,7 +1,6 @@
-// frontend/src/pages/app/CenterContent.tsx
 import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
-import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench } from 'lucide-react';
+import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Filter, Calendar, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
@@ -29,21 +28,22 @@ import type { Task, Member } from '../../types';
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
   const { user } = useAuth();
-  
+
   const [currentListWorkspaceId, setCurrentListWorkspaceId] = useState<string | null>(null);
   const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
+  const [currentListDescription, setCurrentListDescription] = useState('');
   const [listInheritedSpaceRole, setListInheritedSpaceRole] = useState<string | null>(null);
   const { joinedEspaces } = useNavigationStore();
 
   // Récupérer le rôle dans le workspace
   const { role: userWorkspaceRole, isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId);
-  
+
   // Récupérer le rôle dans l'espace (si un espace est sélectionné)
   const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
-  
+
   // Récupérer le rôle dans la liste (si une liste est sélectionnée)
   const { isAdmin: isListeAdmin, isCreator: isListeCreator, role: listeRole } = useResourceRole(listId, 'liste');
-  
+
   const getHighestRole = (roles: Array<string | null | undefined>): string | null => {
     return roles.reduce<string | null>((highest, role) => {
       if (!role) return highest;
@@ -60,13 +60,13 @@ export default function CenterContent() {
   const isAdmin = effectiveRole === ROLES.ADMIN;
   const isCreator = effectiveRole === ROLES.CREATOR;
   const isGuest = effectiveRole === ROLES.GUEST;
-  
+
   // Permissions
   const { canCreateContent } = usePermissions({
     userRole: effectiveRole,
     resourceType: listId ? 'liste' : spaceId ? 'espace' : 'workspace',
   });
-  
+
   // Peut-on assigner des membres à la liste ?
   const canAssignToList = (isAdmin || isCreator || isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
@@ -79,11 +79,18 @@ export default function CenterContent() {
   };
 
   const availableTabs = getAvailableTabs();
-  
+
   // States
   const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres' | 'outils'>(availableTabs[0]);
   const [members, setMembers] = useState<Member[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
+  const [taskFilters, setTaskFilters] = useState({
+    statut: '',
+    priorite: '',
+    membre_id: '',
+    overdue: false,
+  });
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isTaskModalLimited, setIsTaskModalLimited] = useState(false);
@@ -108,9 +115,13 @@ export default function CenterContent() {
           const liste = await listeService.getById(listId);
           setCurrentListWorkspaceId(liste.id_workspace || null);
           setCurrentListEspaceId(liste.id_espace || null);
+          setCurrentListDescription(liste.description || '');
         } catch (err) {
           console.error('Erreur chargement infos liste:', err);
+          setCurrentListDescription('');
         }
+      } else {
+        setCurrentListDescription('');
       }
     };
     loadListInfo();
@@ -187,15 +198,16 @@ export default function CenterContent() {
         <div
           className="h-20 w-20 rounded-full flex items-center justify-center"
           style={{ background: statusGradient }}
-          title={`Avancement moyen : ${averageProgress}%`}
+          title={`Répartition par statut. Avancement moyen : ${averageProgress}%`}
         >
-          <div className="h-14 w-14 rounded-full bg-white flex items-center justify-center">
-            <span className="text-base font-bold text-gray-800">{averageProgress}%</span>
+          <div className="h-14 w-14 rounded-full bg-white flex flex-col items-center justify-center leading-tight">
+            <span className="text-base font-bold text-gray-800">{tasks.length}</span>
+            <span className="text-[10px] text-gray-500">tâches</span>
           </div>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-800">Avancement de la liste</p>
-          <p className="text-xs text-gray-500 mt-1">{tasks.length} tâche{tasks.length > 1 ? 's' : ''}</p>
+          <p className="text-sm font-semibold text-gray-800">Répartition des tâches</p>
+          <p className="text-xs text-gray-500 mt-1">Avancement moyen : {averageProgress}%</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">{pendingCount} en attente</span>
             <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">{inProgressCount} en cours</span>
@@ -205,6 +217,16 @@ export default function CenterContent() {
             )}
           </div>
         </div>
+      </div>
+    );
+  };
+
+  const renderListDescription = () => {
+    if (!listId || !currentListDescription.trim()) return null;
+
+    return (
+      <div className="mb-5 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <p className="text-sm text-gray-600 leading-relaxed">{currentListDescription}</p>
       </div>
     );
   };
@@ -251,6 +273,22 @@ export default function CenterContent() {
     }
   };
 
+  const filteredTasks = tasks.filter(task => {
+    const matchesSearch = !searchTerm || task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatut = !taskFilters.statut || task.status === taskFilters.statut;
+    const matchesPriorite = !taskFilters.priorite || task.priority === taskFilters.priorite;
+    const matchesMembre = !taskFilters.membre_id || task.assignees.some(a => a.id === taskFilters.membre_id);
+
+    let matchesOverdue = true;
+    if (taskFilters.overdue) {
+      const now = new Date();
+      matchesOverdue = !!task.dueDate && new Date(task.dueDate) < now && task.status !== 'terminé';
+    }
+
+    return matchesSearch && matchesStatut && matchesPriorite && matchesMembre && matchesOverdue;
+  });
+
   // Si aucune liste n'est sélectionnée
   if (!listId) {
     if (spaceId && spaceId !== 'list') {
@@ -296,7 +334,7 @@ export default function CenterContent() {
 
   // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
   const isListGuest = effectiveRole === ROLES.GUEST;
-  
+
   if (isListGuest && activeTab === 'membres') {
     // Rediriger vers l'onglet liste si l'invité essaie d'accéder aux membres
     setActiveTab('liste');
@@ -316,6 +354,7 @@ export default function CenterContent() {
         </div>
 
         {renderListProgressSummary()}
+        {renderListDescription()}
 
         {/* Onglets pour les invités (sans l'onglet membres) */}
         <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
@@ -323,9 +362,8 @@ export default function CenterContent() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
-                activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+                }`}
             >
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
               {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
@@ -345,15 +383,15 @@ export default function CenterContent() {
             tasks={tasks}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            onEditTask={() => {}}
-            onDeleteTask={() => {}}
-            onAssignTask={() => {}}
+            onEditTask={() => { }}
+            onDeleteTask={() => { }}
+            onAssignTask={() => { }}
             getTaskProgress={getTaskProgress}
             readOnly={true}
           />
         )}
 
-        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => {}} />}
+        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => { }} />}
         {activeTab === 'gantt' && <GanttView tasks={tasks} />}
         {activeTab === 'outils' && (
           <PlannerToolsPanel
@@ -372,6 +410,7 @@ export default function CenterContent() {
   return (
     <div className="p-6">
       {renderListProgressSummary()}
+      {renderListDescription()}
 
       {/* Onglets */}
       <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
@@ -379,9 +418,8 @@ export default function CenterContent() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
-              activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+              }`}
           >
             {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
             {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
@@ -397,28 +435,91 @@ export default function CenterContent() {
         ))}
       </div>
 
-      {/* Boutons d'action - visibles uniquement pour Admin et Créateur */}
-      {(isAdmin || isCreator) && (
-        <div className="flex gap-2 mb-6">
+      {/* Barre de recherche enrichie - Visible pour toutes les vues sauf Membres et Outils */}
+      {activeTab !== 'membres' && activeTab !== 'outils' && (
+        <div className="mb-6 space-y-4 bg-white/50 p-4 rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher une tâche..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary/20 outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <select value={taskFilters.statut} onChange={e => setTaskFilters(prev => ({ ...prev, statut: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+              <option value="">Tous statuts</option>
+              <option value="en attente">En attente</option>
+              <option value="en cours">En cours</option>
+              <option value="terminé">Terminé</option>
+              <option value="bloqué">Bloqué</option>
+            </select>
+            <select value={taskFilters.priorite} onChange={e => setTaskFilters(prev => ({ ...prev, priorite: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+              <option value="">Toutes priorités</option>
+              <option value="basse">Basse</option>
+              <option value="moyenne">Moyenne</option>
+              <option value="haute">Haute</option>
+              <option value="critique">Critique</option>
+            </select>
+            <select value={taskFilters.membre_id} onChange={e => setTaskFilters(prev => ({ ...prev, membre_id: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+              <option value="">Tous membres</option>
+              {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+            </select>
+            <div className="flex items-center gap-2 px-2 border rounded-lg bg-white">
+              <input
+                type="checkbox"
+                id="overdue-filter"
+                checked={taskFilters.overdue}
+                onChange={e => setTaskFilters(prev => ({ ...prev, overdue: e.target.checked }))}
+              />
+              <label htmlFor="overdue-filter" className="text-sm text-gray-600 flex items-center gap-1 cursor-pointer">
+                <Calendar className="h-3 w-3" /> En retard
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Boutons d'action - Visibilité contextuelle */}
+      <div className="flex gap-2 mb-6">
+        {(isAdmin || isCreator) && activeTab !== 'membres' && activeTab !== 'outils' && (
           <Button variant="primary" size="sm" onClick={openCreateTask}>
             <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
           </Button>
-          {canAssignToList && (
-            <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-1" /> Ajouter membre à la liste
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+        {(isAdmin || isCreator) && activeTab === 'membres' && (
+          <div className="flex-1 flex gap-2">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Rechercher un membre..."
+                value={memberSearchTerm}
+                onChange={(e) => setMemberSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none"
+              />
+            </div>
+          </div>
+        )}
+        {(isAdmin || isCreator) && canAssignToList && activeTab !== 'outils' && (
+          <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-1" /> Ajouter membre à la liste
+          </Button>
+        )}
+      </div>
 
       {/* Contenu selon l'onglet */}
       {activeTab === 'liste' && (
         <ListView
-          tasks={tasks}
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
+          tasks={filteredTasks}
+          searchTerm="" // Géré maintenant par CenterContent via filteredTasks
+          onSearchChange={() => { }}
           onEditTask={openEditTask}
-          onDeleteTask={canCreateContent ? deleteTask : () => {}}
+          onDeleteTask={canCreateContent ? deleteTask : () => { }}
           onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
           getTaskProgress={getTaskProgress}
           readOnly={!canCreateContent}
@@ -428,8 +529,8 @@ export default function CenterContent() {
         />
       )}
 
-      {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={canCreateContent ? updateTask : () => {}} />}
-      {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+      {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
+      {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
       {activeTab === 'outils' && (
         <PlannerToolsPanel
           workspaceId={currentListWorkspaceId || workspaceId}
@@ -442,11 +543,12 @@ export default function CenterContent() {
       )}
 
       {activeTab === 'membres' && (
-        <MemberManagement 
+        <MemberManagement
           listeId={listId}
           espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
           workspaceId={currentListWorkspaceId || workspaceId || undefined}
           currentUserRole={effectiveRole}
+          searchQuery={memberSearchTerm}
         />
       )}
 
@@ -462,8 +564,8 @@ export default function CenterContent() {
             checklistLoading={checklistLoading}
             onAddChecklist={addChecklist}
             onToggleChecklist={toggleChecklist}
-            onUpdateChecklistText={isTaskModalLimited ? async () => {} : updateChecklistText}
-            onDeleteChecklist={isTaskModalLimited ? async () => {} : deleteChecklist}
+            onUpdateChecklistText={isTaskModalLimited ? async () => { } : updateChecklistText}
+            onDeleteChecklist={isTaskModalLimited ? async () => { } : deleteChecklist}
             onSubmit={handleTaskSubmit}
             limitedOperational={isTaskModalLimited}
           />

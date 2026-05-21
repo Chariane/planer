@@ -589,6 +589,60 @@ def _get_list_management_grant(
     raise HTTPException(status_code=403, detail="Privileges insuffisants pour gerer cette liste")
 
 
+def _get_direct_list_management_grant(
+    db: Session,
+    liste_id: str,
+    current_user_id: str,
+) -> tuple[Membre, str, str, str]:
+    liste_member = _get_liste_member_record(db, liste_id, current_user_id)
+    if (
+        liste_member
+        and liste_member.statut == "Actif"
+        and liste_member.role in LISTE_MANAGEMENT_ROLES
+    ):
+        return liste_member, liste_member.role, ResourceType.LISTE, liste_id
+
+    raise HTTPException(
+        status_code=403,
+        detail="Privileges insuffisants pour gerer directement cette liste",
+    )
+
+
+def _get_inherited_list_management_grant(
+    db: Session,
+    liste_id: str,
+    current_user_id: str,
+) -> tuple[Membre, str, str, str]:
+    liste = _get_liste_or_404(db, liste_id)
+
+    if liste.id_espace:
+        try:
+            espace_member = _require_espace_descendant_management_access(
+                db,
+                liste.id_espace,
+                current_user_id,
+            )
+            return espace_member, espace_member.role, ResourceType.ESPACE, liste.id_espace
+        except HTTPException:
+            pass
+
+    if liste.id_workspace:
+        try:
+            workspace_member = _require_workspace_descendant_management_access(
+                db,
+                liste.id_workspace,
+                current_user_id,
+            )
+            return workspace_member, workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace
+        except HTTPException:
+            pass
+
+    raise HTTPException(
+        status_code=403,
+        detail="Privileges insuffisants par heritage pour gerer cette liste",
+    )
+
+
 def _require_list_management_access(db: Session, liste_id: str, current_user_id: str):
     """Vérifie l'accès de gestion d'une liste (Créateur ou Admin uniquement)."""
     actor_member, _, _, _ = _get_list_management_grant(db, liste_id, current_user_id)
@@ -1169,6 +1223,28 @@ def _require_attachment_target_write_access(
     raise HTTPException(status_code=400, detail="Type de cible de fichier invalide")
 
 
+def _require_attachment_target_management_access(
+    db: Session,
+    target_type: str,
+    target_id: str,
+    current_user_id: str,
+):
+    if target_type == ResourceType.WORKSPACE:
+        return _require_workspace_descendant_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.ESPACE:
+        return _require_espace_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.LISTE:
+        return _require_list_management_access(db, target_id, current_user_id)
+    if target_type == ResourceType.TACHE:
+        return _require_task_management_access(db, target_id, current_user_id)
+    # Canevas, Section, Checklist héritent généralement de la Liste/Tâche
+    if target_type in {ResourceType.CANEVAS, ResourceType.SECTION, ResourceType.CHECKLIST}:
+        # Simplification : accès gestion requis sur le parent
+        return _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
+    
+    raise HTTPException(status_code=400, detail="Type de cible de fichier invalide pour la gestion")
+
+
 def _extract_file_target(file: Fichier) -> tuple[str | None, str | None]:
     if not file.meta_donnees:
         return None, None
@@ -1237,6 +1313,44 @@ def _require_member_self_or_management_access(db: Session, member_id: str, curre
     return _require_member_management_access(db, member_id, current_user_id)
 
 
+def _member_is_direct_list_manager(membre: Membre) -> bool:
+    return bool(membre.id_liste and membre.role in LISTE_MANAGEMENT_ROLES)
+
+
+def _require_member_workflow_read_access(db: Session, member_id: str, current_user_id: str):
+    """
+    Accès lecture pour rapports et absences/congés :
+    - l'auteur voit toujours son propre historique ;
+    - les rapports/demandes d'un membre simple vont aux gestionnaires directs de la liste ;
+    - les rapports/demandes d'un admin/créateur direct de liste vont aux gestionnaires hérités.
+    """
+    membre = _get_member_or_404(db, member_id)
+    liste_id = _get_member_scope_liste_id(db, membre)
+
+    if membre.id_utilisateur == current_user_id:
+        _require_member_read_access(db, member_id, current_user_id)
+        return membre
+
+    if _member_is_direct_list_manager(membre):
+        _get_inherited_list_management_grant(db, liste_id, current_user_id)
+        return membre
+
+    _get_direct_list_management_grant(db, liste_id, current_user_id)
+    return membre
+
+
+def _require_member_workflow_evaluation_access(db: Session, member_id: str, current_user_id: str):
+    """
+    Accès décision/évaluation pour demandes :
+    même routage que la lecture, mais l'auteur ne peut jamais évaluer sa propre demande.
+    """
+    membre = _get_member_or_404(db, member_id)
+    if membre.id_utilisateur == current_user_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre demande.")
+
+    return _require_member_workflow_read_access(db, member_id, current_user_id)
+
+
 def _get_rapport_or_404(db: Session, rapport_id: str) -> Rapport:
     rapport = db.query(Rapport).filter(Rapport.id == rapport_id).first()
     if not rapport:
@@ -1253,13 +1367,13 @@ def _get_absence_or_404(db: Session, absence_id: str) -> AbsenceEtConge:
 
 def _require_report_read_access(db: Session, rapport_id: str, current_user_id: str):
     rapport = _get_rapport_or_404(db, rapport_id)
-    membre = _require_member_read_access(db, rapport.id_membre, current_user_id)
+    membre = _require_member_workflow_read_access(db, rapport.id_membre, current_user_id)
     return rapport, membre
 
 
 def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
     rapport = _get_rapport_or_404(db, rapport_id)
-    membre = _require_member_management_access(db, rapport.id_membre, current_user_id)
+    membre = _require_member_workflow_evaluation_access(db, rapport.id_membre, current_user_id)
     return rapport, membre
 
 
@@ -1273,19 +1387,19 @@ def _require_report_owner_or_management_access(
     if membre.id_utilisateur == current_user_id:
         _require_member_read_access(db, membre.id, current_user_id)
         return rapport, membre, "owner"
-    _require_member_management_access(db, membre.id, current_user_id)
+    _require_member_workflow_evaluation_access(db, membre.id, current_user_id)
     return rapport, membre, "manager"
 
 
 def _require_absence_read_access(db: Session, absence_id: str, current_user_id: str):
     absence = _get_absence_or_404(db, absence_id)
-    membre = _require_member_read_access(db, absence.id_membre, current_user_id)
+    membre = _require_member_workflow_read_access(db, absence.id_membre, current_user_id)
     return absence, membre
 
 
 def _require_absence_management_access(db: Session, absence_id: str, current_user_id: str):
     absence = _get_absence_or_404(db, absence_id)
-    membre = _require_member_management_access(db, absence.id_membre, current_user_id)
+    membre = _require_member_workflow_evaluation_access(db, absence.id_membre, current_user_id)
     return absence, membre
 
 
@@ -1295,5 +1409,5 @@ def _require_absence_self_or_management_access(db: Session, absence_id: str, cur
     if membre.id_utilisateur == current_user_id:
         _require_member_read_access(db, membre.id, current_user_id)
         return absence, membre, "owner"
-    _require_member_management_access(db, membre.id, current_user_id)
+    _require_member_workflow_evaluation_access(db, membre.id, current_user_id)
     return absence, membre, "manager"

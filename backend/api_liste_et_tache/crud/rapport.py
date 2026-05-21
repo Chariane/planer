@@ -1,22 +1,29 @@
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     _get_member_or_404,
     _get_member_scope_liste_id,
     _require_member_management_access,
-    _require_member_read_access,
     _require_member_self_or_management_access,
+    _require_member_workflow_read_access,
     _require_report_owner_or_management_access,
     _require_report_read_access,
     commit_or_raise,
 )
-from ..models import Rapport
+from ..models import Rapport, Membre, Utilisateur
 
 
 def _serialize_report(rapport: Rapport) -> dict:
+    owner_name = "inconnu"
+    if rapport.membres and rapport.membres.utilisateur:
+        user = rapport.membres.utilisateur
+        owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+    elif hasattr(rapport, "owner_user_id") and rapport.owner_user_id:
+        pass
+
     return {
         "id": rapport.id,
         "titre": rapport.titre,
@@ -28,6 +35,7 @@ def _serialize_report(rapport: Rapport) -> dict:
         "periode_fin": rapport.periode_fin,
         "created_at": rapport.created_at,
         "id_membre": rapport.id_membre,
+        "owner_name": owner_name,
     }
 
 
@@ -78,7 +86,11 @@ def list_accessible_reports(
     q: Optional[str] = None,
     limit: int = 100,
 ) -> list[dict]:
-    query = db.query(Rapport).order_by(Rapport.created_at.desc())
+    query = (
+        db.query(Rapport)
+        .options(joinedload(Rapport.membres).joinedload(Membre.utilisateur))
+        .order_by(Rapport.created_at.desc())
+    )
     if member_id:
         query = query.filter(Rapport.id_membre == member_id)
     if q:
@@ -94,7 +106,7 @@ def list_accessible_reports(
     results: list[dict] = []
     for rapport in reports:
         try:
-            _require_member_read_access(db, rapport.id_membre, current_user_id)
+            _require_member_workflow_read_access(db, rapport.id_membre, current_user_id)
             membre = _get_member_or_404(db, rapport.id_membre)
         except HTTPException:
             continue
@@ -102,9 +114,9 @@ def list_accessible_reports(
         member_liste_id = _get_member_scope_liste_id(db, membre)
         if liste_id and member_liste_id != liste_id:
             continue
-        if espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
+        if not liste_id and espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
             continue
-        if workspace_id:
+        if not liste_id and workspace_id:
             member_workspace_id = membre.liste.id_workspace if membre.liste else None
             if membre.liste and membre.liste.id_espace and membre.liste.espace:
                 member_workspace_id = membre.liste.espace.id_workspace
@@ -134,6 +146,9 @@ def update_report(
 ) -> Rapport:
     rapport, _membre, actor_kind = _require_report_owner_or_management_access(db, report_id, current_user_id)
 
+    if actor_kind != "owner":
+        raise HTTPException(status_code=403, detail="Seul l'auteur du rapport peut le modifier.")
+
     if actor_kind == "owner" and "id_membre" in updates and updates["id_membre"] != rapport.id_membre:
         raise HTTPException(status_code=403, detail="Vous ne pouvez pas reassigner votre rapport a un autre membre.")
 
@@ -153,6 +168,8 @@ def update_report(
 
 
 def delete_report(db: Session, *, report_id: str, current_user_id: str) -> None:
-    rapport, _membre, _actor_kind = _require_report_owner_or_management_access(db, report_id, current_user_id)
+    rapport, _membre, actor_kind = _require_report_owner_or_management_access(db, report_id, current_user_id)
+    if actor_kind != "owner":
+        raise HTTPException(status_code=403, detail="Seul l'auteur du rapport peut le supprimer.")
     db.delete(rapport)
     commit_or_raise(db, detail="Impossible de supprimer ce rapport.")

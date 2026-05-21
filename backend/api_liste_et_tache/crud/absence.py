@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import and_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     _get_absence_or_404,
@@ -16,7 +16,7 @@ from ..core.function import (
     _require_member_self_or_management_access,
     commit_or_raise,
 )
-from ..models import AbsenceEtConge, Membre
+from ..models import AbsenceEtConge, Membre, Utilisateur
 
 
 ABSENCE_STATUS_ALIASES = {
@@ -60,6 +60,11 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "En attent
 
 
 def _serialize_absence(absence: AbsenceEtConge) -> dict:
+    owner_name = "inconnu"
+    if absence.membres and absence.membres.utilisateur:
+        user = absence.membres.utilisateur
+        owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+        
     return {
         "id": absence.id,
         "is_absence": absence.is_absence,
@@ -73,6 +78,7 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
         "duree_demandee_en_jours": absence.duree_demandee_en_jours,
         "conge_interrompu_at": absence.conge_interrompu_at,
         "id_membre": absence.id_membre,
+        "owner_name": owner_name
     }
 
 
@@ -168,7 +174,11 @@ def list_accessible_absences(
     date_to=None,
     limit: int = 100,
 ) -> list[dict]:
-    query = db.query(AbsenceEtConge).order_by(AbsenceEtConge.date_debut.desc())
+    query = (
+        db.query(AbsenceEtConge)
+        .options(joinedload(AbsenceEtConge.membres).joinedload(Membre.utilisateur))
+        .order_by(AbsenceEtConge.date_debut.desc())
+    )
     if member_id:
         query = query.filter(AbsenceEtConge.id_membre == member_id)
     if statut:
@@ -189,9 +199,9 @@ def list_accessible_absences(
         member_liste_id = _get_member_scope_liste_id(db, membre)
         if liste_id and member_liste_id != liste_id:
             continue
-        if espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
+        if not liste_id and espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
             continue
-        if workspace_id:
+        if not liste_id and workspace_id:
             member_workspace_id = membre.liste.id_workspace if membre.liste else None
             if membre.liste and membre.liste.id_espace and membre.liste.espace:
                 member_workspace_id = membre.liste.espace.id_workspace

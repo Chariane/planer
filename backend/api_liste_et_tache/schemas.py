@@ -837,6 +837,7 @@ class FichierOut(FichierBase):
     id: str
     created_at: datetime
     id_membre: Optional[str] = None
+    owner_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class FichierDelete(BaseModel):
@@ -896,6 +897,7 @@ class RapportOut(RapportBase):
     id: str
     created_at: datetime
     id_membre: Optional[str] = None
+    owner_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class RapportDelete(BaseModel):
@@ -936,6 +938,7 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
     statut_date: datetime
     created_at: datetime
     id_membre: Optional[str] = None
+    owner_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AbsenceEtCongeDelete(BaseModel):

@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     ResourceType,
@@ -13,13 +13,14 @@ from ..core.function import (
     _is_resource_within_scope,
     _require_attachment_target_read_access,
     _require_attachment_target_write_access,
+    _require_attachment_target_management_access,
     _require_file_management_access,
     _require_file_read_access,
     _resolve_file_target_context,
     commit_or_raise,
 )
 from ..core.security import ALGORITHM, SECRET_KEY, create_access_token
-from ..models import Fichier
+from ..models import Fichier, Membre, Utilisateur
 
 
 FILE_TARGET_TYPES = {
@@ -118,6 +119,7 @@ def list_accessible_files(
     type_fichier: Optional[str] = None,
     scope_type: Optional[str] = None,
     scope_id: Optional[str] = None,
+    member_id: Optional[str] = None,
     limit: int = 50,
 ) -> list[Fichier]:
     query = db.query(Fichier)
@@ -126,9 +128,12 @@ def list_accessible_files(
         query = query.filter(Fichier.nom.ilike(pattern))
     if type_fichier:
         query = query.filter(Fichier.type_fichier == type_fichier)
+    if member_id:
+        query = query.filter(Fichier.id_membre == member_id)
 
     candidates = (
-        query.order_by(Fichier.created_at.desc())
+        query.options(joinedload(Fichier.membres).joinedload(Membre.utilisateur))
+        .order_by(Fichier.created_at.desc())
         .limit(max(limit, 1) * 8)
         .all()
     )
@@ -154,6 +159,20 @@ def list_accessible_files(
         except HTTPException:
             continue
 
+        owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
+        owner_name = "inconnu"
+        
+        # Résolution du nom via id_membre ou owner_user_id
+        if fichier.membres and fichier.membres.utilisateur:
+            owner_name = f"{fichier.membres.utilisateur.nom or ''} {fichier.membres.utilisateur.prenoms or ''}".strip() or fichier.membres.utilisateur.username
+        elif owner_user_id:
+            user = db.query(Utilisateur).filter(Utilisateur.id == owner_user_id).first()
+            if user:
+                owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+        
+        # On attache le nom à l'objet pour le schéma Pydantic
+        setattr(fichier, 'owner_name', owner_name)
+        
         results.append(fichier)
         if len(results) >= limit:
             break
@@ -198,7 +217,24 @@ def update_file_attachment(
 
 
 def delete_file_attachment(db: Session, *, file_id: str, current_user_id: str) -> None:
-    fichier = _require_file_management_access(db, file_id, current_user_id)
+    fichier = _get_fichier_or_404(db, file_id)
+    target_type, target_id = _extract_file_target(fichier)
+    
+    # Sécurité supplémentaire : Seul le propriétaire ou un admin peut supprimer
+    is_owner = False
+    owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
+    if owner_user_id == current_user_id:
+        is_owner = True
+    elif fichier.membres and fichier.membres.id_utilisateur == current_user_id:
+        is_owner = True
+        
+    if not is_owner:
+        # Si pas propriétaire, on vérifie si c'est un Admin de la ressource cible
+        _require_attachment_target_management_access(db, target_type, target_id, current_user_id)
+    else:
+        # Même si propriétaire, on vérifie qu'il a toujours accès à la ressource
+        _require_attachment_target_read_access(db, target_type, target_id, current_user_id)
+
     db.delete(fichier)
     commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
 

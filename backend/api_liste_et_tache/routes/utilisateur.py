@@ -1,6 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
+import shutil
+import os
+from pathlib import Path
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ..core.emails import send_liste_invitation_email
@@ -932,12 +935,42 @@ def create_file_endpoint(
     )
 
 
+@router.post("/files/upload")
+async def upload_file_endpoint(
+    file: UploadFile = File(...),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Télécharge un fichier binaire et retourne son URL."""
+    uploads_dir = Path(__file__).resolve().parent.parent / "uploads"
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    filename = os.path.basename(file.filename)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    unique_filename = f"{timestamp}_{filename}"
+    file_path = uploads_dir / unique_filename
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # On utilise le port 8004 par défaut pour ce microservice
+    # Idéalement cette URL devrait être configurée via une variable d'environnement
+    base_url = config_data.get("LISTE_TACHE_URL", "http://localhost:8004").rstrip("/")
+    file_url = f"{base_url}/uploads/{unique_filename}"
+
+    return {
+        "filename": filename,
+        "url": file_url,
+        "content_type": file.content_type
+    }
+
+
 @router.get("/files", response_model=List[FichierOut])
 def list_files_endpoint(
     q: Optional[str] = None,
     type_fichier: Optional[str] = None,
     target_type: Optional[str] = None,
     target_id: Optional[str] = None,
+    member_id: Optional[str] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
@@ -953,6 +986,7 @@ def list_files_endpoint(
         type_fichier=type_fichier,
         scope_type=target_type,
         scope_id=target_id,
+        member_id=member_id,
         limit=limit,
     )
 

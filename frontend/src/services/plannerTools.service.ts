@@ -1,6 +1,6 @@
 import { apiFetch } from './api';
 
-const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
+export const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
 
 type ScopeParams = {
   workspace_id?: string | null;
@@ -37,9 +37,19 @@ export const plannerToolsService = {
     type_fichier?: string;
     target_type?: string;
     target_id?: string;
+    member_id?: string;
     limit?: number;
   }) =>
     apiFetch(LISTE_TACHE_BASE_URL, withParams('/listes/files', params)),
+
+  uploadFile: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiFetch(LISTE_TACHE_BASE_URL, '/listes/files/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  },
 
   createFile: (data: {
     nom: string;
@@ -80,6 +90,23 @@ export const plannerToolsService = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  updateReport: (reportId: string, data: {
+    titre?: string;
+    realisations?: string;
+    difficultes_et_solutions?: string;
+    commentaire?: string;
+    fichier_joint?: string;
+    periode_debut?: string;
+    periode_fin?: string;
+  }) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/rapports/${reportId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteReport: (reportId: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/rapports/${reportId}`, { method: 'DELETE' }),
 
   listAbsences: (params: ScopeParams & {
     member_id?: string;

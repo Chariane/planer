@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { UserPlus, Trash2, X, Users } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
@@ -18,14 +19,13 @@ interface MemberManagementProps {
   listeId?: string;
   onMemberAdded?: () => void;
   currentUserRole?: string | null;
+  searchQuery?: string;
 }
 
-// Rôles disponibles pour la gestion (après invitation)
 const MANAGABLE_ROLES = ['Invité', 'Membre', 'Administrateur'];
 const CREATOR_ROLE = 'Créateur';
 const ADMIN_ROLE = 'Administrateur';
 
-// Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -33,7 +33,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
   }, [onClose]);
 
   const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-  
+
   return (
     <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
       <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
@@ -46,27 +46,27 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
   );
 };
 
-export default function MemberManagement({ 
-  workspaceId, 
-  espaceId, 
+export default function MemberManagement({
+  workspaceId,
+  espaceId,
   listeId,
-  onMemberAdded, 
-  currentUserRole 
+  onMemberAdded,
+  currentUserRole,
+  searchQuery = ''
 }: MemberManagementProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
-  
-  // États pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmData, setConfirmData] = useState<{ userId: string; onConfirm: () => Promise<void> } | null>(null);
+
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
 
-  // Permissions
   const resourceType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const { role: directListRole } = useResourceRole(listeId, 'liste');
   const { canManageMembers, canInviteMembers, isAdmin, isCreator } = usePermissions({
@@ -75,8 +75,6 @@ export default function MemberManagement({
   });
   const isDirectListAdmin = !!listeId && directListRole === ADMIN_ROLE;
   const canChangeMemberRoles = canManageMembers && !isDirectListAdmin;
-
-  // Rôles disponibles pour l'invitation (selon le rôle de l'inviteur)
   const availableInvitationRoles = getAvailableInvitationRoles(currentUserRole || '');
 
   const loadMembers = async () => {
@@ -94,7 +92,7 @@ export default function MemberManagement({
         setLoading(false);
         return;
       }
-      
+
       setMembers(data.map((m: any) => ({
         id: m.id_utilisateur || m.utilisateur?.id || m.id,
         name: getMemberDisplayName(m),
@@ -117,7 +115,6 @@ export default function MemberManagement({
     if (!inviteEmail.trim()) return;
     try {
       if (listeId) {
-        // Pour une liste, on utilise inviteMember (envoi d'email) au lieu de assignMember
         await listeService.inviteMember(listeId, inviteEmail, inviteRole);
       } else if (espaceId) {
         await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
@@ -128,70 +125,41 @@ export default function MemberManagement({
       onMemberAdded?.();
       setIsInviteModalOpen(false);
       setInviteEmail('');
-      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
+      showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
     } catch (err: any) {
-      console.error('Erreur invitation', err);
-      if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
-        showMessage('Cette personne a déjà un rôle parent qui couvre cette ressource', 'error');
-      } else if (err.message?.includes('403')) {
-        showMessage('Vous n\'avez pas les permissions nécessaires pour inviter des membres.', 'error');
-      } else {
-        showMessage(err.message || 'Erreur lors de l\'invitation', 'error');
-      }
+      showMessage(err.message || 'Erreur lors de l\'invitation', 'error');
     }
   };
 
   const handleRemoveMember = async (userId: string) => {
     const targetMember = members.find(m => m.id === userId);
-    
-    // L'Admin ne peut pas supprimer un autre Admin ou le Créateur
     if (isAdmin && targetMember && ((targetMember.role as string) === ADMIN_ROLE || (targetMember.role as string) === CREATOR_ROLE)) {
-      showMessage('Vous ne pouvez pas retirer un autre administrateur ou le créateur', 'error');
+      showMessage('Action non autorisée', 'error');
       return;
     }
-    
-    if (!confirm('Retirer ce membre ?')) return;
-    try {
-      if (listeId) {
-        await listeService.unassignMember(listeId, userId);
-      } else if (espaceId) {
-        await espaceService.removeMember(espaceId, userId);
-      } else if (workspaceId) {
-        await workspaceService.removeMember(workspaceId, userId);
+
+    setConfirmData({
+      userId,
+      onConfirm: async () => {
+        try {
+          if (listeId) {
+            await listeService.unassignMember(listeId, userId);
+          } else if (espaceId) {
+            await espaceService.removeMember(espaceId, userId);
+          } else if (workspaceId) {
+            await workspaceService.removeMember(workspaceId, userId);
+          }
+          await loadMembers();
+          showMessage('Membre retiré', 'success');
+        } catch (err) {
+          showMessage('Erreur lors de la suppression', 'error');
+        }
       }
-      await loadMembers();
-      showMessage('Membre retiré avec succès', 'success');
-    } catch (err) {
-      console.error('Erreur suppression', err);
-      showMessage('Erreur lors de la suppression', 'error');
-    }
+    });
+    setIsConfirmOpen(true);
   };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
-    const targetMember = members.find(m => m.id === userId);
-
-    if (newRole === CREATOR_ROLE) {
-      showMessage('Le rôle Créateur ne peut pas être attribué manuellement', 'error');
-      return;
-    }
-
-    if (listeId && isDirectListAdmin) {
-      showMessage('Un administrateur direct de liste ne peut pas modifier le rôle d’un membre', 'error');
-      return;
-    }
-    
-    // L'Admin ne peut pas modifier un autre Admin ou le Créateur
-    if (!listeId && isAdmin && targetMember && ((targetMember.role as string) === ADMIN_ROLE || (targetMember.role as string) === CREATOR_ROLE)) {
-      showMessage('Vous ne pouvez pas modifier le rôle d\'un autre administrateur ou du créateur', 'error');
-      return;
-    }
-    
-    // L'Admin ne peut pas promouvoir quelqu'un au rôle Administrateur
-    if (!listeId && isAdmin && newRole === ADMIN_ROLE) {
-      showMessage('Vous ne pouvez pas promouvoir un membre au rôle Administrateur', 'error');
-      return;
-    }
-    
     try {
       if (listeId) {
         await listeService.assignMember(listeId, userId, newRole);
@@ -201,90 +169,53 @@ export default function MemberManagement({
         await workspaceService.updateMemberRole(workspaceId, userId, newRole);
       }
       await loadMembers();
-      showMessage(`Rôle modifié avec succès`, 'success');
+      showMessage(`Rôle modifié`, 'success');
     } catch (err: any) {
-      console.error('Erreur modification rôle', err);
-      if (err.message?.includes('deja du role') || err.message?.includes('redondant')) {
-        showMessage('Ce rôle est déjà couvert par un rôle parent', 'error');
-      } else if (err.message?.includes('403') || err.message?.includes('Créateur') || err.message?.includes('Createur')) {
-        showMessage(err.message, 'error');
-      } else {
-        showMessage('Erreur lors de la modification du rôle', 'error');
-      }
+      showMessage(err.message || 'Erreur modification rôle', 'error');
     }
   };
 
   const isCreatorMember = (role: string) => role === CREATOR_ROLE;
-
-  // Pour les listes, les rôles disponibles pour l'assignation
-  const getAvailableRolesForListe = () => {
-    if (isCreator || isAdmin) return ['Membre', 'Administrateur'];
-    return ['Membre'];
-  };
-
+  const getAvailableRolesForListe = () => (isCreator || isAdmin) ? ['Membre', 'Administrateur'] : ['Membre'];
   const displayRoles = listeId ? getAvailableRolesForListe() : MANAGABLE_ROLES;
 
-  // 🔧 Déterminer le titre de la modale selon le contexte
-  const getModalTitle = () => {
-    if (listeId) return "Inviter un membre dans la liste";
-    if (workspaceId) return "Inviter un membre dans le workspace";
-    if (espaceId) return "Inviter un membre dans l'espace";
-    return "Inviter un membre";
-  };
+  const filteredMembers = members.filter(member =>
+    !searchQuery ||
+    member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    member.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // 🔧 Déterminer le texte du bouton d'invitation
-  const getInviteButtonText = () => {
-    if (listeId) return "Inviter";
-    return "Inviter";
-  };
-
-  if (loading) {
-    return <div className="text-center py-8 text-gray-500">Chargement...</div>;
-  }
+  if (loading) return <div className="text-center py-8 text-gray-500">Chargement...</div>;
 
   return (
     <div className="space-y-4">
-      {/* Toast Notifications */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-gray-800">
-          {listeId && 'Membres de la liste'}
-          {!listeId && espaceId && 'Membres de l\'espace'}
-          {!listeId && !espaceId && workspaceId && 'Membres du workspace'}
+          {listeId ? 'Membres de la liste' : espaceId ? 'Membres de l\'espace' : 'Membres du workspace'}
         </h3>
         {!listeId && canInviteMembers && availableInvitationRoles.length > 0 && (
           <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> {getInviteButtonText()}
+            <UserPlus className="h-4 w-4 mr-1" /> Inviter
           </Button>
         )}
       </div>
 
-      {members.length === 0 ? (
+      {filteredMembers.length === 0 ? (
         <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
           <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-          <p>Aucun membre</p>
-          <p className="text-sm mt-1">
-            {listeId 
-              ? 'Invitez des membres pour collaborer sur cette liste'
-              : 'Invitez des membres pour commencer'}
-          </p>
+          <p>{searchQuery ? 'Aucun membre trouvé' : 'Aucun membre'}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {members.map(member => (
-            <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          {filteredMembers.map(member => (
+            <div key={member.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
               <div>
                 <p className="font-medium text-gray-800">{member.name}</p>
                 <p className="text-sm text-gray-500">{member.email}</p>
-                <span className="text-xs text-gray-400 mt-1 inline-block">
-                  Rôle : {getRoleLabel(member.role)}
+                <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold uppercase mt-1 inline-block">
+                  {getRoleLabel(member.role)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -293,27 +224,14 @@ export default function MemberManagement({
                     <select
                       value={member.role}
                       onChange={(e) => handleChangeRole(member.id, e.target.value)}
-                      className="text-sm border rounded px-2 py-1"
-                      disabled={!listeId && isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
+                      className="text-sm border rounded px-1 py-1"
                     >
-                      {displayRoles.map(r => (
-                        <option key={r} value={r}>{getRoleLabel(r)}</option>
-                      ))}
+                      {displayRoles.map(r => <option key={r} value={r}>{getRoleLabel(r)}</option>)}
                     </select>
-                    <button
-                      onClick={() => handleRemoveMember(member.id)}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded"
-                      disabled={!listeId && isAdmin && ((member.role as string) === ADMIN_ROLE || (member.role as string) === CREATOR_ROLE)}
-                    >
+                    <button onClick={() => handleRemoveMember(member.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </>
-                )}
-                {!isCreatorMember(member.role) && canManageMembers && !canChangeMemberRoles && (
-                  <span className="text-xs text-gray-400 italic">Modification verrouillée</span>
-                )}
-                {isCreatorMember(member.role) && (
-                  <span className="text-xs text-gray-400 italic">Créateur</span>
                 )}
               </div>
             </div>
@@ -321,55 +239,17 @@ export default function MemberManagement({
         </div>
       )}
 
-      {/* Modale d'invitation */}
-      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title={getModalTitle()} size="md">
+      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email du membre
-            </label>
-            <input
-              type="email"
-              placeholder="exemple@email.com"
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              className="w-full p-2 border rounded-lg"
-            />
-            {listeId && (
-              <p className="text-xs text-gray-400 mt-1">
-                💡 Une invitation par email sera envoyée à cette personne.
-              </p>
-            )}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="w-full p-2 border rounded-lg" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rôle
-            </label>
-            <select
-              value={inviteRole}
-              onChange={e => setInviteRole(e.target.value)}
-              className="w-full p-2 border rounded-lg"
-            >
-              {availableInvitationRoles.map(role => (
-                <option key={role} value={role}>{getRoleLabel(role)}</option>
-              ))}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rôle</label>
+            <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full p-2 border rounded-lg">
+              {availableInvitationRoles.map(role => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
             </select>
-            <p className="text-xs text-gray-400 mt-1">
-              {isCreator ? (
-                <>
-                  💡 <strong>Administrateur</strong> : peut gérer la ressource et ses membres<br />
-                  💡 <strong>Invitant</strong> : accès en lecture seule
-                </>
-              ) : isAdmin ? (
-                <>
-                  💡 En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
-                </>
-              ) : (
-                <>
-                  💡 Vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
-                </>
-              )}
-            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
@@ -377,6 +257,14 @@ export default function MemberManagement({
           </div>
         </div>
       </Modal>
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
+        title="Retirer le membre"
+        message="Voulez-vous vraiment retirer ce membre de cette ressource ? Cette action peut être annulée en ré-invitant le membre plus tard."
+        confirmText="Retirer"
+      />
     </div>
   );
 }

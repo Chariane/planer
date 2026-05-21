@@ -46,6 +46,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     membersCount: 0,
   });
   const [spaceName, setSpaceName] = useState('');
+  const [spaceDescription, setSpaceDescription] = useState('');
   const [spaceWorkspaceId, setSpaceWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +130,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         || { id: spaceId, nom: 'Espace', id_workspace: null };
 
       setSpaceName(spaceData.nom);
+      setSpaceDescription(spaceData.description || '');
       setSpaceWorkspaceId(spaceData.id_workspace || navigationSpace?.workspace_id || null);
 
       const roleCandidates: Array<string | null> = (spaces.length ? spaces : [spaceData])
@@ -258,6 +260,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{spaceName}</h1>
           <p className="text-gray-500 mt-1">Tableau de bord de l'espace</p>
+          {spaceDescription && (
+            <p className="text-sm text-gray-500 mt-3 max-w-3xl leading-relaxed">{spaceDescription}</p>
+          )}
         </div>
         {/* Bouton Inviter - visible pour Créateur/Admin workspace OU Créateur/Admin espace */}
         {canInviteMembers && availableRoles.length > 0 && (

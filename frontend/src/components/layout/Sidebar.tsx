@@ -1,11 +1,15 @@
 // frontend/src/components/layout/Sidebar.tsx
-import { useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Lock } from 'lucide-react';
+import { useState, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Lock, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal';
+import Modal from '../ui/Modal';
+import { Button } from '../ui/Button';
+import ConfirmModal from '../ui/ConfirmModal';
+import type { Workspace } from '../../types';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -13,19 +17,78 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { workspaceId, id } = useParams();
   const activeWorkspaceId = workspaceId || (location.pathname.startsWith('/workspace/') ? id : undefined);
   const { user, logout } = useAuth();
-  const { loadWorkspaces } = useApp();
+  const { loadWorkspaces, updateWorkspace, deleteWorkspace } = useApp();
   const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes } = useNavigationStore();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; workspace: Workspace | null }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    workspace: null,
+  });
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [ownedOpen, setOwnedOpen] = useState(true);
   const [joinedOpen, setJoinedOpen] = useState(true);
   const [espacesOpen, setEspacesOpen] = useState(true);
   const [listesOpen, setListesOpen] = useState(true);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmData, setConfirmData] = useState<{ workspaceId: string; onConfirm: () => Promise<void> } | null>(null);
 
   const handleWorkspaceCreated = () => {
     loadWorkspaces(); // Recharger la liste
+  };
+
+  const openWorkspaceMenu = (event: MouseEvent, workspace: Workspace) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      workspace,
+    });
+  };
+
+  const openEditWorkspace = () => {
+    if (!contextMenu.workspace) return;
+    setEditName(contextMenu.workspace.nom || '');
+    setEditDescription(contextMenu.workspace.description || '');
+    setIsEditModalOpen(true);
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleEditWorkspace = async () => {
+    if (!contextMenu.workspace || !editName.trim()) return;
+    await updateWorkspace(contextMenu.workspace.id, {
+      nom: editName,
+      description: editDescription,
+    });
+    setIsEditModalOpen(false);
+    await loadWorkspaces();
+  };
+
+  const handleDeleteWorkspace = async () => {
+    const workspace = contextMenu.workspace;
+    if (!workspace) return;
+    setContextMenu(prev => ({ ...prev, visible: false }));
+
+    setConfirmData({
+      workspaceId: workspace.id,
+      onConfirm: async () => {
+        await deleteWorkspace(workspace.id);
+        await loadWorkspaces();
+        if (activeWorkspaceId === workspace.id) {
+          navigate('/workspaces');
+        }
+      }
+    });
+    setIsConfirmOpen(true);
   };
 
   // Version réduite (icônes seulement)
@@ -109,6 +172,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
               <Link
                 key={ws.id}
                 to={`/workspace/${ws.id}`}
+                onContextMenu={(event) => openWorkspaceMenu(event, ws)}
                 className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${activeWorkspaceId === ws.id
                   ? 'bg-secondary text-white'
                   : 'text-white/70 hover:bg-white/10 hover:text-white'
@@ -252,6 +316,54 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleWorkspaceCreated}
+      />
+
+      {contextMenu.visible && contextMenu.workspace && (
+        <div
+          className="fixed z-50 min-w-[190px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onMouseLeave={() => setContextMenu(prev => ({ ...prev, visible: false }))}
+        >
+          <button onClick={openEditWorkspace} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+            <Edit className="h-4 w-4" />
+            Modifier le workspace
+          </button>
+          <button onClick={handleDeleteWorkspace} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+            <Trash2 className="h-4 w-4" />
+            Supprimer le workspace
+          </button>
+        </div>
+      )}
+
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Modifier le workspace" size="md">
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Nom"
+            value={editName}
+            onChange={(event) => setEditName(event.target.value)}
+            className="w-full rounded-lg border p-2"
+            autoFocus
+          />
+          <textarea
+            placeholder="Description"
+            value={editDescription}
+            onChange={(event) => setEditDescription(event.target.value)}
+            rows={3}
+            className="w-full rounded-lg border p-2"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Annuler</Button>
+            <Button onClick={handleEditWorkspace}>Enregistrer</Button>
+          </div>
+        </div>
+      </Modal>
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
+        title="Supprimer le workspace"
+        message={`Voulez-vous vraiment supprimer définitivement le workspace "${contextMenu.workspace?.nom}" ? Toutes les données associées seront perdues.`}
       />
     </div>
   );

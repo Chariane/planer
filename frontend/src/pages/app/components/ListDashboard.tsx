@@ -40,12 +40,14 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 };
 
 export default function ListDashboard({ listId, listName, workspaceId, espaceId, onMemberInvited }: ListDashboardProps) {
+  const [listDescription, setListDescription] = useState('');
   const [stats, setStats] = useState({
     membersCount: 0,
     tasksCount: 0,
     pendingTasksCount: 0,
     inProgressTasksCount: 0,
     doneTasksCount: 0,
+    blockedTasksCount: 0,
     listProgress: 0,
   });
   const [members, setMembers] = useState<Member[]>([]);
@@ -78,6 +80,13 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const loadData = async () => {
     setLoading(true);
     try {
+      try {
+        const liste = await listeService.getById(listId);
+        setListDescription(liste.description || '');
+      } catch {
+        setListDescription('');
+      }
+
       let formattedMembers: Member[] = [];
       try {
         const membersData = await listeService.getMembers(listId);
@@ -103,6 +112,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       const pendingTasksCount = tasks.filter(task => task.statut === 'en attente').length;
       const inProgressTasksCount = tasks.filter(task => task.statut === 'en cours').length;
       const doneTasksCount = tasks.filter(task => task.statut === 'terminé').length;
+      const blockedTasksCount = tasks.filter(task => task.statut === 'bloqué').length;
       const listProgress = tasks.length > 0
         ? Math.round(tasks.reduce((total, task) => total + Number(task.progression || 0), 0) / tasks.length)
         : 0;
@@ -113,6 +123,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         pendingTasksCount,
         inProgressTasksCount,
         doneTasksCount,
+        blockedTasksCount,
         listProgress,
       });
     } catch (err) {
@@ -167,7 +178,8 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     if (stats.tasksCount === 0) return '#e5e7eb';
     const done = (stats.doneTasksCount / stats.tasksCount) * 100;
     const inProgress = done + (stats.inProgressTasksCount / stats.tasksCount) * 100;
-    return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #e5e7eb ${inProgress}% 100%)`;
+    const blocked = inProgress + (stats.blockedTasksCount / stats.tasksCount) * 100;
+    return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
   })();
 
   return (
@@ -202,6 +214,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
               <p className="text-gray-500 mt-1">Tableau de bord de la liste</p>
             </div>
           </div>
+          {listDescription && (
+            <p className="text-sm text-gray-500 mt-3 max-w-3xl leading-relaxed">{listDescription}</p>
+          )}
         </div>
         {canInviteMembers && availableRoles.length > 0 && (
           <div className="flex items-center gap-2">
@@ -245,18 +260,23 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
               style={{
                 background: statusGradient,
               }}
-              title={`Avancement moyen : ${stats.listProgress}%`}
+              title={`Répartition par statut. Avancement moyen : ${stats.listProgress}%`}
             >
-              <div className="h-11 w-11 rounded-full bg-white flex items-center justify-center">
-                <span className="text-sm font-bold text-gray-800">{stats.listProgress}%</span>
+              <div className="h-11 w-11 rounded-full bg-white flex flex-col items-center justify-center leading-tight">
+                <span className="text-sm font-bold text-gray-800">{stats.tasksCount}</span>
+                <span className="text-[9px] text-gray-500">tâches</span>
               </div>
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-gray-500">Avancement</p>
+              <p className="text-sm text-gray-500">Répartition</p>
+              <p className="text-xs text-gray-400 mt-1">Avancement moyen : {stats.listProgress}%</p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs">
                 <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">{stats.pendingTasksCount} en attente</span>
                 <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">{stats.inProgressTasksCount} en cours</span>
                 <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{stats.doneTasksCount} terminées</span>
+                {stats.blockedTasksCount > 0 && (
+                  <span className="px-2 py-1 rounded-full bg-red-100 text-red-700">{stats.blockedTasksCount} bloquée{stats.blockedTasksCount > 1 ? 's' : ''}</span>
+                )}
               </div>
             </div>
           </div>

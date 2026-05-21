@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import sys
+import os
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -31,6 +33,11 @@ app.add_middleware(
 
 app.include_router(utilisateur_router)
 app.include_router(entreprise_router)
+
+# Monter le dossier des uploads pour servir les fichiers statiques
+uploads_dir = Path(__file__).resolve().parent / "uploads"
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 @app.get("/")
 def root():

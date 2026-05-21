@@ -1,9 +1,9 @@
 // frontend/src/pages/app/RightCanevas.tsx
 import { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { 
-  ChevronDown, ChevronRight, CheckCircle, Circle, Edit, X, 
-  Target, Sparkles, Plus, Trash2, Save, AlertCircle, Loader2 
+import {
+  ChevronDown, ChevronRight, CheckCircle, Circle, Edit, X,
+  Target, Sparkles, Plus, Trash2, Save, AlertCircle, Loader2
 } from 'lucide-react';
 import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '../../services/canevas.service';
 import { sectionService } from '../../services/section.service';
@@ -15,6 +15,7 @@ import { espaceService } from '../../services/espace.service';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 
 type AddChecklistMode = 'manual' | 'task';
 
@@ -41,13 +42,13 @@ export default function RightCanevas() {
   const [isReadOnly, setIsReadOnly] = useState(true);
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [userRoleDisplay, setUserRoleDisplay] = useState<string | null>(null);
-  
+
   // États pour l'édition
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingSectionTitle, setEditingSectionTitle] = useState('');
   const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
   const [editingChecklistText, setEditingChecklistText] = useState('');
-  
+
   // États pour l'ajout
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [isAddingSection, setIsAddingSection] = useState(false);
@@ -57,32 +58,44 @@ export default function RightCanevas() {
   const [taskChecklistOptions, setTaskChecklistOptions] = useState<TaskChecklistOption[]>([]);
   const [loadingTaskChecklistOptions, setLoadingTaskChecklistOptions] = useState(false);
   const [selectedTaskChecklistId, setSelectedTaskChecklistId] = useState('');
-  
+
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: async () => { },
+  });
 
   // 🔧 Récupérer les permissions avec héritage descendant
   useEffect(() => {
     const fetchPermissions = async () => {
       if (!listId) return;
-      
+
       try {
         // 1. Récupérer les informations de la liste
         const liste = await listeService.getById(listId);
         const currentUserId = user?.id;
-        
+
         if (!currentUserId) {
           setCanModify(false);
           setIsReadOnly(true);
           setPermissionChecked(true);
           return;
         }
-        
+
         // 2. Vérifier si l'utilisateur est membre direct de la liste
         try {
           const membres = await listeService.getMembers(listId);
           const currentMember = membres.find((m: any) => m.id_utilisateur === currentUserId);
-          
+
           if (currentMember) {
             const role = currentMember.role;
             setUserRoleDisplay(role);
@@ -101,7 +114,7 @@ export default function RightCanevas() {
         } catch (err) {
           console.log('Pas de membre direct trouvé, vérification héritage...');
         }
-        
+
         // 3. Vérifier l'héritage depuis l'espace parent
         let resolvedWorkspaceId = liste.id_workspace || routeWorkspaceId || null;
 
@@ -145,7 +158,7 @@ export default function RightCanevas() {
             console.log('Pas de rôle trouvé dans l\'espace');
           }
         }
-        
+
         // 4. Vérifier l'héritage depuis le workspace parent
         if (resolvedWorkspaceId) {
           try {
@@ -158,11 +171,11 @@ export default function RightCanevas() {
               setPermissionChecked(true);
               return;
             }
-            
+
             // Vérifier si l'utilisateur est admin du workspace
             const workspaceMembres = await workspaceService.getMembers(resolvedWorkspaceId);
             const currentWorkspaceMember = workspaceMembres.find((m: any) => m.id_utilisateur === currentUserId);
-            
+
             if (currentWorkspaceMember && currentWorkspaceMember.role === ROLES.ADMIN) {
               setUserRoleDisplay('Administrateur (hérité du workspace)');
               setCanModify(true);
@@ -178,12 +191,12 @@ export default function RightCanevas() {
             console.log('Pas de rôle trouvé dans le workspace');
           }
         }
-        
+
         // 5. Aucune permission trouvée
         setUserRoleDisplay('Invité');
         setCanModify(false);
         setIsReadOnly(true);
-        
+
       } catch (err) {
         console.error('Erreur récupération permissions:', err);
         setCanModify(false);
@@ -192,13 +205,13 @@ export default function RightCanevas() {
         setPermissionChecked(true);
       }
     };
-    
+
     fetchPermissions();
   }, [listId, routeWorkspaceId, user?.id]);
 
   const loadCanevas = async () => {
     if (!listId) return;
-    
+
     setLoading(true);
     setError(null);
     try {
@@ -258,17 +271,24 @@ export default function RightCanevas() {
 
   const deleteSection = async (sectionId: string) => {
     if (!canModify) return;
-    if (!confirm('Supprimer cette section ? Toutes les checklists seront également supprimées.')) return;
-    setActionLoading(`delete-section-${sectionId}`);
-    try {
-      await sectionService.delete(sectionId);
-      await loadCanevas();
-    } catch (err) {
-      console.error('Erreur suppression section:', err);
-      alert('Erreur lors de la suppression de la section');
-    } finally {
-      setActionLoading(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Supprimer la section',
+      message: 'Voulez-vous vraiment supprimer cette section ? Toutes les checklists seront également supprimées.',
+      onConfirm: async () => {
+        setActionLoading(`delete-section-${sectionId}`);
+        try {
+          await sectionService.delete(sectionId);
+          await loadCanevas();
+        } catch (err) {
+          console.error('Erreur suppression section:', err);
+          alert('Erreur lors de la suppression de la section');
+        } finally {
+          setActionLoading(null);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   const addChecklist = async (sectionId: string) => {
@@ -355,7 +375,7 @@ export default function RightCanevas() {
 
   const toggleChecklist = async (checklist: EnhancedChecklist) => {
     if (!canModify) return;
-    
+
     setActionLoading(`toggle-${checklist.id}`);
     try {
       await checklistService.update(checklist.id, { is_checked: !checklist.is_checked });
@@ -385,17 +405,24 @@ export default function RightCanevas() {
 
   const deleteChecklist = async (checklistId: string) => {
     if (!canModify) return;
-    if (!confirm('Supprimer cet élément ?')) return;
-    setActionLoading(`delete-${checklistId}`);
-    try {
-      await checklistService.delete(checklistId);
-      await loadCanevas();
-    } catch (err) {
-      console.error('Erreur suppression checklist:', err);
-      alert('Erreur lors de la suppression de l\'élément');
-    } finally {
-      setActionLoading(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Supprimer l\'élément',
+      message: 'Voulez-vous vraiment supprimer cet élément ?',
+      onConfirm: async () => {
+        setActionLoading(`delete-${checklistId}`);
+        try {
+          await checklistService.delete(checklistId);
+          await loadCanevas();
+        } catch (err) {
+          console.error('Erreur suppression checklist:', err);
+          alert('Erreur lors de la suppression de l\'élément');
+        } finally {
+          setActionLoading(null);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   const toggleSection = (sectionId: string) => {
@@ -407,17 +434,24 @@ export default function RightCanevas() {
       alert('Supprimez d\'abord toutes les sections');
       return;
     }
-    if (!confirm('Supprimer ce canevas ?')) return;
-    setActionLoading('delete-canevas');
-    try {
-      await canevasService.delete(canevas.id);
-      setCanevas(null);
-    } catch (err) {
-      console.error('Erreur suppression canevas:', err);
-      alert('Erreur lors de la suppression du canevas');
-    } finally {
-      setActionLoading(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Supprimer le canevas',
+      message: 'Voulez-vous vraiment supprimer ce canevas ?',
+      onConfirm: async () => {
+        setActionLoading('delete-canevas');
+        try {
+          await canevasService.delete(canevas.id);
+          setCanevas(null);
+        } catch (err) {
+          console.error('Erreur suppression canevas:', err);
+          alert('Erreur lors de la suppression du canevas');
+        } finally {
+          setActionLoading(null);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   if (!isOpen) {
@@ -583,7 +617,7 @@ export default function RightCanevas() {
             {canevas.sections.map((section) => {
               const progress = section.progress;
               const isExpanded = expandedSections[section.id] !== false;
-              
+
               return (
                 <div key={section.id} className="border border-gray-100 rounded-lg overflow-hidden">
                   <div className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition">
@@ -606,13 +640,13 @@ export default function RightCanevas() {
                         <span className="text-sm font-medium text-gray-700">{section.titre}</span>
                       )}
                     </button>
-                    
+
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-secondary">{progress}%</span>
                       <div className="w-20 bg-gray-200 rounded-full h-1.5">
                         <div className="bg-secondary h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
                       </div>
-                      
+
                       {canModify && !canevas.is_verrouille && (
                         <>
                           {editingSectionId !== section.id && (
@@ -657,7 +691,7 @@ export default function RightCanevas() {
                           {checklist.source === 'manual' && (
                             <span className="text-xs text-gray-400 w-4" title="Checklist manuelle">✏️</span>
                           )}
-                          
+
                           <button
                             onClick={() => toggleChecklist(checklist)}
                             disabled={canevas.is_verrouille || !canModify || actionLoading?.startsWith('toggle')}
@@ -671,7 +705,7 @@ export default function RightCanevas() {
                               <Circle className="h-4 w-4 text-gray-300 hover:text-gray-400" />
                             )}
                           </button>
-                          
+
                           {editingChecklistId === checklist.id && canModify ? (
                             <input
                               type="text"
@@ -686,7 +720,7 @@ export default function RightCanevas() {
                               {checklist.texte}
                             </span>
                           )}
-                          
+
                           {canModify && !canevas.is_verrouille && checklist.source === 'manual' && (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                               {editingChecklistId !== checklist.id && (
@@ -720,7 +754,7 @@ export default function RightCanevas() {
                           )}
                         </div>
                       ))}
-                      
+
                       {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">
                           {addingChecklistToSection === section.id ? (
@@ -879,6 +913,14 @@ export default function RightCanevas() {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        isLoading={actionLoading !== null}
+      />
     </div>
   );
 }

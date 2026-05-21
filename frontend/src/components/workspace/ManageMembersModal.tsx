@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { UserPlus, Trash2, Crown } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
+import ConfirmModal from '../ui/ConfirmModal';
 import { espaceService } from '../../services/espace.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
@@ -30,6 +31,8 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
   const [inviteRole, setInviteRole] = useState('Membre');
   const [inviting, setInviting] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmData, setConfirmData] = useState<{ userId: string; onConfirm: () => Promise<void> } | null>(null);
 
   const canManageMembers = currentUserRole === 'Créateur' || currentUserRole === 'Administrateur';
 
@@ -89,13 +92,18 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
 
   const handleRemoveMember = async (userId: string) => {
     if (!canManageMembers) return;
-    if (!confirm("Retirer ce membre de l'espace ?")) return;
-    try {
-      await espaceService.removeMember(espaceId, userId);
-      await loadMembers();
-    } catch (error) {
-      console.error("Erreur suppression membre", error);
-    }
+    setConfirmData({
+      userId,
+      onConfirm: async () => {
+        try {
+          await espaceService.removeMember(espaceId, userId);
+          await loadMembers();
+        } catch (error) {
+          console.error("Erreur suppression membre", error);
+        }
+      }
+    });
+    setIsConfirmOpen(true);
   };
 
   return (
@@ -177,6 +185,14 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
           )}
         </div>
       </div>
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
+        title="Retirer le membre"
+        message="Voulez-vous vraiment retirer ce membre de l'espace ? Cette action peut être annulée en le ré-invitant plus tard."
+        confirmText="Retirer"
+      />
     </Modal>
   );
 }

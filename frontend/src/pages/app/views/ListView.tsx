@@ -55,9 +55,9 @@ interface ListViewProps {
 }
 
 // Composant de détail d'une tâche
-function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: { 
-  task: Task | null; 
-  isOpen: boolean; 
+function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: {
+  task: Task | null;
+  isOpen: boolean;
   onClose: () => void;
   getTaskProgress: (task: Task) => number;
 }) {
@@ -99,12 +99,11 @@ function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-              task.status === 'en attente' ? 'bg-yellow-100 text-yellow-800' :
-              task.status === 'en cours' ? 'bg-blue-100 text-blue-800' :
-              task.status === 'terminé' ? 'bg-green-100 text-green-800' :
-              'bg-red-100 text-red-800'
-            }`}>
+            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${task.status === 'en attente' ? 'bg-yellow-100 text-yellow-800' :
+                task.status === 'en cours' ? 'bg-blue-100 text-blue-800' :
+                  task.status === 'terminé' ? 'bg-green-100 text-green-800' :
+                    'bg-red-100 text-red-800'
+              }`}>
               {statusLabels[task.status] || task.status}
             </span>
           </div>
@@ -229,21 +228,6 @@ export default function ListView({
         getTaskProgress={getTaskProgress}
       />
 
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Rechercher une tâche..."
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm"
-          />
-        </div>
-        <button className="p-2 rounded-lg hover:bg-gray-100">
-          <Filter className="h-5 w-5 text-gray-500" />
-        </button>
-      </div>
 
       {Object.entries(statusLabels).map(([status, label]) => {
         const statusTasks = groupedTasks[status] || [];
@@ -279,8 +263,8 @@ export default function ListView({
                       {filtered.map((task, idx) => {
                         const progress = getTaskProgress(task);
                         return (
-                          <tr 
-                            key={task.id} 
+                          <tr
+                            key={task.id}
                             className="border-b border-gray-50 hover:bg-gray-50/50 transition cursor-pointer"
                             onClick={() => openTaskDetail(task)}
                           >
@@ -328,42 +312,42 @@ export default function ListView({
                                 }
 
                                 return (
-                                <div className="relative">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === task.id ? null : task.id); }}
-                                    className="p-1 rounded-lg hover:bg-gray-100"
-                                  >
-                                    <MoreVertical className="h-4 w-4 text-gray-400" />
-                                  </button>
-                                  {openMenuId === task.id && (
-                                    <div className="absolute right-0 top-8 z-10 flex flex-col bg-white shadow-lg rounded-lg w-32 border">
-                                      {showAssign && (
-                                        <button
-                                          onClick={() => { onAssignTask(task); setOpenMenuId(null); }}
-                                          className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                        >
-                                          <UserPlus className="h-3 w-3" /> Assigner
-                                        </button>
-                                      )}
-                                      {showEdit && (
-                                        <button
-                                          onClick={() => { onEditTask(task); setOpenMenuId(null); }}
-                                          className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                        >
-                                          <Edit className="h-3 w-3" /> Modifier
-                                        </button>
-                                      )}
-                                      {showDelete && (
-                                        <button
-                                          onClick={() => { onDeleteTask(task.id); setOpenMenuId(null); }}
-                                          className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
-                                        >
-                                          <Trash className="h-3 w-3" /> Supprimer
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
+                                  <div className="relative">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === task.id ? null : task.id); }}
+                                      className="p-1 rounded-lg hover:bg-gray-100"
+                                    >
+                                      <MoreVertical className="h-4 w-4 text-gray-400" />
+                                    </button>
+                                    {openMenuId === task.id && (
+                                      <div className="absolute right-0 top-8 z-10 flex flex-col bg-white shadow-lg rounded-lg w-32 border">
+                                        {showAssign && (
+                                          <button
+                                            onClick={() => { onAssignTask(task); setOpenMenuId(null); }}
+                                            className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                          >
+                                            <UserPlus className="h-3 w-3" /> Assigner
+                                          </button>
+                                        )}
+                                        {showEdit && (
+                                          <button
+                                            onClick={() => { onEditTask(task); setOpenMenuId(null); }}
+                                            className="px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                          >
+                                            <Edit className="h-3 w-3" /> Modifier
+                                          </button>
+                                        )}
+                                        {showDelete && (
+                                          <button
+                                            onClick={() => { onDeleteTask(task.id); setOpenMenuId(null); }}
+                                            className="px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
+                                          >
+                                            <Trash className="h-3 w-3" /> Supprimer
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 );
                               })()}
                             </td>
