@@ -17,6 +17,7 @@ import UsersPage from './pages/UsersPage';
 import AbsencesPage from './pages/AbsencesPage';
 import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
+import NotificationsPage from './pages/NotificationsPage';
 import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
 import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
@@ -56,6 +57,7 @@ function App() {
               <Route path="/absences" element={<AbsencesPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

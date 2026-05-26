@@ -18,6 +18,7 @@ from ..core.function import (
     commit_or_raise,
 )
 from ..models import AbsenceEtConge, Membre, Utilisateur
+from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
 
 
 ABSENCE_STATUS_ALIASES = {
@@ -166,6 +167,8 @@ def create_leave_request(
         detail="Impossible de creer cette demande d'absence ou de conge.",
         refresh_instance=absence,
     )
+    notify_absence_created(db, absence_member=membre, actor_user_id=current_user_id, is_absence=is_absence)
+    commit_notification_events(db)
     return absence
 
 
@@ -267,18 +270,22 @@ def update_absence(
 
 
 def approve_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
-    absence, _membre = _require_absence_management_access(db, absence_id, current_user_id)
+    absence, membre = _require_absence_management_access(db, absence_id, current_user_id)
     absence.statut = "Accepté"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
+    notify_absence_decision(db, absence_member=membre, accepted=True)
+    commit_notification_events(db)
     return absence
 
 
 def reject_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
-    absence, _membre = _require_absence_management_access(db, absence_id, current_user_id)
+    absence, membre = _require_absence_management_access(db, absence_id, current_user_id)
     absence.statut = "Refusé"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
+    notify_absence_decision(db, absence_member=membre, accepted=False)
+    commit_notification_events(db)
     return absence
 
 

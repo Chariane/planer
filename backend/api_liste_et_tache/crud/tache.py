@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
 from ..models import Tache, Membre, Checklist, Liste
+from .notification_events import commit_notification_events, notify_task_assigned
 
 def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
@@ -243,6 +244,8 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
     try:
         db.commit()
         db.refresh(assignation)
+        notify_task_assigned(db, tache=tache, assigned_user_id=utilisateur_id)
+        commit_notification_events(db)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Erreur lors de l'assignation du membre.")

@@ -14,6 +14,7 @@ from ..core.function import (
     commit_or_raise,
 )
 from ..models import Rapport, Membre, Utilisateur
+from .notification_events import commit_notification_events, notify_report_created
 
 
 def _serialize_report(rapport: Rapport) -> dict:
@@ -72,6 +73,8 @@ def create_report(
         detail="Impossible de creer ce rapport.",
         refresh_instance=rapport,
     )
+    notify_report_created(db, report_member=membre, report_title=titre, actor_user_id=current_user_id)
+    commit_notification_events(db)
     return rapport
 
 

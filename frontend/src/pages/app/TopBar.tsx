@@ -46,9 +46,11 @@ function TopBarShell({ children }: { children: ReactNode }) {
         </button>
         {children}
       </div>
-      <button className="p-1 rounded hover:bg-gray-100">
-        <Menu className="h-5 w-5 text-gray-600" />
-      </button>
+      <div className="flex items-center gap-2">
+        <button className="p-1 rounded hover:bg-gray-100">
+          <Menu className="h-5 w-5 text-gray-600" />
+        </button>
+      </div>
     </div>
   );
 }

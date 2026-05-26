@@ -1,8 +1,9 @@
-import { Menu, Bell, User, LogOut, PanelLeftClose, Search } from 'lucide-react';
+import { Menu, User, LogOut, PanelLeftClose, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import NotificationBell from '../notifications/NotificationBell';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -47,10 +48,11 @@ export default function Header({ onMenuClick, onToggleSidebar }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="relative rounded-full p-2 text-gray-600 hover:bg-gray-100">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-secondary"></span>
-          </motion.button>
+          {user && (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">
+              <NotificationBell />
+            </motion.div>
+          )}
 
           {user ? (
             <div className="flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1">
