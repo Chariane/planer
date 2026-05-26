@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     _get_absence_or_404,
+    _get_inherited_list_management_grant,
     _get_member_or_404,
     _get_member_scope_liste_id,
     _require_absence_management_access,
@@ -137,8 +138,15 @@ def create_leave_request(
     conge_interrompu_at=None,
 ) -> AbsenceEtConge:
     membre = _get_member_or_404(db, id_membre)
-    _get_member_scope_liste_id(db, membre)
-    _require_member_self_or_management_access(db, id_membre, current_user_id)
+    liste_id = _get_member_scope_liste_id(db, membre)
+
+    if is_absence:
+        _require_member_self_or_management_access(db, id_membre, current_user_id)
+    else:
+        _get_inherited_list_management_grant(db, liste_id, current_user_id)
+        is_conge_planifie = True
+        if statut is None:
+            statut = "Accepté"
 
     absence = AbsenceEtConge(
         id_membre=id_membre,

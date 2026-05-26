@@ -219,21 +219,18 @@ def update_file_attachment(
 def delete_file_attachment(db: Session, *, file_id: str, current_user_id: str) -> None:
     fichier = _get_fichier_or_404(db, file_id)
     target_type, target_id = _extract_file_target(fichier)
-    
-    # Sécurité supplémentaire : Seul le propriétaire ou un admin peut supprimer
+
     is_owner = False
     owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
     if owner_user_id == current_user_id:
         is_owner = True
     elif fichier.membres and fichier.membres.id_utilisateur == current_user_id:
         is_owner = True
-        
+
     if not is_owner:
-        # Si pas propriétaire, on vérifie si c'est un Admin de la ressource cible
+        if not target_type or not target_id:
+            raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
         _require_attachment_target_management_access(db, target_type, target_id, current_user_id)
-    else:
-        # Même si propriétaire, on vérifie qu'il a toujours accès à la ressource
-        _require_attachment_target_read_access(db, target_type, target_id, current_user_id)
 
     db.delete(fichier)
     commit_or_raise(db, detail="Impossible de supprimer ce fichier.")

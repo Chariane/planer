@@ -51,6 +51,11 @@ export default function PlannerToolsPanel({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [confirmData, setConfirmData] = useState<{
     id: string;
+    title: string;
+    message: string;
+    confirmText?: string;
+    confirmVariant?: 'danger' | 'primary' | 'warning';
+    loadingText?: string;
     onConfirm: () => Promise<void>;
   } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -88,6 +93,7 @@ export default function PlannerToolsPanel({
     motif: '',
     duree_demandee_en_jours: '',
   });
+  const [absenceTargetMemberId, setAbsenceTargetMemberId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -111,20 +117,33 @@ export default function PlannerToolsPanel({
   // Rapport création : Uniquement par les membres DIRECTS Administrateurs OU Membres simples ayant une tâche assignée.
   const canCreateReport = isDirectAdmin || (isDirectSimpleMember && hasAssignedTask);
 
-  // Absence : N'importe quel membre direct de la liste
-  const canCreateAbsence = !!isDirectMemberRecord;
+  const canCreateOwnAbsenceRequest = !!isDirectMemberRecord && !isInheritedManager;
+  const canPublishLeave = isInheritedManager;
+  const canCreateAbsence = canCreateOwnAbsenceRequest || canPublishLeave;
 
   const canAddFiles = !isGuest && (!listeId || !isDirectSimpleMember || hasAssignedTask || isManager);
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
-  const filterMembers = activeTool === 'reports' || activeTool === 'absences'
-    ? directMembers
-    : members;
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3500);
   };
+
+  const closeConfirm = () => {
+    if (loading) return;
+    setIsConfirmOpen(false);
+    setConfirmData(null);
+  };
+
+  const escapeHtml = (value?: string | null) => (
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  );
 
   const loadMembers = async () => {
     if (!workspaceId && !espaceId && !listeId) return;
@@ -200,7 +219,7 @@ export default function PlannerToolsPanel({
     if (!listeId) return;
     try {
       const data = await plannerToolsService.listReports({
-        ...scope,
+        ...(listeId ? { liste_id: listeId } : scope),
         member_id: selectedMemberId || undefined,
         limit: 100
       });
@@ -214,7 +233,7 @@ export default function PlannerToolsPanel({
     if (!listeId) return;
     try {
       const data = await plannerToolsService.listAbsences({
-        ...scope,
+        ...(listeId ? { liste_id: listeId } : scope),
         member_id: selectedMemberId || undefined,
         limit: 100
       });
@@ -260,6 +279,12 @@ export default function PlannerToolsPanel({
     }
   }, [absenceArchiveKey]);
 
+  useEffect(() => {
+    if (isInheritedManager && !absenceTargetMemberId && directMembers.length > 0) {
+      setAbsenceTargetMemberId(directMembers[0].id);
+    }
+  }, [isInheritedManager, absenceTargetMemberId, directMembers]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -285,13 +310,18 @@ export default function PlannerToolsPanel({
   const handleDeleteFile = (fileId: string) => {
     setConfirmData({
       id: fileId,
+      title: 'Supprimer le fichier',
+      message: 'Ce fichier sera retiré définitivement de la ressource et de la base de données.',
+      confirmText: 'Supprimer',
+      confirmVariant: 'danger',
+      loadingText: 'Suppression...',
       onConfirm: async () => {
         setLoading(true);
         try {
           await plannerToolsService.deleteFile(fileId);
           setFiles(prev => prev.filter(f => f.id !== fileId));
           showMessage('success', 'Fichier supprimé avec succès.');
-          setIsConfirmOpen(false);
+          closeConfirm();
         } catch (err: any) {
           showMessage('error', `Erreur lors de la suppression : ${err.message}`);
         } finally {
@@ -412,6 +442,11 @@ export default function PlannerToolsPanel({
   const handleDeleteReport = (report: any) => {
     setConfirmData({
       id: report.id,
+      title: 'Supprimer le rapport',
+      message: `Le rapport "${report.titre || 'sans titre'}" sera supprimé définitivement de votre historique.`,
+      confirmText: 'Supprimer',
+      confirmVariant: 'danger',
+      loadingText: 'Suppression...',
       onConfirm: async () => {
         setLoading(true);
         try {
@@ -419,7 +454,7 @@ export default function PlannerToolsPanel({
           setReports(prev => prev.filter(item => item.id !== report.id));
           setSelectedReport(prev => prev?.id === report.id ? null : prev);
           setEditingReport(prev => prev?.id === report.id ? null : prev);
-          setIsConfirmOpen(false);
+          closeConfirm();
           showMessage('success', 'Rapport supprimé avec succès.');
         } catch (err: any) {
           showMessage('error', err?.message || 'Impossible de supprimer le rapport.');
@@ -460,20 +495,22 @@ export default function PlannerToolsPanel({
   };
 
   const handleCreateAbsence = async () => {
-    if (!isDirectMemberRecord || !absenceForm.date_debut) return;
+    const targetMemberId = canPublishLeave ? absenceTargetMemberId : isDirectMemberRecord?.id;
+    if (!targetMemberId || !absenceForm.date_debut) return;
     setLoading(true);
     try {
       await plannerToolsService.createAbsence({
-        id_membre: isDirectMemberRecord.id,
-        is_absence: absenceForm.is_absence,
+        id_membre: targetMemberId,
+        is_absence: !canPublishLeave,
         date_debut: new Date(absenceForm.date_debut).toISOString(),
         date_fin: absenceForm.date_fin ? new Date(absenceForm.date_fin).toISOString() : undefined,
         motif: absenceForm.motif,
+        is_conge_planifie: canPublishLeave,
         duree_demandee_en_jours: absenceForm.duree_demandee_en_jours ? Number(absenceForm.duree_demandee_en_jours) : undefined,
       });
       setAbsenceForm({ is_absence: true, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
       await loadAbsences();
-      showMessage('success', 'Demande envoyée.');
+      showMessage('success', canPublishLeave ? 'Congé publié.' : 'Demande envoyée.');
     } catch (err: any) {
       showMessage('error', err?.message || 'Impossible de créer la demande.');
     } finally {
@@ -512,18 +549,29 @@ export default function PlannerToolsPanel({
   const reportsWithAuthors = useMemo(() => {
     return reports.map(report => ({
       ...report,
+      owner_user_id: report.owner_user_id
+        || members.find(member => member.id === report.id_membre)?.id_utilisateur
+        || (window as any)._membershipMap?.get(report.id_membre)?.id_utilisateur
+        || null,
       authorName: getAuthorName(report.id_membre, report.owner_user_id, report.owner_name)
     }));
   }, [reports, members, currentUserId]);
 
   const ownReports = useMemo(
-    () => reportsWithAuthors.filter(report => report.owner_user_id === currentUserId),
-    [reportsWithAuthors, currentUserId],
+    () => reportsWithAuthors.filter(report =>
+      report.owner_user_id === currentUserId
+      || report.id_membre === isDirectMemberRecord?.id
+    ),
+    [reportsWithAuthors, currentUserId, isDirectMemberRecord?.id],
   );
 
   const accessibleReports = useMemo(
-    () => reportsWithAuthors.filter(report => report.owner_user_id !== currentUserId && !archivedReportIds.includes(report.id)),
-    [reportsWithAuthors, archivedReportIds, currentUserId],
+    () => reportsWithAuthors.filter(report =>
+      report.owner_user_id !== currentUserId
+      && report.id_membre !== isDirectMemberRecord?.id
+      && !archivedReportIds.includes(report.id)
+    ),
+    [reportsWithAuthors, archivedReportIds, currentUserId, isDirectMemberRecord?.id],
   );
   const archivedReports = useMemo(
     () => reportsWithAuthors.filter(report => archivedReportIds.includes(report.id)),
@@ -533,6 +581,7 @@ export default function PlannerToolsPanel({
   const filesWithAuthors = useMemo(() => {
     return files.map(file => ({
       ...file,
+      owner_user_id: file.owner_user_id || file.meta_donnees?.owner_user_id || null,
       authorName: getAuthorName(file.id_membre, file.meta_donnees?.owner_user_id, file.owner_name)
     }));
   }, [files, members, currentUserId]);
@@ -540,16 +589,27 @@ export default function PlannerToolsPanel({
   const absencesWithAuthors = useMemo(() => {
     return absences.map(absence => ({
       ...absence,
+      owner_user_id: absence.owner_user_id
+        || members.find(member => member.id === absence.id_membre)?.id_utilisateur
+        || (window as any)._membershipMap?.get(absence.id_membre)?.id_utilisateur
+        || null,
       authorName: getAuthorName(absence.id_membre, absence.owner_user_id, absence.owner_name),
     }));
   }, [absences, members, currentUserId]);
   const ownAbsences = useMemo(
-    () => absencesWithAuthors.filter(absence => absence.owner_user_id === currentUserId),
-    [absencesWithAuthors, currentUserId],
+    () => absencesWithAuthors.filter(absence =>
+      absence.owner_user_id === currentUserId
+      || absence.id_membre === isDirectMemberRecord?.id
+    ),
+    [absencesWithAuthors, currentUserId, isDirectMemberRecord?.id],
   );
   const accessibleAbsences = useMemo(
-    () => absencesWithAuthors.filter(absence => absence.owner_user_id !== currentUserId && !archivedAbsenceIds.includes(absence.id)),
-    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
+    () => absencesWithAuthors.filter(absence =>
+      absence.owner_user_id !== currentUserId
+      && absence.id_membre !== isDirectMemberRecord?.id
+      && !archivedAbsenceIds.includes(absence.id)
+    ),
+    [absencesWithAuthors, archivedAbsenceIds, currentUserId, isDirectMemberRecord?.id],
   );
   const archivedAbsences = useMemo(
     () => absencesWithAuthors.filter(absence => archivedAbsenceIds.includes(absence.id)),
@@ -567,13 +627,35 @@ export default function PlannerToolsPanel({
     }
   };
 
+  const confirmAbsenceDecision = (absence: any, action: 'approve' | 'reject') => {
+    const isApprove = action === 'approve';
+    setConfirmData({
+      id: absence.id,
+      title: isApprove ? 'Accepter la demande' : 'Rejeter la demande',
+      message: `Voulez-vous vraiment ${isApprove ? 'accepter' : 'rejeter'} la demande de ${absence.authorName} ?`,
+      confirmText: isApprove ? 'Accepter' : 'Rejeter',
+      confirmVariant: isApprove ? 'primary' : 'danger',
+      loadingText: isApprove ? 'Acceptation...' : 'Rejet...',
+      onConfirm: async () => {
+        await decideAbsence(absence.id, action);
+        closeConfirm();
+      },
+    });
+    setIsConfirmOpen(true);
+  };
+
   const printReport = (report: any) => {
     const win = window.open('', '_blank');
     if (!win) return;
+    const safeTitle = escapeHtml(report.titre);
+    const safeAuthor = escapeHtml(report.authorName || 'Utilisateur');
+    const safeRealisations = escapeHtml(report.realisations);
+    const safeDifficultes = escapeHtml(report.difficultes_et_solutions);
+    const safeCommentaire = escapeHtml(report.commentaire);
     win.document.write(`
       <html>
         <head>
-          <title>Rapport - ${report.titre}</title>
+          <title>Rapport - ${safeTitle}</title>
           <style>
             body { font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
             .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
@@ -592,27 +674,27 @@ export default function PlannerToolsPanel({
           <div class="header">
             <div>
               <div class="meta">Rapport d'activité</div>
-              <h1 class="title">${report.titre || ''}</h1>
+              <h1 class="title">${safeTitle}</h1>
             </div>
             <div class="meta">Date: ${formatDate(report.created_at)}</div>
           </div>
           <div class="section">
             <div class="section-title">I. Réalisations</div>
-            <div class="content">${report.realisations || ''}</div>
+            <div class="content">${safeRealisations}</div>
           </div>
-          ${report.difficultes_et_solutions ? `
+          ${safeDifficultes ? `
           <div class="section">
             <div class="section-title">II. Difficultés & Solutions</div>
-            <div class="content warning">${report.difficultes_et_solutions}</div>
+            <div class="content warning">${safeDifficultes}</div>
           </div>` : ''}
-          ${report.commentaire ? `
+          ${safeCommentaire ? `
           <div class="section">
             <div class="section-title">III. Commentaires Additionnels</div>
-            <div class="content note">${report.commentaire}</div>
+            <div class="content note">${safeCommentaire}</div>
           </div>` : ''}
           <div class="footer">
             <div>Généré par K-Planner le ${new Date().toLocaleDateString('fr-FR')}</div>
-            <div>Signé: <span class="signature">${report.authorName || 'Utilisateur'}</span></div>
+            <div>Signé: <span class="signature">${safeAuthor}</span></div>
           </div>
           <script>window.onload = () => { window.print(); window.close(); }</script>
         </body>
@@ -712,8 +794,8 @@ export default function PlannerToolsPanel({
         <div className="flex gap-2">
           {absence.statut === 'En attente' && (
             <>
-              <button onClick={() => decideAbsence(absence.id, 'approve')} className="p-2 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"><Check className="h-4 w-4" /></button>
-              <button onClick={() => decideAbsence(absence.id, 'reject')} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"><X className="h-4 w-4" /></button>
+              <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"><Check className="h-4 w-4" /></button>
+              <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"><X className="h-4 w-4" /></button>
             </>
           )}
           <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 transition-colors" title="Archiver">
@@ -768,67 +850,56 @@ export default function PlannerToolsPanel({
         </div>
       )}
 
-      {/* Barre de Filtre par Membre */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b bg-gray-50/50">
-        <div className="relative flex-1 group">
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
-            <Users size={16} />
+      {activeTool === 'files' && (
+        <div className="flex items-center gap-3 px-6 py-3 border-b bg-gray-50/50">
+          <div className="relative flex-1 group">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
+              <Users size={16} />
+            </div>
+            <select
+              value={selectedMemberId}
+              onChange={(e) => setSelectedMemberId(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Tous les membres</option>
+              {directMembers.length > 0 && (
+                <optgroup label="Membres directes de la liste">
+                  {directMembers.map(member => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {inheritedMembers.length > 0 && (
+                <optgroup label="Membres (Héritage Gestion)">
+                  {inheritedMembers.map(member => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
-          <select
-            value={selectedMemberId}
-            onChange={(e) => setSelectedMemberId(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-          >
-            <option value="">
-              {activeTool === 'reports'
-                ? 'Tous les rapports accessibles'
-                : activeTool === 'absences'
-                  ? 'Toutes les demandes accessibles'
-                  : 'Tous les membres'}
-            </option>
-            {(activeTool === 'reports' || activeTool === 'absences') ? (
-              filterMembers.map(member => (
-                <option key={member.id} value={member.id}>
-                  {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
-                </option>
-              ))
-            ) : directMembers.length > 0 && (
-              <optgroup label="Membres directes de la liste">
-                {directMembers.map(member => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {activeTool === 'files' && inheritedMembers.length > 0 && (
-              <optgroup label="Membres (Héritage Gestion)">
-                {inheritedMembers.map(member => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
+          {selectedMemberId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedMemberId('')}
+              className="text-gray-400 hover:text-red-500 p-2"
+              title="Effacer le filtre"
+            >
+              <X size={16} />
+            </Button>
+          )}
         </div>
-        {(selectedMemberId) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedMemberId('')}
-            className="text-gray-400 hover:text-red-500 p-2"
-            title="Effacer le filtre"
-          >
-            <X size={16} />
-          </Button>
-        )}
-      </div>
+      )}
 
       {activeTool === 'files' && (
         <GlassCard className="p-4 space-y-4">
@@ -861,7 +932,7 @@ export default function PlannerToolsPanel({
                 <div className="flex items-center gap-1">
                   <button onClick={() => window.open(getFileFullUrl(file.url_fichier), '_blank')} className="p-2 rounded-full hover:bg-green-50 text-green-600"><Eye className="h-4 w-4" /></button>
                   <button onClick={() => handleDownload(file)} className="p-2 rounded-full hover:bg-secondary/10 text-secondary"><Download className="h-4 w-4" /></button>
-                  {((file.owner_user_id || file.meta_donnees?.owner_user_id) === currentUserId || isManager) && (
+                  {(file.owner_user_id === currentUserId || isManager) && (
                     <button onClick={() => handleDeleteFile(file.id)} className="p-2 rounded-full hover:bg-red-50 text-red-600"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </div>
@@ -985,31 +1056,47 @@ export default function PlannerToolsPanel({
 
       {activeTool === 'absences' && (
         <div className="space-y-6">
-          {!isInheritedManager && (
           <GlassCard className="p-5 border-t-4 border-t-primary">
             <div className="flex items-center gap-2 border-b pb-3 mb-4">
               <Calendar className="h-5 w-5 text-primary" />
-              <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Demande d'Absence ou Congé</h4>
+              <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">
+                {canPublishLeave ? 'Publier un congé' : "Demande d'absence"}
+              </h4>
             </div>
 
             {!canCreateAbsence ? (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3 text-xs text-amber-700">
                 <ShieldAlert className="h-5 w-5 flex-shrink-0" />
-                Vous devez être membre de cette liste pour pouvoir effectuer une demande.
+                Vous devez être membre direct de cette liste pour demander une absence, ou gestionnaire par héritage pour publier un congé.
+              </div>
+            ) : canPublishLeave && directMembers.length === 0 ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-xs text-blue-700">
+                <Users className="h-5 w-5 flex-shrink-0" />
+                Aucun membre direct n'est disponible dans cette liste. Ajoutez d'abord un membre à la liste avant de publier un congé.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Type</label>
-                  <select
-                    value={absenceForm.is_absence ? 'absence' : 'conge'}
-                    onChange={e => setAbsenceForm(prev => ({ ...prev, is_absence: e.target.value === 'absence' }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white h-10"
-                  >
-                    <option value="absence">Absence</option>
-                    <option value="conge">Congé</option>
-                  </select>
-                </div>
+                {canPublishLeave ? (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Membre</label>
+                    <select
+                      value={absenceTargetMemberId}
+                      onChange={e => setAbsenceTargetMemberId(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white h-10"
+                    >
+                      {directMembers.map(member => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Type</label>
+                    <div className="h-10 flex items-center rounded-lg border bg-gray-50 px-3 text-sm text-gray-600">Absence</div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Début</label>
                   <input
@@ -1037,13 +1124,12 @@ export default function PlannerToolsPanel({
                     className="w-full border rounded-lg px-3 py-2 text-sm outline-none h-10"
                   />
                 </div>
-                <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut} className="h-10">
-                  Soumettre
+                <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut || (canPublishLeave && !absenceTargetMemberId)} className="h-10">
+                  {canPublishLeave ? 'Publier' : 'Soumettre'}
                 </Button>
               </div>
             )}
           </GlassCard>
-          )}
 
           <GlassCard className="p-5">
             <div className="flex items-center justify-between border-b pb-3 mb-4">
@@ -1184,10 +1270,13 @@ export default function PlannerToolsPanel({
 
       <ConfirmModal
         isOpen={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
+        onClose={closeConfirm}
         onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
-        title="Confirmation"
-        message="Voulez-vous vraiment continuer ? Cette action est irréversible."
+        title={confirmData?.title || 'Confirmation'}
+        message={confirmData?.message || 'Voulez-vous vraiment continuer ?'}
+        confirmText={confirmData?.confirmText}
+        confirmVariant={confirmData?.confirmVariant}
+        loadingText={confirmData?.loadingText}
         isLoading={loading}
       />
     </div>

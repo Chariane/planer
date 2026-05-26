@@ -1,6 +1,5 @@
 // frontend/src/components/ui/ConfirmModal.tsx
-import { useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 import { Button } from './Button';
 
@@ -14,6 +13,7 @@ interface ConfirmModalProps {
   cancelText?: string;
   confirmVariant?: 'danger' | 'primary' | 'warning';
   isLoading?: boolean;
+  loadingText?: string;
 }
 
 export default function ConfirmModal({
@@ -26,6 +26,7 @@ export default function ConfirmModal({
   cancelText = 'Annuler',
   confirmVariant = 'danger',
   isLoading = false,
+  loadingText = 'Traitement...',
 }: ConfirmModalProps) {
   const handleConfirm = async () => {
     await onConfirm();
@@ -59,7 +60,7 @@ export default function ConfirmModal({
             disabled={isLoading}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getConfirmButtonClass()} disabled:opacity-50`}
           >
-            {isLoading ? 'Suppression...' : confirmText}
+            {isLoading ? loadingText : confirmText}
           </button>
         </div>
       </div>
