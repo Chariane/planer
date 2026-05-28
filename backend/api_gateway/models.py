@@ -61,7 +61,6 @@ class Utilisateur(Base):
     date_creation: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     date_modif: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     date_sup: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-
     # Relations
     a_propos: Mapped[List['APropos']] = relationship('APropos', back_populates='utilisateur')
     categorie_evenements: Mapped[List['CategorieEvenements']] = relationship('CategorieEvenements', back_populates='utilisateur')

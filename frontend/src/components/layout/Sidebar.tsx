@@ -1,7 +1,7 @@
 // frontend/src/components/layout/Sidebar.tsx
 import { useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Lock, Edit, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { useNavigationStore } from '../../store/useNavigationStore';
@@ -13,9 +13,10 @@ import type { Workspace } from '../../types';
 
 interface SidebarProps {
   isOpen: boolean;
+  width?: number;
 }
 
-export default function Sidebar({ isOpen }: SidebarProps) {
+export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { workspaceId, id } = useParams();
@@ -41,7 +42,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const [confirmData, setConfirmData] = useState<{ workspaceId: string; onConfirm: () => Promise<void> } | null>(null);
 
   const handleWorkspaceCreated = () => {
-    loadWorkspaces(); // Recharger la liste
+    loadWorkspaces();
   };
 
   const openWorkspaceMenu = (event: MouseEvent, workspace: Workspace) => {
@@ -91,18 +92,19 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     setIsConfirmOpen(true);
   };
 
-  // Version réduite (icônes seulement)
+  const isCompact = width < 120;
+
   if (!isOpen) {
     return (
-      <div className="flex h-full flex-col bg-primary py-4 shadow-xl overflow-y-auto">
+      <div className="flex h-full flex-col bg-primary py-4 shadow-xl overflow-y-auto items-center w-full">
         <div className="mb-8 flex justify-center">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white">KP</div>
+          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white text-xs">KP</div>
         </div>
-        <nav className="flex flex-col items-center gap-2">
-          <Link to="/dashboard" className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all">
+        <nav className="flex flex-col items-center gap-4">
+          <Link to="/dashboard" className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all" title="Tableau de bord">
             <LayoutDashboard className="h-5 w-5" />
           </Link>
-          <Link to="/workspaces" className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all">
+          <Link to="/workspaces" className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all" title="Workspaces">
             <Briefcase className="h-5 w-5" />
           </Link>
         </nav>
@@ -110,76 +112,81 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     );
   }
 
-  // Version complète
   return (
-    <div className="flex h-full flex-col bg-primary shadow-xl overflow-y-auto">
+    <div className="flex h-full flex-col bg-primary shadow-xl overflow-y-auto w-full items-center pb-2">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-white/10">
-        <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white">KP</div>
-        <span className="text-lg font-bold text-white">K‑Planner</span>
+      <div className={`flex ${isCompact ? 'flex-col justify-center gap-1 py-4 px-1' : 'items-center gap-2 px-4 py-4'} w-full border-b border-white/10 transition-all`}>
+        <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-secondary flex items-center justify-center font-bold text-white text-xs shadow-md">KP</div>
+        <span className={`${isCompact ? 'text-[9px] mt-1' : 'text-lg'} font-bold text-white tracking-wide truncate transition-all`}>K-Planner</span>
       </div>
 
       {/* Profil utilisateur */}
-      <div className="mx-3 mt-4 p-3 bg-white/10 rounded-xl">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
+      <div className={`w-full ${isCompact ? 'px-2 mt-3' : 'px-3 mt-4'}`}>
+        <div className={`p-2 bg-white/5 rounded-xl flex ${isCompact ? 'flex-col items-center justify-center' : 'items-center gap-3'} border border-white/10`}>
+          <div className={`${isCompact ? 'h-7 w-7' : 'h-10 w-10'} flex-shrink-0 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-xs shadow-sm`}>
             {user?.username?.charAt(0)?.toUpperCase() || 'U'}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user?.username || 'Invité'}</p>
-            <p className="text-xs text-white/60 truncate">{user?.email || 'connecté'}</p>
+          <div className={`${isCompact ? 'w-full text-center mt-1' : 'flex-1 min-w-0'} flex flex-col`}>
+            <p className={`${isCompact ? 'text-[9px]' : 'text-sm'} font-medium text-white/90 truncate w-full`}>
+              {user?.username || 'Invité'}
+            </p>
+            {!isCompact && <p className="text-xs text-white/60 truncate">{user?.email || 'connecté'}</p>}
           </div>
         </div>
       </div>
 
       {/* Navigation principale */}
-      <nav className="mt-4 px-3 space-y-1">
-        <Link to="/dashboard">
-          <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${location.pathname === '/dashboard'
+      <nav className={`mt-3 w-full ${isCompact ? 'px-2' : 'px-3'} space-y-1`}>
+        <Link to="/dashboard" className="block w-full">
+          <div className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-3 py-2'} gap-2 rounded-lg transition-all ${location.pathname === '/dashboard'
             ? 'bg-secondary text-white shadow-md'
             : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}>
-            <LayoutDashboard className="h-5 w-5" />
-            <span>Tableau de bord</span>
+            <LayoutDashboard className={`${isCompact ? "h-4 w-4" : "h-5 w-5"} flex-shrink-0`} />
+            <span className={`${isCompact ? 'text-[9px] leading-tight text-center' : 'text-sm'} truncate`}>
+              {isCompact ? 'Dashboard' : 'Tableau de bord'}
+            </span>
           </div>
         </Link>
       </nav>
 
       {/* Mes Workspaces (owned) */}
-      <div className="mt-4 pt-3 border-t border-white/10">
-        <div className="flex items-center justify-between px-3 mb-2">
+      <div className={`mt-3 pt-3 border-t border-white/10 w-full flex flex-col ${isCompact ? 'items-center' : ''}`}>
+        <div className={`flex ${isCompact ? 'flex-col items-center justify-center gap-1.5' : 'items-center justify-between px-3'} mb-2 w-full`}>
           <button
             onClick={() => setOwnedOpen(!ownedOpen)}
-            className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+            className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-xs'} font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors`}
+            title="Mes Workspaces"
           >
-            {ownedOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            Mes Workspaces
+            {ownedOpen ? <ChevronDown className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} /> : <ChevronRight className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} />}
+            <span className={`${isCompact ? 'truncate max-w-[50px]' : ''}`}>{isCompact ? 'Works.' : 'Mes Workspaces'}</span>
           </button>
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="p-1 rounded-lg bg-white/10 hover:bg-secondary transition-colors"
+            className={`p-1.5 rounded-lg bg-white/10 hover:bg-secondary transition-colors ${isCompact ? '' : 'flex-shrink-0'}`}
             title="Créer un workspace"
           >
             <Plus className="h-3 w-3 text-white" />
           </button>
         </div>
         {ownedOpen && (
-          <div className="space-y-0.5 px-2">
+          <div className={`space-y-1 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-2'}`}>
             {ownedWorkspaces.length === 0 && (
-              <p className="text-xs text-white/40 px-2 py-1">Aucun workspace créé</p>
+              <p className={`${isCompact ? 'text-[8px] text-center' : 'text-xs px-2'} text-white/40`}>Aucun{isCompact ? '' : ' workspace'}</p>
             )}
             {ownedWorkspaces.map((ws) => (
               <Link
                 key={ws.id}
                 to={`/workspace/${ws.id}`}
                 onContextMenu={(event) => openWorkspaceMenu(event, ws)}
-                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${activeWorkspaceId === ws.id
-                  ? 'bg-secondary text-white'
+                className={`flex ${isCompact ? 'flex-col items-center justify-center p-1.5' : 'items-center px-2 py-1.5'} gap-2 rounded-lg w-full transition-all ${activeWorkspaceId === ws.id
+                  ? 'bg-secondary text-white shadow-sm'
                   : 'text-white/70 hover:bg-white/10 hover:text-white'
                   }`}
+                title={ws.nom}
               >
-                <Crown className="h-4 w-4 flex-shrink-0 text-amber-400" />
-                <span className="truncate">{ws.nom}</span>
+                <Crown className={`${isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} flex-shrink-0 text-amber-400`} />
+                <span className={`${isCompact ? 'text-[8px] text-center px-0.5' : 'text-sm'} truncate w-full`}>{ws.nom}</span>
               </Link>
             ))}
           </div>
@@ -188,31 +195,33 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
       {/* Workspaces rejoints (joined) */}
       {joinedWorkspaces.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between px-3 mb-2">
+        <div className={`mt-2 pt-2 border-t border-white/10 w-full flex flex-col ${isCompact ? 'items-center' : ''}`}>
+          <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-3'} mb-2 w-full`}>
             <button
               onClick={() => setJoinedOpen(!joinedOpen)}
-              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+              className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-xs'} font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors`}
+              title="Workspaces rejoints"
             >
-              {joinedOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Rejoints
+              {joinedOpen ? <ChevronDown className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} /> : <ChevronRight className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} />}
+              <span>Rejoints</span>
             </button>
           </div>
           {joinedOpen && (
-            <div className="space-y-0.5 px-2">
+            <div className={`space-y-1 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-2'}`}>
               {joinedWorkspaces.map((ws) => (
                 <Link
                   key={ws.id}
                   to={`/workspace/${ws.id}`}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-all ${activeWorkspaceId === ws.id
-                    ? 'bg-secondary text-white'
+                  className={`flex ${isCompact ? 'flex-col items-center justify-center p-1.5' : 'items-center px-2 py-1.5'} gap-2 rounded-lg w-full transition-all ${activeWorkspaceId === ws.id
+                    ? 'bg-secondary text-white shadow-sm'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}
+                  title={ws.nom}
                 >
-                  <Users className="h-4 w-4 flex-shrink-0 text-sky-400" />
-                  <span className="truncate flex-1">{ws.nom}</span>
-                  {ws.current_user_role && (
-                    <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                  <Users className={`${isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} flex-shrink-0 text-sky-400`} />
+                  <span className={`${isCompact ? 'text-[8px] text-center px-0.5' : 'text-sm'} truncate w-full flex-1`}>{ws.nom}</span>
+                  {!isCompact && ws.current_user_role && (
+                    <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none flex-shrink-0">
                       {ws.current_user_role}
                     </span>
                   )}
@@ -225,31 +234,35 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
       {/* Espaces rejoints */}
       {joinedEspaces.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between px-3 mb-2">
+        <div className={`mt-2 pt-2 border-t border-white/10 w-full flex flex-col ${isCompact ? 'items-center' : ''}`}>
+          <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-3'} mb-2 w-full`}>
             <button
               onClick={() => setEspacesOpen(!espacesOpen)}
-              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+              className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-xs'} font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors`}
+              title="Espaces rejoints"
             >
-              {espacesOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Espaces rejoints
+              {espacesOpen ? <ChevronDown className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} /> : <ChevronRight className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} />}
+              <span>Espaces</span>
             </button>
           </div>
           {espacesOpen && (
-            <div className="space-y-1 px-2">
+            <div className={`space-y-1 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-2'}`}>
               {joinedEspaces.map((espace) => (
-                <div key={`joined-espace-${espace.id}`}>
-                  <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
-                    {espace.workspace_nom || 'Workspace'} <Lock className="inline w-3 h-3 ml-1" />
-                  </div>
+                <div key={`joined-espace-${espace.id}`} className="w-full">
+                  {!isCompact && (
+                    <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
+                      {espace.workspace_nom || 'Workspace'}
+                    </div>
+                  )}
                   <Link
                     to={`/espace/${espace.id}`}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                    className={`flex ${isCompact ? 'flex-col items-center justify-center p-1.5' : 'items-center px-2 py-1'} gap-2 rounded-lg w-full transition-all text-white/70 hover:bg-white/10 hover:text-white`}
+                    title={`${espace.workspace_nom} > ${espace.nom}`}
                   >
-                    <FolderOpen className="h-4 w-4 flex-shrink-0 text-emerald-400" />
-                    <span className="truncate flex-1">{espace.nom}</span>
-                    {espace.role && (
-                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                    <FolderOpen className={`${isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} flex-shrink-0 text-emerald-400`} />
+                    <span className={`${isCompact ? 'text-[8px] text-center px-0.5' : 'text-sm'} truncate w-full flex-1`}>{espace.nom}</span>
+                    {!isCompact && espace.role && (
+                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none flex-shrink-0">
                         {espace.role}
                       </span>
                     )}
@@ -263,31 +276,35 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
       {/* Listes rejointes */}
       {joinedListes.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between px-3 mb-2">
+        <div className={`mt-2 pt-2 border-t border-white/10 w-full flex flex-col ${isCompact ? 'items-center' : ''}`}>
+          <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-3'} mb-2 w-full`}>
             <button
               onClick={() => setListesOpen(!listesOpen)}
-              className="flex items-center gap-1 text-xs font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors"
+              className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-xs'} font-semibold text-white/50 uppercase tracking-wider hover:text-white/80 transition-colors`}
+              title="Listes rejointes"
             >
-              {listesOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Listes rejointes
+              {listesOpen ? <ChevronDown className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} /> : <ChevronRight className={`h-3 w-3 ${isCompact ? 'mr-0.5' : 'mr-1'}`} />}
+              <span>Listes</span>
             </button>
           </div>
           {listesOpen && (
-            <div className="space-y-1 px-2">
+            <div className={`space-y-1 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-2'}`}>
               {joinedListes.map((liste) => (
-                <div key={`joined-liste-${liste.id}`}>
-                  <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
-                    {liste.espace_nom || liste.workspace_nom || 'Parent inconnu'} <Lock className="inline w-3 h-3 ml-1" />
-                  </div>
+                <div key={`joined-liste-${liste.id}`} className="w-full">
+                  {!isCompact && (
+                    <div className="flex items-center text-[10px] text-white/40 px-2 mt-1 truncate" title="Contexte Parent Restreint">
+                      {liste.espace_nom || liste.workspace_nom || 'Parent inconnu'}
+                    </div>
+                  )}
                   <Link
                     to={`/liste/${liste.id}`}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-all"
+                    className={`flex ${isCompact ? 'flex-col items-center justify-center p-1.5' : 'items-center px-2 py-1'} gap-2 rounded-lg w-full transition-all text-white/70 hover:bg-white/10 hover:text-white`}
+                    title={`${liste.espace_nom || liste.workspace_nom} > ${liste.nom}`}
                   >
-                    <ListTodo className="h-4 w-4 flex-shrink-0 text-violet-400" />
-                    <span className="truncate flex-1">{liste.nom}</span>
-                    {liste.role && (
-                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none">
+                    <ListTodo className={`${isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'} flex-shrink-0 text-violet-400`} />
+                    <span className={`${isCompact ? 'text-[8px] text-center px-0.5' : 'text-sm'} truncate w-full flex-1`}>{liste.nom}</span>
+                    {!isCompact && liste.role && (
+                      <span className="text-[10px] bg-white/15 text-white/60 px-1.5 py-0.5 rounded-full leading-none flex-shrink-0">
                         {liste.role}
                       </span>
                     )}
@@ -300,15 +317,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       )}
 
       {/* Footer */}
-      <div className="mt-auto pt-4 pb-4 border-t border-white/10 px-3">
+      <div className={`mt-auto pt-4 border-t border-white/10 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-3 pb-4'}`}>
         <button
           onClick={() => logout()}
-          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+          className={`w-full flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center gap-3 px-3 py-2'} rounded-lg text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-colors`}
+          title="Déconnexion"
         >
-          <LogOut className="h-4 w-4" />
-          <span>Déconnexion</span>
+          <LogOut className="h-4 w-4 flex-shrink-0" />
+          <span className={`${isCompact ? 'text-[8px] font-semibold uppercase mt-1' : 'text-sm'} truncate`}>{isCompact ? 'Quitter' : 'Déconnexion'}</span>
         </button>
-        <p className="text-center text-xs text-white/30 mt-3">v1.0 K-Planner</p>
+        <p className={`text-center ${isCompact ? 'text-[7px] mt-2' : 'text-xs mt-3'} text-white/30 truncate`}>v1.0 {isCompact ? '' : 'K-Planner'}</p>
       </div>
 
       {/* Modale de création */}
@@ -326,11 +344,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         >
           <button onClick={openEditWorkspace} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
             <Edit className="h-4 w-4" />
-            Modifier le workspace
+            Modifier
           </button>
           <button onClick={handleDeleteWorkspace} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
             <Trash2 className="h-4 w-4" />
-            Supprimer le workspace
+            Supprimer
           </button>
         </div>
       )}
@@ -363,8 +381,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         onClose={() => setIsConfirmOpen(false)}
         onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
         title="Supprimer le workspace"
-        message={`Voulez-vous vraiment supprimer définitivement le workspace "${contextMenu.workspace?.nom}" ? Toutes les données associées seront perdues.`}
+        message={`Voulez-vous vraiment supprimer définitivement "${contextMenu.workspace?.nom}" ?`}
       />
     </div>
   );
 }
+
