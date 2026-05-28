@@ -10,7 +10,7 @@ export default function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarOpen] = useState(true);
   const [isCompact, setIsCompact] = useState(false);
-  
+
   const sidebarWidth = isCompact ? 75 : 200;
 
   const toggleSidebar = () => setIsCompact(!isCompact);
@@ -18,7 +18,7 @@ export default function DashboardLayout() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar desktop */}
-      <div 
+      <div
         className="fixed inset-y-0 left-0 z-20 hidden lg:flex transition-all duration-300"
         style={{ width: sidebarWidth }}
       >
@@ -33,7 +33,7 @@ export default function DashboardLayout() {
       </AnimatePresence>
 
       {/* Contenu principal */}
-      <div 
+      <div
         className="transition-all duration-300"
         style={{ paddingLeft: `calc(${sidebarWidth}px + 0.375rem)` }}
       >
@@ -42,7 +42,7 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
-      
+
       <style>{`
         @media (max-width: 1023px) {
           .transition-all[style*="paddingLeft"] {

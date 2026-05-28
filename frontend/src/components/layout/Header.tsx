@@ -28,7 +28,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
               {isCompact ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
             </button>
           </div>
-          
+
           {/* Barre de recherche responsive */}
           <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -40,9 +40,9 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
               className="w-72 lg:w-[400px] pl-9 pr-4 py-2 rounded-full border border-gray-200 bg-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-secondary focus:bg-white transition-all shadow-sm"
             />
           </div>
-          
+
           {/* Bouton recherche mobile */}
-          <button 
+          <button
             onClick={() => setIsSearchOpen(!isSearchOpen)}
             className="md:hidden rounded-lg p-2 text-gray-600 hover:bg-gray-100"
           >
@@ -54,7 +54,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
           <button className="p-2 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 transition-colors" title="Passer en mode sombre">
             <Moon className="h-5 w-5" />
           </button>
-          
+
           {user && (
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">
               <NotificationBell />
