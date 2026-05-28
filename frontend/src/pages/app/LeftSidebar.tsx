@@ -694,11 +694,11 @@ export default function LeftSidebar() {
   };
 
   const renderTree = (items: any[], depth = 0) => {
-    if (!items?.length) return <div className="text-sm text-gray-400 px-2 py-2">Aucun espace</div>;
+    if (!items?.length) return <div className="text-xs text-gray-400 px-2 py-1.5">Aucun espace</div>;
     return items.map(item => {
       const canManageCurrentSpace = canManageSpace(item.id);
       return (
-        <div key={item.id} style={{ marginLeft: depth * 16 }} className="mb-1">
+        <div key={item.id} style={{ marginLeft: depth * 12 }} className="mb-0.5">
           <div
             className="flex items-center justify-between group"
             onContextMenu={(e) => handleContextMenu(e, item)}
@@ -706,10 +706,10 @@ export default function LeftSidebar() {
             <Link
               to={`/workspace/${workspaceId}/${item.id}`}
               onClick={handleLinkClick}
-              className={`flex-1 flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-all ${spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
+              className={`flex-1 flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-xs transition-all ${spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
                 }`}
             >
-              <FolderTree className="h-4 w-4 text-primary" />
+              <FolderTree className="h-3.5 w-3.5 text-primary" />
               <span className="truncate">{item.nom}</span>
             </Link>
             <div className="flex items-center gap-1">
@@ -744,20 +744,20 @@ export default function LeftSidebar() {
           {openSpaces[item.id] && (
             <div className="ml-4 mt-1 space-y-0.5">
               {loadingLists[item.id] && (
-                <div className="text-sm text-gray-400 pl-6">Chargement...</div>
+                <div className="text-xs text-gray-400 pl-5">Chargement...</div>
               )}
               {listsBySpace[item.id]?.map(list => (
                 <div
                   key={list.id}
                   onContextMenu={(e) => handleListContextMenu(e, list, item.id, false)}
-                  className="block py-1.5 pl-8 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                  className="block py-1 pl-6 text-xs rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
                 >
                   <Link
                     to={`/workspace/${workspaceId}/${item.id}/${list.id}`}
                     onClick={handleLinkClick}
-                    className="flex-1 flex items-center gap-2"
+                    className="flex-1 flex items-center gap-1.5"
                   >
-                    <ListTodo className="h-4 w-4 text-gray-500" />
+                    <ListTodo className="h-3.5 w-3.5 text-gray-500" />
                     <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
                       {list.nom}
                     </span>
@@ -765,7 +765,7 @@ export default function LeftSidebar() {
                 </div>
               ))}
               {!loadingLists[item.id] && listsBySpace[item.id]?.length === 0 && (
-                <div className="text-sm text-gray-400 pl-8">Aucune liste</div>
+                <div className="text-xs text-gray-400 pl-6">Aucune liste</div>
               )}
             </div>
           )}
@@ -841,7 +841,7 @@ export default function LeftSidebar() {
   }
 
   return (
-    <div className="p-3">
+    <div className="p-2">
       {/* Toast Notifications */}
       {toast && (
         <Toast
@@ -854,21 +854,21 @@ export default function LeftSidebar() {
       {currentWorkspace && (
         <div
           onContextMenu={handleWorkspaceContextMenu}
-          className="mb-4 rounded-lg border border-gray-100 bg-white px-3 py-2"
+          className="mb-3 rounded-lg border border-gray-100 bg-white px-2 py-1.5"
           title={isWorkspaceCreator ? 'Clic droit pour modifier ou supprimer le workspace' : undefined}
         >
-          <div className="flex items-center gap-2">
-            <Hash className="h-4 w-4 text-primary" />
-            <span className="truncate text-sm font-semibold text-gray-800">{currentWorkspace.nom}</span>
+          <div className="flex items-center gap-1.5">
+            <Hash className="h-3.5 w-3.5 text-primary" />
+            <span className="truncate text-xs font-semibold text-gray-800">{currentWorkspace.nom}</span>
           </div>
         </div>
       )}
 
       {/* Section Espaces et listes hiérarchiques */}
       {hasWorkspaceAccess && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2 relative">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1.5 relative">
+            <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
             {canManageSpaceListe && (
               <div className="relative" ref={createMenuRef}>
                 <button
@@ -881,16 +881,16 @@ export default function LeftSidebar() {
                   <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
                     <button
                       onClick={() => openCreateSpaceModal()}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                     >
-                      <FolderTree className="h-4 w-4" />
+                      <FolderTree className="h-3.5 w-3.5" />
                       Espace
                     </button>
                     <button
                       onClick={() => openCreateListModal(undefined, workspaceId)}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                     >
-                      <ListTodo className="h-4 w-4" />
+                      <ListTodo className="h-3.5 w-3.5" />
                       Liste (projet)
                     </button>
                   </div>
@@ -904,24 +904,24 @@ export default function LeftSidebar() {
 
       {/* Section Projets du workspace (listes sans espace) */}
       {hasWorkspaceAccess && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Projets (workspace)</h3>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Projets (workspace)</h3>
           </div>
           <div className="space-y-0.5">
-            {loadingWorkspaceLists && <div className="text-sm text-gray-400 pl-2">Chargement...</div>}
+            {loadingWorkspaceLists && <div className="text-xs text-gray-400 pl-2">Chargement...</div>}
             {workspaceLists.map(list => (
               <div
                 key={list.id}
                 onContextMenu={(e) => handleListContextMenu(e, list, null, true)}
-                className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                className="block py-1 pl-2 text-xs rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
               >
                 <Link
                   to={`/workspace/${workspaceId}/list/${list.id}`}
                   onClick={handleLinkClick}
-                  className="flex-1 flex items-center gap-2"
+                  className="flex-1 flex items-center gap-1.5"
                 >
-                  <ListTodo className="h-4 w-4 text-gray-500" />
+                  <ListTodo className="h-3.5 w-3.5 text-gray-500" />
                   <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
                     {list.nom}
                   </span>
@@ -929,44 +929,44 @@ export default function LeftSidebar() {
               </div>
             ))}
             {!loadingWorkspaceLists && workspaceLists.length === 0 && (
-              <div className="text-sm text-gray-400 pl-2">Aucun projet</div>
+              <div className="text-xs text-gray-400 pl-2">Aucun projet</div>
             )}
           </div>
         </div>
       )}
 
       {/* Chat - visible pour tous */}
-      <div className="mb-6">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Chat</h3>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-            <Hash className="h-4 w-4 text-secondary" /> Canal général d'environnement
+      <div className="mb-4">
+        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Chat</h3>
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+            <Hash className="h-3.5 w-3.5 text-secondary" /> Canal général
           </div>
-          <div className="pl-4">
-            <div className="text-xs text-gray-400 mb-1">Canaux d'espace</div>
-            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-              <Hash className="h-4 w-4 text-gray-400" /> Canal d'espace 1
+          <div className="pl-3 mt-1">
+            <div className="text-[10px] text-gray-400 mb-0.5">Canaux d'espace</div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+              <Hash className="h-3.5 w-3.5 text-gray-400" /> Canal d'espace 1
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-            <MessageSquare className="h-4 w-4 text-primary" /> Discussions directes
+          <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer mt-1">
+            <MessageSquare className="h-3.5 w-3.5 text-primary" /> Discussions
           </div>
         </div>
       </div>
 
       {/* Gestion - visible pour Admin et Créateur */}
       {(isAdminForSpace || isCreatorForSpace) && (
-        <div>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gestion</h3>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-              <FileText className="h-4 w-4 text-primary" /> Fichiers
+        <div className="mb-4">
+          <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Gestion</h3>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+              <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-              <FileText className="h-4 w-4 text-primary" /> Gestion des rapports
+            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+              <FileText className="h-3.5 w-3.5 text-primary" /> Rapports
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-100 rounded p-1.5 cursor-pointer">
-              <Calendar className="h-4 w-4 text-primary" /> Gestion des absences/congés
+            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+              <Calendar className="h-3.5 w-3.5 text-primary" /> Absences / Congés
             </div>
           </div>
         </div>

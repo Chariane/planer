@@ -1,5 +1,5 @@
 // frontend/src/layouts/DashboardLayout.tsx
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
@@ -8,54 +8,23 @@ import MobileSidebar from '../components/layout/MobileSidebar';
 
 export default function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen] = useState(true);
+  const [isCompact, setIsCompact] = useState(false);
   
-  const [sidebarWidth, setSidebarWidth] = useState(250);
-  const isResizing = useRef(false);
+  const sidebarWidth = isCompact ? 75 : 200;
 
-  const startResizing = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = true;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isResizing.current) return;
-    const newWidth = e.clientX;
-    if (newWidth >= 75 && newWidth <= 500) {
-      setSidebarWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    isResizing.current = false;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  };
-
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-  
-
+  const toggleSidebar = () => setIsCompact(!isCompact);
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar desktop */}
       <div 
-        className="fixed inset-y-0 left-0 z-20 hidden lg:flex"
+        className="fixed inset-y-0 left-0 z-20 hidden lg:flex transition-all duration-300"
         style={{ width: sidebarWidth }}
       >
         <div className="flex-1 w-full overflow-hidden">
-          <Sidebar isOpen={isSidebarOpen} width={sidebarWidth} />
+          <Sidebar isOpen={isSidebarOpen} isCompact={isCompact} />
         </div>
-        <div 
-          className="w-1.5 cursor-col-resize hover:bg-blue-400 bg-transparent transition-colors z-30"
-          onMouseDown={startResizing}
-        />
       </div>
 
       {/* Sidebar mobile */}
@@ -68,7 +37,7 @@ export default function DashboardLayout() {
         className="transition-all duration-300"
         style={{ paddingLeft: `calc(${sidebarWidth}px + 0.375rem)` }}
       >
-        <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} />
+        <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} isCompact={isCompact} />
         <main className="h-[calc(100vh-64px)] overflow-hidden">
           <Outlet />
         </main>

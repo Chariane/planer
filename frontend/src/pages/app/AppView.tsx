@@ -10,7 +10,7 @@ export default function AppView() {
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         {/* Colonne gauche */}
-        <div className="w-[280px] flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+        <div className="w-[220px] flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
           <LeftSidebar />
         </div>
         {/* Colonne centrale */}

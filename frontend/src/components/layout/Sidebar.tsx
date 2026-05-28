@@ -11,12 +11,12 @@ import { Button } from '../ui/Button';
 import ConfirmModal from '../ui/ConfirmModal';
 import type { Workspace } from '../../types';
 
-interface SidebarProps {
+  interface SidebarProps {
   isOpen: boolean;
-  width?: number;
+  isCompact?: boolean;
 }
 
-export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
+export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { workspaceId, id } = useParams();
@@ -92,7 +92,6 @@ export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
     setIsConfirmOpen(true);
   };
 
-  const isCompact = width < 120;
 
   if (!isOpen) {
     return (
@@ -115,9 +114,9 @@ export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
   return (
     <div className="flex h-full flex-col bg-primary shadow-xl overflow-y-auto w-full items-center pb-2">
       {/* Logo */}
-      <div className={`flex ${isCompact ? 'flex-col justify-center gap-1 py-4 px-1' : 'items-center gap-2 px-4 py-4'} w-full border-b border-white/10 transition-all`}>
+      <div className={`flex ${isCompact ? 'flex-col items-center justify-center gap-1 py-4 px-1' : 'items-center gap-2 px-3 py-4'} w-full border-b border-white/10 transition-all`}>
         <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-secondary flex items-center justify-center font-bold text-white text-xs shadow-md">KP</div>
-        <span className={`${isCompact ? 'text-[9px] mt-1' : 'text-lg'} font-bold text-white tracking-wide truncate transition-all`}>K-Planner</span>
+        <span className={`${isCompact ? 'text-[9px] mt-1' : 'text-lg'} font-bold text-white tracking-wide truncate transition-all text-center`}>K-Planner</span>
       </div>
 
       {/* Profil utilisateur */}
@@ -136,9 +135,9 @@ export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
       </div>
 
       {/* Navigation principale */}
-      <nav className={`mt-3 w-full ${isCompact ? 'px-2' : 'px-3'} space-y-1`}>
+      <nav className={`mt-3 w-full ${isCompact ? 'px-2' : 'px-2'} space-y-1`}>
         <Link to="/dashboard" className="block w-full">
-          <div className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-3 py-2'} gap-2 rounded-lg transition-all ${location.pathname === '/dashboard'
+          <div className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-2.5 py-2'} gap-2 rounded-lg transition-all ${location.pathname === '/dashboard'
             ? 'bg-secondary text-white shadow-md'
             : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}>
@@ -317,7 +316,7 @@ export default function Sidebar({ isOpen, width = 250 }: SidebarProps) {
       )}
 
       {/* Footer */}
-      <div className={`mt-auto pt-4 border-t border-white/10 w-full ${isCompact ? 'px-2 flex flex-col items-center' : 'px-3 pb-4'}`}>
+      <div className={`mt-auto pt-4 border-t border-white/10 w-full ${isCompact ? 'px-2 flex flex-col items-center pb-4' : 'px-3 pb-4'}`}>
         <button
           onClick={() => logout()}
           className={`w-full flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center gap-3 px-3 py-2'} rounded-lg text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-colors`}
