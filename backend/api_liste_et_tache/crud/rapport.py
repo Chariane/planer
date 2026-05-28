@@ -22,6 +22,8 @@ def _serialize_report(rapport: Rapport) -> dict:
     if rapport.membres and rapport.membres.utilisateur:
         user = rapport.membres.utilisateur
         owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+    elif rapport.membres and not rapport.membres.utilisateur:
+        owner_name = "Utilisateur supprimé"
     elif hasattr(rapport, "owner_user_id") and rapport.owner_user_id:
         pass
 

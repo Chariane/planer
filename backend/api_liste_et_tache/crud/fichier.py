@@ -165,10 +165,14 @@ def list_accessible_files(
         # Résolution du nom via id_membre ou owner_user_id
         if fichier.membres and fichier.membres.utilisateur:
             owner_name = f"{fichier.membres.utilisateur.nom or ''} {fichier.membres.utilisateur.prenoms or ''}".strip() or fichier.membres.utilisateur.username
+        elif fichier.membres and not fichier.membres.utilisateur:
+            owner_name = "Utilisateur supprimé"
         elif owner_user_id:
             user = db.query(Utilisateur).filter(Utilisateur.id == owner_user_id).first()
             if user:
                 owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+            else:
+                owner_name = "Utilisateur supprimé"
         
         # On attache le nom à l'objet pour le schéma Pydantic
         setattr(fichier, 'owner_name', owner_name)

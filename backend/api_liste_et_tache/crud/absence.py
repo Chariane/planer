@@ -66,6 +66,8 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
     if absence.membres and absence.membres.utilisateur:
         user = absence.membres.utilisateur
         owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+    elif absence.membres and not absence.membres.utilisateur:
+        owner_name = "Utilisateur supprimé"
         
     return {
         "id": absence.id,

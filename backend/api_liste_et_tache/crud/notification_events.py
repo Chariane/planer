@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -17,8 +18,34 @@ def _display_user(user: Utilisateur | None) -> str:
     return f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email or "Un utilisateur"
 
 
-def _create_notification(db: Session, *, user_id: str | None, message: str, type_: str = "info") -> None:
+def _already_notified_today(db: Session, *, user_id: str, message: str, type_: str) -> bool:
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start = today_start + timedelta(days=1)
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.id_utilisateur == user_id,
+            Notification.type == type_,
+            Notification.message == message,
+            Notification.date_creation >= today_start,
+            Notification.date_creation < tomorrow_start,
+        )
+        .first()
+        is not None
+    )
+
+
+def _create_notification(
+    db: Session,
+    *,
+    user_id: str | None,
+    message: str,
+    type_: str = "info",
+    dedupe_today: bool = False,
+) -> None:
     if not user_id:
+        return
+    if dedupe_today and _already_notified_today(db, user_id=user_id, message=message, type_=type_):
         return
     notification = Notification(
         id_utilisateur=user_id,
@@ -179,3 +206,53 @@ def notify_task_assigned(db: Session, *, tache: Tache, assigned_user_id: str) ->
         liste_name = f" dans la liste « {liste.nom} »" if liste else ""
     message = f"La tâche « {tache.titre} » vous a été assignée{liste_name}."
     _create_notification(db, user_id=assigned_user_id, message=message, type_="info")
+
+
+def notify_overdue_tasks_for_liste(db: Session, *, liste_id: str) -> None:
+    now = datetime.now()
+    overdue_tasks = (
+        db.query(Tache)
+        .filter(
+            Tache.id_liste == liste_id,
+            Tache.date_fin_prevue.isnot(None),
+            Tache.date_fin_prevue < now,
+            Tache.statut != "terminé",
+        )
+        .all()
+    )
+    if not overdue_tasks:
+        return
+
+    liste = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not liste:
+        return
+
+    manager_ids = _unique_user_ids(
+        _direct_list_manager_user_ids(db, liste_id)
+        + _inherited_list_manager_user_ids(db, liste)
+    )
+
+    for tache in overdue_tasks:
+        assigned_members = (
+            db.query(Membre)
+            .filter(
+                Membre.id_tache == tache.id,
+                Membre.statut == "Actif",
+            )
+            .all()
+        )
+        assigned_user_ids = [member.id_utilisateur for member in assigned_members]
+        recipients = _unique_user_ids(manager_ids + assigned_user_ids)
+        if not recipients:
+            continue
+
+        due_date = tache.date_fin_prevue.strftime("%d/%m/%Y") if tache.date_fin_prevue else "date prévue dépassée"
+        message = f"La tâche « {tache.titre} » est en retard depuis le {due_date} dans la liste « {liste.nom or 'une liste'} »."
+        for user_id in recipients:
+            _create_notification(
+                db,
+                user_id=user_id,
+                message=message,
+                type_="warning",
+                dedupe_today=True,
+            )
