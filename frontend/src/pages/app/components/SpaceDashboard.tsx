@@ -1,6 +1,6 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, X } from 'lucide-react';
+import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, ShieldCheck, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
@@ -17,6 +17,22 @@ interface SpaceDashboardProps {
   spaceId: string;
   onMemberInvited?: () => void;
 }
+
+const ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Administrateur'];
+
+const getRoleBadgeClass = (role: string) => {
+  if (role === 'Administrateur') return 'bg-orange-100 text-orange-700';
+  if (role === 'Créateur') return 'bg-purple-100 text-purple-700';
+  if (role === 'Invité') return 'bg-gray-100 text-gray-500';
+  return 'bg-blue-100 text-blue-700';
+};
+
+const getRoleLabel = (role: string) => {
+  if (role === 'Invité') return 'Invité';
+  if (role === 'Membre') return 'Membre';
+  if (role === 'Administrateur') return 'Admin';
+  return 'Créateur';
+};
 
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
@@ -54,6 +70,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
   const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
   
   // État pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -85,6 +102,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || effectiveSpaceRole === ROLES.CREATOR
     || isWorkspaceAdmin
     || isWorkspaceCreator;
+  const canManageMemberRoles = isEspaceCreator || isWorkspaceCreator;
   
   // Rôles disponibles pour l'invitation selon le rôle
   const getAvailableRoles = () => {
@@ -224,6 +242,26 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     }
   };
 
+  const handleMemberRoleChange = async (member: Member, nextRole: string) => {
+    if (!canManageMemberRoles || member.role === ROLES.CREATOR || nextRole === member.role) return;
+
+    setUpdatingMemberId(member.id);
+    try {
+      await espaceService.updateMemberRole(spaceId, member.id, nextRole);
+      setMembers(prevMembers =>
+        prevMembers.map(item =>
+          item.id === member.id ? { ...item, role: nextRole } : item,
+        ),
+      );
+      showMessage(`Rôle de ${member.name} mis à jour`, 'success');
+    } catch (err: any) {
+      showMessage(err?.message || "Impossible de modifier le rôle de ce membre", 'error');
+      await loadData();
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -317,25 +355,46 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       {/* Liste des membres - visible pour tout utilisateur ayant accès en lecture */}
       {members.length > 0 ? (
         <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Membres de l'espace
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Membres de l'espace
+            </h3>
+            {canManageMemberRoles && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Gestion des rôles
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {members.map(member => (
-              <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
-                <div>
+              <GlassCard key={member.id} className="p-3 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-shadow">
+                <div className="min-w-0">
                   <p className="font-medium text-gray-800">{member.name}</p>
                   <p className="text-sm text-gray-500">{member.email}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700'
-                    : member.role === 'Créateur' ? 'bg-purple-100 text-purple-700'
-                      : member.role === 'Invité' ? 'bg-gray-100 text-gray-500'
-                        : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {member.role === 'Invité' ? '👁️ Invité' : member.role === 'Membre' ? '👤 Membre' : member.role === 'Administrateur' ? '🔐 Admin' : '👑 Créateur'}
-                </span>
+                {canManageMemberRoles && member.role !== ROLES.CREATOR ? (
+                  <div className="flex items-center gap-2">
+                    {updatingMemberId === member.id && (
+                      <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                    )}
+                    <select
+                      value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : ROLES.GUEST}
+                      onChange={event => handleMemberRoleChange(member, event.target.value)}
+                      disabled={updatingMemberId === member.id}
+                      className="min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm outline-none transition focus:border-secondary focus:ring-2 focus:ring-secondary/20 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {ROLE_MANAGEMENT_OPTIONS.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className={`text-xs px-2 py-1 rounded-full ${getRoleBadgeClass(member.role)}`}>
+                    {getRoleLabel(member.role)}
+                  </span>
+                )}
               </GlassCard>
             ))}
           </div>
