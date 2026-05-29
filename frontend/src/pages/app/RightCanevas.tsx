@@ -467,7 +467,7 @@ export default function RightCanevas() {
 
   if (!permissionChecked) {
     return (
-      <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
+      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 text-secondary animate-spin" />
         </div>
@@ -478,29 +478,29 @@ export default function RightCanevas() {
   // Vue pour les invités (lecture seule)
   if (isReadOnly) {
     return (
-      <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
-        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
+        <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-secondary" />
-            <h2 className="font-semibold text-gray-800">
+            <h2 className="font-bold text-theme-main uppercase tracking-tight">
               {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
             </h2>
           </div>
-          <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 transition">
+          <button onClick={() => setIsOpen(false)} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-blue-800">
-              👁️ Vous êtes en mode <strong>lecture seule</strong>.
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 mb-4">
+            <p className="text-sm text-primary font-bold">
+              👁️ Vous êtes en mode <span className="uppercase tracking-widest text-[10px]">lecture seule</span>.
             </p>
-            <p className="text-xs text-blue-600 mt-1">
+            <p className="text-[11px] text-primary/80 mt-1 font-medium italic">
               {userRoleDisplay === 'Invité' && "Vous êtes invité dans cette liste, espace ou workspace."}
               {userRoleDisplay?.includes('hérité') && `Vous avez le rôle "${userRoleDisplay}" mais les permissions d'écriture ne sont pas disponibles.`}
               {!userRoleDisplay && "Vous n'avez pas les droits de modification."}
             </p>
-            <p className="text-xs text-blue-600 mt-1">
+            <p className="text-[10px] text-primary/60 mt-2 font-bold uppercase tracking-widest">
               Seuls les Créateurs et Administrateurs peuvent modifier le canevas.
             </p>
           </div>
@@ -517,13 +517,13 @@ export default function RightCanevas() {
             </div>
           ) : (
             canevas.sections.map((section) => (
-              <div key={section.id} className="border border-gray-100 rounded-lg mb-4">
-                <div className="p-3 bg-gray-50">
-                  <span className="text-sm font-medium text-gray-700">{section.titre}</span>
+              <div key={section.id} className="border border-theme-border-subtle rounded-2xl mb-4 overflow-hidden shadow-theme-sm">
+                <div className="p-3 bg-theme-surface-hover/50">
+                  <span className="text-sm font-bold text-theme-main uppercase tracking-tight">{section.titre}</span>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-semibold text-secondary">{section.progress}%</span>
-                    <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                      <div className="bg-secondary h-1.5 rounded-full" style={{ width: `${section.progress}%` }} />
+                    <span className="text-[10px] font-black text-secondary uppercase tracking-widest">{section.progress}%</span>
+                    <div className="w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
+                      <div className="bg-secondary h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--secondary-rgb),0.4)]" style={{ width: `${section.progress}%` }} />
                     </div>
                   </div>
                 </div>
@@ -539,9 +539,9 @@ export default function RightCanevas() {
                       {checklist.is_checked ? (
                         <CheckCircle className="h-4 w-4 text-emerald-500" />
                       ) : (
-                        <Circle className="h-4 w-4 text-gray-300" />
+                        <Circle className="h-4 w-4 text-theme-muted/40" />
                       )}
-                      <span className={`text-sm ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                      <span className={`text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
                         {checklist.texte}
                       </span>
                     </div>
@@ -557,18 +557,18 @@ export default function RightCanevas() {
 
   // Vue normale (avec modifications possibles)
   return (
-    <div className="h-full bg-white flex flex-col border-l border-gray-200 shadow-lg w-96">
-      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+    <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
+      <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-secondary" />
-          <h2 className="font-semibold text-gray-800">
+          <h2 className="font-bold text-theme-main uppercase tracking-tight">
             {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
           </h2>
           {canevas && canevas.is_verrouille && (
-            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Verrouillé</span>
+            <span className="text-[10px] font-black bg-theme-surface-hover text-theme-muted px-2 py-0.5 rounded-lg uppercase tracking-widest border border-theme-border-subtle">Verrouillé</span>
           )}
           {userRoleDisplay && (
-            <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full" title="Permission héritée">
+            <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-lg uppercase tracking-widest border border-emerald-500/20" title="Permission héritée">
               {userRoleDisplay}
             </span>
           )}
@@ -578,13 +578,13 @@ export default function RightCanevas() {
             <button
               onClick={deleteCanevas}
               disabled={actionLoading === 'delete-canevas'}
-              className="p-1 text-gray-400 hover:text-red-500 transition"
+              className="p-1 text-theme-muted hover:text-red-500 transition rounded-lg hover:bg-red-500/10"
               title="Supprimer le canevas"
             >
               {actionLoading === 'delete-canevas' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </button>
           )}
-          <button onClick={() => setIsOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 transition">
+          <button onClick={() => setIsOpen(false)} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -619,13 +619,13 @@ export default function RightCanevas() {
               const isExpanded = expandedSections[section.id] !== false;
 
               return (
-                <div key={section.id} className="border border-gray-100 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition">
+                <div key={section.id} className="border border-theme-border-subtle rounded-2xl overflow-hidden shadow-theme-sm group/section">
+                  <div className="flex items-center justify-between p-3 bg-theme-surface-hover/30 hover:bg-theme-surface-hover/60 transition group-hover/section:shadow-inner">
                     <button onClick={() => toggleSection(section.id)} className="flex items-center gap-2 flex-1">
                       {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-500" />
+                        <ChevronDown className="h-4 w-4 text-theme-muted" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-500" />
+                        <ChevronRight className="h-4 w-4 text-theme-muted" />
                       )}
                       {editingSectionId === section.id && canModify ? (
                         <input
@@ -633,18 +633,18 @@ export default function RightCanevas() {
                           value={editingSectionTitle}
                           onChange={(e) => setEditingSectionTitle(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && updateSection(section.id)}
-                          className="text-sm font-medium text-gray-700 border rounded px-2 py-0.5 focus:ring-1 focus:ring-secondary"
+                          className="text-sm font-bold text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
                           autoFocus
                         />
                       ) : (
-                        <span className="text-sm font-medium text-gray-700">{section.titre}</span>
+                        <span className="text-sm font-black text-theme-main uppercase tracking-tight">{section.titre}</span>
                       )}
                     </button>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-secondary">{progress}%</span>
-                      <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                        <div className="bg-secondary h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                      <span className="text-[10px] font-black text-secondary uppercase tracking-widest">{progress}%</span>
+                      <div className="w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
+                        <div className="bg-secondary h-1.5 rounded-full transition-all shadow-[0_0_8px_rgba(var(--secondary-rgb),0.4)]" style={{ width: `${progress}%` }} />
                       </div>
 
                       {canModify && !canevas.is_verrouille && (
@@ -712,11 +712,11 @@ export default function RightCanevas() {
                               value={editingChecklistText}
                               onChange={(e) => setEditingChecklistText(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && updateChecklist(checklist)}
-                              className="flex-1 text-sm text-gray-600 border rounded px-2 py-0.5 focus:ring-1 focus:ring-secondary"
+                              className="flex-1 text-sm text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
                               autoFocus
                             />
                           ) : (
-                            <span className={`text-sm flex-1 ${checklist.is_checked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                            <span className={`text-sm flex-1 font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
                               {checklist.texte}
                             </span>
                           )}
@@ -758,83 +758,83 @@ export default function RightCanevas() {
                       {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">
                           {addingChecklistToSection === section.id ? (
-                            <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
-                              <div className="flex items-center gap-1">
+                            <div className="space-y-3 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/50 p-3 shadow-inner">
+                              <div className="flex items-center gap-1 bg-theme-surface/50 p-1 rounded-xl border border-theme-border-subtle">
                                 <button
                                   type="button"
                                   onClick={() => setAddChecklistMode('manual')}
-                                  className={`px-2 py-1 text-xs rounded-md ${addChecklistMode === 'manual' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'manual' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
                                 >
                                   Créer
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setAddChecklistMode('task')}
-                                  className={`px-2 py-1 text-xs rounded-md ${addChecklistMode === 'task' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'task' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
                                 >
-                                  Depuis une tâche
+                                  Tâches
                                 </button>
                                 <button
                                   onClick={cancelAddChecklist}
-                                  className="ml-auto p-1 text-gray-400 hover:text-gray-600"
+                                  className="p-1.5 text-theme-muted hover:text-red-500 rounded-lg hover:bg-red-500/10 transition-colors"
                                   title="Annuler"
                                 >
-                                  <X className="h-3 w-3" />
+                                  <X className="h-3.5 w-3.5" />
                                 </button>
                               </div>
 
                               {addChecklistMode === 'manual' ? (
-                                <div className="flex items-center gap-2">
-                                  <Circle className="h-4 w-4 text-gray-300" />
+                                <div className="flex items-center gap-3 px-1">
+                                  <Circle className="h-4 w-4 text-theme-muted/40" />
                                   <input
                                     type="text"
-                                    placeholder="Nouvel élément de checklist..."
+                                    placeholder="Libellé de l'élément..."
                                     value={newChecklistText}
                                     onChange={(e) => setNewChecklistText(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && addChecklist(section.id)}
-                                    className="flex-1 text-sm border-b border-gray-200 bg-transparent focus:border-secondary outline-none py-1"
+                                    className="flex-1 text-sm bg-transparent border-b border-theme-border-subtle focus:border-secondary outline-none py-2 text-theme-main placeholder:text-theme-muted/30 font-medium"
                                     autoFocus
                                   />
                                   <button
                                     onClick={() => addChecklist(section.id)}
                                     disabled={actionLoading === `add-checklist-${section.id}`}
-                                    className="text-secondary text-xs hover:underline"
+                                    className="text-secondary text-[11px] font-black uppercase tracking-widest hover:text-secondary/80 disabled:opacity-30"
                                   >
-                                    {actionLoading === `add-checklist-${section.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
+                                    {actionLoading === `add-checklist-${section.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Ajouter'}
                                   </button>
                                 </div>
                               ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-3 px-1">
                                   {loadingTaskChecklistOptions ? (
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Chargement des checklists...
+                                    <div className="flex items-center gap-3 text-[10px] text-theme-muted font-black uppercase tracking-widest py-2">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-secondary" />
+                                      Sync. des données...
                                     </div>
                                   ) : taskChecklistOptions.length === 0 ? (
-                                    <p className="text-xs text-gray-400">
-                                      Aucune checklist de tâche disponible à rattacher.
+                                    <p className="text-[10px] text-theme-muted/50 font-bold uppercase tracking-widest text-center py-2">
+                                      Aucune checklist orpheline
                                     </p>
                                   ) : (
-                                    <>
+                                    <div className="space-y-3">
                                       <select
                                         value={selectedTaskChecklistId}
                                         onChange={(e) => setSelectedTaskChecklistId(e.target.value)}
-                                        className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-1 focus:ring-secondary"
+                                        className="w-full text-xs bg-theme-surface border border-theme-border-subtle rounded-xl px-3 py-2.5 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium appearance-none cursor-pointer"
                                       >
                                         {taskChecklistOptions.map(option => (
-                                          <option key={option.id} value={option.id}>
-                                            {option.taskTitle} / {option.text}
+                                          <option key={option.id} value={option.id} className="bg-theme-surface">
+                                            {option.taskTitle.slice(0, 15)}... / {option.text.slice(0, 20)}...
                                           </option>
                                         ))}
                                       </select>
                                       <button
                                         onClick={() => linkTaskChecklistToSection(section.id)}
                                         disabled={!selectedTaskChecklistId || actionLoading === `link-checklist-${section.id}`}
-                                        className="text-secondary text-xs hover:underline disabled:text-gray-300 disabled:no-underline"
+                                        className="w-full bg-secondary/10 text-secondary text-[10px] font-black uppercase tracking-[0.15em] py-2 rounded-xl hover:bg-secondary/20 transition-all disabled:opacity-20 flex items-center justify-center gap-2"
                                       >
-                                        {actionLoading === `link-checklist-${section.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter à la section'}
+                                        {actionLoading === `link-checklist-${section.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Lier à la section'}
                                       </button>
-                                    </>
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -842,9 +842,10 @@ export default function RightCanevas() {
                           ) : (
                             <button
                               onClick={() => openAddChecklist(section.id)}
-                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-secondary transition"
+                              className="flex items-center gap-2 text-[10px] font-black text-theme-muted/60 hover:text-secondary uppercase tracking-[0.2em] transition-all group/add px-1"
                             >
-                              <Plus className="h-3 w-3" /> Ajouter un élément
+                              <Plus className="h-3.5 w-3.5 group-hover/add:scale-125 transition-transform" />
+                              Ajouter un élément
                             </button>
                           )}
                         </div>
@@ -856,42 +857,47 @@ export default function RightCanevas() {
             })}
 
             {canModify && !canevas.is_verrouille && (
-              <div className="mt-4 pt-2 border-t border-gray-100">
+              <div className="mt-8 pt-6 border-t border-theme-border-subtle">
                 {isAddingSection ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Nom de la section (ex: Mois de Décembre, Semaine du 05/12, Lundi 05/12)"
-                      value={newSectionTitle}
-                      onChange={(e) => setNewSectionTitle(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addSection()}
-                      className="flex-1 text-sm border rounded-lg px-3 py-2 focus:ring-1 focus:ring-secondary"
-                      autoFocus
-                    />
-                    <button
-                      onClick={addSection}
-                      disabled={actionLoading === 'add-section'}
-                      className="px-3 py-2 bg-secondary text-white text-sm rounded-lg hover:bg-secondary/90 transition"
-                    >
-                      {actionLoading === 'add-section' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ajouter'}
-                    </button>
-                    <button
-                      onClick={() => setIsAddingSection(false)}
-                      className="px-3 py-2 text-gray-500 text-sm hover:text-gray-700"
-                    >
-                      Annuler
-                    </button>
+                  <div className="flex flex-col gap-3 bg-theme-surface-hover/30 p-4 rounded-2xl border border-theme-border-subtle shadow-inner">
+                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Titre de la section</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Mois de Décembre, Semaine du 05/12..."
+                        value={newSectionTitle}
+                        onChange={(e) => setNewSectionTitle(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addSection()}
+                        className="flex-1 text-sm bg-theme-surface border border-theme-border-subtle rounded-xl px-4 py-3 text-theme-main focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all outline-none font-bold"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={addSection}
+                        disabled={actionLoading === 'add-section'}
+                        className="flex-1 py-3 bg-secondary text-white text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-secondary/90 transition shadow-theme-md disabled:opacity-50"
+                      >
+                        {actionLoading === 'add-section' ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Ajouter la section'}
+                      </button>
+                      <button
+                        onClick={() => setIsAddingSection(false)}
+                        className="px-6 py-3 text-[11px] font-black text-theme-muted uppercase tracking-widest hover:text-theme-main transition"
+                      >
+                        Annuler
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => setIsAddingSection(true)}
-                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-secondary transition w-full justify-center py-2 border border-dashed border-gray-200 rounded-lg"
+                    className="flex items-center gap-3 text-[11px] font-black text-theme-muted hover:text-secondary transition-all w-full justify-center py-4 border-2 border-dashed border-theme-border-subtle rounded-2xl bg-theme-surface/30 hover:bg-theme-surface hover:border-secondary/30"
                   >
-                    <Plus className="h-4 w-4" /> Ajouter une section
+                    <Plus className="h-4 w-4" /> AJOUTER UNE SECTION D'ANALYSE
                   </button>
                 )}
-                <p className="text-xs text-gray-400 mt-2 text-center">
-                  Les sections peuvent être des mois, semaines ou jours. Les checklists des tâches dont la date correspond seront automatiquement affichées.
+                <p className="text-[10px] text-theme-muted/40 mt-4 text-center font-bold uppercase tracking-widest leading-relaxed">
+                  Sections temporelles recommandées (Mois, Semaines, Jours).
                 </p>
               </div>
             )}

@@ -33,35 +33,25 @@ export default function ConfirmModal({
     onClose();
   };
 
-  const getConfirmButtonClass = () => {
-    switch (confirmVariant) {
-      case 'danger':
-        return 'bg-red-500 hover:bg-red-600 text-white';
-      case 'warning':
-        return 'bg-yellow-500 hover:bg-yellow-600 text-white';
-      default:
-        return 'bg-primary hover:bg-primary/90 text-white';
-    }
-  };
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <div className="space-y-4">
-        <div className="flex items-center gap-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-          <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0" />
-          <p className="text-sm text-gray-700">{message}</p>
+        <div className="flex items-start gap-3 p-4 bg-theme-surface-hover/50 rounded-xl border border-theme-border-subtle">
+          <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-theme-main leading-relaxed">{message}</p>
         </div>
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             {cancelText}
           </Button>
-          <button
+          <Button
+            variant={confirmVariant === 'danger' ? 'primary' : 'secondary'}
             onClick={handleConfirm}
-            disabled={isLoading}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${getConfirmButtonClass()} disabled:opacity-50`}
+            loading={isLoading}
+            className={confirmVariant === 'danger' ? 'bg-red-500 hover:bg-red-600' : ''}
           >
-            {isLoading ? loadingText : confirmText}
-          </button>
+            {confirmText}
+          </Button>
         </div>
       </div>
     </Modal>

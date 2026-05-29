@@ -1,5 +1,6 @@
 // frontend/src/pages/InvitationAccept.tsx
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
@@ -107,26 +108,26 @@ export default function InvitationAccept() {
           const result = await workspaceService.acceptInvitation(token);
           console.log('✅ Invitation workspace acceptée:', result);
           showAccepted('workspace');
-          
+
         } else if (isEspaceToken) {
           console.log('📤 Acceptation espace via token espace...');
           const result = await espaceService.acceptInvitation(token);
           console.log('✅ Invitation espace acceptée:', result);
           showAccepted('espace');
-          
+
         } else if (isListeToken) {
           console.log('📤 Acceptation liste via token liste...');
           const result = await listeService.acceptInvitation(token);
           console.log('✅ Invitation liste acceptée:', result);
           showAccepted('liste');
-          
+
         } else {
           console.log('❌ Type de token inconnu, tentative workspace puis espace...');
           try {
             const result = await workspaceService.acceptInvitation(token);
             console.log('✅ Invitation workspace acceptée:', result);
             showAccepted('workspace');
-            
+
           } catch (workspaceErr) {
             console.log('❌ Échec workspace, tentative espace...');
             const result = await espaceService.acceptInvitation(token);
@@ -151,31 +152,39 @@ export default function InvitationAccept() {
   // Affichage du message de succès avec compte à rebours
   if (acceptSuccess) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <GlassCard className="p-8 text-center max-w-md">
-          <div className="text-green-500 text-5xl mb-4">✓</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            Invitation acceptée !
+      <div className="min-h-screen bg-theme-page flex items-center justify-center p-4">
+        <GlassCard className="p-10 w-full max-w-md border-emerald-500/10 text-center">
+          <div className="h-20 w-20 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mx-auto mb-8 shadow-xl shadow-emerald-500/10">
+            <div className="text-4xl">✓</div>
+          </div>
+          <h2 className="text-3xl font-black text-theme-main tracking-tighter uppercase mb-4">
+            Bienvenue !
           </h2>
-          <p className="text-gray-600 mb-4">
-            Vous avez rejoint avec succès{' '}
-            {invitationType === 'workspace'
-              ? 'le workspace'
-              : invitationType === 'liste'
-                ? 'la liste'
-                : 'l\'espace'}.
+          <p className="text-theme-muted font-medium mb-6">
+            Invitation acceptée avec succès pour{' '}
+            <span className="text-theme-main font-bold">
+              {invitationType === 'workspace'
+                ? 'le workspace'
+                : invitationType === 'liste'
+                  ? 'la liste'
+                  : 'l\'espace'}
+            </span>.
           </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Pour des raisons de sécurité, vous allez être déconnecté(e).
-          </p>
-          <p className="text-sm text-secondary font-medium">
-            Redirection vers la page de connexion dans {redirectCountdown} secondes...
-          </p>
-          <div className="mt-4 w-full bg-gray-200 rounded-full h-1.5">
-            <div 
-              className="bg-secondary h-1.5 rounded-full transition-all duration-1000"
-              style={{ width: `${(redirectCountdown / 5) * 100}%` }}
-            />
+          <div className="bg-theme-surface/30 border border-white/5 p-6 rounded-2xl mb-8 space-y-4">
+            <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest leading-relaxed">
+              Pour des raisons de sécurité,<br />vous allez être déconnecté(e).
+            </p>
+            <p className="text-[11px] font-black text-secondary uppercase tracking-[0.1em]">
+              Redirection dans {redirectCountdown}s...
+            </p>
+            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+              <motion.div
+                className="bg-secondary h-full shadow-[0_0_8px_rgba(255,102,0,0.4)]"
+                initial={{ width: "100%" }}
+                animate={{ width: `${(redirectCountdown / 5) * 100}%` }}
+                transition={{ duration: 1, ease: "linear" }}
+              />
+            </div>
           </div>
         </GlassCard>
       </div>
@@ -184,10 +193,12 @@ export default function InvitationAccept() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <GlassCard className="p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary mx-auto mb-4"></div>
-          <p className="text-gray-600">Traitement de votre invitation...</p>
+      <div className="min-h-screen bg-theme-page flex items-center justify-center p-4 text-center">
+        <GlassCard className="p-10 w-full max-w-md border-white/10">
+          <div className="h-16 w-16 rounded-2xl bg-secondary/10 border border-secondary/20 flex items-center justify-center text-secondary mx-auto mb-6">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-secondary border-t-transparent"></div>
+          </div>
+          <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] animate-pulse">Traitement de l'invitation...</p>
         </GlassCard>
       </div>
     );
@@ -195,15 +206,17 @@ export default function InvitationAccept() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <GlassCard className="p-8 text-center max-w-md">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-red-600 mb-2">Invitation invalide</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <p className="text-sm text-gray-500 mb-4">
-            Le lien d'invitation a peut-être expiré ou a déjà été utilisé.
+      <div className="min-h-screen bg-theme-page flex items-center justify-center p-4 text-center">
+        <GlassCard className="p-10 w-full max-w-md border-red-500/10">
+          <div className="h-20 w-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 mx-auto mb-8 shadow-xl shadow-red-500/10">
+            <div className="text-4xl">⚠️</div>
+          </div>
+          <h2 className="text-xl font-black text-red-500 uppercase tracking-tight mb-4">Invitation invalide</h2>
+          <p className="text-theme-muted text-sm font-medium mb-8 leading-relaxed">
+            {error}.<br />
+            Le lien a peut-être expiré ou a déjà été utilisé.
           </p>
-          <Button onClick={() => navigate('/dashboard')}>
+          <Button onClick={() => navigate('/dashboard')} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px]">
             Retour au tableau de bord
           </Button>
         </GlassCard>

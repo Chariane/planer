@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Calendar, Check, Download, Edit, Eye, FileText, ListTodo, Loader2, Paperclip, ShieldAlert, Trash2, Upload, Users, X } from 'lucide-react';
+import { Archive, Calendar, Check, Download, Edit, Eye, FileText, ListTodo, Loader2, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Search, Filter, Plus } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
@@ -10,6 +10,7 @@ import { espaceService } from '../../../services/espace.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
 import { ROLES } from '../../../lib/roleHierarchy';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Task } from '../../../types';
 
 interface PlannerToolsPanelProps {
@@ -58,8 +59,6 @@ export default function PlannerToolsPanel({
     loadingText?: string;
     onConfirm: () => Promise<void>;
   } | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
   const [files, setFiles] = useState<any[]>([]);
   const [fileForm, setFileForm] = useState({ nom: '', url_fichier: '', type_fichier: '' });
 
@@ -125,10 +124,12 @@ export default function PlannerToolsPanel({
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
 
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3500);
+  const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 4000);
   };
+
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const closeConfirm = () => {
     if (loading) return;
@@ -143,6 +144,29 @@ export default function PlannerToolsPanel({
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;')
+  );
+
+  // Toast Premium
+  const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+        className="fixed bottom-6 right-6 z-[120]"
+      >
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg text-white min-w-[300px] glass border border-white/10 ${type === 'success' ? 'bg-emerald-500/90' : type === 'error' ? 'bg-red-500/90' : 'bg-primary/90'
+          }`}>
+          <div className="p-1.5 rounded-full bg-white/20">
+            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </div>
+          <span className="text-sm font-bold flex-1 tracking-tight">{message}</span>
+          <button onClick={onClose} className="p-1 rounded-xl hover:bg-white/20 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 
   const loadMembers = async () => {
@@ -704,61 +728,61 @@ export default function PlannerToolsPanel({
   };
 
   const renderEmptyReports = (label: string) => (
-    <div className="text-center py-12 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-      <FileText className="h-10 w-10 mx-auto text-gray-200 mb-2" />
-      <p className="text-sm text-gray-400 italic">{label}</p>
+    <div className="text-center py-12 bg-theme-surface-hover/30 rounded-2xl border-2 border-dashed border-theme-border-subtle">
+      <FileText className="h-10 w-10 mx-auto text-theme-muted/20 mb-2" />
+      <p className="text-sm text-theme-muted italic font-medium">{label}</p>
     </div>
   );
 
   const renderReportCard = (report: any, mode: 'own' | 'accessible') => (
-    <div key={report.id} className="group bg-white rounded-xl shadow-sm border border-gray-100 hover:border-secondary/30 transition-all hover:shadow-md overflow-hidden flex flex-col">
-      <button onClick={() => setSelectedReport(report)} className="bg-slate-50 px-5 py-3 border-b flex justify-between items-center text-left">
+    <div key={report.id} className="group bg-theme-surface rounded-2xl shadow-theme-sm border border-theme-border-subtle hover:border-secondary/30 transition-all hover:shadow-theme-md overflow-hidden flex flex-col">
+      <button onClick={() => setSelectedReport(report)} className="bg-theme-surface-hover/50 px-5 py-4 border-b border-theme-border-subtle flex justify-between items-center text-left">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            DOC
+          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center text-white font-black text-[10px] shadow-theme-sm uppercase tracking-widest">
+            Doc
           </div>
           <div>
-            <h4 className="font-bold text-gray-900 group-hover:text-secondary transition-colors text-sm">{report.titre}</h4>
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+            <h4 className="font-bold text-theme-main group-hover:text-secondary transition-colors text-sm tracking-tight">{report.titre}</h4>
+            <p className="text-[9px] font-black text-theme-muted/50 uppercase tracking-widest">
               {formatDate(report.created_at)} · {report.authorName}
             </p>
           </div>
         </div>
-        <Eye size={16} className="text-secondary" />
+        <Eye size={16} className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
       </button>
 
       <div className="p-5 space-y-4 flex-1">
         <div className="relative pl-4 border-l-2 border-secondary/20">
-          <p className="text-[10px] font-black text-secondary/40 uppercase mb-2 tracking-tighter">I. RÉALISATIONS</p>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed line-clamp-4">{report.realisations || 'Aucune réalisation renseignée.'}</p>
+          <p className="text-[10px] font-black text-secondary/40 uppercase mb-2 tracking-widest">I. RÉALISATIONS</p>
+          <p className="text-sm text-theme-muted whitespace-pre-wrap leading-relaxed line-clamp-4 font-medium">{report.realisations || 'Aucune réalisation renseignée.'}</p>
         </div>
         {report.difficultes_et_solutions && (
-          <div className="relative pl-4 border-l-2 border-red-200">
-            <p className="text-[10px] font-black text-red-300 uppercase mb-2 tracking-tighter">II. DIFFICULTÉS & SOLUTIONS</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed line-clamp-3">{report.difficultes_et_solutions}</p>
+          <div className="relative pl-4 border-l-2 border-red-500/20">
+            <p className="text-[10px] font-black text-red-500/40 uppercase mb-2 tracking-widest">II. DIFFICULTÉS & SOLUTIONS</p>
+            <p className="text-sm text-theme-muted whitespace-pre-wrap leading-relaxed line-clamp-3 font-medium">{report.difficultes_et_solutions}</p>
           </div>
         )}
       </div>
 
-      <div className="px-5 py-3 bg-gray-50 border-t flex items-center justify-between">
-        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">
+      <div className="px-5 py-3 bg-theme-surface-hover/30 border-t border-theme-border-subtle flex items-center justify-between">
+        <span className="text-[10px] text-theme-muted font-black uppercase tracking-widest">
           Signé: <span className="text-secondary">{report.authorName}</span>
         </span>
         <div className="flex items-center gap-1">
-          <button onClick={() => printReport(report)} className="p-2 rounded-lg hover:bg-secondary/10 text-secondary" title="Imprimer / PDF">
+          <button onClick={() => printReport(report)} className="p-2 rounded-lg hover:bg-secondary/10 text-secondary transition-all" title="Imprimer / PDF">
             <Download size={14} />
           </button>
           {mode === 'own' ? (
             <>
-              <button onClick={() => startEditReport(report)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Modifier">
+              <button onClick={() => startEditReport(report)} className="p-2 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-all" title="Modifier">
                 <Edit size={14} />
               </button>
-              <button onClick={() => handleDeleteReport(report)} className="p-2 rounded-lg hover:bg-red-50 text-red-600" title="Supprimer">
+              <button onClick={() => handleDeleteReport(report)} className="p-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-all" title="Supprimer">
                 <Trash2 size={14} />
               </button>
             </>
           ) : (
-            <button onClick={() => archiveReport(report.id)} className="p-2 rounded-lg hover:bg-amber-50 text-amber-600" title="Archiver dans mon espace">
+            <button onClick={() => archiveReport(report.id)} className="p-2 rounded-lg hover:bg-amber-500/10 text-amber-500 transition-all" title="Archiver dans mon espace">
               <Archive size={14} />
             </button>
           )}
@@ -768,434 +792,627 @@ export default function PlannerToolsPanel({
   );
 
   const renderAbsenceCard = (absence: any, mode: 'own' | 'accessible' | 'archive') => (
-    <div key={absence.id} className="border rounded-xl p-4 flex items-center justify-between gap-3 bg-white shadow-sm hover:shadow-md transition-all">
+    <div key={absence.id} className="border border-theme-border-subtle rounded-2xl p-4 flex items-center justify-between gap-3 bg-theme-surface shadow-theme-sm hover:shadow-theme-md transition-all">
       <div className="flex gap-4">
-        <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-bold text-xs ${absence.is_absence ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'}`}>
-          {absence.is_absence ? 'ABS' : 'CONG'}
+        <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-black text-[10px] uppercase tracking-widest ${absence.is_absence ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-primary/10 text-primary border border-primary/20'}`}>
+          {absence.is_absence ? 'Abs' : 'Congé'}
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <p className="font-bold text-gray-800">
-              {absence.is_absence ? 'Absence' : 'Congé'} <span className="text-[10px] font-normal text-gray-400">— {absence.authorName}</span>
+            <p className="font-bold text-theme-main">
+              {absence.is_absence ? 'Absence' : 'Congé'} <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-50">— {absence.authorName}</span>
             </p>
-            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${absence.statut === 'Approuvé' || absence.statut === 'Accepté' ? 'bg-green-100 text-green-700' :
-              absence.statut === 'Refusé' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+            <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${absence.statut === 'Approuvé' || absence.statut === 'Accepté' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+              absence.statut === 'Refusé' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-theme-surface-hover/80 text-theme-muted border-theme-border-subtle'
               }`}>
               {absence.statut}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Du <span className="font-semibold">{formatDate(absence.date_debut)}</span> au <span className="font-semibold">{formatDate(absence.date_fin)}</span>
+          <p className="text-xs text-theme-muted mt-1 font-medium">
+            Du <span className="text-theme-main font-bold">{formatDate(absence.date_debut)}</span> au <span className="text-theme-main font-bold">{formatDate(absence.date_fin)}</span>
           </p>
-          {absence.motif && <p className="text-[10px] text-gray-400 mt-2 italic">"{absence.motif}"</p>}
+          {absence.motif && <p className="text-[10px] text-theme-muted mt-2 font-medium italic">"{absence.motif}"</p>}
         </div>
       </div>
       {mode === 'accessible' && (
         <div className="flex gap-2">
           {absence.statut === 'En attente' && (
             <>
-              <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"><Check className="h-4 w-4" /></button>
-              <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"><X className="h-4 w-4" /></button>
+              <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 transition-all border border-emerald-500/10"><Check className="h-4 w-4" /></button>
+              <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all border border-red-500/10"><X className="h-4 w-4" /></button>
             </>
           )}
-          <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 transition-colors" title="Archiver">
+          <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all border border-amber-500/10" title="Archiver">
             <Archive className="h-4 w-4" />
           </button>
         </div>
       )}
       {mode === 'archive' && (
-        <Button variant="outline" size="sm" onClick={() => unarchiveAbsence(absence.id)}>Restaurer</Button>
+        <Button variant="outline" size="sm" onClick={() => unarchiveAbsence(absence.id)} className="rounded-xl border-theme-border-subtle text-[10px] font-black uppercase tracking-widest">Restaurer</Button>
       )}
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={activeTool === 'files' ? 'primary' : 'outline'}
-          size="sm"
+    <div className="space-y-8 pb-20">
+      {toast && <Toast message={toast.text} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Navigation Premium */}
+      <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
+        <button
           onClick={() => setActiveTool('files')}
-          className="flex items-center gap-2"
+          className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'files' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+            }`}
         >
-          <Paperclip className="h-4 w-4" /> Fichiers
-        </Button>
+          <Paperclip className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'files' ? 'text-secondary' : ''}`} />
+          <span className="text-[10px] uppercase tracking-[0.2em]">Fichiers</span>
+          {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+        </button>
+
+        {listeId && canViewReports && (
+          <button
+            onClick={() => setActiveTool('reports')}
+            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'reports' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+              }`}
+          >
+            <FileText className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'reports' ? 'text-secondary' : ''}`} />
+            <span className="text-[10px] uppercase tracking-[0.2em]">Rapports</span>
+            {activeTool === 'reports' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+          </button>
+        )}
+
         {listeId && (
-          <>
-            {canViewReports && (
-              <Button
-                variant={activeTool === 'reports' ? 'primary' : 'outline'}
-                size="sm"
-                onClick={() => setActiveTool('reports')}
-                className="flex items-center gap-2"
-              >
-                <FileText className="h-4 w-4" /> Rapports
-              </Button>
-            )}
-            <Button
-              variant={activeTool === 'absences' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTool('absences')}
-              className="flex items-center gap-2"
-            >
-              <Calendar className="h-4 w-4" /> Absences / congés
-            </Button>
-          </>
+          <button
+            onClick={() => setActiveTool('absences')}
+            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'absences' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+              }`}
+          >
+            <Calendar className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'absences' ? 'text-secondary' : ''}`} />
+            <span className="text-[10px] uppercase tracking-[0.2em]">Absences</span>
+            {activeTool === 'absences' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+          </button>
         )}
       </div>
 
-      {message && (
-        <div className={`rounded-lg border p-3 text-sm ${message.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-          {message.text}
-        </div>
-      )}
-
-      {activeTool === 'files' && (
-        <div className="flex items-center gap-3 px-6 py-3 border-b bg-gray-50/50">
+      {/* Filter Bar */}
+      {activeTool !== 'absences' && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3">
           <div className="relative flex-1 group">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
-              <Users size={16} />
-            </div>
+            <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted group-focus-within:text-secondary transition-colors" />
             <select
               value={selectedMemberId}
               onChange={(e) => setSelectedMemberId(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+              className="w-full pl-12 pr-10 py-3 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none appearance-none cursor-pointer font-bold tracking-tight transition-all"
             >
-              <option value="">Tous les membres</option>
+              <option value="" className="bg-theme-surface">Tous les membres</option>
               {directMembers.length > 0 && (
-                <optgroup label="Membres directes de la liste">
+                <optgroup label="Membres de la liste" className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
                   {directMembers.map(member => (
-                    <option key={member.id} value={member.id}>
+                    <option key={member.id} value={member.id} className="bg-theme-surface">
                       {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
                     </option>
                   ))}
                 </optgroup>
               )}
               {inheritedMembers.length > 0 && (
-                <optgroup label="Membres (Héritage Gestion)">
+                <optgroup label="Héritage Gestion" className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
                   {inheritedMembers.map(member => (
-                    <option key={member.id} value={member.id}>
+                    <option key={member.id} value={member.id} className="bg-theme-surface">
                       {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
                     </option>
                   ))}
                 </optgroup>
               )}
             </select>
-            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted pointer-events-none" />
           </div>
           {selectedMemberId && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={() => setSelectedMemberId('')}
-              className="text-gray-400 hover:text-red-500 p-2"
+              className="p-3 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition-all font-bold group"
               title="Effacer le filtre"
             >
-              <X size={16} />
-            </Button>
+              <X size={18} className="group-hover:scale-110 transition-transform" />
+            </button>
           )}
-        </div>
+        </motion.div>
       )}
 
       {activeTool === 'files' && (
-        <GlassCard className="p-4 space-y-4">
-          {!canAddFiles && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-              <ShieldAlert className="h-4 w-4 mt-0.5" />
-              Les invités ne peuvent pas ajouter de fichiers. Un membre de liste doit avoir au moins une tâche assignée pour joindre un fichier à la liste.
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+          <div className="p-6 border border-theme-border-subtle bg-theme-surface/30 backdrop-blur-xl rounded-3xl">
+            <div className="flex items-center gap-2 mb-6">
+              <Upload className="h-5 w-5 text-secondary" />
+              <h4 className="text-[10px] font-black text-theme-main uppercase tracking-[0.2em]">Joindre un document</h4>
             </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" disabled={!canAddFiles || isUploading} />
-            <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={!canAddFiles || isUploading}>
-              {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Paperclip className="h-4 w-4 mr-2" />}
-              {fileForm.url_fichier ? 'Changer' : 'Choisir'}
-            </Button>
-            <input value={fileForm.nom} onChange={e => setFileForm(prev => ({ ...prev, nom: e.target.value }))} placeholder="Nom du fichier (optionnel)" className="border rounded-lg px-3 py-2 text-sm" disabled={!canAddFiles || isUploading} />
-            <Button onClick={handleCreateFile} disabled={!canAddFiles || loading || isUploading || !fileForm.url_fichier}>
-              <Upload className="h-4 w-4 mr-1" /> Joindre
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {filesWithAuthors.map(file => (
-              <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between gap-3 bg-white hover:shadow-sm transition-shadow">
-                <div className="overflow-hidden">
-                  <p className="font-medium text-gray-800 truncate" title={file.nom}>{file.nom}</p>
-                  <p className="text-[10px] text-gray-500 uppercase font-semibold">
-                    Envoyé par <span className="text-slate-800">{file.authorName}</span> le {formatDate(file.created_at)}
-                  </p>
+
+            {!canAddFiles ? (
+              <div className="flex items-start gap-4 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 text-[11px] text-theme-muted leading-relaxed font-bold">
+                <ShieldAlert className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                <span>Accès restreint. Seuls les administrateurs ou les membres ayant une tâche assignée peuvent joindre des fichiers à cette ressource.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" disabled={!canAddFiles || isUploading} />
+                <div className="md:col-span-4">
+                  <Button variant="outline" className="w-full h-[56px] rounded-2xl border-theme-border-subtle hover:bg-theme-surface-hover/50 transition-all group flex items-center justify-center p-0" onClick={() => fileInputRef.current?.click()} disabled={!canAddFiles || isUploading}>
+                    <div className="flex items-center gap-3">
+                      {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5 group-hover:rotate-12 transition-transform text-secondary" />}
+                      <span className="font-black uppercase tracking-widest text-[10px]">{fileForm.url_fichier ? 'Fichier prêt' : 'Choisir'}</span>
+                    </div>
+                  </Button>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => window.open(getFileFullUrl(file.url_fichier), '_blank')} className="p-2 rounded-full hover:bg-green-50 text-green-600"><Eye className="h-4 w-4" /></button>
-                  <button onClick={() => handleDownload(file)} className="p-2 rounded-full hover:bg-secondary/10 text-secondary"><Download className="h-4 w-4" /></button>
-                  {(file.owner_user_id === currentUserId || isManager) && (
-                    <button onClick={() => handleDeleteFile(file.id)} className="p-2 rounded-full hover:bg-red-50 text-red-600"><Trash2 className="h-4 w-4" /></button>
-                  )}
+                <div className="md:col-span-5 relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted group-focus-within:text-secondary transition-colors"><Edit size={16} /></div>
+                  <input
+                    value={fileForm.nom}
+                    onChange={e => setFileForm(prev => ({ ...prev, nom: e.target.value }))}
+                    placeholder="Nom du document..."
+                    className="w-full h-[56px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl pl-14 pr-4 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold placeholder:text-theme-muted/30 transition-all"
+                    disabled={!canAddFiles || isUploading}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <Button onClick={handleCreateFile} disabled={!canAddFiles || loading || isUploading || !fileForm.url_fichier} className="w-full h-[56px] rounded-2xl shadow-theme-md group">
+                    <Plus className="h-5 w-5 mr-1 group-hover:rotate-90 transition-transform" />
+                    <span className="font-black uppercase tracking-widest text-[10px]">Lier</span>
+                  </Button>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </GlassCard>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence mode="popLayout">
+              {filesWithAuthors.length === 0 ? (
+                <div className="md:col-span-2 lg:col-span-3 py-20 text-center opacity-30">
+                  <Paperclip className="h-12 w-12 mx-auto mb-4 text-theme-muted" />
+                  <p className="font-black text-xs uppercase tracking-[0.3em] text-theme-main">Aucun document joint</p>
+                </div>
+              ) : (
+                filesWithAuthors.map((file, idx) => (
+                  <motion.div
+                    key={file.id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ delay: idx * 0.05 }}
+                  >
+                    <div className="p-4 group/item hover:bg-theme-surface-hover/40 transition-all border border-theme-border-subtle bg-theme-surface rounded-2xl flex items-center justify-between gap-4 shadow-theme-sm">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="h-12 w-12 rounded-2xl bg-secondary/10 border border-secondary/20 flex items-center justify-center text-secondary group-hover/item:shadow-[0_0_20px_rgba(var(--secondary-rgb),0.3)] transition-all flex-shrink-0">
+                          <FileText size={24} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-theme-main truncate tracking-tight text-sm mb-0.5" title={file.nom}>{file.nom}</p>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] font-black uppercase text-secondary/60 tracking-widest">Par {file.authorName}</span>
+                            <span className="text-[9px] font-black text-theme-muted/40 uppercase tracking-widest">{formatDate(file.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => window.open(getFileFullUrl(file.url_fichier), '_blank')} className="p-2 text-theme-muted hover:text-secondary hover:bg-secondary/10 rounded-xl transition-all" title="Visualiser"><Eye size={18} /></button>
+                        <button onClick={() => handleDownload(file)} className="p-2 text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl transition-all" title="Télécharger"><Download size={18} /></button>
+                        {(file.owner_user_id === currentUserId || isManager) && (
+                          <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" title="Supprimer"><Trash2 size={18} /></button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
       )}
 
       {activeTool === 'reports' && (
-        <div className={`grid grid-cols-1 gap-6 ${isInheritedManager ? '' : 'md:grid-cols-3'}`}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`grid grid-cols-1 gap-8 ${isInheritedManager ? '' : 'lg:grid-cols-12'}`}>
           {!isInheritedManager && (
-          <div className="md:col-span-1">
-            <GlassCard className="p-5 space-y-4 border-t-4 border-t-secondary">
-              <div className="flex items-center gap-2 border-b pb-3">
-                <FileText className="h-5 w-5 text-secondary" />
-                <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Nouveau Rapport</h4>
-              </div>
-
-              {!canCreateReport ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-                  <ShieldAlert className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                  <p className="text-xs text-amber-700 leading-relaxed">
-                    <strong>Accès restreint</strong><br />
-                    Pour envoyer un rapport, vous devez être Administrateur/Créateur ou être un membre ayant au moins une tâche assignée dans cette liste.
-                  </p>
+            <div className="lg:col-span-4 lg:sticky lg:top-4 self-start">
+              <GlassCard className="p-6 border-secondary/10 bg-secondary/5 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12">
+                  <FileText size={120} className="text-secondary" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Titre du rapport</label>
-                    <input
-                      value={reportForm.titre}
-                      onChange={e => setReportForm(prev => ({ ...prev, titre: e.target.value }))}
-                      placeholder="Ex: Rapport hebdomadaire - Semaine 22"
-                      className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
-                    />
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Réalisations</label>
-                    <textarea
-                      value={reportForm.realisations}
-                      onChange={e => setReportForm(prev => ({ ...prev, realisations: e.target.value }))}
-                      placeholder="Qu'est-ce qui a été accompli ?"
-                      className="w-full border rounded-lg px-3 py-2.5 text-sm h-32 focus:ring-2 focus:ring-secondary/20 outline-none transition-all resize-none"
-                    />
+                <div className="flex items-center gap-3 mb-8 relative">
+                  <div className="p-2 bg-secondary rounded-xl shadow-lg ring-4 ring-secondary/10">
+                    <Plus className="h-5 w-5 text-white" />
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Difficultés & Solutions (Optionnel)</label>
-                    <textarea
-                      value={reportForm.difficultes_et_solutions}
-                      onChange={e => setReportForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
-                      placeholder="Quels obstacles avez-vous rencontrés ?"
-                      className="w-full border rounded-lg px-3 py-2 text-sm h-24 focus:ring-2 focus:ring-secondary/20 outline-none transition-all resize-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Commentaires Additionnels (Optionnel)</label>
-                    <textarea
-                      value={reportForm.commentaire}
-                      onChange={e => setReportForm(prev => ({ ...prev, commentaire: e.target.value }))}
-                      placeholder="Remarques ou propositions..."
-                      className="w-full border rounded-lg px-3 py-2 text-sm h-20 focus:ring-2 focus:ring-secondary/20 outline-none transition-all resize-none"
-                    />
-                  </div>
-
-                  <Button onClick={handleCreateReport} disabled={loading || !reportForm.titre.trim()} className="w-full py-6 shadow-lg shadow-secondary/20">
-                    <Upload className="h-4 w-4 mr-2" /> Envoyer le rapport
-                  </Button>
+                  <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">Nouveau Rapport</h4>
                 </div>
-              )}
-            </GlassCard>
-          </div>
-          )}
 
-          <div className={`${isInheritedManager ? '' : 'md:col-span-2'} space-y-5`}>
-            {!isInheritedManager && (
-            <GlassCard className="p-5 space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div className="flex items-center gap-2">
-                  <ListTodo className="h-5 w-5 text-gray-400" />
-                  <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Historique de rapports</h4>
-                </div>
-                <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-bold">{ownReports.length} rapports</span>
-              </div>
-              <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
-                {ownReports.length === 0
-                  ? renderEmptyReports("Aucun rapport dans votre historique.")
-                  : ownReports.map(report => renderReportCard(report, 'own'))}
-              </div>
-            </GlassCard>
-            )}
-
-            {isManager && (
-              <GlassCard className="p-5 space-y-4">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-5 w-5 text-gray-400" />
-                    <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Rapports accessibles</h4>
+                {!canCreateReport ? (
+                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-5 flex gap-4 relative">
+                    <ShieldAlert className="h-6 w-6 text-orange-500 flex-shrink-0" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-orange-500 mb-2 tracking-widest">Accès restreint</p>
+                      <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
+                        Seuls les administrateurs ou les membres ayant des tâches assignées peuvent émettre des rapports.
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-bold">{accessibleReports.length} rapports</span>
-                    <Button variant="outline" size="sm" onClick={() => setIsReportArchiveOpen(true)}>
-                      <Archive className="h-4 w-4 mr-1" /> Archives
+                ) : (
+                  <div className="space-y-5 relative">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Objet du rapport</label>
+                      <input
+                        value={reportForm.titre}
+                        onChange={e => setReportForm(prev => ({ ...prev, titre: e.target.value }))}
+                        placeholder="Rapport Hebdomadaire..."
+                        className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main placeholder:text-theme-muted/30 focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-bold shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Ce que vous avez réalisé</label>
+                      <textarea
+                        value={reportForm.realisations}
+                        onChange={e => setReportForm(prev => ({ ...prev, realisations: e.target.value }))}
+                        placeholder="Quels ont été vos accomplissements ?"
+                        className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-medium h-40 resize-none shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Difficultés & Solutions</label>
+                      <textarea
+                        value={reportForm.difficultes_et_solutions}
+                        onChange={e => setReportForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
+                        placeholder="Obstacles rencontrés..."
+                        className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-medium h-32 resize-none shadow-inner"
+                      />
+                    </div>
+
+                    <Button onClick={handleCreateReport} disabled={loading || !reportForm.titre.trim()} className="w-full py-7 rounded-2xl shadow-theme-lg group relative overflow-hidden">
+                      <Upload className="h-5 w-5 mr-2 group-hover:-translate-y-1 transition-transform" />
+                      <span className="font-black uppercase tracking-widest text-xs">Transmettre le rapport</span>
                     </Button>
                   </div>
-                </div>
-                <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
-                  {accessibleReports.length === 0
-                    ? renderEmptyReports("Aucun rapport reçu pour le moment.")
-                    : accessibleReports.map(report => renderReportCard(report, 'accessible'))}
-                </div>
+                )}
               </GlassCard>
+            </div>
+          )}
+
+          <div className={`${isInheritedManager ? 'w-full' : 'lg:col-span-8'} space-y-8`}>
+            {/* Mes rapports */}
+            {!isInheritedManager && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-1 bg-secondary rounded-full" />
+                    <h4 className="text-xs font-black text-theme-main uppercase tracking-[0.2em]">Votre Historique</h4>
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-theme-muted/50 tracking-widest">{ownReports.length} rapports</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <AnimatePresence mode="popLayout">
+                    {ownReports.length === 0 ? (
+                      <div className="md:col-span-2 py-12 text-center opacity-30 border-2 border-dashed border-white/5 rounded-3xl">
+                        <FileText className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
+                        <p className="font-black text-[10px] uppercase tracking-widest">Aucun historique</p>
+                      </div>
+                    ) : (
+                      ownReports.map((report, i) => (
+                        <motion.div key={report.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+                          <GlassCard className="p-6 group hover:bg-white/5 transition-all border-white/5 cursor-pointer h-full flex flex-col justify-between" onClick={() => setSelectedReport(report)}>
+                            <div>
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="p-2 bg-secondary/10 border border-secondary/20 rounded-xl text-secondary">
+                                  <FileText size={18} />
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={(e) => { e.stopPropagation(); startEditReport(report); }} className="p-2 hover:bg-blue-500/10 text-blue-500 rounded-lg transition-all"><Edit size={14} /></button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteReport(report); }} className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+                                </div>
+                              </div>
+                              <h5 className="font-black text-theme-main text-sm mb-1 line-clamp-1">{report.titre}</h5>
+                              <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest mb-4">{formatDate(report.created_at)}</p>
+                              <p className="text-xs text-theme-muted line-clamp-3 font-medium leading-relaxed mb-6">{report.realisations}</p>
+                            </div>
+                            <div className="flex items-center justify-between pt-4 border-t border-theme-border-subtle">
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-5 rounded-full bg-secondary/20 flex items-center justify-center text-[8px] font-black text-secondary">MOI</div>
+                              </div>
+                              <Download size={14} className="text-theme-muted group-hover:text-secondary transition-colors" />
+                            </div>
+                          </GlassCard>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* Rapports accessibles */}
+            {isManager && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-1 bg-primary rounded-full" />
+                    <h4 className="text-xs font-black text-theme-main uppercase tracking-[0.2em]">Rapports de l'Équipe</h4>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-black uppercase text-theme-muted/50 tracking-widest">{accessibleReports.length} reçus</span>
+                    <button onClick={() => setIsReportArchiveOpen(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-secondary tracking-widest hover:brightness-125 transition-all">
+                      <Archive size={14} /> Archives
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <AnimatePresence mode="popLayout">
+                    {accessibleReports.length === 0 ? (
+                      <div className="md:col-span-2 py-12 text-center opacity-30 border-2 border-dashed border-white/5 rounded-3xl">
+                        <ShieldAlert className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
+                        <p className="font-black text-[10px] uppercase tracking-widest">Aucun rapport reçu</p>
+                      </div>
+                    ) : (
+                      accessibleReports.map((report, i) => (
+                        <motion.div key={report.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+                          <GlassCard className="p-6 group hover:bg-white/5 transition-all border-white/5 cursor-pointer h-full flex flex-col justify-between" onClick={() => setSelectedReport(report)}>
+                            <div>
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="p-2 bg-primary/10 border border-primary/20 rounded-xl text-primary">
+                                  <FileText size={18} />
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); archiveReport(report.id); }}
+                                  className="p-2 opacity-0 group-hover:opacity-100 hover:bg-amber-500/10 text-amber-500 rounded-lg transition-all"
+                                  title="Archiver"
+                                >
+                                  <Archive size={14} />
+                                </button>
+                              </div>
+                              <h5 className="font-black text-theme-main text-sm mb-1 line-clamp-1">{report.titre}</h5>
+                              <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest mb-4">{formatDate(report.created_at)} · {report.authorName}</p>
+                              <p className="text-xs text-theme-muted line-clamp-3 font-medium leading-relaxed mb-6">{report.realisations}</p>
+                            </div>
+                            <div className="flex items-center justify-between pt-4 border-t border-theme-border-subtle">
+                              <div className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
+                                  {report.authorName.substring(0, 2).toUpperCase()}
+                                </div>
+                                <span className="text-[10px] font-black text-theme-main uppercase tracking-tight">{report.authorName}</span>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); printReport(report); }} className="hover:scale-110 transition-transform">
+                                <Download size={16} className="text-theme-muted" />
+                              </button>
+                            </div>
+                          </GlassCard>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {activeTool === 'absences' && (
-        <div className="space-y-6">
-          <GlassCard className="p-5 border-t-4 border-t-primary">
-            <div className="flex items-center gap-2 border-b pb-3 mb-4">
-              <Calendar className="h-5 w-5 text-primary" />
-              <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">
-                {canPublishLeave ? 'Publier un congé' : "Demande d'absence"}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          <GlassCard className="p-8 border-primary/10 bg-primary/5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12">
+              <Calendar size={120} className="text-primary" />
+            </div>
+
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-2 bg-primary rounded-xl shadow-theme-lg ring-4 ring-primary/10">
+                <Calendar className="h-5 w-5 text-white" />
+              </div>
+              <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">
+                {canPublishLeave ? 'Planification de Congé' : "Nouvelle Demande d'Absence"}
               </h4>
             </div>
 
             {!canCreateAbsence ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3 text-xs text-amber-700">
-                <ShieldAlert className="h-5 w-5 flex-shrink-0" />
-                Vous devez être membre direct de cette liste pour demander une absence, ou gestionnaire par héritage pour publier un congé.
-              </div>
-            ) : canPublishLeave && directMembers.length === 0 ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-xs text-blue-700">
-                <Users className="h-5 w-5 flex-shrink-0" />
-                Aucun membre direct n'est disponible dans cette liste. Ajoutez d'abord un membre à la liste avant de publier un congé.
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex gap-4">
+                <ShieldAlert className="h-6 w-6 text-primary flex-shrink-0" />
+                <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
+                  Cette fonctionnalité est réservée aux membres directs de la liste ou aux gestionnaires autorisés.
+                </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                {canPublishLeave ? (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Membre</label>
-                    <select
-                      value={absenceTargetMemberId}
-                      onChange={e => setAbsenceTargetMemberId(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white h-10"
-                    >
-                      {directMembers.map(member => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Type</label>
-                    <div className="h-10 flex items-center rounded-lg border bg-gray-50 px-3 text-sm text-gray-600">Absence</div>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 relative">
+                {canPublishLeave && (
+                  <div className="md:col-span-12 lg:col-span-3 space-y-2">
+                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Collaborateur</label>
+                    <div className="relative group">
+                      <select
+                        value={absenceTargetMemberId}
+                        onChange={e => setAbsenceTargetMemberId(e.target.value)}
+                        className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all appearance-none cursor-pointer"
+                      >
+                        {directMembers.map(member => (
+                          <option key={member.id} value={member.id} className="bg-theme-surface">{member.name}</option>
+                        ))}
+                      </select>
+                      <Users className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted pointer-events-none" />
+                    </div>
                   </div>
                 )}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Début</label>
+                <div className={`md:col-span-6 lg:col-span-${canPublishLeave ? '2' : '3'} space-y-2`}>
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Début</label>
                   <input
                     type="date"
                     value={absenceForm.date_debut}
                     onChange={e => setAbsenceForm(prev => ({ ...prev, date_debut: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm outline-none h-10"
+                    className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all custom-datepicker-dark"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Fin</label>
+                <div className={`md:col-span-6 lg:col-span-${canPublishLeave ? '2' : '3'} space-y-2`}>
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Fin</label>
                   <input
                     type="date"
                     value={absenceForm.date_fin}
                     onChange={e => setAbsenceForm(prev => ({ ...prev, date_fin: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm outline-none h-10"
+                    className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all custom-datepicker-dark"
                   />
                 </div>
-                <div className="space-y-1 md:col-span-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Motif</label>
+                <div className="md:col-span-12 lg:col-span-3 space-y-2">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Motif / Justification</label>
                   <input
                     value={absenceForm.motif}
                     onChange={e => setAbsenceForm(prev => ({ ...prev, motif: e.target.value }))}
-                    placeholder="Pourquoi ?"
-                    className="w-full border rounded-lg px-3 py-2 text-sm outline-none h-10"
+                    placeholder="Raison du départ..."
+                    className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all placeholder:text-theme-muted/30"
                   />
                 </div>
-                <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut || (canPublishLeave && !absenceTargetMemberId)} className="h-10">
-                  {canPublishLeave ? 'Publier' : 'Soumettre'}
-                </Button>
+                <div className="md:col-span-12 lg:col-span-2">
+                  <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut} className="w-full h-[52px] rounded-2xl shadow-premium-primary group">
+                    <Check size={20} className="mr-2 group-hover:scale-125 transition-transform" />
+                    <span className="font-black uppercase tracking-widest text-[10px]">{canPublishLeave ? 'Publier' : 'Envoyer'}</span>
+                  </Button>
+                </div>
               </div>
             )}
           </GlassCard>
 
-          <GlassCard className="p-5">
-            <div className="flex items-center justify-between border-b pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <ListTodo className="h-5 w-5 text-gray-400" />
-                <h4 className="text-sm font-bold text-gray-800 uppercase tracking-widest">
-                  {isInheritedManager || isManager ? 'Demandes accessibles' : 'Mes demandes'}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-1 bg-secondary rounded-full" />
+                <h4 className="text-xs font-black text-theme-main uppercase tracking-[0.2em]">
+                  {isManager ? 'Gestion des Demandes' : 'Vos Demandes'}
                 </h4>
               </div>
               {isManager && (
-                <Button variant="outline" size="sm" onClick={() => setIsAbsenceArchiveOpen(true)}>
-                  <Archive className="h-4 w-4 mr-1" /> Archives
-                </Button>
+                <button onClick={() => setIsAbsenceArchiveOpen(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-secondary tracking-widest hover:brightness-125 transition-all">
+                  <Archive size={14} /> Archives
+                </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(isManager ? accessibleAbsences : ownAbsences).length === 0 ? (
-                <div className="md:col-span-2 text-center py-10 text-gray-400 text-sm italic">Aucune demande enregistrée.</div>
-              ) : (
-                (isManager ? accessibleAbsences : ownAbsences).map(absence => renderAbsenceCard(absence, isManager ? 'accessible' : 'own'))
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence mode="popLayout">
+                {(isManager ? accessibleAbsences : ownAbsences).length === 0 ? (
+                  <div className="md:col-span-2 lg:col-span-3 py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
+                    <Calendar className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
+                    <p className="font-black text-[10px] uppercase tracking-widest">Aucune donnée</p>
+                  </div>
+                ) : (
+                  (isManager ? accessibleAbsences : ownAbsences).map((absence, i) => (
+                    <motion.div key={absence.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
+                      <GlassCard className="p-5 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/card">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={`p-2 rounded-xl border ${absence.is_absence ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' : 'bg-primary/10 border-primary/20 text-primary'}`}>
+                            <Calendar size={20} />
+                          </div>
+                          <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${absence.statut === 'Approuvé' || absence.statut === 'Accepté' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                            absence.statut === 'Refusé' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
+                              'bg-theme-muted/10 text-theme-muted border border-theme-border-subtle'
+                            }`}>
+                            {absence.statut}
+                          </span>
+                        </div>
+                        <div className="mb-4">
+                          <p className="font-black text-theme-main text-sm mb-1">{absence.is_absence ? 'Absence' : 'Congé'}</p>
+                          <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{absence.authorName}</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-bold text-theme-main mb-4 bg-theme-surface-hover/30 p-3 rounded-xl border border-theme-border-subtle">
+                          <div className="flex-1 text-center">
+                            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Début</p>
+                            <p>{formatDate(absence.date_debut)}</p>
+                          </div>
+                          <div className="h-6 w-[1px] bg-theme-border-subtle" />
+                          <div className="flex-1 text-center">
+                            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Fin</p>
+                            <p>{formatDate(absence.date_fin)}</p>
+                          </div>
+                        </div>
+                        {absence.motif && <p className="text-[11px] text-theme-muted italic mb-6 font-medium">"{absence.motif}"</p>}
+
+                        {isManager && (
+                          <div className="flex items-center gap-2 pt-4 border-t border-theme-border-subtle">
+                            {absence.statut === 'En attente' ? (
+                              <>
+                                <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase rounded-lg transition-all border border-emerald-500/10">Approuver</button>
+                                <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-lg transition-all border border-red-500/10">Rejeter</button>
+                              </>
+                            ) : (
+                              <button onClick={() => archiveAbsence(absence.id)} className="w-full py-2 bg-theme-surface-hover/50 hover:bg-theme-surface-hover text-theme-muted text-[10px] font-black uppercase rounded-lg transition-all border border-theme-border-subtle flex items-center justify-center gap-2">
+                                <Archive size={12} /> Archiver
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </GlassCard>
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
             </div>
-          </GlassCard>
-        </div>
+          </div>
+        </motion.div>
       )}
-      <Modal isOpen={!!selectedReport} onClose={() => setSelectedReport(null)} title={selectedReport?.titre || 'Rapport'} size="lg">
+
+      {/* Modale de Détails du Rapport */}
+      <Modal isOpen={!!selectedReport} onClose={() => setSelectedReport(null)} title="Détails du Document" size="lg">
         {selectedReport && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 border p-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Rapport d'activité</p>
-                <h3 className="text-xl font-bold text-gray-900">{selectedReport.titre}</h3>
-                <p className="text-xs text-gray-500 mt-1">Signé par {selectedReport.authorName} · {formatDate(selectedReport.created_at)}</p>
+          <div className="space-y-6 pt-2">
+            <div className="flex items-center justify-between p-6 rounded-3xl bg-theme-surface/50 border border-theme-border-subtle shadow-inner">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-secondary/20 rounded-2xl text-secondary shadow-[0_0_20px_rgba(var(--secondary-rgb),0.2)]">
+                  <FileText size={28} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-theme-main tracking-tight line-clamp-1">{selectedReport.titre}</h3>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest mt-1">Émis par {selectedReport.authorName} le {formatDate(selectedReport.created_at)}</p>
+                </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => printReport(selectedReport)}>
-                <Download className="h-4 w-4 mr-1" /> PDF
+              <Button variant="outline" size="sm" onClick={() => printReport(selectedReport)} className="rounded-xl border-theme-border-subtle px-4 text-theme-main hover:bg-theme-surface-hover transition-all">
+                <Download className="h-4 w-4 mr-2" /> PDF
               </Button>
             </div>
 
-            <div className="border-l-4 border-secondary bg-gray-50 rounded-r-xl p-4">
-              <p className="text-[10px] font-black text-secondary uppercase mb-2">I. Réalisations</p>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedReport.realisations || 'Aucune réalisation renseignée.'}</p>
+            <div className="grid grid-cols-1 gap-6">
+              <div className="p-6 bg-theme-surface-hover/20 border border-theme-border-subtle rounded-3xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-secondary"><CheckCircle2 size={60} /></div>
+                <p className="text-[10px] font-black text-secondary uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-secondary" /> I. Réalisations
+                </p>
+                <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner">
+                  <p className="text-sm text-theme-main font-medium leading-relaxed whitespace-pre-wrap">{selectedReport.realisations || 'Aucune réalisation renseignée.'}</p>
+                </div>
+              </div>
+
+              {selectedReport.difficultes_et_solutions && (
+                <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-red-500"><AlertTriangle size={60} /></div>
+                  <p className="text-[10px] font-black text-red-500 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-red-500" /> II. Difficultés & Solutions
+                  </p>
+                  <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner">
+                    <p className="text-sm text-theme-muted font-medium leading-relaxed whitespace-pre-wrap">{selectedReport.difficultes_et_solutions}</p>
+                  </div>
+                </div>
+              )}
+
+              {selectedReport.commentaire && (
+                <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-3xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-blue-500"><Info size={60} /></div>
+                  <p className="text-[10px] font-black text-blue-500 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-blue-500" /> III. Commentaires
+                  </p>
+                  <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner text-blue-400">
+                    <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap italic">{selectedReport.commentaire}</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {selectedReport.difficultes_et_solutions && (
-              <div className="border-l-4 border-red-300 bg-red-50 rounded-r-xl p-4">
-                <p className="text-[10px] font-black text-red-400 uppercase mb-2">II. Difficultés & Solutions</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedReport.difficultes_et_solutions}</p>
-              </div>
-            )}
-
-            {selectedReport.commentaire && (
-              <div className="border-l-4 border-blue-300 bg-blue-50 rounded-r-xl p-4">
-                <p className="text-[10px] font-black text-blue-500 uppercase mb-2">III. Commentaires Additionnels</p>
-                <p className="text-sm text-blue-800 whitespace-pre-wrap leading-relaxed">{selectedReport.commentaire}</p>
-              </div>
-            )}
-
             {selectedReport.owner_user_id === currentUserId && (
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <Button variant="outline" onClick={() => startEditReport(selectedReport)}>
-                  <Edit className="h-4 w-4 mr-1" /> Modifier
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => startEditReport(selectedReport)} className="flex-1 h-14 rounded-2xl border-theme-border-subtle font-black uppercase tracking-widest text-[10px] hover:bg-theme-surface-hover text-theme-main transition-all">
+                  <Edit className="h-4 w-4 mr-2" /> Modifier
                 </Button>
-                <Button variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => handleDeleteReport(selectedReport)}>
-                  <Trash2 className="h-4 w-4 mr-1" /> Supprimer
+                <Button variant="outline" className="flex-1 h-14 rounded-2xl border-red-500/20 text-red-500 hover:bg-red-500/10 font-black uppercase tracking-widest text-[10px] transition-all" onClick={() => handleDeleteReport(selectedReport)}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Supprimer
                 </Button>
               </div>
             )}
@@ -1203,64 +1420,85 @@ export default function PlannerToolsPanel({
         )}
       </Modal>
 
-      <Modal isOpen={!!editingReport} onClose={() => setEditingReport(null)} title="Modifier le rapport" size="lg">
-        <div className="space-y-4">
-          <input
-            value={reportEditForm.titre}
-            onChange={e => setReportEditForm(prev => ({ ...prev, titre: e.target.value }))}
-            placeholder="Titre du rapport"
-            className="w-full border rounded-lg px-3 py-2.5 text-sm"
-            autoFocus
-          />
-          <textarea
-            value={reportEditForm.realisations}
-            onChange={e => setReportEditForm(prev => ({ ...prev, realisations: e.target.value }))}
-            placeholder="Réalisations"
-            className="w-full border rounded-lg px-3 py-2.5 text-sm h-32 resize-none"
-          />
-          <textarea
-            value={reportEditForm.difficultes_et_solutions}
-            onChange={e => setReportEditForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
-            placeholder="Difficultés & Solutions"
-            className="w-full border rounded-lg px-3 py-2.5 text-sm h-24 resize-none"
-          />
-          <textarea
-            value={reportEditForm.commentaire}
-            onChange={e => setReportEditForm(prev => ({ ...prev, commentaire: e.target.value }))}
-            placeholder="Commentaires additionnels"
-            className="w-full border rounded-lg px-3 py-2.5 text-sm h-20 resize-none"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditingReport(null)}>Annuler</Button>
-            <Button onClick={handleUpdateReport} disabled={loading || !reportEditForm.titre.trim()}>Enregistrer</Button>
+      {/* Modale d'Édition */}
+      <Modal isOpen={!!editingReport} onClose={() => setEditingReport(null)} title="Révision du Rapport" size="lg">
+        <div className="space-y-6 py-2">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Titre du rapport</label>
+            <input
+              value={reportEditForm.titre}
+              onChange={e => setReportEditForm(prev => ({ ...prev, titre: e.target.value }))}
+              placeholder="Rectifier le titre..."
+              className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all placeholder:text-theme-muted/30 shadow-inner"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Contenu des réalisations</label>
+            <textarea
+              value={reportEditForm.realisations}
+              onChange={e => setReportEditForm(prev => ({ ...prev, realisations: e.target.value }))}
+              placeholder="Décrivez vos accomplissements..."
+              className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-48 resize-none transition-all custom-scrollbar shadow-inner shadow-black/10"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Difficultés rencontrées</label>
+              <textarea
+                value={reportEditForm.difficultes_et_solutions}
+                onChange={e => setReportEditForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
+                placeholder="Obstacles et solutions..."
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-32 resize-none transition-all shadow-inner"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Commentaires finaux</label>
+              <textarea
+                value={reportEditForm.commentaire}
+                onChange={e => setReportEditForm(prev => ({ ...prev, commentaire: e.target.value }))}
+                placeholder="Notes additionnelles..."
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-32 resize-none transition-all shadow-inner"
+              />
+            </div>
+          </div>
+          <div className="flex gap-4 pt-4">
+            <Button variant="outline" onClick={() => setEditingReport(null)} className="flex-1 py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] border-theme-border-subtle text-theme-muted hover:text-theme-main transition-all">Annuler</Button>
+            <Button onClick={handleUpdateReport} disabled={loading || !reportEditForm.titre.trim()} className="flex-1 py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-theme-md transition-all">Enregistrer les modifications</Button>
           </div>
         </div>
       </Modal>
 
-      <Modal isOpen={isReportArchiveOpen} onClose={() => setIsReportArchiveOpen(false)} title="Archives des rapports" size="lg">
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+      {/* Modales d'Archives */}
+      <Modal isOpen={isReportArchiveOpen} onClose={() => setIsReportArchiveOpen(false)} title="Coffre-fort des Rapports" size="lg">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar pt-2">
           {archivedReports.length === 0 ? (
-            renderEmptyReports('Aucun rapport archivé.')
+            <div className="py-20 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
+              <Archive className="h-12 w-12 mx-auto mb-4 text-theme-muted" />
+              <p className="font-black text-xs uppercase tracking-widest">Archives vides</p>
+            </div>
           ) : (
             archivedReports.map(report => (
-              <div key={report.id} className="rounded-xl border bg-white p-4 flex items-center justify-between gap-3">
-                <button onClick={() => setSelectedReport(report)} className="text-left min-w-0">
-                  <p className="font-bold text-gray-900 truncate">{report.titre}</p>
-                  <p className="text-xs text-gray-500">{report.authorName} · {formatDate(report.created_at)}</p>
+              <GlassCard key={report.id} className="p-5 flex items-center justify-between gap-6 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/archive">
+                <button onClick={() => { setSelectedReport(report); setIsReportArchiveOpen(false); }} className="text-left min-w-0 flex-1">
+                  <p className="font-black text-sm text-theme-main truncate mb-1 group-hover/archive:text-secondary transition-colors">{report.titre}</p>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">{report.authorName} · {formatDate(report.created_at)}</p>
                 </button>
-                <Button variant="outline" size="sm" onClick={() => unarchiveReport(report.id)}>Restaurer</Button>
-              </div>
+                <Button variant="outline" size="sm" onClick={() => unarchiveReport(report.id)} className="rounded-xl border-theme-border-subtle font-black uppercase text-[9px] tracking-widest px-4 hover:bg-theme-surface-hover shadow-theme-sm transition-all text-theme-main">
+                  Désarchiver
+                </Button>
+              </GlassCard>
             ))
           )}
         </div>
       </Modal>
 
-      <Modal isOpen={isAbsenceArchiveOpen} onClose={() => setIsAbsenceArchiveOpen(false)} title="Archives des demandes" size="lg">
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+      <Modal isOpen={isAbsenceArchiveOpen} onClose={() => setIsAbsenceArchiveOpen(false)} title="Archives des Demandes" size="lg">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar pt-2">
           {archivedAbsences.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-              <Calendar className="h-10 w-10 mx-auto text-gray-200 mb-2" />
-              <p className="text-sm text-gray-400 italic">Aucune demande archivée.</p>
+            <div className="py-20 text-center opacity-30">
+              <Calendar className="h-12 w-12 mx-auto mb-4 text-theme-muted" />
+              <p className="font-black text-xs uppercase tracking-widest">Aucune archive</p>
             </div>
           ) : (
             archivedAbsences.map(absence => renderAbsenceCard(absence, 'archive'))

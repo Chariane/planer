@@ -2,19 +2,22 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
-interface GlassCardProps {
+interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
   hover?: boolean;
 }
 
-export function GlassCard({ children, className, hover = true }: GlassCardProps) {
+export function GlassCard({ children, className, hover = true, ...props }: GlassCardProps) {
   return (
-    <div className={cn(
-      "bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 shadow-xl",
-      hover && "transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:bg-white/90",
-      className
-    )}>
+    <div
+      className={cn(
+        "bg-theme-surface/80 backdrop-blur-md rounded-2xl border border-theme-subtle shadow-xl transition-all duration-300",
+        hover && "hover:shadow-2xl hover:bg-theme-surface/90 hover:border-theme-strong hover:-translate-y-0.5",
+        className
+      )}
+      {...props}
+    >
       {children}
     </div>
   );

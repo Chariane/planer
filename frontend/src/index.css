@@ -4,9 +4,145 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-gray-50 text-gray-900;
+  :root {
+    color-scheme: light;
+    --bg-page: #f8fafc;
+    /* slate-50 refined */
+    --bg-surface: #ffffff;
+    --bg-surface-hover: #f1f5f9;
+    /* slate-100 */
+    --text-main: #0f172a;
+    /* slate-900 */
+    --text-muted: #64748b;
+    /* slate-500 */
+    --text-inverse: #ffffff;
+    --border-subtle: #e2e8f0;
+    /* slate-200 */
+    --border-strong: #cbd5e1;
+    /* slate-300 */
+    --primary: #264A67;
+    --secondary: #FF6600;
+    --accent-blue: #eff6ff;
+    --accent-indigo: #eef2ff;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-glow: 0 0 15px rgba(255, 102, 0, 0.15);
   }
+
+  .dark {
+    color-scheme: dark;
+    --bg-page: #020617;
+    /* slate-950 */
+    --bg-surface: #0f172a;
+    /* slate-900 */
+    --bg-surface-hover: #1e293b;
+    /* slate-800 */
+    --text-main: #f8fafc;
+    /* slate-50 */
+    --text-muted: #94a3b8;
+    /* slate-400 */
+    --text-inverse: #020617;
+    --border-subtle: #1e293b;
+    /* slate-800 */
+    --border-strong: #334155;
+    /* slate-700 */
+    --accent-blue: #172554;
+    --accent-indigo: #312e81;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+    --shadow-glow: 0 0 20px rgba(255, 102, 0, 0.1);
+  }
+
+  body {
+    @apply transition-colors duration-200;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+  }
+
+  input,
+  textarea,
+  select {
+    @apply transition-colors duration-200;
+    background-color: var(--bg-surface);
+    border-color: var(--border-subtle);
+    color: var(--text-main);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-muted);
+  }
+}
+
+@layer utilities {
+
+  /* Dynamic utilities based on variables */
+  .bg-theme-page {
+    background-color: var(--bg-page);
+  }
+
+  .bg-theme-surface {
+    background-color: var(--bg-surface);
+  }
+
+  .bg-theme-surface-hover {
+    background-color: var(--bg-surface-hover);
+  }
+
+  .text-theme-main {
+    color: var(--text-main);
+  }
+
+  .text-theme-muted {
+    color: var(--text-muted);
+  }
+
+  .border-theme-subtle {
+    border-color: var(--border-subtle);
+  }
+
+  .border-theme-strong {
+    border-color: var(--border-strong);
+  }
+
+  .shadow-theme-sm {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .shadow-theme-md {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-theme-lg {
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glass {
+    @apply backdrop-blur-md border border-theme-subtle;
+    background-color: var(--bg-surface);
+    opacity: 0.8;
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: rgba(255, 102, 0, 0.3);
+    color: inherit;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.65) transparent;
+}
+
+.dark * {
+  scrollbar-color: rgb(71 85 105 / 0.85) transparent;
 }
 
 /* Animation pour les toasts */

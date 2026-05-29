@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { notificationService } from '../../services/notification.service';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NotificationBellProps {
   buttonClassName?: string;
 }
 
 export default function NotificationBell({
-  buttonClassName = 'relative inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary/30',
+  buttonClassName = 'relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-all border border-transparent hover:border-theme-border-subtle focus:outline-none transition-all duration-300',
 }: NotificationBellProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -35,12 +36,19 @@ export default function NotificationBell({
 
   return (
     <Link to="/notifications" className={buttonClassName} title="Notifications" aria-label="Notifications">
-      <Bell className="h-5 w-5 text-gray-600" />
-      {unreadCount > 0 && (
-        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-          {unreadCount > 9 ? '9+' : unreadCount}
-        </span>
-      )}
+      <Bell size={20} />
+      <AnimatePresence>
+        {unreadCount > 0 && (
+          <motion.span
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-secondary text-white text-[9px] font-black flex items-center justify-center shadow-[0_0_10px_rgba(255,102,0,0.4)] border border-white/20"
+          >
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </motion.span>
+        )}
+      </AnimatePresence>
     </Link>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
-import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Filter, Calendar, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
@@ -16,9 +17,9 @@ import { useTasks } from './hooks/useTasks';
 import { useTaskChecklists } from './hooks/useTaskChecklists';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
-import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
@@ -185,36 +186,87 @@ export default function CenterContent() {
     const inProgressCount = tasks.filter(task => task.status === 'en cours').length;
     const doneCount = tasks.filter(task => task.status === 'terminé').length;
     const blockedCount = tasks.filter(task => task.status === 'bloqué').length;
+
     const averageProgress = Math.round(
       tasks.reduce((total, task) => total + getTaskProgress(task), 0) / tasks.length
     );
-    const done = (doneCount / tasks.length) * 100;
-    const inProgress = done + (inProgressCount / tasks.length) * 100;
-    const blocked = inProgress + (blockedCount / tasks.length) * 100;
-    const statusGradient = `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
 
     return (
-      <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div
-          className="h-20 w-20 rounded-full flex items-center justify-center"
-          style={{ background: statusGradient }}
-          title={`Répartition par statut. Avancement moyen : ${averageProgress}%`}
-        >
-          <div className="h-14 w-14 rounded-full bg-white flex flex-col items-center justify-center leading-tight">
-            <span className="text-base font-bold text-gray-800">{tasks.length}</span>
-            <span className="text-[10px] text-gray-500">tâches</span>
+      <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Main Gauge Widget */}
+        <div className="md:col-span-2 flex items-center gap-6 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-6 shadow-theme-md hover:shadow-theme-lg transition-all duration-300">
+          <div className="relative h-24 w-24 shrink-0">
+            <svg className="h-full w-full -rotate-90">
+              <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-theme-border-subtle" />
+              <circle
+                cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent"
+                strokeDasharray={2 * Math.PI * 40}
+                strokeDashoffset={2 * Math.PI * 40 * (1 - averageProgress / 100)}
+                strokeLinecap="round"
+                className="transition-all duration-1000 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-xl font-black text-theme-main">{averageProgress}%</span>
+              <span className="text-[10px] text-theme-muted uppercase font-bold">Total</span>
+            </div>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-black text-theme-main tracking-tight flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-secondary" />
+              Santé de la Liste
+            </h3>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              Progression globale basée sur les checklists complétées.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-theme-main">{tasks.length}</span>
+                <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Tâches</span>
+              </div>
+              <div className="w-px bg-theme-border-subtle h-6 mt-1" />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-emerald-500">{doneCount}</span>
+                <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Succès</span>
+              </div>
+              <div className="w-px bg-theme-border-subtle h-6 mt-1" />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-amber-500">{inProgressCount}</span>
+                <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Actif</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-800">Répartition des tâches</p>
-          <p className="text-xs text-gray-500 mt-1">Avancement moyen : {averageProgress}%</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">{pendingCount} en attente</span>
-            <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">{inProgressCount} en cours</span>
-            <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{doneCount} terminée{doneCount > 1 ? 's' : ''}</span>
-            {blockedCount > 0 && (
-              <span className="px-2 py-1 rounded-full bg-red-100 text-red-700">{blockedCount} bloquée{blockedCount > 1 ? 's' : ''}</span>
-            )}
+
+        {/* Quick Stats Grid */}
+        <div className="md:col-span-2 grid grid-cols-2 gap-4">
+          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <Clock className="h-4 w-4 text-theme-muted" />
+              <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">En attente</span>
+            </div>
+            <span className="text-2xl font-black text-theme-main mt-1">{pendingCount}</span>
+          </div>
+          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-blue-500">
+            <div className="flex justify-between items-start">
+              <CheckCircle2 className="h-4 w-4 text-blue-500" />
+              <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">En cours</span>
+            </div>
+            <span className="text-2xl font-black text-theme-main mt-1">{inProgressCount}</span>
+          </div>
+          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-emerald-500">
+            <div className="flex justify-between items-start">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Terminées</span>
+            </div>
+            <span className="text-2xl font-black text-theme-main mt-1">{doneCount}</span>
+          </div>
+          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-red-500">
+            <div className="flex justify-between items-start">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Bloquées</span>
+            </div>
+            <span className="text-2xl font-black text-theme-main mt-1">{blockedCount}</span>
           </div>
         </div>
       </div>
@@ -225,8 +277,8 @@ export default function CenterContent() {
     if (!listId || !currentListDescription.trim()) return null;
 
     return (
-      <div className="mb-5 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-        <p className="text-sm text-gray-600 leading-relaxed">{currentListDescription}</p>
+      <div className="mb-5 rounded-xl border border-theme-border-subtle bg-theme-surface p-4 shadow-sm transition-colors duration-200">
+        <p className="text-sm text-theme-muted leading-relaxed">{currentListDescription}</p>
       </div>
     );
   };
@@ -320,9 +372,9 @@ export default function CenterContent() {
     }
     return (
       <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">
-          <ListTodo className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-          <p className="text-lg font-medium">Aucune liste sélectionnée</p>
+        <div className="text-center text-theme-muted">
+          <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-20" />
+          <p className="text-lg font-medium text-theme-main">Aucune liste sélectionnée</p>
           <p className="text-sm">Cliquez sur une liste dans le menu de gauche pour voir ses tâches.</p>
         </div>
       </div>
@@ -344,12 +396,13 @@ export default function CenterContent() {
   if (isGuest || isListGuest) {
     return (
       <div className="p-6">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <p className="text-sm text-blue-800">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> {isListGuest ? 'dans cette liste' : 'dans cet espace'}.
+        <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-6 mb-6 shadow-theme-sm">
+          <p className="text-sm text-theme-main font-bold uppercase tracking-widest text-[11px] flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.6)]" />
+            Mode <strong>lecture seule</strong> {isListGuest ? 'dans cette liste' : 'dans cet espace'}
           </p>
-          <p className="text-xs text-blue-600 mt-1">
-            Vous pouvez consulter les tâches et utiliser les vues, mais vous ne pouvez pas créer, modifier ou supprimer des éléments.
+          <p className="text-[10px] text-theme-muted font-black uppercase tracking-tighter mt-1 opacity-60">
+            Consultation active. Création et modification restreintes.
           </p>
         </div>
 
@@ -357,12 +410,12 @@ export default function CenterContent() {
         {renderListDescription()}
 
         {/* Onglets pour les invités (sans l'onglet membres) */}
-        <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
+        <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
           {availableTabs.filter(tab => tab !== 'membres').map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all shrink-0 ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
                 }`}
             >
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
@@ -413,12 +466,12 @@ export default function CenterContent() {
       {renderListDescription()}
 
       {/* Onglets */}
-      <div className="flex gap-2 border-b border-gray-200 pb-3 mb-5">
+      <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
         {availableTabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all shrink-0 ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
               }`}
           >
             {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
@@ -437,46 +490,47 @@ export default function CenterContent() {
 
       {/* Barre de recherche enrichie - Visible pour toutes les vues sauf Membres et Outils */}
       {activeTab !== 'membres' && activeTab !== 'outils' && (
-        <div className="mb-6 space-y-4 bg-white/50 p-4 rounded-xl border border-gray-100 shadow-sm">
+        <div className="mb-6 space-y-4 bg-theme-surface p-4 rounded-xl border border-theme-border-subtle shadow-sm transition-colors duration-200">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted" />
               <input
                 type="text"
                 placeholder="Rechercher une tâche..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary/20 outline-none"
+                className="w-full pl-9 pr-4 py-2 border border-theme-border-subtle bg-theme-surface rounded-lg text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
               />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <select value={taskFilters.statut} onChange={e => setTaskFilters(prev => ({ ...prev, statut: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+            <select value={taskFilters.statut} onChange={e => setTaskFilters(prev => ({ ...prev, statut: e.target.value }))} className="border border-theme-border-subtle bg-theme-surface rounded-lg px-2 py-2 text-sm text-theme-main outline-none">
               <option value="">Tous statuts</option>
               <option value="en attente">En attente</option>
               <option value="en cours">En cours</option>
               <option value="terminé">Terminé</option>
               <option value="bloqué">Bloqué</option>
             </select>
-            <select value={taskFilters.priorite} onChange={e => setTaskFilters(prev => ({ ...prev, priorite: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+            <select value={taskFilters.priorite} onChange={e => setTaskFilters(prev => ({ ...prev, priorite: e.target.value }))} className="border border-theme-border-subtle bg-theme-surface rounded-lg px-2 py-2 text-sm text-theme-main outline-none">
               <option value="">Toutes priorités</option>
               <option value="basse">Basse</option>
               <option value="moyenne">Moyenne</option>
               <option value="haute">Haute</option>
               <option value="critique">Critique</option>
             </select>
-            <select value={taskFilters.membre_id} onChange={e => setTaskFilters(prev => ({ ...prev, membre_id: e.target.value }))} className="border rounded-lg px-2 py-2 text-sm outline-none">
+            <select value={taskFilters.membre_id} onChange={e => setTaskFilters(prev => ({ ...prev, membre_id: e.target.value }))} className="border border-theme-border-subtle bg-theme-surface rounded-lg px-2 py-2 text-sm text-theme-main outline-none">
               <option value="">Tous membres</option>
               {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
             </select>
-            <div className="flex items-center gap-2 px-2 border rounded-lg bg-white">
+            <div className="flex items-center gap-2 px-2 border border-theme-border-subtle rounded-lg bg-theme-surface">
               <input
                 type="checkbox"
                 id="overdue-filter"
                 checked={taskFilters.overdue}
                 onChange={e => setTaskFilters(prev => ({ ...prev, overdue: e.target.checked }))}
+                className="accent-secondary"
               />
-              <label htmlFor="overdue-filter" className="text-sm text-gray-600 flex items-center gap-1 cursor-pointer">
+              <label htmlFor="overdue-filter" className="text-sm text-theme-muted flex items-center gap-1 cursor-pointer">
                 <Calendar className="h-3 w-3" /> En retard
               </label>
             </div>
@@ -494,13 +548,13 @@ export default function CenterContent() {
         {(isAdmin || isCreator) && activeTab === 'membres' && (
           <div className="flex-1 flex gap-2">
             <div className="relative max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted" />
               <input
                 type="text"
                 placeholder="Rechercher un membre..."
                 value={memberSearchTerm}
                 onChange={(e) => setMemberSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none"
+                className="w-full pl-9 pr-4 py-2 border border-theme-border-subtle bg-theme-surface rounded-lg text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
               />
             </div>
           </div>
@@ -512,45 +566,55 @@ export default function CenterContent() {
         )}
       </div>
 
-      {/* Contenu selon l'onglet */}
-      {activeTab === 'liste' && (
-        <ListView
-          tasks={filteredTasks}
-          searchTerm="" // Géré maintenant par CenterContent via filteredTasks
-          onSearchChange={() => { }}
-          onEditTask={openEditTask}
-          onDeleteTask={canCreateContent ? deleteTask : () => { }}
-          onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
-          getTaskProgress={getTaskProgress}
-          readOnly={!canCreateContent}
-          canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
-          canDeleteTask={() => canCreateContent}
-          canAssignTask={() => canCreateContent}
-        />
-      )}
+      {/* Contenu selon l'onglet avec Transitions */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          {activeTab === 'liste' && (
+            <ListView
+              tasks={filteredTasks}
+              searchTerm="" // Géré maintenant par CenterContent via filteredTasks
+              onSearchChange={() => { }}
+              onEditTask={openEditTask}
+              onDeleteTask={canCreateContent ? deleteTask : () => { }}
+              onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
+              getTaskProgress={getTaskProgress}
+              readOnly={!canCreateContent}
+              canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
+              canDeleteTask={() => canCreateContent}
+              canAssignTask={() => canCreateContent}
+            />
+          )}
 
-      {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
-      {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
-      {activeTab === 'outils' && (
-        <PlannerToolsPanel
-          workspaceId={currentListWorkspaceId || workspaceId}
-          espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
-          listeId={listId}
-          currentUserId={user?.id}
-          effectiveRole={effectiveRole}
-          tasks={tasks}
-        />
-      )}
+          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
+          {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
+          {activeTab === 'outils' && (
+            <PlannerToolsPanel
+              workspaceId={currentListWorkspaceId || workspaceId}
+              espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+              listeId={listId}
+              currentUserId={user?.id}
+              effectiveRole={effectiveRole}
+              tasks={tasks}
+            />
+          )}
 
-      {activeTab === 'membres' && (
-        <MemberManagement
-          listeId={listId}
-          espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
-          workspaceId={currentListWorkspaceId || workspaceId || undefined}
-          currentUserRole={effectiveRole}
-          searchQuery={memberSearchTerm}
-        />
-      )}
+          {activeTab === 'membres' && (
+            <MemberManagement
+              listeId={listId}
+              espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+              workspaceId={currentListWorkspaceId || workspaceId || undefined}
+              currentUserRole={effectiveRole}
+              searchQuery={memberSearchTerm}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Modales */}
       {(isAdmin || isCreator || isTaskModalLimited) && (

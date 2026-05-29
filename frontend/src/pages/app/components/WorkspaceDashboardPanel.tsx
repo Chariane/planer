@@ -1,6 +1,6 @@
 // frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Briefcase, Calendar, FolderTree, ListTodo, Loader2, ShieldCheck, UserPlus, Users, X } from 'lucide-react';
+import { Activity, Briefcase, Calendar, FolderTree, ListTodo, Loader2, ShieldCheck, UserPlus, Users, X, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
@@ -9,6 +9,7 @@ import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 
 interface WorkspaceDashboardPanelProps {
@@ -17,14 +18,11 @@ interface WorkspaceDashboardPanelProps {
 
 const ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Administrateur'];
 
-const countSpaces = (items: any[] = []): number =>
-  items.reduce((total, item) => total + 1 + countSpaces(item.sous_espaces || []), 0);
-
 const getRoleBadgeClass = (role: string) => {
-  if (role === 'Administrateur') return 'bg-orange-100 text-orange-700';
-  if (role === 'Créateur') return 'bg-purple-100 text-purple-700';
-  if (role === 'Invité') return 'bg-gray-100 text-gray-500';
-  return 'bg-blue-100 text-blue-700';
+  if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
+  if (role === 'Créateur') return 'bg-purple-500/10 text-purple-500 border border-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.1)]';
+  if (role === 'Invité') return 'bg-theme-surface-hover text-theme-muted border border-theme-border-subtle opacity-70';
+  return 'bg-primary/10 text-primary border border-primary/20 shadow-[0_0_8px_rgba(0,102,255,0.1)]';
 };
 
 const getRoleLabel = (role: string) => {
@@ -34,24 +32,33 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Composant Toast simple
+// Composant Toast premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-  
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
-        <span className="text-sm flex-1">{message}</span>
-        <button onClick={onClose} className="hover:opacity-70">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+        className="fixed bottom-6 right-6 z-[100]"
+      >
+        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl text-theme-main min-w-[320px] backdrop-blur-xl border border-theme-border-subtle/30 ${type === 'success' ? 'bg-emerald-500/90 shadow-emerald-500/20' : type === 'error' ? 'bg-red-500/90 shadow-red-500/20' : 'bg-primary/90 shadow-primary/20'
+          }`}>
+          <div className="p-2 rounded-xl bg-white/20 border border-white/10">
+            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </div>
+          <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-white/20 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
@@ -69,15 +76,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
-  
-  // État pour les notifications toast
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
+
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
 
-  // Récupérer le rôle de l'utilisateur dans ce workspace
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
   const availableInvitationRoles = useMemo(
@@ -90,7 +95,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       setInviteRole(availableInvitationRoles[0]);
     }
   }, [availableInvitationRoles, inviteRole]);
-  
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -101,14 +106,11 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         const workspace = await workspaceService.getById(workspaceId);
         resolvedName = workspace.nom || resolvedName;
         resolvedDescription = workspace.description || '';
-      } catch {
-        // Accès contextuel ou endpoint indisponible : les stats chargent ce qui est possible.
-      }
+      } catch { /* Suppress error */ }
 
-      // 🔧 Charger les membres pour tout le monde (y compris les invités)
       let formattedMembers: Member[] = [];
       let membersCount = 0;
-      
+
       try {
         const membersData = await workspaceService.getMembers(workspaceId);
         formattedMembers = membersData.map((m: any) => ({
@@ -120,36 +122,26 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         membersCount = formattedMembers.length;
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
-        if (err.status === 403) {
-          console.log('Accès refusé pour voir les membres - affichage limité');
-          // Si c'est un invité, on peut essayer un endpoint public ou laisser vide
-        }
       }
       setMembers(formattedMembers);
 
       let spacesCount = 0;
       try {
         const tree = await espaceService.getTree(workspaceId);
+        const countSpaces = (items: any[] = []): number =>
+          items.reduce((total, item) => total + 1 + countSpaces(item.sous_espaces || []), 0);
         spacesCount = countSpaces(Array.isArray(tree) ? tree : []);
-      } catch {
-        spacesCount = 0;
-      }
+      } catch { spacesCount = 0; }
 
       let listsCount = 0;
       try {
         const workspaceLists = await listeService.getByWorkspace(workspaceId);
         listsCount = Array.isArray(workspaceLists) ? workspaceLists.length : 0;
-      } catch {
-        listsCount = 0;
-      }
+      } catch { listsCount = 0; }
 
       setWorkspaceName(resolvedName);
       setWorkspaceDescription(resolvedDescription);
-      setStats({
-        spacesCount,
-        listsCount,
-        membersCount: membersCount,
-      });
+      setStats({ spacesCount, listsCount, membersCount });
     } finally {
       setLoading(false);
     }
@@ -163,34 +155,25 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     if (!inviteEmail.trim()) return;
     try {
       await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
-      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
+      showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
       setIsInviteModalOpen(false);
       setInviteEmail('');
       await loadData();
     } catch (err: any) {
       const msg = err?.message || '';
-      if (msg.includes('refuse') || msg.includes('redondant')) {
-        showMessage('Cette personne a déjà un rôle parent qui couvre ce workspace', 'error');
-      } else {
-        showMessage(msg || "Erreur lors de l'invitation", 'error');
-      }
+      showMessage(msg.includes('refuse') ? 'Membre déjà présent via parent' : (msg || "Erreur d'invitation"), 'error');
     }
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
     if (!isCreator || member.role === 'Créateur' || nextRole === member.role) return;
-
     setUpdatingMemberId(member.id);
     try {
       await workspaceService.updateMemberRole(workspaceId, member.id, nextRole);
-      setMembers(prevMembers =>
-        prevMembers.map(item =>
-          item.id === member.id ? { ...item, role: nextRole } : item,
-        ),
-      );
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
       showMessage(`Rôle de ${member.name} mis à jour`, 'success');
     } catch (err: any) {
-      showMessage(err?.message || "Impossible de modifier le rôle de ce membre", 'error');
+      showMessage(err?.message || "Impossible de modifier le rôle", 'error');
       await loadData();
     } finally {
       setUpdatingMemberId(null);
@@ -199,212 +182,232 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Chargement du tableau de bord...</div>
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-secondary/60" />
+        <p className="text-theme-muted font-black uppercase tracking-widest text-[10px] animate-pulse">Analytiques en cours...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Toast Notifications */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-10 pb-16"
+    >
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Message pour les invités - mais ils peuvent voir les membres */}
       {isGuest && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> dans ce workspace.
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
-            Vous pouvez consulter les informations et voir les membres, mais vous ne pouvez pas inviter de nouveaux membres.
-          </p>
+        <div className="glass-card bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
+          <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+            <Info className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
+            <p className="text-xs text-theme-muted mt-1 opacity-60">Consultez les informations et les membres. Les modifications sont restreintes.</p>
+          </div>
         </div>
       )}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 rounded-lg">
-              <Briefcase className="h-5 w-5 text-indigo-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">{workspaceName}</h1>
-              <p className="text-gray-500 mt-1">Tableau de bord du workspace</p>
+      {/* Header section */}
+      <div className="flex flex-wrap items-end justify-between gap-8 pb-4">
+        <div className="flex items-center gap-6">
+          <div className="p-5 bg-primary/10 rounded-2xl shadow-xl shadow-primary/5 border border-primary/10 transition-transform hover:scale-105">
+            <Briefcase className="h-8 w-8 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-theme-main tracking-tighter uppercase leading-none">{workspaceName}</h1>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]" />
+              <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] opacity-60">Dashboard Workspace</p>
             </div>
           </div>
-          {workspaceDescription && (
-            <p className="text-sm text-gray-500 mt-3 max-w-2xl">{workspaceDescription}</p>
-          )}
         </div>
-        {/* Bouton Inviter - visible uniquement pour Admin et Créateur */}
         {canInviteMembers && (
-          <Button onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Inviter un membre
+          <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+            <UserPlus size={18} className="mr-3" />
+            Inviter un collaborateur
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FolderTree className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Espaces</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.spacesCount}</p>
-            </div>
-          </div>
+      {workspaceDescription && (
+        <GlassCard className="p-6 border-l-4 border-l-primary/40 bg-theme-surface/30">
+          <p className="text-sm text-theme-main leading-relaxed font-medium italic opacity-80">"{workspaceDescription}"</p>
         </GlassCard>
+      )}
 
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <ListTodo className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Projets directs</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.listsCount}</p>
-            </div>
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Users className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Membres</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.membersCount}</p>
-            </div>
-          </div>
-        </GlassCard>
+      {/* Stats row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {[
+          { label: 'Espaces Actifs', value: stats.spacesCount, icon: FolderTree, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+          { label: 'Projets Directs', value: stats.listsCount, icon: ListTodo, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+          { label: 'Collaborateurs', value: stats.membersCount, icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10' }
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.1 }}
+          >
+            <GlassCard className="p-8 group hover:border-primary/30 transition-all cursor-default border-theme-border-subtle/30 bg-theme-surface/40">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] mb-3 opacity-60">{stat.label}</p>
+                  <p className="text-4xl font-black text-theme-main tracking-tighter group-hover:scale-105 transition-transform origin-left">{stat.value}</p>
+                </div>
+                <div className={`p-5 ${stat.bg} rounded-2xl group-hover:rotate-12 transition-all shadow-inner border border-theme-border-subtle/30`}>
+                  <stat.icon size={28} className={stat.color} />
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Liste des membres - visible pour tout le monde (y compris les invités) */}
-      <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Membres du workspace
-          </h3>
-          {isCreator && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Gestion des rôles
-            </span>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
+        <div className="xl:col-span-2 space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase">
+              <Users className="h-6 w-6 text-primary" />
+              Équipe du Workspace
+            </h3>
+            {isCreator && (
+              <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
+                <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">Gestion des privilèges</span>
+              </div>
+            )}
+          </div>
+
+          {members.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {members.map((member, i) => (
+                <motion.div
+                  key={member.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <GlassCard className="p-5 flex items-center justify-between gap-4 group hover:bg-theme-surface-hover/30 transition-all border-theme-border-subtle/30">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-theme-border-subtle/20 flex items-center justify-center font-black text-primary text-base group-hover:scale-110 transition-transform shadow-inner">
+                        {member.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-theme-main truncate tracking-tight text-base group-hover:text-primary transition-colors">{member.name}</p>
+                        <p className="text-[10px] text-theme-muted font-bold truncate opacity-40 uppercase mt-0.5">{member.email}</p>
+                      </div>
+                    </div>
+
+                    {isCreator && member.role !== 'Créateur' ? (
+                      <div className="flex items-center gap-3">
+                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
+                        <select
+                          value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : 'Invité'}
+                          onChange={e => handleMemberRoleChange(member, e.target.value)}
+                          disabled={updatingMemberId === member.id}
+                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
+                        >
+                          {ROLE_MANAGEMENT_OPTIONS.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
+                          <option value="Invité" className="bg-theme-page text-theme-main">Invité</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                        {getRoleLabel(member.role)}
+                      </span>
+                    )}
+                  </GlassCard>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <GlassCard className="py-20 border-dashed border-theme-border-subtle/30 flex flex-col items-center justify-center bg-theme-surface/20">
+              <div className="p-6 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle/30">
+                <Users size={40} className="opacity-10 text-theme-muted" />
+              </div>
+              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">Équipe non listée</p>
+            </GlassCard>
           )}
         </div>
-        {members.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {members.map(member => (
-              <GlassCard key={member.id} className="p-3 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-shadow">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-800">{member.name}</p>
-                  <p className="text-sm text-gray-500">{member.email}</p>
-                </div>
-                {isCreator && member.role !== 'Créateur' ? (
-                  <div className="flex items-center gap-2">
-                    {updatingMemberId === member.id && (
-                      <Loader2 className="h-4 w-4 animate-spin text-secondary" />
-                    )}
-                    <select
-                      value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : 'Invité'}
-                      onChange={event => handleMemberRoleChange(member, event.target.value)}
-                      disabled={updatingMemberId === member.id}
-                      className="min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm outline-none transition focus:border-secondary focus:ring-2 focus:ring-secondary/20 disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {ROLE_MANAGEMENT_OPTIONS.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <span className={`text-xs px-2 py-1 rounded-full ${getRoleBadgeClass(member.role)}`}>
-                    {getRoleLabel(member.role)}
-                  </span>
-                )}
-              </GlassCard>
-            ))}
+
+        <div className="space-y-10">
+          <div className="space-y-6">
+            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase px-2">
+              <Activity className="h-6 w-6 text-primary" />
+              Pulse
+            </h3>
+            <GlassCard className="p-10 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px] border-theme-border-subtle/30 bg-theme-surface/30">
+              <div className="p-6 rounded-3xl bg-theme-surface border border-theme-border-subtle/30 shadow-inner">
+                <Calendar size={40} className="text-theme-muted opacity-20" />
+              </div>
+              <div className="space-y-3">
+                <p className="font-black text-theme-main uppercase tracking-widest text-xs">Historique à venir</p>
+                <p className="text-theme-muted text-[10px] font-medium leading-relaxed max-w-[180px] mx-auto opacity-40">
+                  Les flux d'activités et journaux de modifications seront bientôt disponibles.
+                </p>
+              </div>
+            </GlassCard>
           </div>
-        ) : (
-          <GlassCard className="p-4">
-            <div className="text-center text-gray-400 py-4">
-              <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun membre pour le moment</p>
-              {!isGuest && <p className="text-sm mt-1">Invitez des membres pour commencer à collaborer.</p>}
-            </div>
-          </GlassCard>
-        )}
+        </div>
       </div>
 
-      <div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Activités récentes
-        </h3>
-        <GlassCard className="p-4">
-          <div className="text-center text-gray-400 py-8">
-            <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-            <p>Fonctionnalité à venir</p>
-            <p className="text-sm">Les activités récentes du workspace seront affichées ici</p>
-          </div>
-        </GlassCard>
-      </div>
-
-      {/* Modale d'invitation - visible uniquement pour Admin et Créateur */}
-      {canInviteMembers && (
-        <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre au workspace" size="md">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email du membre
-              </label>
+      <Modal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        title="Extension de la Collaboration"
+        size="md"
+      >
+        <div className="space-y-8 py-4">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] ml-2 opacity-60">Email du Contact</label>
+            <div className="relative group">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-primary transition-colors">
+                <Users size={20} />
+              </div>
               <input
                 type="email"
-                placeholder="exemple@email.com"
+                placeholder="collaborateur@kplanner.io"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl pl-14 pr-6 py-5 text-theme-main placeholder:text-theme-muted/20 focus:ring-4 focus:ring-primary/10 focus:border-primary/50 transition-all outline-none font-bold"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rôle
-              </label>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] ml-2 opacity-60">Privilèges au Workspace</label>
+            <div className="relative group">
               <select
                 value={inviteRole}
                 onChange={e => setInviteRole(e.target.value)}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl px-6 py-5 text-theme-main focus:ring-4 focus:ring-primary/10 outline-none transition-all font-black uppercase tracking-widest text-xs appearance-none cursor-pointer"
               >
-                {availableInvitationRoles.map(role => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
+                {availableInvitationRoles.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
               </select>
-              <p className="text-xs text-gray-400 mt-1">
-                💡 <strong>Invitant</strong> : accès en lecture seule<br />
-                💡 <strong>Administrateur</strong> : peut gérer le workspace et ses membres
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
-              </p>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-theme-muted opacity-40">
+                <Briefcase size={18} />
+              </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
-              <Button onClick={handleInvite}>Inviter</Button>
+
+            <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10">
+              <div className="flex items-start gap-3">
+                <Info size={16} className="text-primary mt-0.5" />
+                <p className="text-[10px] text-theme-muted font-bold leading-relaxed uppercase tracking-tight">
+                  <strong className="text-theme-main">Invité</strong>: Accès aux éléments assignés.<br />
+                  <strong className="text-theme-main">Admin</strong>: Contrôle total sur les espaces et membres.
+                </p>
+              </div>
             </div>
           </div>
-        </Modal>
-      )}
-    </div>
+
+          <div className="flex gap-4 pt-4">
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100">Annuler</Button>
+            <Button onClick={handleInvite} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20">Envoyer l'Invite</Button>
+          </div>
+        </div>
+      </Modal>
+    </motion.div>
   );
 }

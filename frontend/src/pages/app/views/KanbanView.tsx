@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { motion } from 'framer-motion';
-import { GripVertical } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { GripVertical, Calendar, AlertCircle } from 'lucide-react';
 import type { Task } from '../../../types';
 
 const priorityLabels: Record<string, string> = {
@@ -15,10 +15,10 @@ const priorityLabels: Record<string, string> = {
 };
 
 const priorityColors: Record<string, string> = {
-  basse: 'bg-green-100 text-green-800',
-  moyenne: 'bg-blue-100 text-blue-800',
-  haute: 'bg-orange-100 text-orange-800',
-  critique: 'bg-red-100 text-red-800',
+  basse: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 dark:text-emerald-400',
+  moyenne: 'bg-blue-500/10 text-blue-500 border border-blue-500/20 dark:text-blue-400',
+  haute: 'bg-orange-500/10 text-orange-500 border border-orange-500/20 dark:text-orange-400',
+  critique: 'bg-red-500/10 text-red-500 border border-red-500/20 dark:text-red-400',
 };
 
 const columns = [
@@ -35,32 +35,69 @@ interface KanbanCardProps {
 
 function KanbanCard({ task, isOverlay = false }: KanbanCardProps) {
   const [isDragging, setIsDragging] = useState(false);
-  
+
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      whileHover={{ y: -2, boxShadow: '0 8px 20px rgba(0,0,0,0.1)' }}
-      className={`rounded-lg bg-white p-3 shadow-sm border border-gray-200 cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-50 rotate-2' : ''
-      } ${isOverlay ? 'shadow-xl ring-2 ring-secondary' : ''}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -4, boxShadow: 'var(--shadow-lg)', borderColor: 'var(--secondary)' }}
+      className={`group relative rounded-2xl bg-theme-surface p-4 shadow-theme-sm border border-theme-border-subtle cursor-grab active:cursor-grabbing transition-all duration-300 ${isDragging ? 'opacity-40 scale-95' : ''
+        } ${isOverlay ? 'shadow-theme-lg ring-2 ring-secondary opacity-100' : ''}`}
       onMouseDown={() => setIsDragging(true)}
       onMouseUp={() => setIsDragging(false)}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-800 line-clamp-2">{task.title}</p>
-          {task.dueDate && (
-            <p className="mt-1 text-xs text-gray-400">
-              📅 {new Date(task.dueDate).toLocaleDateString('fr-FR')}
-            </p>
-          )}
-          <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[task.priority]}`}>
-            {priorityLabels[task.priority]}
-          </span>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className={`text-sm font-bold tracking-tight line-clamp-2 leading-snug transition-colors group-hover:text-theme-main ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
+            {task.title}
+          </p>
+          <GripVertical className="h-4 w-4 text-theme-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
         </div>
-        <GripVertical className="h-4 w-4 text-gray-400" />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${priorityColors[task.priority]}`}>
+            <span className="h-1 w-1 rounded-full bg-current" />
+            {priorityLabels[task.priority]}
+          </div>
+
+          {task.dueDate && (
+            <div className="flex items-center gap-1.5 text-[9px] text-theme-muted font-black uppercase tracking-tighter bg-theme-surface-hover px-2 py-0.5 rounded-lg border border-theme-border-subtle opacity-60 group-hover:opacity-100 transition-opacity">
+              <Calendar size={12} />
+              {new Date(task.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mt-1 pt-4 border-t border-theme-border-subtle/30">
+          <div className="flex items-center -space-x-2">
+            {task.assignees.length > 0 ? (
+              task.assignees.slice(0, 3).map((a, i) => (
+                <div key={i} className="h-7 w-7 rounded-lg bg-theme-surface border-2 border-theme-border-subtle flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
+                  {a.name.charAt(0).toUpperCase()}
+                </div>
+              ))
+            ) : (
+              <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border border-dashed border-theme-border-subtle flex items-center justify-center text-theme-muted opacity-30">
+                <AlertCircle size={14} />
+              </div>
+            )}
+            {task.assignees.length > 3 && (
+              <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[9px] font-black text-theme-muted">
+                +{task.assignees.length - 3}
+              </div>
+            )}
+          </div>
+
+          {task.status === 'en cours' && (
+            <div className="h-1.5 w-16 bg-theme-surface-hover rounded-full overflow-hidden border border-theme-border-subtle/30 shadow-inner">
+              <motion.div
+                animate={{ x: [-30, 70] }}
+                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                className="h-full w-10 bg-gradient-to-r from-transparent via-secondary/40 to-transparent"
+              />
+            </div>
+          )}
+        </div>
       </div>
     </motion.div>
   );
@@ -73,21 +110,37 @@ interface KanbanColumnProps {
   color: string;
 }
 
-function KanbanColumn({ title, tasks, status, color }: KanbanColumnProps) {
+function KanbanColumn({ title, tasks, color }: KanbanColumnProps) {
   return (
-    <div className="w-80 flex-shrink-0 rounded-xl bg-gray-100 p-3 shadow-sm">
-      <div className="flex justify-between items-center mb-3 px-2">
-        <h3 className="font-semibold text-gray-700">{title}</h3>
-        <span className="rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: color }}>{tasks.length}</span>
+    <div className="w-80 flex-shrink-0 rounded-2xl bg-theme-surface/30 p-4 border border-theme-border-subtle/30 transition-all duration-300">
+      <div className="flex justify-between items-center mb-6 px-1">
+        <div className="flex items-center gap-3">
+          <div className="h-2 w-2 rounded-full shadow-[0_0_10px_currentcolor] shrink-0" style={{ backgroundColor: color, color: color }} />
+          <h3 className="font-black text-theme-main tracking-[0.1em] uppercase text-[10px] opacity-70 italic">{title}</h3>
+        </div>
+        <span className="rounded-lg px-2.5 py-1 text-[10px] font-black bg-theme-surface-hover shadow-theme-sm border border-theme-border-subtle text-theme-main">
+          {tasks.length}
+        </span>
       </div>
-      <div className="min-h-[400px] space-y-3">
+
+      <div className="min-h-[600px] space-y-4">
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          {tasks.map(task => <KanbanCard key={task.id} task={task} />)}
+          <AnimatePresence mode="popLayout">
+            {tasks.map(task => <KanbanCard key={task.id} task={task} />)}
+          </AnimatePresence>
         </SortableContext>
+
         {tasks.length === 0 && (
-          <div className="py-8 text-center text-sm text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-            Déposez ici
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="h-32 flex flex-col items-center justify-center text-[10px] font-black text-theme-muted border-2 border-dashed border-theme-border-subtle rounded-2xl bg-theme-surface/20 opacity-30 uppercase tracking-[0.2em] gap-3"
+          >
+            <div className="p-2 rounded-full bg-theme-surface">
+              <AlertCircle size={20} className="opacity-40" />
+            </div>
+            Zone Vide
+          </motion.div>
         )}
       </div>
     </div>
@@ -123,7 +176,7 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
 
   return (
     <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-6 overflow-x-auto pb-8 custom-scrollbar-hidden">
         {columns.map(col => (
           <div key={col.id} id={col.id} className="w-80 flex-shrink-0">
             <KanbanColumn
@@ -137,7 +190,7 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
       </div>
       <DragOverlay>
         {activeTask && (
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1.05, opacity: 1 }}>
             <KanbanCard task={activeTask} isOverlay />
           </motion.div>
         )}

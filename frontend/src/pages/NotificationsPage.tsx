@@ -3,6 +3,7 @@ import { Archive, Bell, CheckCheck, Clock, Filter, Loader2, Trash2 } from 'lucid
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import { notificationService, type NotificationItem } from '../services/notification.service';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'Date inconnue';
@@ -18,17 +19,17 @@ const formatDateTime = (value?: string | null) => {
 const notificationStyle = (type: NotificationItem['type']) => {
   switch (type) {
     case 'alerte':
-      return 'bg-red-50 text-red-700 border-red-100';
+      return 'bg-red-500/10 text-red-500 border-red-500/20';
     case 'warning':
-      return 'bg-amber-50 text-amber-700 border-amber-100';
+      return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
     case 'evenement':
-      return 'bg-indigo-50 text-indigo-700 border-indigo-100';
+      return 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
     case 'systeme':
-      return 'bg-slate-100 text-slate-700 border-slate-200';
+      return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
     case 'promotion':
-      return 'bg-purple-50 text-purple-700 border-purple-100';
+      return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
     default:
-      return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
   }
 };
 
@@ -110,136 +111,152 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                <Bell className="h-5 w-5" />
+    <div className="h-full overflow-y-auto bg-theme-page transition-colors duration-300">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-secondary/10 text-secondary flex items-center justify-center shadow-lg shadow-secondary/5 border border-secondary/10">
+                <Bell size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-                <p className="text-sm text-gray-500">
-                  Suivez les rapports, demandes, tâches assignées et événements importants.
+                <h1 className="text-3xl font-black text-theme-main tracking-tight uppercase leading-none">Notifications</h1>
+                <p className="text-sm text-theme-muted font-medium mt-2 opacity-60">
+                  Suivi en temps réel de votre activité K‑Planner.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant={filter === 'all' ? 'primary' : 'outline'}
+          <div className="flex items-center p-1 bg-theme-surface border border-theme-border-subtle rounded-2xl shadow-theme-sm">
+            <button
               onClick={() => setFilter('all')}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filter === 'all'
+                ? 'bg-secondary text-white shadow-lg shadow-secondary/20'
+                : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover'}`}
             >
-              <Filter className="h-4 w-4 mr-2" />
               Toutes
-            </Button>
-            <Button
-              variant={filter === 'unread' ? 'primary' : 'outline'}
+            </button>
+            <button
               onClick={() => setFilter('unread')}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filter === 'unread'
+                ? 'bg-secondary text-white shadow-lg shadow-secondary/20'
+                : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover'}`}
             >
               Non lues
-            </Button>
+            </button>
           </div>
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-red-500/20 bg-red-500/10 px-6 py-4 text-sm font-bold text-red-500 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-red-500" />
             {error}
-          </div>
+          </motion.div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <GlassCard className="p-4">
-            <p className="text-xs uppercase font-bold text-gray-400">Total affiché</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{notifications.length}</p>
+        {/* Stats Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <GlassCard className="p-6 border-white/5 group hover:border-white/10 transition-all">
+            <p className="text-[10px] uppercase font-black text-theme-muted tracking-[0.2em]">Total reçu</p>
+            <p className="text-4xl font-black text-theme-main mt-2 group-hover:scale-105 transition-transform origin-left">{notifications.length}</p>
           </GlassCard>
-          <GlassCard className="p-4">
-            <p className="text-xs uppercase font-bold text-gray-400">Non lues</p>
-            <p className="text-3xl font-bold text-red-500 mt-1">{unreadCount}</p>
+          <GlassCard className="p-6 border-white/5 group hover:border-white/10 transition-all">
+            <p className="text-[10px] uppercase font-black text-theme-muted tracking-[0.2em]">Non lues</p>
+            <p className="text-4xl font-black text-secondary mt-2 group-hover:scale-105 transition-transform origin-left">{unreadCount}</p>
           </GlassCard>
-          <GlassCard className="p-4 flex items-center justify-between gap-3">
+          <GlassCard className="p-6 flex items-center justify-between gap-4 border-white/5 group hover:border-white/10 transition-all">
             <div>
-              <p className="text-xs uppercase font-bold text-gray-400">Action rapide</p>
-              <p className="text-sm text-gray-500 mt-1">Nettoyer votre centre de suivi.</p>
+              <p className="text-[10px] uppercase font-black text-theme-muted tracking-[0.2em]">Nettoyage</p>
+              <p className="text-xs text-theme-muted mt-2 font-medium">Tout marquer comme lu</p>
             </div>
-            <Button
-              variant="outline"
+            <button
               onClick={markAllRead}
               disabled={unreadCount === 0 || actionLoading === 'read-all'}
+              className="h-12 w-12 rounded-xl bg-theme-surface-hover border border-theme-border-subtle flex items-center justify-center text-theme-main hover:bg-secondary hover:text-white hover:border-secondary transition-all shadow-theme-sm disabled:opacity-30 disabled:cursor-not-allowed group-hover:shadow-theme-md"
             >
-              {actionLoading === 'read-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-            </Button>
+              {actionLoading === 'read-all' ? <Loader2 size={20} className="animate-spin" /> : <CheckCheck size={20} />}
+            </button>
           </GlassCard>
         </div>
 
-        <GlassCard className="overflow-hidden">
+        {/* Notifications List */}
+        <GlassCard className="overflow-hidden border-white/5 !p-0">
           {loading ? (
-            <div className="py-20 flex flex-col items-center justify-center text-gray-400">
-              <Loader2 className="h-8 w-8 animate-spin mb-3" />
-              <p className="text-sm">Chargement des notifications...</p>
+            <div className="py-24 flex flex-col items-center justify-center text-theme-muted">
+              <Loader2 size={32} className="animate-spin mb-4 text-secondary opacity-50" />
+              <p className="text-xs uppercase font-black tracking-widest opacity-60">Chargement des données...</p>
             </div>
           ) : notifications.length === 0 ? (
-            <div className="py-20 flex flex-col items-center justify-center text-gray-400">
-              <Archive className="h-10 w-10 mb-3 text-gray-300" />
-              <p className="font-medium text-gray-600">Aucune notification</p>
-              <p className="text-sm mt-1">Quand quelque chose demande votre attention, cela apparaîtra ici.</p>
+            <div className="py-24 flex flex-col items-center justify-center text-theme-muted">
+              <div className="p-6 rounded-full bg-theme-surface-hover mb-6">
+                <Archive size={40} className="opacity-20" />
+              </div>
+              <p className="font-black text-theme-main uppercase tracking-widest text-sm">Zone de calme</p>
+              <p className="text-xs mt-2 opacity-50 max-w-[300px] text-center leading-relaxed">
+                Vous n'avez aucune notification pour le moment. Tout est sous contrôle !
+              </p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              {notifications.map(notification => (
-                <div
-                  key={notification.id}
-                  className={`p-4 sm:p-5 flex gap-4 transition ${notification.est_lu ? 'bg-white' : 'bg-blue-50/50'}`}
-                >
-                  <button
-                    onClick={() => markRead(notification)}
-                    className="flex-1 text-left flex gap-4"
+            <div className="divide-y divide-white/5">
+              <AnimatePresence mode="popLayout">
+                {notifications.map((notification, idx) => (
+                  <motion.div
+                    key={notification.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className={`p-6 flex gap-6 transition-all group ${notification.est_lu ? 'hover:bg-white/[0.02]' : 'bg-secondary/[0.03] hover:bg-secondary/[0.05]'}`}
                   >
-                    <div className={`mt-1 h-10 w-10 rounded-xl border flex items-center justify-center ${notificationStyle(notification.type)}`}>
-                      <Bell className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!notification.est_lu && <span className="h-2 w-2 rounded-full bg-blue-500" />}
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase font-black ${notificationStyle(notification.type)}`}>
-                          {notification.type}
-                        </span>
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {formatDateTime(notification.date_creation)}
-                        </span>
-                      </div>
-                      <p className="text-sm sm:text-base text-gray-800 mt-2 leading-relaxed">
-                        {notification.message}
-                      </p>
-                    </div>
-                  </button>
-
-                  <div className="flex items-start gap-1">
-                    {!notification.est_lu && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => markRead(notification)}
-                        disabled={actionLoading === notification.id}
-                      >
-                        <CheckCheck className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeNotification(notification.id)}
-                      disabled={actionLoading === notification.id}
-                      className="text-red-500 hover:bg-red-50"
+                    <button
+                      onClick={() => markRead(notification)}
+                      className="flex-1 text-left flex gap-6"
                     >
-                      {actionLoading === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                      <div className={`shrink-0 mt-1 h-12 w-12 rounded-2xl border flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${notificationStyle(notification.type)}`}>
+                        <Bell size={20} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          {!notification.est_lu && <span className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.5)]" />}
+                          <span className={`text-[9px] px-2.5 py-1 rounded-lg border font-black uppercase tracking-widest ${notificationStyle(notification.type)}`}>
+                            {notification.type}
+                          </span>
+                          <span className="text-[10px] font-black text-theme-muted flex items-center gap-1.5 uppercase tracking-tighter opacity-40">
+                            <Clock size={12} />
+                            {formatDateTime(notification.date_creation)}
+                          </span>
+                        </div>
+                        <p className={`text-base mt-3 leading-relaxed tracking-tight ${notification.est_lu ? 'text-theme-muted font-medium' : 'text-theme-main font-bold'}`}>
+                          {notification.message}
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="flex items-start gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {!notification.est_lu && (
+                        <button
+                          onClick={() => markRead(notification)}
+                          disabled={actionLoading === notification.id}
+                          className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                          title="Marquer comme lu"
+                        >
+                          <CheckCheck size={18} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => removeNotification(notification.id)}
+                        disabled={actionLoading === notification.id}
+                        className="h-10 w-10 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                        title="Supprimer"
+                      >
+                        {actionLoading === notification.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </GlassCard>

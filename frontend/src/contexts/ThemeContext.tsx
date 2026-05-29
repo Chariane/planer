@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 
 interface ThemeContextType {
@@ -14,7 +14,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return saved === 'true' || (saved === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     localStorage.setItem('darkMode', String(isDarkMode));
     if (isDarkMode) {
       document.documentElement.classList.add('dark');

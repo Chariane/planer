@@ -1,8 +1,12 @@
 import { motion, useInView, easeOut } from 'framer-motion';
 import { useRef, useState, useEffect } from 'react';
-import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X, ChevronDown } from 'lucide-react';
+import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X, ChevronDown, Hash } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { Sun, Moon } from 'lucide-react';
+import KhcLogo from '../components/ui/KhcLogo';
+import { GlassCard } from '../components/ui/GlassCard';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 60, scale: 0.9 },
@@ -56,52 +60,61 @@ export default function LandingPage() {
     navigate('/dashboard');
   };
 
+  const { isDarkMode, toggleDarkMode } = useTheme();
+
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
+    <div className="min-h-screen bg-theme-page text-theme-main overflow-x-hidden selection:bg-secondary/30">
+      {/* Background Decorative Gradient */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-secondary/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px]" />
+      </div>
       {/* Header fixe avec menu responsive */}
-      <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled 
-          ? 'bg-white shadow-lg border-b border-gray-200' 
-          : 'bg-white/30 backdrop-blur-sm border-b border-gray-100'
-      }`}>
+      <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
+        ? 'bg-theme-surface/80 backdrop-blur-xl border-b border-theme-border-subtle shadow-theme-lg'
+        : 'bg-transparent border-b border-transparent'
+        }`}>
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <motion.div
-              initial={{ rotate: -10, scale: 0.9 }}
-              animate={{ rotate: 0, scale: 1 }}
-              transition={{ duration: 0.5, type: "spring" }}
-              className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white"
-            >KP</motion.div>
-            <span className="text-xl font-bold text-gray-800">K‑Planner</span>
+          <div className="flex items-center gap-3">
+            <KhcLogo size={32} />
+            <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planner</span>
           </div>
 
           {/* Menu desktop */}
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-gray-600 hover:text-secondary transition">Fonctionnalités</a>
-            <a href="#demo" className="text-gray-600 hover:text-secondary transition">Démo</a>
-            <a href="#how-it-works" className="text-gray-600 hover:text-secondary transition">Guide</a>
+          <nav className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Fonctionnalités</a>
+            <a href="#demo" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Démo</a>
+            <a href="#how-it-works" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Guide</a>
+
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="p-2.5 rounded-xl bg-theme-surface/50 border border-theme-border-subtle text-theme-muted hover:text-secondary hover:border-secondary/30 transition-all shadow-theme-sm"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
 
             {user ? (
               <div className="relative">
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-theme-surface/50 border border-theme-border-subtle text-theme-main hover:border-secondary/30 transition-all font-bold text-sm"
                 >
                   <span>{user.username || 'Mon compte'}</span>
                   <ChevronDown className="h-4 w-4" />
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                  <div className="absolute right-0 mt-2 w-48 bg-theme-surface/90 backdrop-blur-xl rounded-2xl shadow-theme-lg border border-theme-border-subtle p-2 z-20">
                     <button
                       onClick={handleDashboard}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-theme-main hover:bg-theme-surface-hover hover:text-secondary rounded-xl transition-colors"
                     >
                       Tableau de bord
                     </button>
                     <button
                       onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"
                     >
                       Déconnexion
                     </button>
@@ -109,7 +122,7 @@ export default function LandingPage() {
                 )}
               </div>
             ) : (
-              <Link to="/login" className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition">
+              <Link to="/login" className="px-5 py-2.5 rounded-xl bg-primary text-white font-black uppercase tracking-widest text-[10px] hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
                 Se connecter
               </Link>
             )}
@@ -140,12 +153,20 @@ export default function LandingPage() {
                 <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Guide</a>
                 {user ? (
                   <>
-                    <button onClick={() => { handleDashboard(); setIsMenuOpen(false); }} className="text-left text-gray-700 hover:text-secondary">Tableau de bord</button>
-                    <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="text-left text-red-600 hover:text-red-700">Déconnexion</button>
+                    <button onClick={() => { handleDashboard(); setIsMenuOpen(false); }} className="text-left py-2 px-4 rounded-xl hover:bg-theme-surface-hover text-theme-main font-bold">Tableau de bord</button>
+                    <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="text-left py-2 px-4 rounded-xl hover:bg-red-500/10 text-red-500 font-bold">Déconnexion</button>
                   </>
                 ) : (
-                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="px-4 py-2 rounded-lg bg-primary text-white text-center hover:bg-[#1d3a52]">Se connecter</Link>
+                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="px-4 py-3 rounded-xl bg-primary text-white text-center font-black uppercase tracking-widest text-xs">Se connecter</Link>
                 )}
+
+                <button
+                  onClick={toggleDarkMode}
+                  className="mt-4 flex items-center justify-between px-4 py-3 rounded-xl bg-theme-surface border border-theme-border-subtle text-theme-main"
+                >
+                  <span className="font-bold text-sm">Mode Sombre</span>
+                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
               </nav>
             </div>
           </>
@@ -153,45 +174,72 @@ export default function LandingPage() {
       </header>
 
       {/* Hero section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-orange-50 py-24 md:py-32">
+      <section className="relative overflow-hidden py-32 md:py-48">
         <motion.div
           initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, type: "spring", stiffness: 100 }}
-          className="container mx-auto px-6 text-center"
+          className="container mx-auto px-6 text-center relative z-10"
         >
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            Gérez vos projets et votre équipe <br />
-            <span className="text-secondary inline-block hover:scale-105 transition-transform duration-300">en un seul endroit</span>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="inline-block px-4 py-1.5 mb-8 rounded-full bg-secondary/10 border border-secondary/20 text-secondary text-[10px] font-black uppercase tracking-[0.3em] backdrop-blur-sm"
+          >
+            Nouvelle Version 2.0
+          </motion.div>
+          <h1 className="text-5xl md:text-8xl font-black text-theme-main mb-8 leading-[1.1] tracking-tighter uppercase">
+            Gérer l'avenir <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-orange-400">de vos projets</span>
           </h1>
-          <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
-            K‑Planner combine gestion de tâches, suivi du temps, absences et rapports dans une interface moderne et intuitive.
+          <p className="text-xl text-theme-muted mb-12 max-w-2xl mx-auto font-medium leading-relaxed opacity-80">
+            K‑Planner combine gestion de tâches, suivi du temps, absences et rapports dans une interface futuriste inspirée du néomorphisme.
           </p>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400 }}>
-            <Link to="/dashboard" className="inline-flex items-center px-6 py-3 rounded-lg bg-secondary text-white font-medium hover:bg-[#e05a00] transition shadow-lg hover:shadow-xl">
-              Essayer gratuitement <ArrowRight className="ml-2 h-5 w-5" />
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/dashboard" className="inline-flex items-center px-10 py-5 rounded-2xl bg-secondary text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-2xl shadow-secondary/30 group">
+              Commencer l'aventure <ArrowRight className="ml-3 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </motion.div>
         </motion.div>
-        <motion.div className="absolute -top-20 -right-20 w-64 h-64 bg-secondary/20 rounded-full blur-3xl" animate={{ scale: [1,1.2,1], rotate:[0,90,0] }} transition={{ duration:20, repeat:Infinity, ease:"linear" }} />
-        <motion.div className="absolute -bottom-20 -left-20 w-80 h-80 bg-primary/20 rounded-full blur-3xl" animate={{ scale:[1,1.3,1], rotate:[0,-90,0] }} transition={{ duration:25, repeat:Infinity, ease:"linear" }} />
+
+        {/* Animated Orbs */}
+        <div className="absolute inset-0 -z-10 bg-theme-page opacity-30">
+          <motion.div
+            className="absolute top-20 right-[10%] w-96 h-96 bg-secondary/20 rounded-full blur-[120px]"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.5, 0.3],
+              x: [0, 50, 0]
+            }}
+            transition={{ duration: 10, repeat: Infinity }}
+          />
+          <motion.div
+            className="absolute bottom-20 left-[10%] w-[500px] h-[500px] bg-primary/20 rounded-full blur-[150px]"
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.2, 0.4, 0.2],
+              y: [0, -50, 0]
+            }}
+            transition={{ duration: 12, repeat: Infinity }}
+          />
+        </div>
       </section>
 
       {/* Features section */}
-      <section id="features" ref={featuresRef} className="py-20 bg-gray-50">
+      <section id="features" ref={featuresRef} className="py-32 relative">
         <div className="container mx-auto px-6">
-          <motion.div variants={fadeInUp} initial="hidden" animate={isFeaturesInView ? "visible" : "hidden"} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Tout ce dont vous avez besoin</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Une plateforme complète pour piloter vos projets et votre équipe.</p>
+          <motion.div variants={fadeInUp} initial="hidden" animate={isFeaturesInView ? "visible" : "hidden"} className="text-center mb-24">
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Tout ce dont vous avez besoin</h2>
+            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Une plateforme complète pour piloter vos projets et votre équipe.</p>
           </motion.div>
-          <motion.div variants={staggerContainer} initial="hidden" animate={isFeaturesInView ? "visible" : "hidden"} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <motion.div variants={staggerContainer} initial="hidden" animate={isFeaturesInView ? "visible" : "hidden"} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {features.map((feature, idx) => (
-              <motion.div key={idx} variants={fadeInUp} whileHover={{ y: -5 }} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer">
-                <motion.div className="h-12 w-12 rounded-lg bg-secondary/10 flex items-center justify-center mb-4" whileHover={{ rotate:10, scale:1.1 }} transition={{ type:"spring", stiffness:400 }}>
-                  <feature.icon className="h-6 w-6 text-secondary" />
+              <motion.div key={idx} variants={fadeInUp} whileHover={{ y: -10 }} className="group bg-theme-surface/40 backdrop-blur-md p-10 rounded-[2.5rem] border border-theme-border-subtle hover:border-secondary/30 hover:bg-theme-surface/60 transition-all duration-500 shadow-theme-sm hover:shadow-theme-lg">
+                <motion.div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20 flex items-center justify-center mb-8 group-hover:rotate-12 group-hover:scale-110 transition-all duration-500 shadow-inner" transition={{ type: "spring", stiffness: 400 }}>
+                  <feature.icon className="h-8 w-8 text-secondary" />
                 </motion.div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">{feature.title}</h3>
-                <p className="text-gray-500">{feature.description}</p>
+                <h3 className="text-2xl font-black text-theme-main mb-4 uppercase tracking-tight">{feature.title}</h3>
+                <p className="text-theme-muted leading-relaxed font-medium opacity-80">{feature.description}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -199,44 +247,58 @@ export default function LandingPage() {
       </section>
 
       {/* Demo section */}
-      <section id="demo" ref={demoRef} className="py-20 bg-white">
+      <section id="demo" ref={demoRef} className="py-32 bg-theme-surface/20">
         <div className="container mx-auto px-6">
-          <motion.div variants={fadeInUp} initial="hidden" animate={isDemoInView ? "visible" : "hidden"} className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Voir K‑Planner en action</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Découvrez comment notre plateforme transforme votre quotidien.</p>
+          <motion.div variants={fadeInUp} initial="hidden" animate={isDemoInView ? "visible" : "hidden"} className="text-center mb-20">
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Voir K‑Planner en action</h2>
+            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Découvrez comment notre plateforme transforme votre quotidien.</p>
           </motion.div>
-          <motion.div initial={{ opacity:0, scale:0.8 }} animate={isDemoInView ? { opacity:1, scale:1 } : {}} transition={{ duration:0.8, type:"spring", delay:0.2 }} className="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl border border-gray-200 bg-gray-100">
-            <div className="aspect-video bg-gradient-to-br from-primary to-[#1d3a52] flex items-center justify-center relative group cursor-pointer">
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={isDemoInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, type: "spring", delay: 0.2 }} className="relative max-w-5xl mx-auto rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.3)] border border-theme-border-subtle bg-theme-surface p-4">
+            <div className="aspect-video bg-gradient-to-br from-primary to-[#0f172a] rounded-[2.5rem] overflow-hidden flex items-center justify-center relative group cursor-pointer border border-theme-border-subtle/50">
+              <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <motion.div whileHover={{ scale:1.1 }} whileTap={{ scale:0.9 }} className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center shadow-lg">
-                  <Play className="h-8 w-8 text-white ml-1" />
+                <motion.div
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  whileTap={{ scale: 0.9 }}
+                  className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center shadow-2xl shadow-secondary/50 border-4 border-white/20"
+                >
+                  <Play className="h-10 w-10 text-white ml-1" />
                 </motion.div>
               </div>
-              <motion.div className="absolute top-4 left-4 w-32 h-20 bg-white/20 rounded-lg backdrop-blur-sm" animate={{ y:[0,-10,0], rotate:[0,2,0] }} transition={{ duration:3, repeat:Infinity, ease:"easeInOut" }} />
-              <motion.div className="absolute bottom-4 right-4 w-40 h-24 bg-white/20 rounded-lg backdrop-blur-sm" animate={{ y:[0,10,0], rotate:[0,-2,0] }} transition={{ duration:4, repeat:Infinity, ease:"easeInOut" }} />
-              <motion.div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-32 bg-white/30 rounded-xl backdrop-blur-md" animate={{ scale:[1,1.05,1] }} transition={{ duration:2, repeat:Infinity, ease:"easeInOut" }} />
+
+              {/* Decorative elements in the demo box */}
+              <motion.div className="absolute top-10 left-10 w-48 h-32 bg-white/5 rounded-3xl backdrop-blur-xl border border-white/10" animate={{ y: [0, -20, 0], rotate: [0, 2, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
+              <motion.div className="absolute bottom-10 right-10 w-64 h-40 bg-white/5 rounded-3xl backdrop-blur-xl border border-white/10" animate={{ y: [0, 20, 0], rotate: [0, -2, 0] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[70%] border border-white/5 rounded-[2rem] pointer-events-none" />
             </div>
-            <div className="p-4 text-center text-gray-500 text-sm">Aperçu interactif – Cliquez pour lancer la démo (simulation)</div>
+            <div className="p-4 text-center text-theme-muted text-xs font-bold uppercase tracking-widest opacity-40">Démo Interactive (Simulation)</div>
           </motion.div>
-          <p className="text-center text-gray-500 mt-4">Une vraie vidéo de démonstration sera bientôt disponible.</p>
+          <p className="text-center text-theme-muted mt-8 font-medium italic opacity-40">Une vraie vidéo de démonstration sera bientôt disponible.</p>
         </div>
       </section>
 
       {/* How it works section */}
-      <section id="how-it-works" ref={stepsRef} className="py-20 bg-gray-50">
+      <section id="how-it-works" ref={stepsRef} className="py-32 relative">
         <div className="container mx-auto px-6">
-          <motion.div variants={fadeInUp} initial="hidden" animate={isStepsInView ? "visible" : "hidden"} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Comment ça marche ?</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Trois étapes simples pour booster votre productivité.</p>
+          <motion.div variants={fadeInUp} initial="hidden" animate={isStepsInView ? "visible" : "hidden"} className="text-center mb-24">
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Comment ça marche ?</h2>
+            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Trois étapes simples pour booster votre productivité.</p>
           </motion.div>
-          <motion.div variants={staggerContainer} initial="hidden" animate={isStepsInView ? "visible" : "hidden"} className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          <motion.div variants={staggerContainer} initial="hidden" animate={isStepsInView ? "visible" : "hidden"} className="grid grid-cols-1 md:grid-cols-3 gap-16">
             {steps.map((step, idx) => (
-              <motion.div key={idx} variants={fadeInUp} whileHover={{ y: -10 }} className="text-center bg-white p-6 rounded-xl shadow-md">
-                <motion.div className="w-16 h-16 mx-auto rounded-full bg-primary text-white flex items-center justify-center text-2xl font-bold mb-4" whileHover={{ rotate:360, scale:1.2 }} transition={{ duration:0.5, type:"spring" }}>
-                  {idx + 1}
-                </motion.div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">{step.title}</h3>
-                <p className="text-gray-500">{step.description}</p>
+              <motion.div key={idx} variants={fadeInUp} whileHover={{ y: -10 }} className="text-center group">
+                <div className="relative mb-8">
+                  <motion.div
+                    className="w-24 h-24 mx-auto rounded-[2rem] bg-theme-surface border border-theme-border-subtle text-secondary flex items-center justify-center text-3xl font-black shadow-theme-md group-hover:bg-secondary group-hover:text-white group-hover:rotate-[360deg] transition-all duration-700"
+                  >
+                    {idx + 1}
+                  </motion.div>
+                  {idx < steps.length - 1 && (
+                    <div className="hidden md:block absolute top-1/2 left-[calc(50%+4rem)] w-[calc(100%-8rem)] h-px bg-gradient-to-r from-theme-border-subtle to-transparent" />
+                  )}
+                </div>
+                <h3 className="text-2xl font-black text-theme-main mb-4 uppercase tracking-tight">{step.title}</h3>
+                <p className="text-theme-muted font-medium opacity-70 leading-relaxed">{step.description}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -244,91 +306,85 @@ export default function LandingPage() {
       </section>
 
       {/* Call to Action */}
-      <section className="py-20 bg-primary">
-        <div className="container mx-auto px-6 text-center">
-          <motion.h2 initial={{ opacity:0, y:30 }} whileInView={{ opacity:1, y:0 }} transition={{ duration:0.6, type:"spring" }} viewport={{ once:true }} className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Prêt à transformer votre gestion de projet ?
-          </motion.h2>
-          <motion.p initial={{ opacity:0 }} whileInView={{ opacity:1 }} transition={{ delay:0.2 }} viewport={{ once:true }} className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Rejoignez K‑Planner dès aujourd'hui et gagnez en efficacité.
-          </motion.p>
-          <motion.div whileHover={{ scale:1.05 }} whileTap={{ scale:0.95 }}>
-            <Link to="/dashboard" className="inline-flex items-center px-8 py-3 rounded-lg bg-secondary text-white font-medium hover:bg-[#e05a00] transition text-lg shadow-lg hover:shadow-xl">
-              Commencer gratuitement <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-          </motion.div>
+      <section className="py-32">
+        <div className="container mx-auto px-6">
+          <GlassCard className="p-16 relative overflow-hidden bg-gradient-to-br from-primary to-[#0f172a] border-none text-center rounded-[3rem]">
+            {/* Decorative background for CTA */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-[100px] pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] pointer-events-none" />
+
+            <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }} className="text-4xl md:text-7xl font-black text-white mb-8 tracking-tighter uppercase leading-[1.1]">
+              Prêt à transformer <br /> votre gestion ?
+            </motion.h2>
+            <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ delay: 0.2 }} viewport={{ once: true }} className="text-xl text-blue-100 mb-12 max-w-2xl mx-auto font-medium opacity-80 leading-relaxed">
+              Rejoignez plus de 500 entreprises qui utilisent K‑Planner pour piloter leurs projets stratégiques au quotidien.
+            </motion.p>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Link to="/dashboard" className="inline-flex items-center px-12 py-6 rounded-2xl bg-secondary text-white font-black uppercase tracking-widest text-xs shadow-2xl shadow-secondary/40 hover:bg-orange-600 transition-all">
+                Démarrer gratuitement <ArrowRight className="ml-3 h-5 w-5" />
+              </Link>
+            </motion.div>
+          </GlassCard>
         </div>
       </section>
 
       {/* Footer enrichi */}
-      <footer className="bg-gray-900 text-gray-400">
-        <div className="container mx-auto px-6 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Colonne 1 : Logo et description */}
+      <footer className="bg-theme-surface border-t border-theme-border-subtle py-24">
+        <div className="container mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-white">KP</div>
-                <span className="text-xl font-bold text-white">K‑Planner</span>
+              <div className="flex items-center gap-3 mb-8">
+                <KhcLogo size={32} />
+                <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planner</span>
               </div>
-              <p className="text-sm text-gray-400">
-                La plateforme tout-en-un pour gérer vos projets, vos équipes, vos tâches et vos absences.
+              <p className="text-sm text-theme-muted font-medium leading-relaxed opacity-70">
+                La plateforme futuriste tout-en-un pour gérer vos projets, vos équipes, vos tâches et vos absences avec élégance.
               </p>
             </div>
 
-            {/* Colonne 2 : Liens rapides */}
             <div>
-              <h3 className="text-white font-semibold mb-4">Liens rapides</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-secondary transition">Fonctionnalités</a></li>
-                <li><a href="#demo" className="hover:text-secondary transition">Démo</a></li>
-                <li><a href="#how-it-works" className="hover:text-secondary transition">Comment ça marche</a></li>
-                <li><Link to="/dashboard" className="hover:text-secondary transition">Tableau de bord</Link></li>
+              <h3 className="text-[10px] font-black text-theme-main uppercase tracking-[0.3em] mb-8">Navigation</h3>
+              <ul className="space-y-4 text-xs font-bold uppercase tracking-widest text-theme-muted">
+                <li><a href="#features" className="hover:text-secondary transition-colors">Produit</a></li>
+                <li><a href="#demo" className="hover:text-secondary transition-colors">Démo Live</a></li>
+                <li><a href="#how-it-works" className="hover:text-secondary transition-colors">Documentation</a></li>
               </ul>
             </div>
 
-            {/* Colonne 3 : Ressources */}
             <div>
-              <h3 className="text-white font-semibold mb-4">Ressources</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-secondary transition">Centre d'aide</a></li>
-                <li><a href="#" className="hover:text-secondary transition">Blog</a></li>
-                <li><a href="#" className="hover:text-secondary transition">API</a></li>
-                <li><a href="#" className="hover:text-secondary transition">Statut</a></li>
+              <h3 className="text-[10px] font-black text-theme-main uppercase tracking-[0.3em] mb-8">Soutien</h3>
+              <ul className="space-y-4 text-xs font-bold uppercase tracking-widest text-theme-muted">
+                <li><a href="#" className="hover:text-secondary transition-colors">Centre d'aide</a></li>
+                <li><a href="#" className="hover:text-secondary transition-colors">Confidentialité</a></li>
+                <li><a href="#" className="hover:text-secondary transition-colors">CGU</a></li>
               </ul>
             </div>
 
-            {/* Colonne 4 : Newsletter et réseaux sociaux */}
             <div>
-              <h3 className="text-white font-semibold mb-4">Restez informé</h3>
-              <div className="flex mb-4">
+              <h3 className="text-[10px] font-black text-theme-main uppercase tracking-[0.3em] mb-8">Newsletter</h3>
+              <div className="flex mb-6 bg-theme-surface-hover border border-theme-border-subtle rounded-2xl overflow-hidden p-1">
                 <input
                   type="email"
-                  placeholder="Votre email"
-                  className="flex-1 px-3 py-2 text-sm rounded-l-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-secondary"
+                  placeholder="votre@email.com"
+                  className="flex-1 px-4 py-2.5 text-xs bg-transparent text-theme-main focus:outline-none placeholder:text-theme-muted/50"
                 />
-                <button className="px-3 py-2 bg-secondary text-white text-sm rounded-r-lg hover:bg-[#e05a00] transition">
-                  S'abonner
+                <button className="px-5 py-2.5 bg-secondary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-600 transition-all">
+                  OK
                 </button>
               </div>
               <div className="flex gap-4">
-                {/* Icônes des réseaux sociaux (inchangées) */}
-                <a href="#" className="text-gray-400 hover:text-secondary transition">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg>
-                </a>
-                <a href="#" className="text-gray-400 hover:text-secondary transition">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.937 4.937 0 004.604 3.417 9.868 9.868 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 0021.256-12.18c0-.21-.005-.42-.015-.63a9.935 9.935 0 002.31-2.4z"/></svg>
-                </a>
-                <a href="#" className="text-gray-400 hover:text-secondary transition">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.667.072 4.947.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.667-.014 4.947-.072 4.358-.2 6.78-2.618 6.98-6.98.058-1.28.072-1.688.072-4.947 0-3.259-.014-3.667-.072-4.947-.2-4.358-2.618-6.78-6.98-6.98-1.28-.059-1.688-.073-4.947-.073zM12 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                </a>
-                <a href="#" className="text-gray-400 hover:text-secondary transition">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-                </a>
+                {[1, 2, 3, 4].map(i => (
+                  <a key={i} href="#" className="h-10 w-10 rounded-xl bg-theme-surface-hover border border-theme-border-subtle flex items-center justify-center text-theme-muted hover:text-secondary hover:border-secondary/30 transition-all">
+                    <Hash size={18} />
+                  </a>
+                ))}
               </div>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-6 text-center text-sm">
-            <p>&copy; 2025 K‑Planner. Tous droits réservés.</p>
+          <div className="mt-24 pt-8 border-t border-theme-border-subtle/50 text-center">
+            <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] opacity-40">
+              &copy; 2025 K‑Planner. Design System Premium par Kapitals.
+            </p>
           </div>
         </div>
       </footer>

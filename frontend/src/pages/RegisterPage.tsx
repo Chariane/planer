@@ -1,10 +1,11 @@
 // frontend/src/pages/RegisterPage.tsx
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, Mail, Lock, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Mail, Lock, UserPlus, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
+import { GlassCard } from '../components/ui/GlassCard';
 
 export default function RegisterPage() {
   const { register, isLoading } = useAuth();
@@ -14,25 +15,19 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loadingInvitation, setLoadingInvitation] = useState(false);
-  
-  // Support des deux formats de paramètre
+
   const invitationToken = searchParams.get('invitation_token') || searchParams.get('invitation');
 
-  // Décoder le token JWT pour extraire l'email
   useEffect(() => {
     const decodeToken = async () => {
       if (!invitationToken) return;
-      
+
       setLoadingInvitation(true);
       try {
-        // Décoder le token JWT (partie payload)
         const base64Url = invitationToken.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const payload = JSON.parse(atob(base64));
-        
-        console.log('📦 Payload du token:', payload);
-        
-        // Extraire l'email du payload
+
         if (payload.email) {
           setForm(prev => ({ ...prev, email: payload.email }));
         }
@@ -42,7 +37,7 @@ export default function RegisterPage() {
         setLoadingInvitation(false);
       }
     };
-    
+
     decodeToken();
   }, [invitationToken]);
 
@@ -71,17 +66,9 @@ export default function RegisterPage() {
         password: form.password,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
       };
-      
-      console.log('📤 Envoi inscription avec invitation_token:', invitationToken ? 'Oui' : 'Non');
-      
-      // Inscription (le backend gère l'invitation automatiquement)
+
       await register(registerData);
-      
-      // Nettoyer le token stocké
       sessionStorage.removeItem('pendingInvitation');
-      
-      // Rediriger vers la page de vérification email
-      // L'utilisateur devra vérifier son email puis se connecter
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur d’inscription');
@@ -90,100 +77,116 @@ export default function RegisterPage() {
 
   if (loadingInvitation) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary mx-auto mb-4"></div>
-          <p className="text-gray-600">Vérification de l'invitation...</p>
-        </div>
-      </div>
+      <GlassCard className="p-12 text-center border-theme-border-subtle/30">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-secondary border-t-transparent mx-auto mb-6"></div>
+        <p className="text-theme-main font-bold uppercase tracking-widest text-[10px]">Vérification de l'invitation...</p>
+      </GlassCard>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-      <div className="text-center mb-8">
-        <div className="h-12 w-12 rounded-xl bg-secondary flex items-center justify-center font-bold text-white text-xl mx-auto mb-4">KP</div>
-        <h1 className="text-2xl font-bold text-gray-800">Inscription</h1>
-        <p className="text-gray-500 mt-1">Rejoignez K‑Planner</p>
-        {invitationToken && (
-          <div className="mt-3 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
-            🎉 Vous avez été invité(e) à rejoindre un espace de travail !
-            <p className="text-xs text-gray-500 mt-1">Votre email a été pré-rempli automatiquement.</p>
-          </div>
-        )}
-      </div>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nom d'utilisateur</label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input 
-              type="text" 
-              value={form.username} 
-              onChange={e => setForm({...form, username: e.target.value})} 
-              className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent" 
-              required 
-              minLength={3}
-              maxLength={30}
-              pattern="[A-Za-z0-9_.-]+"
-              title="3 à 30 caractères : lettres, chiffres, point, tiret ou underscore uniquement"
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-1">3 à 30 caractères, sans espace.</p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input 
-              type="email" 
-              value={form.email} 
-              onChange={e => setForm({...form, email: e.target.value})} 
-              className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent ${invitationToken ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
-              readOnly={!!invitationToken}
-              required 
-            />
-          </div>
+    <GlassCard className="p-10 w-full border-theme-border-subtle/30">
+      <div className="text-center mb-10">
+        <motion.div
+          initial={{ rotate: -10, opacity: 0 }}
+          animate={{ rotate: 0, opacity: 1 }}
+          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-2xl mx-auto mb-6 shadow-xl shadow-secondary/20"
+        >
+          KP
+        </motion.div>
+        <h1 className="text-3xl font-black text-theme-main tracking-tighter uppercase mb-2">Rejoindre</h1>
+        <p className="text-theme-muted text-sm font-medium opacity-60">Créez votre compte K‑Planner</p>
+
+        <AnimatePresence>
           {invitationToken && (
-            <p className="text-xs text-gray-400 mt-1">L'email est pré-rempli d'après votre invitation</p>
-          )}
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input 
-              type={showPassword ? 'text' : 'password'} 
-              value={form.password} 
-              onChange={e => setForm({...form, password: e.target.value})} 
-              className="w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent" 
-              required 
-              minLength={8}
-            />
-            <button 
-              type="button" 
-              onClick={() => setShowPassword(!showPassword)} 
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="mt-6 text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-2 justify-center"
             >
-              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              <ShieldCheck size={14} /> Invitation active reconnue
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-xl text-xs font-bold leading-relaxed">
+            {error}
+          </motion.div>
+        )}
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom d'utilisateur</label>
+          <div className="relative group">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-theme-muted group-focus-within:text-secondary transition-colors" />
+            <input
+              type="text"
+              value={form.username}
+              onChange={e => setForm({ ...form, username: e.target.value })}
+              className="w-full bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl pl-12 pr-4 py-4 text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+              placeholder="Ex: nadege_p"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Email</label>
+          <div className="relative group">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-theme-muted group-focus-within:text-secondary transition-colors" />
+            <input
+              type="email"
+              value={form.email}
+              onChange={e => setForm({ ...form, email: e.target.value })}
+              className={`w-full bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl pl-12 pr-4 py-4 text-theme-main outline-none font-bold transition-all ${invitationToken ? 'opacity-50 cursor-not-allowed' : 'focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20'}`}
+              readOnly={!!invitationToken}
+              placeholder="votre@email.com"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Mot de passe</label>
+          <div className="relative group">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-theme-muted group-focus-within:text-secondary transition-colors" />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={e => setForm({ ...form, password: e.target.value })}
+              className="w-full bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl pl-12 pr-12 py-4 text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+              placeholder="••••••••"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main transition-colors"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-1">Minimum 8 caractères</p>
         </div>
-        
-        <Button type="submit" loading={isLoading} className="w-full">
-          <UserPlus className="h-4 w-4 mr-2" /> S'inscrire
-        </Button>
+
+        <div className="pt-2">
+          <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl shadow-secondary/20 group">
+            <span className="flex items-center justify-center gap-2">
+              Créer mon compte <UserPlus size={16} className="group-hover:scale-110 transition-transform" />
+            </span>
+          </Button>
+        </div>
       </form>
-      
-      <p className="text-center text-sm text-gray-500 mt-6">
-        Déjà inscrit ? <Link to="/login" className="text-secondary font-medium">Se connecter</Link>
-      </p>
-    </motion.div>
+
+      <div className="mt-10 pt-8 border-t border-theme-border-subtle/30 text-center">
+        <p className="text-xs font-medium text-theme-muted">
+          Déjà inscrit ?{' '}
+          <Link to="/login" className="text-secondary font-black uppercase tracking-widest ml-1 hover:underline">
+            Se connecter
+          </Link>
+        </p>
+      </div>
+    </GlassCard>
   );
 }

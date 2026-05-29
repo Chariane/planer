@@ -21,11 +21,11 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className={cn('w-full rounded-2xl bg-white shadow-xl overflow-hidden', sizes[size])}
+              className={cn('w-full rounded-2xl bg-theme-surface shadow-2xl overflow-hidden border border-theme-border-subtle transition-all duration-300', sizes[size])}
             >
-              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-                <button onClick={onClose} className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-5 w-5" /></button>
+              <div className="flex items-center justify-between border-b border-theme-border-subtle px-6 py-4">
+                <h3 className="text-lg font-bold text-theme-main tracking-tight">{title}</h3>
+                <button onClick={onClose} className="rounded-full p-1.5 text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-colors"><X className="h-5 w-5" /></button>
               </div>
               <div className="p-6">{children}</div>
             </motion.div>

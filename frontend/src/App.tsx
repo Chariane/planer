@@ -18,7 +18,6 @@ import AbsencesPage from './pages/AbsencesPage';
 import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
-import WorkspaceDashboard from './pages/workspaces/WorkspaceDashboard';
 import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
@@ -50,7 +49,6 @@ function App() {
               <Route path="/workspace/:workspaceId/list/:listId" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
               <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
 
-              <Route path="/workspaces" element={<WorkspaceDashboard />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/users" element={<UsersPage />} />

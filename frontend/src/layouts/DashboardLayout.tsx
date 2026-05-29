@@ -16,7 +16,7 @@ export default function DashboardLayout() {
   const toggleSidebar = () => setIsCompact(!isCompact);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-theme-page transition-colors duration-200">
       {/* Sidebar desktop */}
       <div
         className="fixed inset-y-0 left-0 z-20 hidden lg:flex transition-all duration-300"

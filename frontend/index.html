@@ -1,10 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('darkMode');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'true' || (savedTheme === null && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch {
+      }
+    </script>
+    <title>K-Planner</title>
   </head>
   <body>
     <div id="root"></div>

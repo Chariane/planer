@@ -5,10 +5,12 @@ import {
   FolderKanban, CheckSquare, Users,
   ArrowRight, TrendingUp, Zap,
   Star, Briefcase, PlusCircle, Bell, ChevronRight,
-  Activity
+  Activity, Clock, LayoutGrid
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useApp } from '../contexts/AppContext';
 import { GlassCard } from '../components/ui/GlassCard';
+import { Button } from '../components/ui/Button';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
 export default function DashboardPage() {
@@ -31,7 +33,7 @@ export default function DashboardPage() {
 
   const loadDashboardStats = async () => {
     try {
-      // Simulation de données dynamiques (à adapter avec vos vrais endpoints)
+      // Simulation de données dynamiques
       const totalTasks = 42;
       const pendingTasks = 15;
       const completedTasks = 27;
@@ -43,9 +45,9 @@ export default function DashboardPage() {
         completedTasks,
         activeMembers,
         recentActivities: [
-          { id: 1, user: "Thomas D.", action: "a créé", target: "Design System", time: "2h", icon: "zap" },
-          { id: 2, user: "Alice M.", action: "a terminé", target: "API Integration", time: "5h", icon: "check" },
-          { id: 3, user: "Lucas B.", action: "a rejoint", target: "K-Planner", time: "1j", icon: "user" }
+          { id: 1, user: "Thomas D.", action: "a créé", target: "Design System", time: "2h", icon: "zap", color: "text-primary" },
+          { id: 2, user: "Alice M.", action: "a terminé", target: "API Integration", time: "5h", icon: "check", color: "text-emerald-500" },
+          { id: 3, user: "Lucas B.", action: "a rejoint", target: "K-Planner", time: "1j", icon: "user", color: "text-secondary" }
         ]
       });
     } catch (error) {
@@ -56,39 +58,39 @@ export default function DashboardPage() {
   };
 
   const handleWorkspaceCreated = () => {
-    loadWorkspaces(); // Recharger la liste des workspaces
+    loadWorkspaces();
   };
 
   const statCards = [
     {
       label: "Workspaces",
       value: workspaces.length,
-      icon: <Briefcase className="w-6 h-6" />,
-      color: "bg-blue-100 text-primary",
+      icon: <Briefcase size={24} />,
+      color: "bg-primary/10 text-primary",
       trend: "+12%",
       link: "/workspaces"
     },
     {
       label: "Espaces",
       value: workspaces.reduce((acc, ws) => acc + (ws.espaces?.length || 0), 0) + joinedEspaces.length,
-      icon: <FolderKanban className="w-6 h-6" />,
-      color: "bg-orange-100 text-secondary",
+      icon: <FolderKanban size={24} />,
+      color: "bg-secondary/10 text-secondary",
       trend: "+8%",
       link: "#"
     },
     {
       label: "Tâches totales",
       value: stats.totalTasks + joinedTaches.length,
-      icon: <CheckSquare className="w-6 h-6" />,
-      color: "bg-emerald-100 text-emerald-600",
+      icon: <CheckSquare size={24} />,
+      color: "bg-emerald-500/10 text-emerald-500",
       trend: "+23%",
       link: "#"
     },
     {
       label: "Membres actifs",
       value: stats.activeMembers,
-      icon: <Users className="w-6 h-6" />,
-      color: "bg-purple-100 text-purple-600",
+      icon: <Users size={24} />,
+      color: "bg-purple-500/10 text-purple-400",
       trend: "+5%",
       link: "#"
     }
@@ -96,129 +98,175 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div>
+      <div className="flex flex-col items-center justify-center h-full space-y-4">
+        <div className="h-12 w-12 rounded-2xl border-2 border-secondary/20 border-t-secondary animate-spin"></div>
+        <p className="text-xs font-black text-theme-muted uppercase tracking-widest opacity-60">Initialisation...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* En-tête avec bienvenue */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-            Tableau de bord
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Bienvenue ! Voici ce qui se passe aujourd'hui.
-          </p>
+    <div className="space-y-10 pb-16">
+      {/* Hero Header */}
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/10 shadow-lg shadow-secondary/5 transition-transform hover:scale-105">
+              <LayoutGrid size={24} />
+            </div>
+            <div>
+              <h1 className="text-4xl font-black text-theme-main tracking-tight uppercase leading-none">Tableau de bord</h1>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.6)]" />
+                <p className="text-xs font-bold text-theme-muted uppercase tracking-widest opacity-60">Vue d'ensemble de vos projets</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <button
+        <Button
           onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-xl hover:bg-secondary/90 transition-colors shadow-sm"
+          className="rounded-2xl px-8 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]"
         >
-          <PlusCircle className="w-5 h-5" />
+          <PlusCircle className="w-4 h-4 mr-2" />
           Nouveau workspace
-        </button>
+        </Button>
       </div>
 
-      {/* Cartes statistiques */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Stats Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card, index) => (
-          <Link key={index} to={card.link} className="block group">
-            <GlassCard className="p-5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">{card.label}</p>
-                  <p className="text-3xl font-bold text-gray-900">{card.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="w-3 h-3 text-emerald-500" />
-                    <span className="text-xs text-emerald-600">{card.trend}</span>
-                    <span className="text-xs text-gray-400">vs mois dernier</span>
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+          >
+            <Link to={card.link} className="block group">
+              <GlassCard className="p-6 transition-all duration-300 hover:border-secondary/30 hover:bg-theme-surface-hover shadow-theme-sm hover:shadow-theme-md relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-10 transition-opacity">
+                  <div className="scale-[4] rotate-12">{card.icon}</div>
+                </div>
+
+                <div className="flex items-start justify-between relative z-10">
+                  <div>
+                    <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mb-3">{card.label}</p>
+                    <p className="text-3xl font-black text-theme-main tracking-tighter">{card.value}</p>
+                    <div className="flex items-center gap-1.5 mt-4">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tight">{card.trend}</span>
+                      <span className="text-[10px] font-bold text-theme-muted opacity-40 uppercase tracking-tighter ml-1">vs mois dernier</span>
+                    </div>
+                  </div>
+                  <div className={`p-4 rounded-2xl shadow-inner border border-white/5 transition-transform group-hover:scale-110 ${card.color}`}>
+                    {card.icon}
                   </div>
                 </div>
-                <div className={`p-3 rounded-xl ${card.color}`}>
-                  {card.icon}
-                </div>
-              </div>
-            </GlassCard>
-          </Link>
+              </GlassCard>
+            </Link>
+          </motion.div>
         ))}
       </div>
 
-      {/* Grille principale */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Grid pour Activités et Workspaces */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Activités récentes */}
-        <div className="lg:col-span-2">
-          <GlassCard className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-gray-900">Activités récentes</h3>
-              </div>
-              <button className="text-sm text-secondary hover:underline flex items-center gap-1">
-                Voir tout <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              {stats.recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    {activity.icon === 'zap' && <Zap className="w-4 h-4 text-primary" />}
-                    {activity.icon === 'check' && <CheckSquare className="w-4 h-4 text-emerald-500" />}
-                    {activity.icon === 'user' && <Users className="w-4 h-4 text-secondary" />}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xl font-black text-theme-main tracking-tighter flex items-center gap-3 uppercase">
+              <Activity className="h-5 w-5 text-primary" />
+              Activités récentes
+            </h3>
+            <button className="text-[10px] font-black text-secondary hover:underline flex items-center gap-1.5 uppercase tracking-widest opacity-80 hover:opacity-100 transition-all">
+              Voir tout <ArrowRight size={14} />
+            </button>
+          </div>
+
+          <GlassCard className="p-2 border-white/5 bg-theme-surface/30">
+            <div className="space-y-1">
+              {stats.recentActivities.map((activity, idx) => (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + idx * 0.1 }}
+                  className="flex items-center gap-4 p-4 rounded-xl hover:bg-white/[0.03] transition-colors group cursor-pointer"
+                >
+                  <div className={`w-10 h-10 rounded-xl bg-theme-surface border border-white/5 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform ${activity.color}`}>
+                    {activity.icon === 'zap' && <Zap size={18} />}
+                    {activity.icon === 'check' && <CheckSquare size={18} />}
+                    {activity.icon === 'user' && <Users size={18} />}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-medium">{activity.user}</span>
-                      <span className="text-gray-500"> {activity.action} </span>
-                      <span className="font-medium text-primary">{activity.target}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-theme-main font-medium leading-tight">
+                      <span className="font-bold">{activity.user}</span>
+                      <span className="text-theme-muted opacity-60"> {activity.action} </span>
+                      <span className="font-bold text-primary group-hover:text-secondary transition-colors">{activity.target}</span>
                     </p>
+                    <div className="flex items-center gap-2 mt-1 px-0.5">
+                      <Clock size={10} className="text-theme-muted opacity-30" />
+                      <span className="text-[10px] font-black text-theme-muted opacity-30 uppercase tracking-tighter">il y a {activity.time}</span>
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-400">il y a {activity.time}</span>
-                </div>
+                </motion.div>
               ))}
             </div>
           </GlassCard>
         </div>
 
-        {/* Workspaces récents + Actions rapides */}
-        <div className="space-y-6">
-          <GlassCard className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-500" />
-                <h3 className="font-semibold text-gray-900">Workspaces récents</h3>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {workspaces.slice(0, 3).map((ws) => (
-                <Link key={ws.id} to={`/workspace/${ws.id}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors group">
-                  <div>
-                    <p className="font-medium text-gray-800 group-hover:text-primary transition-colors">{ws.nom}</p>
-                    <p className="text-xs text-gray-400">{ws.membres?.length || 1} membres</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-secondary transition-colors" />
-                </Link>
-              ))}
-            </div>
-            <Link to="/workspaces" className="mt-4 text-sm text-secondary hover:underline inline-flex items-center gap-1">
-              Voir tous les workspaces <ArrowRight className="w-3 h-3" />
-            </Link>
-          </GlassCard>
+        {/* Workspaces récents + Notifications */}
+        <div className="space-y-10">
+          <div className="space-y-6">
+            <h3 className="text-xl font-black text-theme-main tracking-tighter flex items-center gap-3 uppercase px-1">
+              <Star className="h-5 w-5 text-yellow-500" />
+              Favoris
+            </h3>
+            <GlassCard className="p-4 border-white/5 space-y-2">
+              {workspaces.slice(0, 4).length > 0 ? (
+                workspaces.slice(0, 4).map((ws) => (
+                  <Link
+                    key={ws.id}
+                    to={`/workspace/${ws.id}`}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-all group border border-transparent hover:border-white/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black text-xs border border-primary/20 group-hover:rotate-6 transition-transform">
+                        {ws.nom.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-theme-main group-hover:text-secondary transition-colors">{ws.nom}</p>
+                        <p className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-widest">{ws.membres?.length || 1} membres</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-theme-muted opacity-0 group-hover:opacity-60 group-hover:translate-x-1 transition-all" />
+                  </Link>
+                ))
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-xs font-black text-theme-muted uppercase tracking-widest opacity-20 italic">Aucun favori</p>
+                </div>
+              )}
+              <Link to="/workspaces" className="mt-4 px-3 text-[10px] font-black text-secondary hover:underline inline-flex items-center gap-1.5 uppercase tracking-widest opacity-80 hover:opacity-100 transition-all">
+                Voir tout <ArrowRight size={12} />
+              </Link>
+            </GlassCard>
+          </div>
 
-          <GlassCard className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Bell className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-gray-900">Notifications</h3>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 text-center py-4">
-                Aucune notification pour le moment
-              </p>
-            </div>
-          </GlassCard>
+          <div className="space-y-6">
+            <h3 className="text-xl font-black text-theme-main tracking-tighter flex items-center gap-3 uppercase px-1">
+              <Bell className="h-5 w-5 text-primary" />
+              Notifs
+            </h3>
+            <GlassCard className="p-8 flex flex-col items-center justify-center text-center space-y-4 border-white/5 bg-theme-surface/20 min-h-[180px]">
+              <div className="p-4 rounded-full bg-theme-surface/50 border border-white/5 shadow-inner">
+                <Bell size={24} className="text-theme-muted opacity-20" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest opacity-40 leading-relaxed">
+                  Aucun message<br />pour le moment
+                </p>
+              </div>
+            </GlassCard>
+          </div>
         </div>
       </div>
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Mail, Shield, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
+import { GlassCard } from '../components/ui/GlassCard';
 
 export default function VerifyEmailPage() {
   const navigate = useNavigate();
@@ -57,48 +58,72 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8">
-      <div className="text-center mb-8">
-        <div className="h-12 w-12 rounded-xl bg-secondary flex items-center justify-center font-bold text-white text-xl mx-auto mb-4">KP</div>
-        <h1 className="text-2xl font-bold text-gray-800">Vérifiez votre email</h1>
-        <p className="text-gray-500 mt-1">Nous avons envoyé un code à <strong>{email}</strong></p>
+    <GlassCard className="p-10 w-full border-theme-border-subtle/30">
+      <div className="text-center mb-10">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-2xl mx-auto mb-6 shadow-xl shadow-secondary/20"
+        >
+          KP
+        </motion.div>
+        <h1 className="text-3xl font-black text-theme-main tracking-tighter uppercase mb-2">Vérification</h1>
+        <p className="text-theme-muted text-sm font-medium opacity-60">
+          Nous avons envoyé un code à <br />
+          <strong className="text-theme-main opacity-100">{email}</strong>
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
-        {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm">{success}</div>}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <AnimatePresence mode="wait">
+          {error && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-xl text-xs font-bold leading-relaxed">
+              {error}
+            </motion.div>
+          )}
+          {success && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 p-4 rounded-xl text-xs font-bold leading-relaxed">
+              {success}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Code de vérification</label>
-          <div className="relative">
-            <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Code de vérification</label>
+          <div className="relative group">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-secondary transition-colors">
+              <Shield size={20} />
+            </div>
             <input
               type="text"
               placeholder="123456"
               value={code}
               onChange={e => setCode(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-secondary"
+              className="w-full pl-12 pr-4 py-4 bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 outline-none font-bold tracking-[0.5em] text-center transition-all"
               maxLength={6}
               required
             />
           </div>
         </div>
 
-        <Button type="submit" loading={isLoading} className="w-full">Vérifier</Button>
+        <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl shadow-secondary/20">
+          Vérifier l'adresse
+        </Button>
       </form>
 
-      <div className="mt-6 text-center">
-        <p className="text-sm text-gray-500">
-          Vous n'avez pas reçu le code ?{' '}
-          <button onClick={handleResend} disabled={resendLoading} className="text-secondary hover:underline">
+      <div className="mt-10 pt-8 border-t border-theme-border-subtle/30 text-center space-y-4">
+        <p className="text-xs font-medium text-theme-muted">
+          Pas reçu ?{' '}
+          <button onClick={handleResend} disabled={resendLoading} className="text-secondary font-black uppercase tracking-widest ml-1 hover:underline disabled:opacity-50">
             {resendLoading ? 'Envoi...' : 'Renvoyer'}
           </button>
         </p>
+        <div>
+          <Link to="/login" className="text-[10px] font-black text-theme-muted uppercase tracking-widest hover:text-theme-main transition-colors decoration-secondary underline-offset-4">
+            Retour à la connexion
+          </Link>
+        </div>
       </div>
-
-      <div className="mt-4 text-center">
-        <Link to="/login" className="text-sm text-gray-500 hover:text-gray-700">Retour à la connexion</Link>
-      </div>
-    </motion.div>
+    </GlassCard>
   );
 }

@@ -1,6 +1,6 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, ShieldCheck, X } from 'lucide-react';
+import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, ShieldCheck, X, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
@@ -11,6 +11,7 @@ import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { useNavigationStore } from '../../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
 import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 
 interface SpaceDashboardProps {
@@ -21,10 +22,10 @@ interface SpaceDashboardProps {
 const ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Administrateur'];
 
 const getRoleBadgeClass = (role: string) => {
-  if (role === 'Administrateur') return 'bg-orange-100 text-orange-700';
-  if (role === 'Créateur') return 'bg-purple-100 text-purple-700';
-  if (role === 'Invité') return 'bg-gray-100 text-gray-500';
-  return 'bg-blue-100 text-blue-700';
+  if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
+  if (role === 'Créateur') return 'bg-purple-500/10 text-purple-500 border border-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.1)]';
+  if (role === 'Invité') return 'bg-theme-surface-hover text-theme-muted border border-theme-border-subtle';
+  return 'bg-secondary/10 text-secondary border border-secondary/20 shadow-[0_0_8px_rgba(255,102,0,0.1)]';
 };
 
 const getRoleLabel = (role: string) => {
@@ -34,24 +35,33 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Composant Toast simple
+// Toast Premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-  
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
-        <span className="text-sm flex-1">{message}</span>
-        <button onClick={onClose} className="hover:opacity-70">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+        className="fixed bottom-6 right-6 z-[100]"
+      >
+        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl text-theme-main min-w-[320px] backdrop-blur-xl border border-theme-border-subtle/30 ${type === 'success' ? 'bg-emerald-500/90 shadow-emerald-500/20' : type === 'error' ? 'bg-red-500/90 shadow-red-500/20' : 'bg-secondary/90 shadow-secondary/20'
+          }`}>
+          <div className="p-2 rounded-xl bg-white/20 border border-white/10">
+            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </div>
+          <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-white/20 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
@@ -71,21 +81,18 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [inviteRole, setInviteRole] = useState('Invité');
   const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
-  
-  // État pour les notifications toast
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
+
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
 
-  // Récupérer le rôle dans l'espace
   const { isGuest: isEspaceGuest, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId, 'espace');
   const { joinedEspaces } = useNavigationStore();
-  
-  // Récupérer le rôle dans le workspace parent
+
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(spaceWorkspaceId || undefined);
-  
+
   const getDirectSpaceRole = (targetSpaceId: string): string | null => {
     return joinedEspaces.find(espace => espace.id === targetSpaceId)?.role || null;
   };
@@ -96,37 +103,24 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || (isEspaceGuest ? ROLES.GUEST : null);
   const isDirectSpaceAdmin = isEspaceAdmin || getDirectSpaceRole(spaceId) === ROLES.ADMIN;
 
-  // Un utilisateur peut inviter s'il est Créateur/Admin direct ou hérité de l'espace,
-  // ou Créateur/Admin du workspace parent.
   const canInviteMembers = effectiveSpaceRole === ROLES.ADMIN
     || effectiveSpaceRole === ROLES.CREATOR
     || isWorkspaceAdmin
     || isWorkspaceCreator;
   const canManageMemberRoles = isEspaceCreator || isWorkspaceCreator;
-  
-  // Rôles disponibles pour l'invitation selon le rôle
+
   const getAvailableRoles = () => {
     if (isWorkspaceCreator || isWorkspaceAdmin || effectiveSpaceRole === ROLES.CREATOR) {
       return ['Invité', 'Administrateur'];
     }
     if (effectiveSpaceRole === ROLES.ADMIN) {
-      if (isDirectSpaceAdmin) {
-        return ['Invité'];
-      }
+      if (isDirectSpaceAdmin) return ['Invité'];
       return ['Invité', 'Administrateur'];
     }
     return [];
   };
 
-  const availableRoles = useMemo(
-    () => getAvailableRoles(),
-    [
-      isWorkspaceCreator,
-      isWorkspaceAdmin,
-      effectiveSpaceRole,
-      isDirectSpaceAdmin,
-    ],
-  );
+  const availableRoles = useMemo(() => getAvailableRoles(), [isWorkspaceCreator, isWorkspaceAdmin, effectiveSpaceRole, isDirectSpaceAdmin]);
 
   useEffect(() => {
     if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
@@ -138,8 +132,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     setLoading(true);
     setInheritedSpaceRole(null);
     try {
-      // 1. Charger les infos de l'espace via la hiérarchie accessible.
-      // Cela évite d'appeler /get_espace sur des parents non accessibles.
       const navigationSpace = joinedEspaces.find(espace => espace.id === spaceId);
       const hierarchy = await espaceService.getHierarchy(spaceId).catch(() => []);
       const spaces = Array.isArray(hierarchy) ? hierarchy : [];
@@ -165,7 +157,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       }, null);
       setInheritedSpaceRole(resolvedInheritedRole);
 
-      // 2. Charger les membres pour tout utilisateur ayant accès en lecture à l'espace.
       let formattedMembers: Member[] = [];
       let membersCount = 0;
 
@@ -178,38 +169,23 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           role: m.role,
         }));
         membersCount = formattedMembers.length;
-      } catch (err: any) {
-        console.warn('Impossible de charger les membres:', err);
-        if (err.status === 403) {
-          console.log('Accès refusé pour voir les membres - affichage limité');
-        }
-      }
+      } catch { /* Suppress */ }
 
       setMembers(formattedMembers);
 
-      // 3. Charger les listes
       let listsCount = 0;
       try {
         const lists = await listeService.getByEspace(spaceId);
         listsCount = lists.length;
-      } catch {
-        console.log('Impossible de charger les listes');
-      }
+      } catch { /* Suppress */ }
 
-      // 4. Charger les sous-espaces
       let subSpacesCount = 0;
       try {
         const subSpaces = await espaceService.getSubSpaces(spaceId);
         subSpacesCount = subSpaces.length;
-      } catch {
-        subSpacesCount = 0;
-      }
+      } catch { /* Suppress */ }
 
-      setStats({
-        subSpacesCount,
-        listsCount,
-        membersCount: membersCount,
-      });
+      setStats({ subSpacesCount, listsCount, membersCount });
     } catch (err) {
       console.error('Erreur chargement espace:', err);
     } finally {
@@ -225,37 +201,26 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     if (!inviteEmail.trim()) return;
     try {
       await espaceService.inviteMember(spaceId, inviteEmail, inviteRole);
-      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
+      showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
       setIsInviteModalOpen(false);
       setInviteEmail('');
       await loadData();
       onMemberInvited?.();
     } catch (err: any) {
       const msg = err?.message || '';
-      if (msg.includes('refuse') || msg.includes('redondant')) {
-        showMessage('Cette personne a déjà un rôle parent qui couvre cet espace', 'error');
-      } else if (msg.includes('403')) {
-        showMessage('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cet espace.', 'error');
-      } else {
-        showMessage(msg || 'Erreur lors de l\'invitation', 'error');
-      }
+      showMessage(msg.includes('refuse') ? 'Membre déjà présent via parent' : (msg || "Erreur d'invitation"), 'error');
     }
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
     if (!canManageMemberRoles || member.role === ROLES.CREATOR || nextRole === member.role) return;
-
     setUpdatingMemberId(member.id);
     try {
       await espaceService.updateMemberRole(spaceId, member.id, nextRole);
-      setMembers(prevMembers =>
-        prevMembers.map(item =>
-          item.id === member.id ? { ...item, role: nextRole } : item,
-        ),
-      );
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
       showMessage(`Rôle de ${member.name} mis à jour`, 'success');
     } catch (err: any) {
-      showMessage(err?.message || "Impossible de modifier le rôle de ce membre", 'error');
+      showMessage(err?.message || "Impossible de modifier le rôle", 'error');
       await loadData();
     } finally {
       setUpdatingMemberId(null);
@@ -264,237 +229,232 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Chargement du tableau de bord...</div>
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-secondary/60" />
+        <p className="text-theme-muted font-black uppercase tracking-widest text-[10px] animate-pulse">Chargement de l'espace...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Toast Notifications */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-10"
+    >
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Message pour les invités */}
       {isEspaceGuest && !canInviteMembers && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
-            Vous pouvez consulter les informations mais ne pouvez pas inviter de nouveaux membres.
-          </p>
+        <div className="glass bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
+          <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+            <Info className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
+            <p className="text-xs text-theme-muted mt-1 opacity-60">Vous pouvez consulter les informations, mais les modifications sont restreintes.</p>
+          </div>
         </div>
       )}
 
       {/* En-tête */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">{spaceName}</h1>
-          <p className="text-gray-500 mt-1">Tableau de bord de l'espace</p>
-          {spaceDescription && (
-            <p className="text-sm text-gray-500 mt-3 max-w-3xl leading-relaxed">{spaceDescription}</p>
-          )}
-        </div>
-        {/* Bouton Inviter - visible pour Créateur/Admin workspace OU Créateur/Admin espace */}
-        {canInviteMembers && availableRoles.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setIsInviteModalOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Inviter un membre
-            </Button>
+      <div className="flex flex-wrap items-end justify-between gap-8 pb-4">
+        <div className="flex items-center gap-6">
+          <div className="p-5 bg-secondary/10 rounded-2xl shadow-xl shadow-secondary/5 border border-secondary/10 transition-transform hover:scale-105">
+            <FolderTree className="h-8 w-8 text-secondary" />
           </div>
+          <div>
+            <h1 className="text-4xl font-black text-theme-main tracking-tighter uppercase leading-none">{spaceName}</h1>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
+              <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] opacity-60">Dashboard Espace</p>
+            </div>
+          </div>
+        </div>
+        {canInviteMembers && availableRoles.length > 0 && (
+          <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+            <UserPlus size={18} className="mr-3" />
+            Inviter un membre
+          </Button>
         )}
       </div>
 
-      {/* Cartes de statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FolderTree className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Sous-espaces</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.subSpacesCount}</p>
-            </div>
-          </div>
+      {spaceDescription && (
+        <GlassCard className="p-6 border-l-4 border-l-secondary/40 bg-theme-surface/30">
+          <p className="text-sm text-theme-main leading-relaxed font-medium italic opacity-80">"{spaceDescription}"</p>
         </GlassCard>
-
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <ListTodo className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Listes / Projets</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.listsCount}</p>
-            </div>
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Users className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Membres</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.membersCount}</p>
-            </div>
-          </div>
-        </GlassCard>
-      </div>
-
-      {/* Liste des membres - visible pour tout utilisateur ayant accès en lecture */}
-      {members.length > 0 ? (
-        <div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Membres de l'espace
-            </h3>
-            {canManageMemberRoles && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Gestion des rôles
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {members.map(member => (
-              <GlassCard key={member.id} className="p-3 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-shadow">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-800">{member.name}</p>
-                  <p className="text-sm text-gray-500">{member.email}</p>
-                </div>
-                {canManageMemberRoles && member.role !== ROLES.CREATOR ? (
-                  <div className="flex items-center gap-2">
-                    {updatingMemberId === member.id && (
-                      <Loader2 className="h-4 w-4 animate-spin text-secondary" />
-                    )}
-                    <select
-                      value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : ROLES.GUEST}
-                      onChange={event => handleMemberRoleChange(member, event.target.value)}
-                      disabled={updatingMemberId === member.id}
-                      className="min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm outline-none transition focus:border-secondary focus:ring-2 focus:ring-secondary/20 disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {ROLE_MANAGEMENT_OPTIONS.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <span className={`text-xs px-2 py-1 rounded-full ${getRoleBadgeClass(member.role)}`}>
-                    {getRoleLabel(member.role)}
-                  </span>
-                )}
-              </GlassCard>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Membres de l'espace
-          </h3>
-          <GlassCard className="p-4">
-            <div className="text-center text-gray-400 py-4">
-              <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun membre pour le moment</p>
-              {canInviteMembers && <p className="text-sm mt-1">Invitez des membres pour collaborer sur cet espace</p>}
-            </div>
-          </GlassCard>
-        </div>
       )}
 
-      {/* Liste des sous-espaces */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <FolderTree className="h-5 w-5" />
-          Sous-espaces
-        </h3>
-        {stats.subSpacesCount > 0 ? (
-          <div className="text-sm text-gray-600">
-            Cet espace contient {stats.subSpacesCount} sous-espace(s)
+      {/* Statistiques */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {[
+          { label: 'Sous-espaces', value: stats.subSpacesCount, icon: FolderTree, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+          { label: 'Listes / Projets', value: stats.listsCount, icon: ListTodo, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+          { label: 'Membres', value: stats.membersCount, icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10' }
+        ].map((stat, i) => (
+          <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}>
+            <GlassCard className="p-8 group hover:border-secondary/30 transition-all cursor-default border-theme-border-subtle/30 bg-theme-surface/40">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] mb-3 opacity-60">{stat.label}</p>
+                  <p className="text-4xl font-black text-theme-main tracking-tighter group-hover:scale-105 transition-transform origin-left">{stat.value}</p>
+                </div>
+                <div className={`p-5 ${stat.bg} rounded-2xl group-hover:rotate-12 transition-all shadow-inner border border-theme-border-subtle/30`}>
+                  <stat.icon size={28} className={stat.color} />
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Main Grid Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 pb-16">
+        <div className="xl:col-span-2 space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase">
+              <Users className="h-6 w-6 text-secondary" />
+              Équipe de l'espace
+            </h3>
+            {canManageMemberRoles && (
+              <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
+                <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">Rangs & Privilèges</span>
+              </div>
+            )}
           </div>
-        ) : (
-          <GlassCard className="p-4">
-            <div className="text-center text-gray-400 py-4">
-              <FolderTree className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun sous-espace</p>
-              <p className="text-sm">Créez des sous-espaces pour mieux organiser votre travail</p>
+
+          {members.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {members.map((member, i) => (
+                <motion.div key={member.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
+                  <GlassCard className="p-5 flex items-center justify-between gap-4 group hover:bg-theme-surface-hover/30 transition-all border-theme-border-subtle/30">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-secondary/20 to-primary/20 border border-theme-border-subtle/20 flex items-center justify-center font-black text-secondary text-base group-hover:rotate-6 transition-transform shadow-inner">
+                        {member.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-theme-main truncate tracking-tight text-base group-hover:text-secondary transition-colors">{member.name}</p>
+                        <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
+                      </div>
+                    </div>
+                    {canManageMemberRoles && member.role !== ROLES.CREATOR ? (
+                      <div className="flex items-center gap-3">
+                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
+                        <select
+                          value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : ROLES.GUEST}
+                          onChange={e => handleMemberRoleChange(member, e.target.value)}
+                          disabled={updatingMemberId === member.id}
+                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-theme-surface-hover"
+                        >
+                          {ROLE_MANAGEMENT_OPTIONS.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
+                          {!ROLE_MANAGEMENT_OPTIONS.includes(member.role) && <option value={ROLES.GUEST} className="bg-theme-page text-theme-main">Invité</option>}
+                        </select>
+                      </div>
+                    ) : (
+                      <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                        {getRoleLabel(member.role)}
+                      </span>
+                    )}
+                  </GlassCard>
+                </motion.div>
+              ))}
             </div>
-          </GlassCard>
-        )}
-      </div>
+          ) : (
+            <GlassCard className="py-20 border-dashed border-theme-border-subtle/30 flex flex-col items-center justify-center bg-theme-surface/20">
+              <div className="p-6 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle/30">
+                <Users size={40} className="opacity-10 text-theme-muted" />
+              </div>
+              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">L'équipe est vide</p>
+            </GlassCard>
+          )}
+        </div>
 
-      {/* Activités récentes */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Activités récentes
-        </h3>
-        <GlassCard className="p-4">
-          <div className="text-center text-gray-400 py-8">
-            <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-            <p>Fonctionnalité à venir</p>
-            <p className="text-sm">Les activités récentes seront affichées ici</p>
+        <div className="space-y-10">
+          <div className="space-y-6">
+            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase px-2">
+              <Activity className="h-6 w-6 text-secondary" />
+              Pulse
+            </h3>
+            <GlassCard className="p-10 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px] border-theme-border-subtle/30 bg-theme-surface/30">
+              {stats.subSpacesCount > 0 ? (
+                <div className="flex flex-col items-center">
+                  <div className="p-5 rounded-3xl bg-blue-500/10 mb-6 border border-blue-500/20 shadow-xl shadow-blue-500/5 transition-transform hover:scale-105">
+                    <FolderTree size={36} className="text-blue-500" />
+                  </div>
+                  <p className="text-4xl font-black text-theme-main tracking-tighter">{stats.subSpacesCount}</p>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] mt-2 opacity-60">Architectures actives</p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-6 rounded-3xl bg-theme-surface border border-white/5 shadow-inner">
+                    <FolderTree size={40} className="text-theme-muted opacity-20" />
+                  </div>
+                  <div className="space-y-3">
+                    <p className="font-black text-theme-main uppercase tracking-widest text-xs">Structurer l'Espace</p>
+                    <p className="text-theme-muted text-[10px] font-medium leading-relaxed max-w-[180px] mx-auto opacity-40">
+                      Utilisez des sous-espaces pour organiser vos workflow plus finement.
+                    </p>
+                  </div>
+                </>
+              )}
+            </GlassCard>
           </div>
-        </GlassCard>
+
+          <div className="space-y-6">
+            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase px-2">
+              <Calendar className="h-6 w-6 text-secondary" />
+              Agenda
+            </h3>
+            <GlassCard className="p-8 border-theme-border-subtle/30 bg-theme-surface/20">
+              <div className="flex items-center gap-4">
+                <div className="h-3 w-3 rounded-full bg-secondary/40 animate-pulse shadow-[0_0_10px_rgba(255,102,0,0.3)]" />
+                <p className="text-[10px] text-theme-muted font-black uppercase tracking-widest opacity-30 italic">Analyse des flux en cours...</p>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
       </div>
 
-      {/* Modale d'invitation */}
-      {canInviteMembers && (
-        <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email du membre
-              </label>
+      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Expansion de l'Équipe" size="md">
+        <div className="space-y-8 py-4">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] ml-2 opacity-60">Email du Contact</label>
+            <div className="relative group">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-secondary transition-colors">
+                <Users size={20} />
+              </div>
               <input
                 type="email"
-                placeholder="exemple@email.com"
+                placeholder="collaborateur@kplanner.io"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl pl-14 pr-6 py-5 text-theme-main placeholder:text-theme-muted/20 focus:ring-4 focus:ring-secondary/10 focus:border-secondary/50 transition-all outline-none font-bold"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rôle
-              </label>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] ml-2 opacity-60">Privilèges Assignés</label>
+            <div className="relative group">
               <select
                 value={inviteRole}
                 onChange={e => setInviteRole(e.target.value)}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl px-6 py-5 text-theme-main focus:ring-4 focus:ring-secondary/10 outline-none transition-all font-black uppercase tracking-widest text-xs appearance-none cursor-pointer"
               >
-                {availableRoles.map(role => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
+                {availableRoles.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
               </select>
-              <p className="text-xs text-gray-400 mt-1">
-                💡 <strong>Invitant</strong> : accès en lecture seule<br />
-                💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
-              <Button onClick={handleInvite}>Inviter</Button>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-theme-muted opacity-40">
+                <ShieldCheck size={18} />
+              </div>
             </div>
           </div>
-        </Modal>
-      )}
-    </div>
+
+          <div className="flex gap-4 pt-4">
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100">Annuler</Button>
+            <Button onClick={handleInvite} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] shadow-xl shadow-secondary/20">Envoyer l'Invite</Button>
+          </div>
+        </div>
+      </Modal>
+    </motion.div>
   );
 }

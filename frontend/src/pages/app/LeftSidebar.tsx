@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare,
   FileText, Calendar, Plus, Edit, Trash2, ListTodo, Settings, UserPlus, X
@@ -18,24 +19,31 @@ import { getRoleLabel, getRoleRank, ROLES } from '../../lib/roleHierarchy';
 
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
-        <span className="text-sm flex-1">{message}</span>
-        <button onClick={onClose} className="hover:opacity-70">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+        className="fixed bottom-6 right-6 z-[100]"
+      >
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg text-white min-w-[280px] glass border border-white/10 ${type === 'success' ? 'bg-emerald-500/90' : type === 'error' ? 'bg-red-500/90' : 'bg-primary/90'
+          }`}>
+          <div className="p-1 rounded-full bg-white/20">
+            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </div>
+          <span className="text-sm font-bold flex-1 tracking-tight">{message}</span>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-white/20 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
+
+// Supporting icons for toast logic (needed by the refactor)
+import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 
 export default function LeftSidebar() {
   const { workspaceId, spaceId, listId } = useActiveResource();
@@ -694,81 +702,112 @@ export default function LeftSidebar() {
   };
 
   const renderTree = (items: any[], depth = 0) => {
-    if (!items?.length) return <div className="text-xs text-gray-400 px-2 py-1.5">Aucun espace</div>;
+    if (!items?.length) return (
+      <div className="text-[10px] text-theme-muted/40 px-4 py-2 uppercase font-bold tracking-widest italic">
+        Vide
+      </div>
+    );
+
     return items.map(item => {
       const canManageCurrentSpace = canManageSpace(item.id);
+      const isExpanded = openSpaces[item.id];
+      const hasChildren = item.sous_espaces?.length > 0 || (listsBySpace[item.id]?.length ?? 0) > 0;
+
       return (
-        <div key={item.id} style={{ marginLeft: depth * 12 }} className="mb-0.5">
+        <div key={item.id} className="mb-0.5">
           <div
-            className="flex items-center justify-between group"
+            className="flex items-center justify-between group px-1 rounded-xl transition-all duration-300"
             onContextMenu={(e) => handleContextMenu(e, item)}
           >
-            <Link
-              to={`/workspace/${workspaceId}/${item.id}`}
-              onClick={handleLinkClick}
-              className={`flex-1 flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-xs transition-all ${spaceId === item.id ? 'bg-secondary/10 text-secondary font-medium' : 'text-gray-700 hover:bg-gray-100'
-                }`}
-            >
-              <FolderTree className="h-3.5 w-3.5 text-primary" />
-              <span className="truncate">{item.nom}</span>
-            </Link>
-            <div className="flex items-center gap-1">
+            <div className="flex-1 flex items-center gap-1 min-w-0">
+              {/* Active Indicator */}
+              {spaceId === item.id && (
+                <motion.div layoutId="space-active-indicator" className="w-1 h-4 bg-primary rounded-full absolute left-0" />
+              )}
+
+              <Link
+                to={`/workspace/${workspaceId}/${item.id}`}
+                onClick={handleLinkClick}
+                className={`flex-1 flex items-center gap-2 py-1.5 px-2 rounded-xl text-xs transition-all relative overflow-hidden ${spaceId === item.id
+                  ? 'text-primary font-bold shadow-theme-sm'
+                  : 'text-theme-main hover:bg-theme-surface-hover'
+                  }`}
+              >
+                <div className={`shrink-0 p-1 rounded-lg transition-colors ${spaceId === item.id ? 'bg-primary shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]' : 'bg-theme-surface-hover group-hover:bg-theme-surface'}`}>
+                  <FolderTree className={`h-3 w-3 ${spaceId === item.id ? 'text-white' : 'text-theme-muted'}`} />
+                </div>
+                <span className="truncate tracking-tight">{item.nom}</span>
+
+                {/* Subtle active glow background */}
+                {spaceId === item.id && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent -z-10" />
+                )}
+              </Link>
+            </div>
+
+            <div className="flex items-center gap-0.5 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
               {canManageCurrentSpace && (
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateListModal(item.id, undefined); }}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
-                  title="Ajouter une liste"
+                  className="p-1 text-theme-muted hover:text-secondary hover:bg-theme-surface rounded-lg transition-all"
+                  title="Nouvelle liste"
                 >
                   <ListTodo className="h-3 w-3" />
                 </button>
               )}
-              {canManageCurrentSpace && (
+              {hasChildren && (
                 <button
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCreateSpaceModal(item.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600"
-                  title="Ajouter un sous-espace"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSpace(item.id); }}
+                  className={`p-1 rounded-lg hover:bg-theme-surface transition-all ${isExpanded ? 'text-primary' : 'text-theme-muted'}`}
                 >
-                  <Plus className="h-3 w-3" />
-                </button>
-              )}
-              {(item.sous_espaces?.length > 0 || (listsBySpace[item.id]?.length ?? 0) > 0) && (
-                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSpace(item.id); }} className="p-1 text-gray-400">
-                  {openSpaces[item.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                 </button>
               )}
             </div>
           </div>
-          {openSpaces[item.id] && item.sous_espaces?.length > 0 && (
-            <div className="ml-4 mt-1">{renderTree(item.sous_espaces, depth + 1)}</div>
-          )}
-          {openSpaces[item.id] && (
-            <div className="ml-4 mt-1 space-y-0.5">
-              {loadingLists[item.id] && (
-                <div className="text-xs text-gray-400 pl-5">Chargement...</div>
-              )}
-              {listsBySpace[item.id]?.map(list => (
-                <div
-                  key={list.id}
-                  onContextMenu={(e) => handleListContextMenu(e, list, item.id, false)}
-                  className="block py-1 pl-6 text-xs rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
-                >
-                  <Link
-                    to={`/workspace/${workspaceId}/${item.id}/${list.id}`}
-                    onClick={handleLinkClick}
-                    className="flex-1 flex items-center gap-1.5"
-                  >
-                    <ListTodo className="h-3.5 w-3.5 text-gray-500" />
-                    <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
-                      {list.nom}
-                    </span>
-                  </Link>
+
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="ml-5 mt-1 border-l border-theme-border-subtle/50 space-y-0.5">
+                  {item.sous_espaces?.length > 0 && renderTree(item.sous_espaces, depth + 1)}
+
+                  {loadingLists[item.id] ? (
+                    <div className="text-[10px] text-theme-muted/40 animate-pulse py-2 pl-4">Chargement...</div>
+                  ) : (
+                    listsBySpace[item.id]?.map(list => (
+                      <div key={list.id} className="relative group/list">
+                        {listId === list.id && (
+                          <motion.div layoutId="list-active-indicator" className="w-0.5 h-3 bg-secondary rounded-full absolute left-0 top-1/2 -translate-y-1/2" />
+                        )}
+                        <Link
+                          to={`/workspace/${workspaceId}/${item.id}/${list.id}`}
+                          onClick={handleLinkClick}
+                          onContextMenu={(e) => handleListContextMenu(e, list, item.id, false)}
+                          className={`flex items-center gap-2 py-1.5 pl-4 pr-2 text-[11px] rounded-lg transition-all relative overflow-hidden ${listId === list.id
+                            ? 'text-secondary font-bold bg-secondary/5'
+                            : 'text-theme-muted/70 hover:text-theme-main hover:bg-theme-surface-hover'
+                            }`}
+                        >
+                          <Hash className={`h-3 w-3 transition-colors ${listId === list.id ? 'text-secondary drop-shadow-[0_0_3px_rgba(var(--secondary-rgb),0.5)]' : 'text-theme-muted'}`} />
+                          <span className="truncate">{list.nom}</span>
+                          {listId === list.id && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-secondary/5 to-transparent -z-10" />
+                          )}
+                        </Link>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))}
-              {!loadingLists[item.id] && listsBySpace[item.id]?.length === 0 && (
-                <div className="text-xs text-gray-400 pl-6">Aucune liste</div>
-              )}
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       );
     });
@@ -781,57 +820,57 @@ export default function LeftSidebar() {
         {currentWorkspace && (
           <div
             onContextMenu={handleWorkspaceContextMenu}
-            className="mb-4 rounded-lg border border-gray-100 bg-white px-3 py-2"
+            className="mb-4 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-3 py-2 transition-colors"
             title={isWorkspaceCreator ? 'Clic droit pour modifier ou supprimer le workspace' : undefined}
           >
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-primary" />
-              <span className="truncate text-sm font-semibold text-gray-800">{currentWorkspace.nom}</span>
+              <span className="truncate text-sm font-semibold text-theme-main">{currentWorkspace.nom}</span>
             </div>
           </div>
         )}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
+        <div className="bg-secondary/5 border border-secondary/20 rounded-lg p-4">
+          <p className="text-sm text-theme-main">
             👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
           </p>
-          <p className="text-xs text-blue-600 mt-1">
+          <p className="text-xs text-theme-muted mt-1">
             Vous pouvez consulter le contenu mais ne pouvez pas créer, modifier ou supprimer des ressources.
           </p>
-          <p className="text-xs text-blue-600 mt-2">
+          <p className="text-xs text-secondary/70 mt-2 font-bold uppercase tracking-widest text-[10px]">
             Contactez un administrateur pour obtenir plus de droits.
           </p>
         </div>
         {/* Affichage des espaces en lecture seule */}
         {hasWorkspaceAccess && (
           <div className="mt-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Espaces</h3>
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">Espaces</h3>
             {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
           </div>
         )}
         {hasWorkspaceAccess && (
           <div className="mt-6">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Projets (workspace)</h3>
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">Projets (workspace)</h3>
             <div className="space-y-0.5">
-              {loadingWorkspaceLists && <div className="text-sm text-gray-400 pl-2">Chargement...</div>}
+              {loadingWorkspaceLists && <div className="text-[10px] text-theme-muted/40 animate-pulse pl-2">Chargement...</div>}
               {workspaceLists.map(list => (
                 <div
                   key={list.id}
-                  className="block py-1.5 pl-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                  className="block py-1.5 pl-2 text-sm rounded-lg text-theme-muted hover:bg-theme-surface-hover transition-colors flex items-center gap-2"
                 >
                   <Link
                     to={`/workspace/${workspaceId}/list/${list.id}`}
                     onClick={handleLinkClick}
                     className="flex-1 flex items-center gap-2"
                   >
-                    <ListTodo className="h-4 w-4 text-gray-500" />
-                    <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
+                    <ListTodo className="h-4 w-4 text-theme-muted" />
+                    <span className={listId === list.id ? 'text-secondary font-semibold' : ''}>
                       {list.nom}
                     </span>
                   </Link>
                 </div>
               ))}
               {!loadingWorkspaceLists && workspaceLists.length === 0 && (
-                <div className="text-sm text-gray-400 pl-2">Aucun projet</div>
+                <div className="text-[10px] text-theme-muted/30 pl-2 uppercase font-bold tracking-widest">Aucun projet</div>
               )}
             </div>
           </div>
@@ -854,82 +893,82 @@ export default function LeftSidebar() {
       {currentWorkspace && (
         <div
           onContextMenu={handleWorkspaceContextMenu}
-          className="mb-3 rounded-lg border border-gray-100 bg-white px-2 py-1.5"
+          className="mb-3 rounded-lg border border-theme-border-subtle bg-theme-surface px-2 py-1.5 shadow-sm transition-colors"
           title={isWorkspaceCreator ? 'Clic droit pour modifier ou supprimer le workspace' : undefined}
         >
           <div className="flex items-center gap-1.5">
             <Hash className="h-3.5 w-3.5 text-primary" />
-            <span className="truncate text-xs font-semibold text-gray-800">{currentWorkspace.nom}</span>
+            <span className="truncate text-[11px] font-bold text-theme-main tracking-tight">{currentWorkspace.nom}</span>
           </div>
         </div>
       )}
 
-      {/* Section Espaces et listes hiérarchiques */}
-      {hasWorkspaceAccess && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1.5 relative">
-            <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Espaces et listes</h3>
-            {canManageSpaceListe && (
-              <div className="relative" ref={createMenuRef}>
-                <button
-                  onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                  className="p-1 rounded hover:bg-gray-100"
-                >
-                  <Plus className="h-3.5 w-3.5 text-gray-500" />
-                </button>
-                {isCreateMenuOpen && (
-                  <div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200 py-1">
-                    <button
-                      onClick={() => openCreateSpaceModal()}
-                      className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                    >
-                      <FolderTree className="h-3.5 w-3.5" />
-                      Espace
-                    </button>
-                    <button
-                      onClick={() => openCreateListModal(undefined, workspaceId)}
-                      className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                    >
-                      <ListTodo className="h-3.5 w-3.5" />
-                      Liste (projet)
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2.5 relative">
+          <h3 className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] pl-1 opacity-80 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+            Espaces et listes
+          </h3>
+          {canManageSpaceListe && (
+            <div className="relative" ref={createMenuRef}>
+              <button
+                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                className="p-1 rounded-md hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              {isCreateMenuOpen && (
+                <div className="absolute right-0 mt-1 w-44 bg-theme-surface rounded-lg shadow-2xl z-10 border border-theme-border-subtle py-1.5 animate-slide-up">
+                  <button
+                    onClick={() => openCreateSpaceModal()}
+                    className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
+                  >
+                    <FolderTree className="h-3.5 w-3.5 text-primary" />
+                    <span>Espace</span>
+                  </button>
+                  <button
+                    onClick={() => openCreateListModal(undefined, workspaceId)}
+                    className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
+                  >
+                    <ListTodo className="h-3.5 w-3.5 text-secondary" />
+                    <span>Liste (projet)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+      </div>
 
       {/* Section Projets du workspace (listes sans espace) */}
       {hasWorkspaceAccess && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
-            <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Projets (workspace)</h3>
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest pl-1">Projets (workspace)</h3>
           </div>
           <div className="space-y-0.5">
-            {loadingWorkspaceLists && <div className="text-xs text-gray-400 pl-2">Chargement...</div>}
+            {loadingWorkspaceLists && <div className="text-[10px] text-theme-muted/40 animate-pulse pl-2">Chargement...</div>}
             {workspaceLists.map(list => (
               <div
                 key={list.id}
                 onContextMenu={(e) => handleListContextMenu(e, list, null, true)}
-                className="block py-1 pl-2 text-xs rounded-lg text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+                className="block py-1 pl-2 text-xs rounded-lg text-theme-muted hover:bg-theme-surface-hover transition-colors flex items-center gap-1.5"
               >
                 <Link
                   to={`/workspace/${workspaceId}/list/${list.id}`}
                   onClick={handleLinkClick}
                   className="flex-1 flex items-center gap-1.5"
                 >
-                  <ListTodo className="h-3.5 w-3.5 text-gray-500" />
-                  <span className={listId === list.id ? 'text-secondary font-medium' : ''}>
+                  <ListTodo className="h-3.5 w-3.5 text-theme-muted" />
+                  <span className={listId === list.id ? 'text-secondary font-semibold' : ''}>
                     {list.nom}
                   </span>
                 </Link>
               </div>
             ))}
             {!loadingWorkspaceLists && workspaceLists.length === 0 && (
-              <div className="text-xs text-gray-400 pl-2">Aucun projet</div>
+              <div className="text-[10px] text-theme-muted/30 pl-2 uppercase font-bold tracking-widest">Aucun projet</div>
             )}
           </div>
         </div>
@@ -937,18 +976,18 @@ export default function LeftSidebar() {
 
       {/* Chat - visible pour tous */}
       <div className="mb-4">
-        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Chat</h3>
+        <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Chat</h3>
         <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+          <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
             <Hash className="h-3.5 w-3.5 text-secondary" /> Canal général
           </div>
           <div className="pl-3 mt-1">
-            <div className="text-[10px] text-gray-400 mb-0.5">Canaux d'espace</div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
-              <Hash className="h-3.5 w-3.5 text-gray-400" /> Canal d'espace 1
+            <div className="text-[10px] text-theme-muted mb-0.5 opacity-60">Canaux d'espace</div>
+            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
+              <Hash className="h-3.5 w-3.5 text-theme-muted" /> Canal d'espace 1
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer mt-1">
+          <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer mt-1 transition-colors">
             <MessageSquare className="h-3.5 w-3.5 text-primary" /> Discussions
           </div>
         </div>
@@ -957,93 +996,97 @@ export default function LeftSidebar() {
       {/* Gestion - visible pour Admin et Créateur */}
       {(isAdminForSpace || isCreatorForSpace) && (
         <div className="mb-4">
-          <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Gestion</h3>
+          <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Gestion</h3>
           <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
               <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
               <FileText className="h-3.5 w-3.5 text-primary" /> Rapports
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded p-1 cursor-pointer">
+            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
               <Calendar className="h-3.5 w-3.5 text-primary" /> Absences / Congés
             </div>
           </div>
         </div>
       )}
 
-      {/* Menu contextuel pour Workspace */}
-      {workspaceContextMenu.visible && workspaceContextMenu.workspace && isWorkspaceCreator && (
-        <div
-          ref={workspaceMenuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[190px]"
-          style={{ top: workspaceContextMenu.y, left: workspaceContextMenu.x }}
-        >
-          <button onClick={() => openEditWorkspaceModal(workspaceContextMenu.workspace)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <Edit className="h-4 w-4" /> Modifier le workspace
-          </button>
-          <button onClick={() => handleDeleteWorkspace(workspaceContextMenu.workspace)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-            <Trash2 className="h-4 w-4" /> Supprimer le workspace
-          </button>
-        </div>
-      )}
+      {/* Menus Contextuels avec Style Glass */}
+      <AnimatePresence>
+        {workspaceContextMenu.visible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            ref={workspaceMenuRef}
+            className="fixed z-50 bg-theme-surface/90 glass rounded-xl shadow-theme-lg border border-theme-border-subtle p-1 min-w-[220px]"
+            style={{ top: workspaceContextMenu.y, left: workspaceContextMenu.x }}
+          >
+            <button onClick={() => openEditWorkspaceModal(workspaceContextMenu.workspace)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors">
+              <Edit className="h-4 w-4 text-primary" /> Modifier le workspace
+            </button>
+            <button onClick={() => handleDeleteWorkspace(workspaceContextMenu.workspace)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">
+              <Trash2 className="h-4 w-4" /> Supprimer le workspace
+            </button>
+          </motion.div>
+        )}
 
-      {/* Menu contextuel pour Espace */}
-      {contextMenu.visible && (
-        <div
-          ref={menuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <button onClick={() => openEditSpaceModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <Edit className="h-4 w-4" /> Modifier
-          </button>
-          {contextMenu.space && canDeleteTargetSpace(contextMenu.space.id) && (
-            <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-              <Trash2 className="h-4 w-4" /> Supprimer
+        {contextMenu.visible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            ref={menuRef}
+            className="fixed z-50 bg-theme-surface/90 glass rounded-xl shadow-theme-lg border border-theme-border-subtle p-1 min-w-[220px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button onClick={() => openEditSpaceModal(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors">
+              <Edit className="h-4 w-4 text-primary" /> Modifier l'espace
             </button>
-          )}
-          {/* Vérification forcée pour Créateur/Admin Workspace */}
-          {contextMenu.space && contextMenu.canInvite && getAvailableInvitationRolesForSpace(contextMenu.space.id).length > 0 && (
-            <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <UserPlus className="h-4 w-4" /> Inviter
+            {contextMenu.space && canDeleteTargetSpace(contextMenu.space.id) && (
+              <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">
+                <Trash2 className="h-4 w-4" /> Supprimer l'espace
+              </button>
+            )}
+            {contextMenu.space && contextMenu.canInvite && getAvailableInvitationRolesForSpace(contextMenu.space.id).length > 0 && (
+              <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors border-t border-theme-border-subtle/50 mt-1 pt-1">
+                <UserPlus className="h-4 w-4 text-emerald-500" /> Inviter des membres
+              </button>
+            )}
+            <button onClick={() => handleSettings(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Settings className="h-4 w-4 text-theme-muted" /> Paramètres
+              </div>
+              <ChevronRight className="h-3 w-3 opacity-30" />
             </button>
-          )}
-          {contextMenu.space && canManageSpace(contextMenu.space.id) && (
-            <button onClick={() => openCreateListModal(contextMenu.space.id, undefined)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <ListTodo className="h-4 w-4" /> Créer une liste
-            </button>
-          )}
-          <button onClick={() => handleSettings(contextMenu.space)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <Settings className="h-4 w-4" /> Paramètres
-          </button>
-        </div>
-      )}
+          </motion.div>
+        )}
 
-      {/* Menu contextuel pour Liste */}
-      {listContextMenu.visible && canManageListContext(listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList) && (
-        <div
-          ref={listMenuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]"
-          style={{ top: listContextMenu.y, left: listContextMenu.x }}
-        >
-          <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <Edit className="h-4 w-4" /> Modifier la liste
-          </button>
-          {canManageListContext(listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList) && (
-            <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+        {listContextMenu.visible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            ref={listMenuRef}
+            className="fixed z-50 bg-theme-surface/90 glass rounded-xl shadow-theme-lg border border-theme-border-subtle p-1 min-w-[220px]"
+            style={{ top: listContextMenu.y, left: listContextMenu.x }}
+          >
+            <button onClick={() => openEditListModal(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors">
+              <Edit className="h-4 w-4 text-primary" /> Modifier la liste
+            </button>
+            <button onClick={() => handleDeleteList(listContextMenu.list, listContextMenu.parentSpaceId, listContextMenu.isWorkspaceList)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">
               <Trash2 className="h-4 w-4" /> Supprimer la liste
             </button>
-          )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modales */}
       <Modal isOpen={isCreateSpaceModalOpen} onClose={() => setIsCreateSpaceModalOpen(false)} title={parentSpaceId ? "Créer un sous-espace" : "Créer un espace"} size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom" value={newSpaceName} onChange={e => setNewSpaceName(e.target.value)} className="w-full p-2 border rounded-lg" autoFocus />
-          <textarea placeholder="Description" value={newSpaceDesc} onChange={e => setNewSpaceDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
-          <div className="flex justify-end gap-2">
+          <input type="text" placeholder="Nom" value={newSpaceName} onChange={e => setNewSpaceName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" autoFocus />
+          <textarea placeholder="Description" value={newSpaceDesc} onChange={e => setNewSpaceDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsCreateSpaceModalOpen(false)}>Annuler</Button>
             <Button onClick={handleCreateSpace}>Créer</Button>
           </div>
@@ -1052,9 +1095,9 @@ export default function LeftSidebar() {
 
       <Modal isOpen={isEditSpaceModalOpen} onClose={() => setIsEditSpaceModalOpen(false)} title="Modifier l'espace" size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom" value={editSpaceName} onChange={e => setEditSpaceName(e.target.value)} className="w-full p-2 border rounded-lg" />
-          <textarea placeholder="Description" value={editSpaceDesc} onChange={e => setEditSpaceDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
-          <div className="flex justify-end gap-2">
+          <input type="text" placeholder="Nom" value={editSpaceName} onChange={e => setEditSpaceName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
+          <textarea placeholder="Description" value={editSpaceDesc} onChange={e => setEditSpaceDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsEditSpaceModalOpen(false)}>Annuler</Button>
             <Button onClick={handleEditSpace}>Enregistrer</Button>
           </div>
@@ -1063,9 +1106,9 @@ export default function LeftSidebar() {
 
       <Modal isOpen={isCreateListModalOpen} onClose={() => setIsCreateListModalOpen(false)} title="Créer une liste" size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom de la liste" value={newListName} onChange={e => setNewListName(e.target.value)} className="w-full p-2 border rounded-lg" autoFocus />
-          <textarea placeholder="Description" value={newListDesc} onChange={e => setNewListDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
-          <div className="flex justify-end gap-2">
+          <input type="text" placeholder="Nom de la liste" value={newListName} onChange={e => setNewListName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" autoFocus />
+          <textarea placeholder="Description" value={newListDesc} onChange={e => setNewListDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsCreateListModalOpen(false)}>Annuler</Button>
             <Button onClick={handleCreateList}>Créer</Button>
           </div>
@@ -1074,9 +1117,9 @@ export default function LeftSidebar() {
 
       <Modal isOpen={isEditListModalOpen} onClose={() => setIsEditListModalOpen(false)} title="Modifier la liste" size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom" value={editListName} onChange={e => setEditListName(e.target.value)} className="w-full p-2 border rounded-lg" />
-          <textarea placeholder="Description" value={editListDesc} onChange={e => setEditListDesc(e.target.value)} rows={2} className="w-full p-2 border rounded-lg" />
-          <div className="flex justify-end gap-2">
+          <input type="text" placeholder="Nom" value={editListName} onChange={e => setEditListName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
+          <textarea placeholder="Description" value={editListDesc} onChange={e => setEditListDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsEditListModalOpen(false)}>Annuler</Button>
             <Button onClick={handleEditList}>Enregistrer</Button>
           </div>
@@ -1085,9 +1128,9 @@ export default function LeftSidebar() {
 
       <Modal isOpen={isEditWorkspaceModalOpen} onClose={() => setIsEditWorkspaceModalOpen(false)} title="Modifier le workspace" size="md">
         <div className="space-y-4">
-          <input type="text" placeholder="Nom" value={editWorkspaceName} onChange={e => setEditWorkspaceName(e.target.value)} className="w-full p-2 border rounded-lg" />
-          <textarea placeholder="Description" value={editWorkspaceDesc} onChange={e => setEditWorkspaceDesc(e.target.value)} rows={3} className="w-full p-2 border rounded-lg" />
-          <div className="flex justify-end gap-2">
+          <input type="text" placeholder="Nom" value={editWorkspaceName} onChange={e => setEditWorkspaceName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
+          <textarea placeholder="Description" value={editWorkspaceDesc} onChange={e => setEditWorkspaceDesc(e.target.value)} rows={3} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsEditWorkspaceModalOpen(false)}>Annuler</Button>
             <Button onClick={handleEditWorkspace}>Enregistrer</Button>
           </div>
@@ -1098,7 +1141,7 @@ export default function LeftSidebar() {
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre" size="md">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-theme-main mb-1.5">
               Email du membre
             </label>
             <input
@@ -1106,23 +1149,23 @@ export default function LeftSidebar() {
               placeholder="exemple@email.com"
               value={inviteEmail}
               onChange={e => setInviteEmail(e.target.value)}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-theme-main mb-1.5">
               Rôle
             </label>
             <select
               value={inviteRole}
               onChange={e => setInviteRole(e.target.value)}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all"
             >
               {getAvailableInvitationRolesForSpace(selectedSpaceId).map(role => (
                 <option key={role} value={role}>{getRoleLabel(role)}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-[11px] text-theme-muted mt-2 leading-relaxed opacity-80">
               {isCreatorForSpace || isWorkspaceCreator ? (
                 <>
                   💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres<br />
@@ -1139,7 +1182,7 @@ export default function LeftSidebar() {
               )}
             </p>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
             <Button onClick={handleInviteMember}>Inviter</Button>
           </div>
