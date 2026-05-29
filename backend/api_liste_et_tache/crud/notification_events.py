@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..models import Espace, Liste, Membre, Notification, Tache, Utilisateur, Workspace
+from ..models import Espace, Liste, Membre, Tache, Utilisateur, Workspace
 
 
 MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
@@ -21,18 +22,27 @@ def _display_user(user: Utilisateur | None) -> str:
 def _already_notified_today(db: Session, *, user_id: str, message: str, type_: str) -> bool:
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow_start = today_start + timedelta(days=1)
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.id_utilisateur == user_id,
-            Notification.type == type_,
-            Notification.message == message,
-            Notification.date_creation >= today_start,
-            Notification.date_creation < tomorrow_start,
-        )
-        .first()
-        is not None
-    )
+    return db.execute(
+        text(
+            """
+            SELECT 1
+            FROM notification.notification
+            WHERE id_utilisateur = :user_id
+              AND type = :type
+              AND message = :message
+              AND date_creation >= :today_start
+              AND date_creation < :tomorrow_start
+            LIMIT 1
+            """
+        ),
+        {
+            "user_id": user_id,
+            "type": type_,
+            "message": message,
+            "today_start": today_start,
+            "tomorrow_start": tomorrow_start,
+        },
+    ).first() is not None
 
 
 def _create_notification(
@@ -47,14 +57,19 @@ def _create_notification(
         return
     if dedupe_today and _already_notified_today(db, user_id=user_id, message=message, type_=type_):
         return
-    notification = Notification(
-        id_utilisateur=user_id,
-        type=type_,
-        message=message,
-        est_lu=False,
-        est_globale=False,
+    db.execute(
+        text(
+            """
+            INSERT INTO notification.notification (id_utilisateur, type, message, est_lu, est_globale)
+            VALUES (:user_id, :type, :message, false, false)
+            """
+        ),
+        {
+            "user_id": user_id,
+            "type": type_,
+            "message": message,
+        },
     )
-    db.add(notification)
 
 
 def commit_notification_events(db: Session) -> None:
