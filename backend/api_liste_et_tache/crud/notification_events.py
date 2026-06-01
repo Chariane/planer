@@ -195,20 +195,10 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
     if not liste:
         return
 
-    if not is_absence:
-        message = f"Un congé a été planifié pour vous dans la liste « {liste.nom or 'une liste'} »."
-        _create_notification(
-            db,
-            user_id=absence_member.id_utilisateur,
-            message=message,
-            type_="evenement",
-            dedupe_today=True
-        )
-        return
-
     author = db.query(Utilisateur).filter(Utilisateur.id == absence_member.id_utilisateur).first()
     author_name = _display_user(author)
-    message = f"{author_name} a créé une demande d'absence dans la liste « {liste.nom or 'une liste'} »."
+    request_type = "d'absence" if is_absence else "de congé"
+    message = f"{author_name} a créé une demande {request_type} dans la liste « {liste.nom or 'une liste'} »."
 
     if absence_member.role == "Membre":
         recipients = _direct_list_manager_user_ids(db, liste.id, exclude_user_id=actor_user_id)
@@ -228,7 +218,7 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
 def notify_absence_decision(db: Session, *, absence_member: Membre, accepted: bool) -> None:
     status_label = "acceptée" if accepted else "refusée"
     type_ = "evenement" if accepted else "warning"
-    message = f"Votre demande d'absence a été {status_label}."
+    message = f"Votre demande d'absence/congé a été {status_label}."
     _create_notification(
         db,
         user_id=absence_member.id_utilisateur,

@@ -13,6 +13,12 @@ from ..schemas import (
     WorkspaceMemberInvite,
 )
 from datetime import timedelta
+from backend.api_messagerie.sync import (
+    delete_resource_group,
+    ensure_resource_group,
+    remove_resource_member,
+    sync_resource_member,
+)
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:
@@ -299,6 +305,14 @@ def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) ->
             ).model_dump(exclude={"id_workspace", "id_liste", "id_tache"}, exclude_none=True),
         )
         db.add(createur)
+        ensure_resource_group(
+            db,
+            resource_type="espace",
+            resource_id=espace.id,
+            name=espace.nom,
+            creator_id=creator_user_id,
+            members=[creator_user_id],
+        )
         commit_or_raise(
             db,
             detail="Impossible de creer l'espace a cause d'une contrainte d'integrite.",
@@ -328,6 +342,23 @@ def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate) -> Optio
         )
     for key, value in update_data.items():
         setattr(espace, key, value)
+    if "nom" in update_data:
+        createur_id = (
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_espace == espace.id,
+                Membre.role == "Créateur",
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        )
+        ensure_resource_group(
+            db,
+            resource_type="espace",
+            resource_id=espace.id,
+            name=espace.nom,
+            creator_id=createur_id,
+        )
     commit_or_raise(
         db,
         detail="Impossible de mettre a jour l'espace a cause d'une contrainte d'integrite.",
@@ -360,6 +391,8 @@ def delete_espace(db: Session, espace_id: str) -> bool:
 
     # Supprimer les membres de tous les espaces concernés
     if all_espace_ids:
+        for target_id in all_espace_ids:
+            delete_resource_group(db, resource_type="espace", resource_id=target_id)
         db.query(Membre).filter(Membre.id_espace.in_(all_espace_ids)).delete(synchronize_session=False)
 
     # Supprimer les sous-espaces descendants (du plus profond au plus haut)
@@ -407,6 +440,25 @@ def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -
         id_espace=espace_id,
     )
     db.add(membre)
+    if membre.statut == "Actif":
+        espace = get_espace_by_id(db, espace_id)
+        createur_id = (
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_espace == espace_id,
+                Membre.role == "Créateur",
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        )
+        sync_resource_member(
+            db,
+            resource_type="espace",
+            resource_id=espace_id,
+            user_id=membre.id_utilisateur,
+            name=espace.nom if espace else None,
+            creator_id=createur_id,
+        )
     commit_or_raise(
         db,
         detail="Impossible d'ajouter ce membre a l'espace a cause d'une contrainte d'integrite.",
@@ -436,6 +488,33 @@ def update_espace_member(
         )
     for key, value in update_data.items():
         setattr(membre, key, value)
+    target_status = update_data.get("statut", membre.statut)
+    if target_status == "Actif":
+        espace = get_espace_by_id(db, espace_id)
+        createur_id = (
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_espace == espace_id,
+                Membre.role == "Créateur",
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        )
+        sync_resource_member(
+            db,
+            resource_type="espace",
+            resource_id=espace_id,
+            user_id=user_id,
+            name=espace.nom if espace else None,
+            creator_id=createur_id,
+        )
+    elif "statut" in update_data:
+        remove_resource_member(
+            db,
+            resource_type="espace",
+            resource_id=espace_id,
+            user_id=user_id,
+        )
     commit_or_raise(
         db,
         detail="Impossible de mettre a jour ce membre a cause d'une contrainte d'integrite.",
@@ -448,6 +527,12 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
     membre = get_espace_member(db, espace_id, user_id)
     if not membre:
         return False
+    remove_resource_member(
+        db,
+        resource_type="espace",
+        resource_id=espace_id,
+        user_id=user_id,
+    )
     db.delete(membre)
     commit_or_raise(
         db,
@@ -618,6 +703,23 @@ def accept_espace_invitation(
         # Les anciens tokens "scope" ne transportent pas toujours le role.
         existing_member.role = invited_role
         existing_member.statut = "Actif"
+        createur_id = (
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_espace == target_espace_id,
+                Membre.role == "Créateur",
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        )
+        sync_resource_member(
+            db,
+            resource_type="espace",
+            resource_id=target_espace_id,
+            user_id=user_id,
+            name=espace.nom,
+            creator_id=createur_id,
+        )
         commit_or_raise(
             db,
             detail="Impossible d'activer votre statut de membre.",
@@ -633,6 +735,23 @@ def accept_espace_invitation(
         statut="Actif"
     )
     db.add(new_member)
+    createur_id = (
+        db.query(Membre.id_utilisateur)
+        .filter(
+            Membre.id_espace == target_espace_id,
+            Membre.role == "Créateur",
+            Membre.statut == "Actif",
+        )
+        .scalar()
+    )
+    sync_resource_member(
+        db,
+        resource_type="espace",
+        resource_id=target_espace_id,
+        user_id=user_id,
+        name=espace.nom,
+        creator_id=createur_id,
+    )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
     
     return new_member

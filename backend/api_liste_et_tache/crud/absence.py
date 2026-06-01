@@ -2,22 +2,19 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     _get_absence_or_404,
-    _get_inherited_list_management_grant,
     _get_member_or_404,
     _get_member_scope_liste_id,
     _require_absence_management_access,
     _require_absence_read_access,
     _require_absence_self_or_management_access,
     _require_member_management_access,
-    _require_member_self_or_management_access,
     commit_or_raise,
 )
-from ..models import AbsenceEtConge, Membre, Utilisateur
+from ..models import AbsenceEtConge, Membre, Tache
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
 
 
@@ -61,6 +58,8 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "En attent
     )
 
 
+def _serialize_absence(absence: AbsenceEtConge) -> dict:
+    owner_name = "Utilisateur supprimé"
     author_role = "Membre"
     if absence.membres:
         author_role = absence.membres.role
@@ -86,6 +85,49 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "En attent
         "owner_name": owner_name,
         "author_role": author_role
     }
+
+
+def _member_has_assigned_task_in_list(db: Session, *, liste_id: str, user_id: str) -> bool:
+    return (
+        db.query(Membre.id)
+        .join(Tache, Membre.id_tache == Tache.id)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+            Membre.id_tache.isnot(None),
+            Tache.id_liste == liste_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def _require_self_leave_request_access(db: Session, *, membre: Membre, current_user_id: str) -> str:
+    if membre.id_utilisateur != current_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Vous ne pouvez créer une demande d'absence ou de congé que pour vous-même.",
+        )
+
+    if not membre.id_liste:
+        raise HTTPException(
+            status_code=400,
+            detail="La demande doit être rattachée à votre rôle direct dans la liste.",
+        )
+
+    liste_id = _get_member_scope_liste_id(db, membre)
+    _require_member_read_access(db, membre.id, current_user_id)
+
+    if membre.role in {"Créateur", "Administrateur"}:
+        return liste_id
+
+    if membre.role == "Membre" and _member_has_assigned_task_in_list(db, liste_id=liste_id, user_id=current_user_id):
+        return liste_id
+
+    raise HTTPException(
+        status_code=403,
+        detail="Seuls les administrateurs/créateurs de la liste ou les membres ayant au moins une tâche assignée peuvent faire une demande.",
+    )
 
 
 def _date_overlap(start_a, end_a, start_b, end_b) -> bool:
@@ -143,25 +185,17 @@ def create_leave_request(
     conge_interrompu_at=None,
 ) -> AbsenceEtConge:
     membre = _get_member_or_404(db, id_membre)
-    liste_id = _get_member_scope_liste_id(db, membre)
-
-    if is_absence:
-        _require_member_self_or_management_access(db, id_membre, current_user_id)
-    else:
-        _get_inherited_list_management_grant(db, liste_id, current_user_id)
-        is_conge_planifie = True
-        if statut is None:
-            statut = "Accepté"
+    _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
 
     absence = AbsenceEtConge(
         id_membre=id_membre,
         is_absence=is_absence,
         date_debut=date_debut,
         date_fin=date_fin,
-        statut=_normalize_absence_status(statut),
+        statut=_normalize_absence_status(statut, default="En attente"),
         statut_date=datetime.utcnow(),
         motif=motif,
-        is_conge_planifie=bool(is_conge_planifie),
+        is_conge_planifie=False,
         duree_demandee_en_jours=duree_demandee_en_jours,
         conge_interrompu_at=conge_interrompu_at,
     )

@@ -10,6 +10,12 @@ from ..models import (
 )
 from ..core.security import create_access_token, decode_invitation_token
 from ..schemas import WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate, WorkspaceMemberInvite
+from backend.api_messagerie.sync import (
+    delete_resource_group,
+    ensure_resource_group,
+    remove_resource_member,
+    sync_resource_member,
+)
 
 
 # ============================================================================
@@ -51,6 +57,14 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
             statut=Status.ACTIVE,
         )
         db.add(owner_member)
+        ensure_resource_group(
+            db,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            name=workspace.nom,
+            creator_id=user_id,
+            members=[user_id],
+        )
 
         commit_or_raise(
             db,
@@ -74,6 +88,14 @@ def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpda
     for key, value in update_data.items():
         setattr(workspace, key, value)
     workspace.updated_at = datetime.utcnow()
+    if "nom" in update_data:
+        ensure_resource_group(
+            db,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            name=workspace.nom,
+            creator_id=workspace.id_utilisateur,
+        )
 
     commit_or_raise(
         db,
@@ -132,10 +154,15 @@ def delete_workspace(db: Session, workspace_id: str) -> bool:
         )
 
     if dependency_ids["espace_ids"]:
+        for espace_id in dependency_ids["espace_ids"]:
+            delete_resource_group(db, resource_type="espace", resource_id=espace_id)
         db.query(Espace).filter(Espace.id.in_(dependency_ids["espace_ids"])).delete(
             synchronize_session=False
         )
 
+    for liste_id in dependency_ids["liste_ids"]:
+        delete_resource_group(db, resource_type="liste", resource_id=liste_id)
+    delete_resource_group(db, resource_type="workspace", resource_id=workspace_id)
     db.delete(workspace)
     commit_or_raise(
         db,
@@ -278,6 +305,24 @@ def update_member_role(
     update_data = membre_in.model_dump(exclude_unset=True, exclude_none=True)
     for key, value in update_data.items():
         setattr(membre, key, value)
+    target_status = update_data.get("statut", membre.statut)
+    if target_status == Status.ACTIVE:
+        workspace = get_workspace_by_id(db, workspace_id)
+        sync_resource_member(
+            db,
+            resource_type="workspace",
+            resource_id=workspace_id,
+            user_id=user_id,
+            name=workspace.nom if workspace else None,
+            creator_id=workspace.id_utilisateur if workspace else None,
+        )
+    elif "statut" in update_data:
+        remove_resource_member(
+            db,
+            resource_type="workspace",
+            resource_id=workspace_id,
+            user_id=user_id,
+        )
 
     commit_or_raise(
         db,
@@ -298,6 +343,12 @@ def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -
     db.query(Rapport).filter(Rapport.id_membre == membre.id).delete(synchronize_session=False)
     db.query(AbsenceEtConge).filter(AbsenceEtConge.id_membre == membre.id).delete(
         synchronize_session=False
+    )
+    remove_resource_member(
+        db,
+        resource_type="workspace",
+        resource_id=workspace_id,
+        user_id=user_id,
     )
     db.delete(membre)
     commit_or_raise(
@@ -456,6 +507,14 @@ def accept_workspace_invitation(
         # Les anciens tokens "scope" ne transportent pas toujours le role.
         existing_member.role = invited_role or existing_member.role
         existing_member.statut = "Actif"
+        sync_resource_member(
+            db,
+            resource_type="workspace",
+            resource_id=target_workspace_id,
+            user_id=user_id,
+            name=workspace.nom,
+            creator_id=workspace.id_utilisateur,
+        )
         commit_or_raise(
             db,
             detail="Impossible d'activer votre statut de membre.",
@@ -471,6 +530,14 @@ def accept_workspace_invitation(
         statut="Actif"
     )
     db.add(new_member)
+    sync_resource_member(
+        db,
+        resource_type="workspace",
+        resource_id=target_workspace_id,
+        user_id=user_id,
+        name=workspace.nom,
+        creator_id=workspace.id_utilisateur,
+    )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion au workspace.", refresh_instance=new_member)
     
     return new_member
@@ -524,6 +591,12 @@ def leave_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
     db.query(Rapport).filter(Rapport.id_membre == membre.id).delete(synchronize_session=False)
     db.query(AbsenceEtConge).filter(AbsenceEtConge.id_membre == membre.id).delete(
         synchronize_session=False
+    )
+    remove_resource_member(
+        db,
+        resource_type="workspace",
+        resource_id=workspace_id,
+        user_id=user_id,
     )
     db.delete(membre)
     commit_or_raise(db, detail="Impossible de quitter le workspace.")

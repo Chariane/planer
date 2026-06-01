@@ -92,7 +92,6 @@ export default function PlannerToolsPanel({
     motif: '',
     duree_demandee_en_jours: '',
   });
-  const [absenceTargetMemberId, setAbsenceTargetMemberId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -116,7 +115,7 @@ export default function PlannerToolsPanel({
   // Rapport création : Administrateurs OU toute personne ayant une tâche assignée dans la liste.
   const canCreateReport = isDirectAdmin || hasAssignedTask;
 
-  const canCreateAbsence = !!isDirectMemberRecord || isInheritedManager;
+  const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
   const canAddFiles = !isGuest && (!listeId || !isDirectSimpleMember || hasAssignedTask || isManager);
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
@@ -300,12 +299,6 @@ export default function PlannerToolsPanel({
       setArchivedAbsenceIds([]);
     }
   }, [absenceArchiveKey]);
-
-  useEffect(() => {
-    if (isInheritedManager && !absenceTargetMemberId && directMembers.length > 0) {
-      setAbsenceTargetMemberId(directMembers[0].id);
-    }
-  }, [isInheritedManager, absenceTargetMemberId, directMembers]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -520,13 +513,16 @@ export default function PlannerToolsPanel({
   };
 
   const handleCreateAbsence = async () => {
-    // En cas de manager créant pour quelqu'un d'autre, on utilise absenceTargetMemberId
-    // Sinon, on utilise le record de membre de l'utilisateur courant.
-    const currentUserMemberRecord = members.find(m => m.id_utilisateur === currentUserId);
-    const targetMemberId = (isManager && absenceTargetMemberId) ? absenceTargetMemberId : currentUserMemberRecord?.id;
+    const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
+    const targetMemberId = currentUserMemberRecord?.id;
 
     if (!targetMemberId || !absenceForm.date_debut) {
       showMessage('error', 'Sélectionnez une date de début.');
+      return;
+    }
+
+    if (!canCreateAbsence) {
+      showMessage('error', "Vous devez être administrateur/créateur direct de la liste ou membre avec au moins une tâche assignée.");
       return;
     }
 
@@ -539,7 +535,7 @@ export default function PlannerToolsPanel({
         date_debut: new Date(absenceForm.date_debut).toISOString(),
         date_fin: absenceForm.date_fin ? new Date(absenceForm.date_fin).toISOString() : undefined,
         motif: absenceForm.motif,
-        is_conge_planifie: !absenceForm.is_absence,
+        is_conge_planifie: false,
         duree_demandee_en_jours: absenceForm.duree_demandee_en_jours ? Number(absenceForm.duree_demandee_en_jours) : undefined,
       });
       setAbsenceForm({ is_absence: true, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
@@ -648,6 +644,10 @@ export default function PlannerToolsPanel({
   const archivedAbsences = useMemo(
     () => absencesWithAuthors.filter(absence => archivedAbsenceIds.includes(absence.id)),
     [absencesWithAuthors, archivedAbsenceIds],
+  );
+  const visibleAbsences = useMemo(
+    () => (isManager ? [...ownAbsences, ...accessibleAbsences] : ownAbsences),
+    [isManager, ownAbsences, accessibleAbsences],
   );
 
   const decideAbsence = async (absenceId: string, action: 'approve' | 'reject' | 'finish') => {
@@ -1224,7 +1224,7 @@ export default function PlannerToolsPanel({
                 <Calendar className="h-5 w-5 text-white" />
               </div>
               <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">
-                {isManager ? 'Gestion des Congés' : "Nouvelle Demande d'Absence"}
+                Absences & Congés
               </h4>
             </div>
 
@@ -1232,29 +1232,23 @@ export default function PlannerToolsPanel({
               <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex gap-4">
                 <ShieldAlert className="h-6 w-6 text-primary flex-shrink-0" />
                 <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
-                  Cette fonctionnalité est réservée aux membres directs de la liste ou aux gestionnaires autorisés.
+                  Vous pourrez faire une demande dès que vous serez administrateur/créateur direct de la liste ou membre direct avec au moins une tâche assignée.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 relative">
-                {isManager && (
-                  <div className="md:col-span-12 lg:col-span-3 space-y-2">
-                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Collaborateur</label>
-                    <div className="relative group">
-                      <select
-                        value={absenceTargetMemberId}
-                        onChange={e => setAbsenceTargetMemberId(e.target.value)}
-                        className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all appearance-none cursor-pointer"
-                      >
-                        {directMembers.map(member => (
-                          <option key={member.id} value={member.id} className="bg-theme-surface">{member.name}</option>
-                        ))}
-                      </select>
-                      <Users className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted pointer-events-none" />
-                    </div>
-                  </div>
-                )}
-                <div className={`md:col-span-6 lg:col-span-${isManager ? '2' : '3'} space-y-2`}>
+                <div className="md:col-span-6 lg:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Type</label>
+                  <select
+                    value={absenceForm.is_absence ? 'absence' : 'conge'}
+                    onChange={e => setAbsenceForm(prev => ({ ...prev, is_absence: e.target.value === 'absence' }))}
+                    className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="absence" className="bg-theme-surface">Absence</option>
+                    <option value="conge" className="bg-theme-surface">Congé</option>
+                  </select>
+                </div>
+                <div className="md:col-span-6 lg:col-span-2 space-y-2">
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Début</label>
                   <input
                     type="date"
@@ -1263,7 +1257,7 @@ export default function PlannerToolsPanel({
                     className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all custom-datepicker-dark"
                   />
                 </div>
-                <div className={`md:col-span-6 lg:col-span-${isManager ? '2' : '3'} space-y-2`}>
+                <div className="md:col-span-6 lg:col-span-2 space-y-2">
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Fin</label>
                   <input
                     type="date"
@@ -1272,12 +1266,12 @@ export default function PlannerToolsPanel({
                     className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all custom-datepicker-dark"
                   />
                 </div>
-                <div className="md:col-span-12 lg:col-span-3 space-y-2">
+                <div className="md:col-span-12 lg:col-span-4 space-y-2">
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Motif / Justification</label>
                   <input
                     value={absenceForm.motif}
                     onChange={e => setAbsenceForm(prev => ({ ...prev, motif: e.target.value }))}
-                    placeholder="Raison du départ..."
+                    placeholder={absenceForm.is_absence ? "Ex: maladie, urgence familiale..." : "Ex: congé annuel, rendez-vous personnel..."}
                     className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all placeholder:text-theme-muted/30"
                   />
                 </div>
@@ -1308,13 +1302,13 @@ export default function PlannerToolsPanel({
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <AnimatePresence mode="popLayout">
-                {(isManager ? accessibleAbsences : ownAbsences).length === 0 ? (
+                {visibleAbsences.length === 0 ? (
                   <div className="md:col-span-2 lg:col-span-3 py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
                     <Calendar className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
                     <p className="font-black text-[10px] uppercase tracking-widest">Aucune donnée</p>
                   </div>
                 ) : (
-                  (isManager ? accessibleAbsences : ownAbsences).map((absence, i) => (
+                  visibleAbsences.map((absence, i) => (
                     <motion.div key={absence.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
                       <GlassCard className="p-5 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/card">
                         <div className="flex justify-between items-start mb-4">

@@ -19,6 +19,12 @@ from ..core.function import (
 from ..core.security import create_access_token, decode_invitation_token
 from ..models import Liste, Membre, Canevas, Section, Tache, Checklist, Utilisateur
 from ..schemas import WorkspaceMemberInvite
+from backend.api_messagerie.sync import (
+    delete_resource_group,
+    ensure_resource_group,
+    remove_resource_member,
+    sync_resource_member,
+)
 
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -111,6 +117,14 @@ def create_liste(
                 statut="Actif",
             )
         )
+        ensure_resource_group(
+            db,
+            resource_type="liste",
+            resource_id=liste.id,
+            name=liste.nom,
+            creator_id=creator_user_id,
+            members=[creator_user_id],
+        )
     
     # 3. Commit final
     try:
@@ -146,6 +160,23 @@ def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
     for key, value in kwargs.items():
         if hasattr(liste, key) and value is not None:
             setattr(liste, key, value)
+    if "nom" in kwargs:
+        creator_id = (
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_liste == liste_id,
+                Membre.role == LISTE_OWNER_ROLE,
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        )
+        ensure_resource_group(
+            db,
+            resource_type="liste",
+            resource_id=liste_id,
+            name=liste.nom,
+            creator_id=creator_id,
+        )
             
     try:
         db.commit()
@@ -208,6 +239,7 @@ def delete_liste(db: Session, liste_id: str) -> bool:
         db.delete(canevas)
     
     # 7. Supprimer la liste
+    delete_resource_group(db, resource_type="liste", resource_id=liste_id)
     db.delete(liste)
     
     try:
@@ -282,6 +314,22 @@ def assign_member_to_liste(
     if existing:
         existing.role = role
         existing.statut = "Actif"
+        sync_resource_member(
+            db,
+            resource_type="liste",
+            resource_id=liste_id,
+            user_id=utilisateur_id,
+            name=liste.nom,
+            creator_id=(
+                db.query(Membre.id_utilisateur)
+                .filter(
+                    Membre.id_liste == liste_id,
+                    Membre.role == LISTE_OWNER_ROLE,
+                    Membre.statut == "Actif",
+                )
+                .scalar()
+            ),
+        )
         try:
             db.commit()
             db.refresh(existing)
@@ -300,6 +348,22 @@ def assign_member_to_liste(
         statut="Actif",
     )
     db.add(assignation)
+    sync_resource_member(
+        db,
+        resource_type="liste",
+        resource_id=liste_id,
+        user_id=utilisateur_id,
+        name=liste.nom,
+        creator_id=(
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_liste == liste_id,
+                Membre.role == LISTE_OWNER_ROLE,
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        ),
+    )
     try:
         db.commit()
         db.refresh(assignation)
@@ -326,6 +390,12 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
     if not assignation:
         return False
 
+    remove_resource_member(
+        db,
+        resource_type="liste",
+        resource_id=liste_id,
+        user_id=utilisateur_id,
+    )
     db.delete(assignation)
     db.commit()
     return True
@@ -516,6 +586,22 @@ def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) ->
             raise HTTPException(status_code=409, detail="Invitation déjà acceptée.")
         existing_member.role = invited_role
         existing_member.statut = "Actif"
+        sync_resource_member(
+            db,
+            resource_type="liste",
+            resource_id=target_liste_id,
+            user_id=user_id,
+            name=liste.nom,
+            creator_id=(
+                db.query(Membre.id_utilisateur)
+                .filter(
+                    Membre.id_liste == target_liste_id,
+                    Membre.role == LISTE_OWNER_ROLE,
+                    Membre.statut == "Actif",
+                )
+                .scalar()
+            ),
+        )
         commit_or_raise(db, detail="Impossible d'activer votre statut de membre.", refresh_instance=existing_member)
         return existing_member
     
@@ -526,6 +612,22 @@ def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) ->
         statut="Actif"
     )
     db.add(new_member)
+    sync_resource_member(
+        db,
+        resource_type="liste",
+        resource_id=target_liste_id,
+        user_id=user_id,
+        name=liste.nom,
+        creator_id=(
+            db.query(Membre.id_utilisateur)
+            .filter(
+                Membre.id_liste == target_liste_id,
+                Membre.role == LISTE_OWNER_ROLE,
+                Membre.statut == "Actif",
+            )
+            .scalar()
+        ),
+    )
     commit_or_raise(db, detail="Impossible de finaliser votre adhésion à la liste.", refresh_instance=new_member)
     
     return new_member
