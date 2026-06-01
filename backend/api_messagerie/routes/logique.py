@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Iterable, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -64,9 +64,13 @@ def serialize_group(db: Session, group: Groupe) -> dict:
         .filter(GroupeMembers.id_groupe == group.id)
         .count()
     )
+    resource_type, resource_id, display_name = _parse_group_name(group.name)
     return {
         "id": group.id,
-        "name": _display_group_name(group.name),
+        "name": display_name,
+        "raw_name": group.name,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
         "creator": group.creator,
         "member_count": member_count,
         "created_at": group.created_at,
@@ -80,10 +84,14 @@ def _display_user(user: Optional[Utilisateur]) -> dict:
 
 
 def _display_group_name(raw_name: str) -> str:
+    return _parse_group_name(raw_name)[2]
+
+
+def _parse_group_name(raw_name: str) -> tuple[Optional[str], Optional[str], str]:
     parts = raw_name.split(":", 2)
     if len(parts) == 3 and parts[0] in RESOURCE_TYPES:
-        return parts[2]
-    return raw_name
+        return parts[0], parts[1], parts[2]
+    return None, None, raw_name
 
 
 def _resource_group_prefix(resource_type: str, resource_id: str) -> str:
@@ -233,6 +241,7 @@ def create_group(
 
 
 def list_user_groups(db: Session, user_id: str) -> list[dict]:
+    ensure_user_resource_groups(db, user_id)
     groups = (
         db.query(Groupe)
         .join(GroupeMembers, GroupeMembers.id_groupe == Groupe.id)
@@ -240,7 +249,79 @@ def list_user_groups(db: Session, user_id: str) -> list[dict]:
         .order_by(Groupe.created_at.desc())
         .all()
     )
-    return [serialize_group(db, group) for group in groups]
+    unique_groups: list[Groupe] = []
+    seen_resources: set[tuple[str, str]] = set()
+
+    for group in groups:
+        resource_type, resource_id, _ = _parse_group_name(group.name)
+        key = (resource_type, resource_id) if resource_type and resource_id else ("group", group.id)
+        if key in seen_resources:
+            continue
+        seen_resources.add(key)
+        unique_groups.append(group)
+
+    return [serialize_group(db, group) for group in unique_groups]
+
+
+def ensure_user_resource_groups(db: Session, user_id: str) -> None:
+    memberships = (
+        db.query(Membre)
+        .filter(Membre.id_utilisateur == user_id, Membre.statut == "Actif")
+        .all()
+    )
+
+    for membership in memberships:
+        if membership.id_workspace:
+            workspace = db.query(Workspace).filter(Workspace.id == membership.id_workspace).first()
+            if workspace:
+                ensure_resource_group(
+                    db,
+                    resource_type="workspace",
+                    resource_id=workspace.id,
+                    name=workspace.nom,
+                    creator_id=workspace.id_utilisateur,
+                    members=[user_id],
+                )
+        elif membership.id_espace:
+            espace = db.query(Espace).filter(Espace.id == membership.id_espace).first()
+            if espace:
+                creator_id = (
+                    db.query(Membre.id_utilisateur)
+                    .filter(
+                        Membre.id_espace == espace.id,
+                        Membre.role == "Créateur",
+                        Membre.statut == "Actif",
+                    )
+                    .scalar()
+                )
+                ensure_resource_group(
+                    db,
+                    resource_type="espace",
+                    resource_id=espace.id,
+                    name=espace.nom,
+                    creator_id=creator_id,
+                    members=[user_id],
+                )
+        elif membership.id_liste:
+            liste = db.query(Liste).filter(Liste.id == membership.id_liste).first()
+            if liste:
+                creator_id = (
+                    db.query(Membre.id_utilisateur)
+                    .filter(
+                        Membre.id_liste == liste.id,
+                        Membre.role == "Créateur",
+                        Membre.statut == "Actif",
+                    )
+                    .scalar()
+                )
+                ensure_resource_group(
+                    db,
+                    resource_type="liste",
+                    resource_id=liste.id,
+                    name=liste.nom,
+                    creator_id=creator_id,
+                    members=[user_id],
+                )
 
 
 def require_group_member(db: Session, group_id: str, user_id: str) -> GroupeMembers:
@@ -266,6 +347,7 @@ def add_group_member(db: Session, group_id: str, user_id: str, *, commit: bool =
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
 
+    db.flush()
     membership = (
         db.query(GroupeMembers)
         .filter(GroupeMembers.id_groupe == group_id, GroupeMembers.member == user_id)
@@ -274,10 +356,23 @@ def add_group_member(db: Session, group_id: str, user_id: str, *, commit: bool =
     if membership:
         return membership
 
-    membership = GroupeMembers(id_groupe=group_id, member=user_id)
-    db.add(membership)
+    db.execute(
+        text(
+            """
+            INSERT INTO messagerie.groupe_members (id_groupe, member)
+            VALUES (:group_id, :user_id)
+            ON CONFLICT (id_groupe, member) DO NOTHING
+            """
+        ),
+        {"group_id": group_id, "user_id": user_id},
+    )
     if commit:
         db.commit()
+    membership = (
+        db.query(GroupeMembers)
+        .filter(GroupeMembers.id_groupe == group_id, GroupeMembers.member == user_id)
+        .first()
+    )
     return membership
 
 
@@ -350,6 +445,7 @@ def create_group_message(
 
 def get_group_messages(db: Session, *, group_id: str, current_user_id: str) -> list[dict]:
     require_group_member(db, group_id, current_user_id)
+    mark_group_notifications_as_read(db, group_id=group_id, user_id=current_user_id)
     messages = (
         db.query(Message)
         .filter(Message.id_groupe == group_id, Message.date_sup.is_(None))
@@ -357,6 +453,55 @@ def get_group_messages(db: Session, *, group_id: str, current_user_id: str) -> l
         .all()
     )
     return [serialize_message(message) for message in messages]
+
+
+def mark_group_notifications_as_read(db: Session, *, group_id: str, user_id: str) -> None:
+    unread_notifications = (
+        db.query(NotificationMessagerie)
+        .filter(
+            NotificationMessagerie.id_utilisateur == user_id,
+            NotificationMessagerie.id_groupe == group_id,
+            or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
+        )
+        .all()
+    )
+    if not unread_notifications:
+        return
+    for notification in unread_notifications:
+        notification.est_lu = True
+    db.commit()
+
+
+def get_unread_summary(db: Session, *, user_id: str) -> dict:
+    unread_group_ids = {
+        row[0]
+        for row in (
+            db.query(NotificationMessagerie.id_groupe)
+            .filter(
+                NotificationMessagerie.id_utilisateur == user_id,
+                or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
+                NotificationMessagerie.id_groupe.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        if row[0]
+    }
+    has_private_unread = (
+        db.query(NotificationMessagerie.id)
+        .filter(
+            NotificationMessagerie.id_utilisateur == user_id,
+            or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
+            NotificationMessagerie.id_groupe.is_(None),
+        )
+        .first()
+        is not None
+    )
+    return {
+        "unread_discussions_count": len(unread_group_ids) + (1 if has_private_unread else 0),
+        "unread_group_ids": list(unread_group_ids),
+        "has_private_unread": has_private_unread,
+    }
 
 
 def get_resource_group(db: Session, resource_type: str, resource_id: str) -> Optional[Groupe]:
@@ -388,8 +533,8 @@ def ensure_resource_group(
         group.name = desired_name
         group.creator = group.creator or resolved_creator
 
-    add_group_member(db, group.id, resolved_creator, commit=False)
-    for member_id in members:
+    member_ids = list(dict.fromkeys([resolved_creator, *members]))
+    for member_id in member_ids:
         add_group_member(db, group.id, member_id, commit=False)
     db.commit()
     db.refresh(group)

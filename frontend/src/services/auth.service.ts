@@ -2,8 +2,27 @@ import { apiFetch } from './api';
 
 const AUTH_BASE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';
 
+export interface ProfileUpdatePayload {
+  nom?: string;
+  prenoms?: string;
+  email?: string;
+  username?: string;
+  telephone?: string;
+  delivery_address?: string;
+  biographie?: string;
+  genre?: string;
+  date_nais?: string;
+  pays?: string;
+  ville?: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  [key: string]: unknown;
+}
+
 export const authService = {
-  register: (data: any) => apiFetch(AUTH_BASE_URL, '/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  register: (data: RegisterPayload) => apiFetch(AUTH_BASE_URL, '/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (identifier: string, password: string) => apiFetch(AUTH_BASE_URL, '/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) }),
   verifyEmail: (email: string, code: string) => apiFetch(AUTH_BASE_URL, '/auth/verify-email-code', { method: 'POST', body: JSON.stringify({ email, code }) }),
   resendVerificationCode: (email: string) => apiFetch(AUTH_BASE_URL, '/auth/resend-verification-code', { method: 'POST', body: JSON.stringify({ email }) }),
@@ -11,7 +30,10 @@ export const authService = {
   resetPassword: (email: string, code: string, new_password: string) => apiFetch(AUTH_BASE_URL, '/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, new_password }) }),
   changePassword: (current_password: string, new_password: string) => apiFetch(AUTH_BASE_URL, '/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   getMe: () => apiFetch(AUTH_BASE_URL, '/auth/me'),
-  updateMe: (data: { nom?: string; prenoms?: string; email?: string; username?: string }) => apiFetch(AUTH_BASE_URL, '/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
+  updateMe: (data: ProfileUpdatePayload) => apiFetch(AUTH_BASE_URL, '/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
+  getMyProfilePhoto: () => apiFetch(AUTH_BASE_URL, '/auth/me/photo'),
+  updateMyProfilePhoto: (photo_base64: string | null) => apiFetch(AUTH_BASE_URL, '/auth/me/photo', { method: 'PUT', body: JSON.stringify({ photo_base64 }) }),
+  getUserProfilePhoto: (userId: string) => apiFetch(AUTH_BASE_URL, `/auth/users/${userId}/photo`),
   logout: () => apiFetch(AUTH_BASE_URL, '/auth/logout', { method: 'POST' }),
   verify2FA: (challenge_token: string, code: string) => apiFetch(AUTH_BASE_URL, '/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge_token, code }) }),
   setup2FA: () => apiFetch(AUTH_BASE_URL, '/auth/2fa/setup'),

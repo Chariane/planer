@@ -3,10 +3,11 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from ..models import Membre, Motdepasseoublie, Utilisateur, Workspace
+from ..models import Espace, Liste, Membre, Motdepasseoublie, Utilisateur, Workspace
 from ..core.function import commit_or_raise
 from ..core.security import SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
+from backend.api_messagerie.sync import ensure_resource_group, sync_resource_member
 
 
 def _build_default_workspace_name(user_data: dict) -> str:
@@ -72,6 +73,14 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
             role="Créateur",
             statut="Actif",
         ))
+        ensure_resource_group(
+            db,
+            resource_type="workspace",
+            resource_id=default_workspace.id,
+            name=default_workspace.nom,
+            creator_id=new_user.id,
+            members=[new_user.id],
+        )
 
         # 6. Traitement de l'invitation (Contrainte 2, 4, 5)
         if payload:
@@ -106,10 +115,37 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                         role=target_role,
                         statut="Actif",
                     ))
+                    if target_espace_id:
+                        espace = db.query(Espace).filter(Espace.id == target_espace_id).first()
+                        creator_id = (
+                            db.query(Membre.id_utilisateur)
+                            .filter(
+                                Membre.id_espace == target_espace_id,
+                                Membre.role == "Créateur",
+                                Membre.statut == "Actif",
+                            )
+                            .scalar()
+                        )
+                        sync_resource_member(
+                            db,
+                            resource_type="espace",
+                            resource_id=target_espace_id,
+                            user_id=new_user.id,
+                            name=espace.nom if espace else None,
+                            creator_id=creator_id,
+                        )
+                    else:
+                        sync_resource_member(
+                            db,
+                            resource_type="workspace",
+                            resource_id=target_workspace_id,
+                            user_id=new_user.id,
+                            name=ws_exists.nom,
+                            creator_id=ws_exists.id_utilisateur,
+                        )
             
             # 🔧 AJOUT: Traitement des invitations de liste
             if target_liste_id:
-                from ..models import Liste
                 liste_exists = db.query(Liste).filter(Liste.id == target_liste_id).first()
                 if not liste_exists:
                     raise HTTPException(status_code=404, detail="La liste de l'invitation n'existe plus.")
@@ -126,6 +162,23 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                         role=target_role,
                         statut="Actif",
                     ))
+                    creator_id = (
+                        db.query(Membre.id_utilisateur)
+                        .filter(
+                            Membre.id_liste == target_liste_id,
+                            Membre.role == "Créateur",
+                            Membre.statut == "Actif",
+                        )
+                        .scalar()
+                    )
+                    sync_resource_member(
+                        db,
+                        resource_type="liste",
+                        resource_id=target_liste_id,
+                        user_id=new_user.id,
+                        name=liste_exists.nom,
+                        creator_id=creator_id,
+                    )
 
         # Finalisation
         db.commit()

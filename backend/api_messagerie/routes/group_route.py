@@ -18,6 +18,7 @@ from .logique import (
     get_group_members,
     get_group_messages,
     get_resource_group,
+    get_unread_summary,
     list_user_groups,
     remove_group_member,
     remove_resource_member,
@@ -52,6 +53,14 @@ def my_groups(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     return {"groups": list_user_groups(db, current_user.id)}
+
+
+@router.get("/unread-summary")
+def unread_summary(
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return get_unread_summary(db, user_id=current_user.id)
 
 
 @router.get("/groups/{group_id}/members")

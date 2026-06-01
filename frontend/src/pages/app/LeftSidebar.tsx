@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronDown, ChevronRight, FolderTree, Hash, MessageSquare,
+  ChevronDown, ChevronRight, FolderTree, Hash,
   FileText, Calendar, Plus, Edit, Trash2, ListTodo, Settings, UserPlus, X
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
@@ -976,25 +976,6 @@ export default function LeftSidebar() {
           </div>
         </div>
       )}
-
-      {/* Chat - visible pour tous */}
-      <div className="mb-4">
-        <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Chat</h3>
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
-            <Hash className="h-3.5 w-3.5 text-secondary" /> Canal général
-          </div>
-          <div className="pl-3 mt-1">
-            <div className="text-[10px] text-theme-muted mb-0.5 opacity-60">Canaux d'espace</div>
-            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
-              <Hash className="h-3.5 w-3.5 text-theme-muted" /> Canal d'espace 1
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer mt-1 transition-colors">
-            <MessageSquare className="h-3.5 w-3.5 text-primary" /> Discussions
-          </div>
-        </div>
-      </div>
 
       {/* Gestion - visible pour Admin et Créateur */}
       {(isAdminForSpace || isCreatorForSpace) && (

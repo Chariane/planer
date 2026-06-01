@@ -1,18 +1,64 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Camera, Check, Copy, Edit2, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { Shield, Copy, Check, Edit2 } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
+
+const emptyProfileForm = {
+  username: '',
+  email: '',
+  nom: '',
+  prenoms: '',
+  telephone: '',
+  pays: '',
+  ville: '',
+  genre: '',
+  date_nais: '',
+  delivery_address: '',
+  biographie: '',
+};
+
+type ProfileForm = typeof emptyProfileForm;
+
+interface TwoFASetupPayload {
+  google_authenticator_secret?: string;
+  google_authenticator_otpauth_url?: string;
+}
+
+const buildPhotoSrc = (photoBase64?: string | null, mimeType?: string | null) =>
+  photoBase64 ? `data:${mimeType || 'image/jpeg'};base64,${photoBase64}` : null;
+
+const toDateInputValue = (value?: string | null) => {
+  if (!value) return '';
+  return value.slice(0, 10);
+};
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 export default function ProfilePage() {
-  const { user, updateProfile, setup2FA, enable2FA, disable2FA, changePassword } = useAuth();
+  const {
+    user,
+    updateProfile,
+    getProfilePhoto,
+    updateProfilePhoto,
+    setup2FA,
+    enable2FA,
+    disable2FA,
+    changePassword,
+  } = useAuth();
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState('profile');
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ nom: user?.nom || '', prenoms: user?.prenoms || '' });
+  const [editForm, setEditForm] = useState<ProfileForm>(emptyProfileForm);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
-  const [twoFASetup, setTwoFASetup] = useState<any>(null);
+  const [twoFASetup, setTwoFASetup] = useState<TwoFASetupPayload | null>(null);
   const [twoFACode, setTwoFACode] = useState('');
   const [copied, setCopied] = useState(false);
   const [disablePassword, setDisablePassword] = useState('');
@@ -20,15 +66,122 @@ export default function ProfilePage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const fullName = [user?.prenoms, user?.nom].filter(Boolean).join(' ') || user?.username || 'Utilisateur';
+  const initials = (user?.prenoms?.[0] || user?.username?.[0] || 'U').toUpperCase();
+
+  const completion = useMemo(() => {
+    const fields = [
+      user?.nom,
+      user?.prenoms,
+      user?.telephone,
+      user?.pays,
+      user?.ville,
+      user?.biographie,
+      user?.genre,
+      user?.date_nais,
+      photoPreview,
+    ];
+    return Math.round((fields.filter(Boolean).length / fields.length) * 100);
+  }, [photoPreview, user]);
+
+  useEffect(() => {
+    setEditForm({
+      username: user?.username || '',
+      email: user?.email || '',
+      nom: user?.nom || '',
+      prenoms: user?.prenoms || '',
+      telephone: user?.telephone || '',
+      pays: user?.pays || '',
+      ville: user?.ville || '',
+      genre: user?.genre || '',
+      date_nais: toDateInputValue(user?.date_nais),
+      delivery_address: user?.delivery_address || '',
+      biographie: user?.biographie || '',
+    });
+  }, [user]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPhoto = async () => {
+      try {
+        const photo = await getProfilePhoto();
+        if (mounted) setPhotoPreview(buildPhotoSrc(photo?.photoBase64, photo?.mimeType));
+      } catch {
+        if (mounted) setPhotoPreview(null);
+      }
+    };
+    loadPhoto();
+    return () => {
+      mounted = false;
+    };
+  }, [getProfilePhoto, user?.id]);
+
+  const showMessage = (text: string) => {
+    setMessage(text);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
+  const showError = (text: string) => {
+    setError(text);
+    setTimeout(() => setError(''), 3500);
+  };
+
+  const updateField = (field: keyof ProfileForm, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleEditSubmit = async () => {
     try {
-      await updateProfile({ nom: editForm.nom, prenoms: editForm.prenoms });
-      setMessage('Profil mis à jour avec succès');
+      await updateProfile(editForm);
       setIsEditing(false);
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      setError('Erreur lors de la mise à jour');
-      setTimeout(() => setError(''), 3000);
+      showMessage('Profil mis à jour avec succès');
+    } catch (err: unknown) {
+      showError(getErrorMessage(err, 'Erreur lors de la mise à jour'));
+    }
+  };
+
+  const handlePhotoChange = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showError('Veuillez choisir une image valide.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showError('La photo ne doit pas dépasser 2 Mo.');
+      return;
+    }
+
+    setPhotoLoading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const photoDataUrl = String(reader.result);
+        const savedPhotoBase64 = await updateProfilePhoto(photoDataUrl);
+        setPhotoPreview(buildPhotoSrc(savedPhotoBase64) || photoDataUrl);
+        showMessage('Photo de profil mise à jour');
+      } catch (err: unknown) {
+        showError(getErrorMessage(err, 'Impossible de mettre à jour la photo'));
+      } finally {
+        setPhotoLoading(false);
+      }
+    };
+    reader.onerror = () => {
+      setPhotoLoading(false);
+      showError('Impossible de lire cette image.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = async () => {
+    setPhotoLoading(true);
+    try {
+      await updateProfilePhoto(null);
+      setPhotoPreview(null);
+      showMessage('Photo de profil retirée');
+    } catch (err: unknown) {
+      showError(getErrorMessage(err, 'Impossible de retirer la photo'));
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -37,9 +190,8 @@ export default function ProfilePage() {
       const data = await setup2FA();
       setTwoFASetup(data);
       setIs2FAModalOpen(true);
-    } catch (err) {
-      setError('Erreur lors de la préparation 2FA');
-      setTimeout(() => setError(''), 3000);
+    } catch {
+      showError('Erreur lors de la préparation 2FA');
     }
   };
 
@@ -49,128 +201,252 @@ export default function ProfilePage() {
       setIs2FAModalOpen(false);
       setTwoFASetup(null);
       setTwoFACode('');
-      setMessage('2FA activée avec succès');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      setError('Code 2FA invalide');
-      setTimeout(() => setError(''), 3000);
+      showMessage('2FA activée avec succès');
+    } catch {
+      showError('Code 2FA invalide');
     }
   };
 
   const handleDisable2FA = async () => {
     if (!disablePassword) {
-      setError('Veuillez entrer votre mot de passe');
-      setTimeout(() => setError(''), 3000);
+      showError('Veuillez entrer votre mot de passe');
       return;
     }
     try {
       await disable2FA(disablePassword);
       setDisablePassword('');
-      setMessage('2FA désactivée avec succès');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Erreur lors de la désactivation');
-      setTimeout(() => setError(''), 3000);
+      showMessage('2FA désactivée avec succès');
+    } catch (err: unknown) {
+      showError(getErrorMessage(err, 'Erreur lors de la désactivation'));
     }
   };
 
   const handleChangePassword = async () => {
     if (passwordForm.new !== passwordForm.confirm) {
-      setError('Les nouveaux mots de passe ne correspondent pas');
-      setTimeout(() => setError(''), 3000);
+      showError('Les nouveaux mots de passe ne correspondent pas');
       return;
     }
     try {
       await changePassword(passwordForm.current, passwordForm.new);
-      setMessage('Mot de passe modifié avec succès');
       setPasswordForm({ current: '', new: '', confirm: '' });
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      setError('Mot de passe actuel incorrect');
-      setTimeout(() => setError(''), 3000);
+      showMessage('Mot de passe modifié avec succès');
+    } catch {
+      showError('Mot de passe actuel incorrect');
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Mon profil</h1>
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-4">
-          <button onClick={() => setActiveTab('profile')} className={`pb-2 px-1 text-sm font-medium ${activeTab === 'profile' ? 'border-b-2 border-secondary text-secondary' : 'text-gray-500'}`}>Informations</button>
-          <button onClick={() => setActiveTab('security')} className={`pb-2 px-1 text-sm font-medium ${activeTab === 'security' ? 'border-b-2 border-secondary text-secondary' : 'text-gray-500'}`}>Sécurité</button>
-        </nav>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-theme-main">Mon profil</h1>
+          <p className="mt-1 text-sm text-theme-muted">
+            Ces informations seront utilisées dans la messagerie, les rapports et les espaces collaboratifs.
+          </p>
+        </div>
+        {!isEditing && (
+          <Button onClick={() => setIsEditing(true)}>
+            <Edit2 className="mr-2 h-4 w-4" />
+            Compléter mon profil
+          </Button>
+        )}
       </div>
 
-      {activeTab === 'profile' && (
-        <GlassCard className="p-6">
-          <div className="space-y-4">
-            <div><label className="block text-sm font-medium text-gray-700">Nom d'utilisateur</label><p className="mt-1">{user?.username}</p></div>
-            <div><label className="block text-sm font-medium text-gray-700">Email</label><p className="mt-1">{user?.email}</p></div>
-            {!isEditing ? (
-              <>
-                <div><label className="block text-sm font-medium text-gray-700">Nom</label><p className="mt-1">{user?.nom || 'Non renseigné'}</p></div>
-                <div><label className="block text-sm font-medium text-gray-700">Prénoms</label><p className="mt-1">{user?.prenoms || 'Non renseigné'}</p></div>
-                <Button variant="outline" onClick={() => { setEditForm({ nom: user?.nom || '', prenoms: user?.prenoms || '' }); setIsEditing(true); }}>
-                  <Edit2 className="h-4 w-4 mr-2" /> Modifier mon profil
+      <GlassCard className="overflow-hidden" hover={false}>
+        <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
+          <div className="border-b border-theme-subtle bg-theme-surface-hover/50 p-6 lg:border-b-0 lg:border-r">
+            <div className="flex flex-col items-center text-center">
+              <div className="relative">
+                <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-4 border-theme-surface bg-secondary/10 text-4xl font-bold text-secondary shadow-theme-lg">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Photo de profil" className="h-full w-full object-cover" />
+                  ) : (
+                    initials
+                  )}
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={photoLoading}
+                  className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-white shadow-lg transition hover:bg-secondary/90 disabled:opacity-60"
+                  title="Changer la photo"
+                >
+                  <Camera className="h-5 w-5" />
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => handlePhotoChange(event.target.files?.[0])}
+              />
+              <h2 className="mt-4 text-xl font-semibold text-theme-main">{fullName}</h2>
+              <p className="text-sm text-theme-muted">@{user?.username}</p>
+              <div className="mt-5 w-full">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-medium text-theme-muted">Profil complété</span>
+                  <span className="font-bold text-secondary">{completion}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-theme-surface">
+                  <div className="h-2 rounded-full bg-secondary transition-all" style={{ width: `${completion}%` }} />
+                </div>
+              </div>
+              {photoPreview && (
+                <Button variant="ghost" size="sm" className="mt-4 text-red-500 hover:text-red-600" onClick={handleRemovePhoto} loading={photoLoading}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Retirer la photo
                 </Button>
-              </>
-            ) : (
-              <div className="space-y-4">
-                <div><label className="block text-sm font-medium text-gray-700">Nom</label><input type="text" value={editForm.nom} onChange={e => setEditForm({ ...editForm, nom: e.target.value })} className="w-full border rounded p-2" /></div>
-                <div><label className="block text-sm font-medium text-gray-700">Prénoms</label><input type="text" value={editForm.prenoms} onChange={e => setEditForm({ ...editForm, prenoms: e.target.value })} className="w-full border rounded p-2" /></div>
-                <div className="flex gap-2"><Button onClick={handleEditSubmit}>Enregistrer</Button><Button variant="outline" onClick={() => setIsEditing(false)}>Annuler</Button></div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="mb-6 border-b border-theme-subtle">
+              <nav className="flex gap-4">
+                <button onClick={() => setActiveTab('profile')} className={`pb-3 text-sm font-semibold ${activeTab === 'profile' ? 'border-b-2 border-secondary text-secondary' : 'text-theme-muted'}`}>Informations</button>
+                <button onClick={() => setActiveTab('security')} className={`pb-3 text-sm font-semibold ${activeTab === 'security' ? 'border-b-2 border-secondary text-secondary' : 'text-theme-muted'}`}>Sécurité</button>
+              </nav>
+            </div>
+
+            {activeTab === 'profile' && (
+              <div className="space-y-5">
+                {!isEditing ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InfoItem icon={<UserRound className="h-4 w-4" />} label="Nom complet" value={fullName} />
+                      <InfoItem icon={<Mail className="h-4 w-4" />} label="Email" value={user?.email} />
+                      <InfoItem icon={<Phone className="h-4 w-4" />} label="Téléphone" value={user?.telephone} />
+                      <InfoItem icon={<MapPin className="h-4 w-4" />} label="Localisation" value={[user?.ville, user?.pays].filter(Boolean).join(', ')} />
+                    </div>
+                    <InfoItem label="Adresse de livraison" value={user?.delivery_address} />
+                    <InfoItem label="Biographie" value={user?.biographie} multiline />
+                    <Button variant="outline" onClick={() => setIsEditing(true)}>
+                      <Edit2 className="mr-2 h-4 w-4" />
+                      Modifier mes informations
+                    </Button>
+                  </>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TextField label="Nom d'utilisateur" value={editForm.username} onChange={value => updateField('username', value)} />
+                      <TextField label="Email" type="email" value={editForm.email} onChange={value => updateField('email', value)} />
+                      <TextField label="Nom" value={editForm.nom} onChange={value => updateField('nom', value)} />
+                      <TextField label="Prénoms" value={editForm.prenoms} onChange={value => updateField('prenoms', value)} />
+                      <TextField label="Téléphone" value={editForm.telephone} onChange={value => updateField('telephone', value)} />
+                      <TextField label="Date de naissance" type="date" value={editForm.date_nais} onChange={value => updateField('date_nais', value)} />
+                      <TextField label="Ville" value={editForm.ville} onChange={value => updateField('ville', value)} />
+                      <TextField label="Pays" value={editForm.pays} onChange={value => updateField('pays', value)} />
+                      <SelectField label="Genre" value={editForm.genre} onChange={value => updateField('genre', value)} />
+                    </div>
+                    <TextField label="Adresse de livraison" value={editForm.delivery_address} onChange={value => updateField('delivery_address', value)} />
+                    <TextAreaField label="Biographie" value={editForm.biographie} onChange={value => updateField('biographie', value)} />
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button variant="outline" onClick={() => setIsEditing(false)}>
+                        <X className="mr-2 h-4 w-4" />
+                        Annuler
+                      </Button>
+                      <Button onClick={handleEditSubmit}>
+                        <Save className="mr-2 h-4 w-4" />
+                        Enregistrer
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'security' && (
+              <div className="space-y-6">
+                <section className="rounded-xl border border-theme-subtle p-4">
+                  <h2 className="mb-4 text-lg font-semibold text-theme-main">Authentification à deux facteurs</h2>
+                  {user?.is_2fa_enabled ? (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-emerald-600">2FA activée</p>
+                      <input type="password" placeholder="Mot de passe actuel" value={disablePassword} onChange={e => setDisablePassword(e.target.value)} className="w-full max-w-sm rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main" />
+                      <Button variant="outline" onClick={handleDisable2FA}>Désactiver 2FA</Button>
+                    </div>
+                  ) : (
+                    <Button onClick={handleSetup2FA}><Shield className="mr-2 h-4 w-4" /> Activer 2FA</Button>
+                  )}
+                </section>
+
+                <section className="rounded-xl border border-theme-subtle p-4">
+                  <h2 className="mb-4 text-lg font-semibold text-theme-main">Changer le mot de passe</h2>
+                  <div className="space-y-3 max-w-md">
+                    <input type="password" placeholder="Mot de passe actuel" value={passwordForm.current} onChange={e => setPasswordForm({ ...passwordForm, current: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main" />
+                    <input type="password" placeholder="Nouveau mot de passe" value={passwordForm.new} onChange={e => setPasswordForm({ ...passwordForm, new: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main" />
+                    <input type="password" placeholder="Confirmer" value={passwordForm.confirm} onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main" />
+                    <Button onClick={handleChangePassword}>Modifier le mot de passe</Button>
+                  </div>
+                </section>
               </div>
             )}
           </div>
-        </GlassCard>
-      )}
-
-      {activeTab === 'security' && (
-        <div className="space-y-6">
-          <GlassCard className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Authentification à deux facteurs</h2>
-            {user?.is_2fa_enabled ? (
-              <div>
-                <p className="text-green-600 mb-2">✓ 2FA activée</p>
-                <input type="password" placeholder="Mot de passe actuel" value={disablePassword} onChange={e => setDisablePassword(e.target.value)} className="border rounded p-2 w-64 mr-2" />
-                <Button variant="outline" onClick={handleDisable2FA}>Désactiver 2FA</Button>
-              </div>
-            ) : (
-              <Button onClick={handleSetup2FA}><Shield className="h-4 w-4 mr-2" /> Activer 2FA</Button>
-            )}
-          </GlassCard>
-
-          <GlassCard className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Changer le mot de passe</h2>
-            <div className="space-y-3 max-w-md">
-              <input type="password" placeholder="Mot de passe actuel" value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full border rounded p-2" />
-              <input type="password" placeholder="Nouveau mot de passe" value={passwordForm.new} onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} className="w-full border rounded p-2" />
-              <input type="password" placeholder="Confirmer" value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full border rounded p-2" />
-              <Button onClick={handleChangePassword}>Modifier le mot de passe</Button>
-            </div>
-          </GlassCard>
         </div>
-      )}
+      </GlassCard>
 
       <Modal isOpen={is2FAModalOpen} onClose={() => setIs2FAModalOpen(false)} title="Activer l'authentification à deux facteurs" size="lg">
         {twoFASetup && (
           <div className="space-y-4">
-            <p>Scannez ce QR code avec Google Authenticator :</p>
-            <div className="flex justify-center"><QRCodeCanvas value={twoFASetup.google_authenticator_otpauth_url} size={200} /></div>
-            <p>Ou saisissez ce code secret :</p>
+            <p className="text-sm text-theme-muted">Scannez ce QR code avec Google Authenticator.</p>
+            <div className="flex justify-center"><QRCodeCanvas value={twoFASetup.google_authenticator_otpauth_url || ''} size={200} /></div>
+            <p className="text-sm text-theme-muted">Ou saisissez ce code secret :</p>
             <div className="flex items-center gap-2">
-              <code className="bg-gray-100 p-2 rounded">{twoFASetup.google_authenticator_secret}</code>
-              <button onClick={() => { navigator.clipboard.writeText(twoFASetup.google_authenticator_secret); setCopied(true); setTimeout(()=>setCopied(false),2000); }}>{copied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}</button>
+              <code className="rounded bg-theme-surface-hover p-2 text-sm text-theme-main">{twoFASetup.google_authenticator_secret || ''}</code>
+              <button onClick={() => { navigator.clipboard.writeText(twoFASetup.google_authenticator_secret || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}</button>
             </div>
-            <input type="text" placeholder="Code à 6 chiffres" value={twoFACode} onChange={e => setTwoFACode(e.target.value)} className="w-full border rounded p-2" />
+            <input type="text" placeholder="Code à 6 chiffres" value={twoFACode} onChange={e => setTwoFACode(e.target.value)} className="w-full rounded-lg border border-theme-border bg-theme-surface p-2 text-theme-main" />
             <Button onClick={handleEnable2FA}>Activer</Button>
           </div>
         )}
       </Modal>
 
-      {message && <div className="fixed bottom-4 right-4 bg-green-100 text-green-700 p-3 rounded shadow">{message}</div>}
-      {error && <div className="fixed bottom-4 right-4 bg-red-100 text-red-700 p-3 rounded shadow">{error}</div>}
+      {message && <div className="fixed bottom-4 right-4 rounded-lg bg-green-100 p-3 text-green-700 shadow">{message}</div>}
+      {error && <div className="fixed bottom-4 right-4 rounded-lg bg-red-100 p-3 text-red-700 shadow">{error}</div>}
     </div>
+  );
+}
+
+function InfoItem({ label, value, icon, multiline = false }: { label: string; value?: string | null; icon?: ReactNode; multiline?: boolean }) {
+  return (
+    <div className="rounded-xl border border-theme-subtle bg-theme-surface/70 p-4">
+      <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-theme-muted">
+        {icon}
+        {label}
+      </div>
+      <p className={`text-sm text-theme-main ${multiline ? 'whitespace-pre-wrap leading-6' : ''}`}>{value || 'Non renseigné'}</p>
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-theme-muted">{label}</span>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main outline-none focus:ring-2 focus:ring-secondary/40" />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-theme-muted">{label}</span>
+      <select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main outline-none focus:ring-2 focus:ring-secondary/40">
+        <option value="">Non renseigné</option>
+        <option value="Homme">Homme</option>
+        <option value="Femme">Femme</option>
+        <option value="Autre">Autre</option>
+      </select>
+    </label>
+  );
+}
+
+function TextAreaField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-theme-muted">{label}</span>
+      <textarea value={value} onChange={e => onChange(e.target.value)} rows={4} className="w-full resize-none rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm text-theme-main outline-none focus:ring-2 focus:ring-secondary/40" />
+    </label>
   );
 }

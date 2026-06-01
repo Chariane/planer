@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
@@ -283,6 +284,22 @@ export default function CenterContent() {
     );
   };
 
+  const renderListDiscussionButton = () => {
+    if (!listId) return null;
+
+    return (
+      <div className="mb-5 flex justify-end">
+        <Link
+          to={`/messagerie?resource_type=liste&resource_id=${listId}`}
+          className="inline-flex items-center justify-center rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-2 text-sm font-bold text-secondary shadow-theme-sm transition-all hover:border-secondary hover:bg-secondary hover:text-white"
+        >
+          <MessageCircle className="mr-2 h-4 w-4" />
+          Voir la discussion
+        </Link>
+      </div>
+    );
+  };
+
   const openCreateTask = () => {
     if (!canCreateContent) return;
     setEditingTask(null);
@@ -406,6 +423,7 @@ export default function CenterContent() {
           </p>
         </div>
 
+        {renderListDiscussionButton()}
         {renderListProgressSummary()}
         {renderListDescription()}
 
@@ -462,6 +480,7 @@ export default function CenterContent() {
 
   return (
     <div className="p-6">
+      {renderListDiscussionButton()}
       {renderListProgressSummary()}
       {renderListDescription()}
 

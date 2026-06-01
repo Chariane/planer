@@ -1,3 +1,5 @@
+import base64
+import binascii
 from datetime import timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -45,6 +47,8 @@ from ..schemas import (
     LoginResponse,
     LoginRequest,
     MessageResponse,
+    ProfilePhotoResponse,
+    ProfilePhotoUpdate,
     RegisterWithWorkspaceResponse,
     ResetPasswordRequest,
     Token,
@@ -67,6 +71,46 @@ from ..crud.utilisateur import (
 from ..core.function import decode_token
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
+
+MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+
+
+def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
+    if not photo_base64:
+        return None
+
+    payload = photo_base64.strip()
+    if "," in payload:
+        payload = payload.split(",", 1)[1]
+
+    try:
+        photo_bytes = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Photo de profil invalide.") from exc
+
+    if len(photo_bytes) > MAX_PROFILE_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="La photo de profil ne doit pas depasser 2 Mo.")
+    return photo_bytes
+
+
+def _encode_profile_photo(photo: bytes | None) -> str | None:
+    if not photo:
+        return None
+    return base64.b64encode(photo).decode("ascii")
+
+
+def _guess_profile_photo_mime(photo: bytes | None) -> str | None:
+    if not photo:
+        return None
+    if photo.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if photo.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if photo.startswith(b"RIFF") and photo[8:12] == b"WEBP":
+        return "image/webp"
+    if photo.startswith(b"GIF87a") or photo.startswith(b"GIF89a"):
+        return "image/gif"
+    return "image/jpeg"
 
 
 @router.post("/register", response_model=RegisterWithWorkspaceResponse, status_code=status.HTTP_201_CREATED)
@@ -475,6 +519,57 @@ def change_password(
 @router.get("/me", response_model=UtilisateurOut)
 def get_me(current_user: UtilisateurOut = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/me/photo", response_model=ProfilePhotoResponse)
+def get_my_profile_photo(
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    return {
+        "photo_base64": _encode_profile_photo(user.photo),
+        "mime_type": _guess_profile_photo_mime(user.photo),
+    }
+
+
+@router.put("/me/photo", response_model=ProfilePhotoResponse)
+def update_my_profile_photo(
+    payload: ProfilePhotoUpdate,
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    user.photo = _decode_profile_photo(payload.photo_base64)
+    commit_or_raise(
+        db,
+        detail="Impossible de mettre a jour la photo de profil.",
+        refresh_instance=user,
+    )
+    return {
+        "photo_base64": _encode_profile_photo(user.photo),
+        "mime_type": _guess_profile_photo_mime(user.photo),
+    }
+
+
+@router.get("/users/{user_id}/photo", response_model=ProfilePhotoResponse)
+def get_user_profile_photo(
+    user_id: str,
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    return {
+        "photo_base64": _encode_profile_photo(user.photo),
+        "mime_type": _guess_profile_photo_mime(user.photo),
+    }
 
 
 @router.get("/me/resources", response_model=dict)

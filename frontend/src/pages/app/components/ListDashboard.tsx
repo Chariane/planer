@@ -1,6 +1,7 @@
 // frontend/src/pages/app/components/ListDashboard.tsx
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, Calendar, Activity, Target, X } from 'lucide-react';
+import { Users, UserPlus, Calendar, Activity, Target, X, MessageCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
@@ -218,14 +219,21 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
             <p className="text-sm text-gray-500 mt-3 max-w-3xl leading-relaxed">{listDescription}</p>
           )}
         </div>
-        {canInviteMembers && availableRoles.length > 0 && (
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to={`/messagerie?resource_type=liste&resource_id=${listId}`}
+            className="inline-flex items-center justify-center rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition-all hover:bg-secondary hover:text-white hover:border-secondary"
+          >
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Voir la discussion
+          </Link>
+          {canInviteMembers && availableRoles.length > 0 && (
             <Button onClick={() => setIsInviteModalOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
               Inviter un membre
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

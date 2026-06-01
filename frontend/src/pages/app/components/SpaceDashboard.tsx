@@ -1,6 +1,7 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, ShieldCheck, X, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, MessageCircle, ShieldCheck, X, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
@@ -270,12 +271,21 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             </div>
           </div>
         </div>
-        {canInviteMembers && availableRoles.length > 0 && (
-          <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
-            <UserPlus size={18} className="mr-3" />
-            Inviter un membre
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`/messagerie?resource_type=espace&resource_id=${spaceId}`}
+            className="inline-flex items-center justify-center rounded-2xl border border-secondary/20 bg-secondary/10 px-8 py-4 text-[11px] font-black uppercase tracking-widest text-secondary shadow-theme-sm transition-all hover:border-secondary/30 hover:bg-secondary hover:text-white hover:shadow-xl hover:shadow-secondary/20"
+          >
+            <MessageCircle size={18} className="mr-3" />
+            Ouvrir la discussion
+          </Link>
+          {canInviteMembers && availableRoles.length > 0 && (
+            <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+              <UserPlus size={18} className="mr-3" />
+              Inviter un membre
+            </Button>
+          )}
+        </div>
       </div>
 
       {spaceDescription && (

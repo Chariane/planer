@@ -109,7 +109,7 @@ class UtilisateurUpdate(BaseModel):
     new_password: Optional[str] = Field(None, min_length=8)
     biographie: Optional[str] = None
     genre: Optional[str] = None
-    date_nais: Optional[datetime] = None
+    date_nais: Optional[date] = None
     pays: Optional[str] = None
     ville: Optional[str] = None
 
@@ -164,10 +164,19 @@ class UtilisateurOut(UtilisateurBase):
     is_livreur: bool
     biographie: Optional[str] = None
     genre: Optional[str] = None
-    date_nais: Optional[datetime] = None
+    date_nais: Optional[date] = None
     pays: Optional[str] = None
     ville: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfilePhotoUpdate(BaseModel):
+    photo_base64: Optional[str] = None
+
+
+class ProfilePhotoResponse(BaseModel):
+    photo_base64: Optional[str] = None
+    mime_type: Optional[str] = None
 
 # ----------------------------------------
 # 🔐 AUTHENTIFICATION

@@ -1000,6 +1000,9 @@ class GroupCreate(BaseModel):
 class GroupOut(BaseModel):
     id: str
     name: str
+    raw_name: Optional[str] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
     creator: str
     member_count: int = 0
     created_at: Optional[datetime] = None

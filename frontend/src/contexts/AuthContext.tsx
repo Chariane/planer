@@ -1,8 +1,9 @@
 // frontend/src/contexts/AuthContext.tsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
+import type { ProfileUpdatePayload, RegisterPayload } from '../services/auth.service';
 
 interface User {
   id: string;
@@ -10,8 +11,26 @@ interface User {
   email: string;
   nom?: string;
   prenoms?: string;
+  telephone?: string;
+  delivery_address?: string;
+  biographie?: string;
+  genre?: string;
+  date_nais?: string;
+  pays?: string;
+  ville?: string;
   is_2fa_enabled?: boolean;
   is_utilisateur_verifie?: boolean;
+}
+
+interface TwoFASetupPayload {
+  google_authenticator_secret?: string;
+  google_authenticator_otpauth_url?: string;
+  [key: string]: unknown;
+}
+
+interface ProfilePhotoPayload {
+  photoBase64: string;
+  mimeType?: string | null;
 }
 
 interface AuthContextType {
@@ -21,14 +40,16 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<{ requires2fa: boolean; challengeToken?: string }>;
   verify2FA: (challengeToken: string, code: string) => Promise<void>;
-  register: (data: any) => Promise<{ email: string }>;
+  register: (data: RegisterPayload) => Promise<{ email: string }>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerificationCode: (email: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  updateProfile: (data: { nom?: string; prenoms?: string; email?: string; username?: string }) => Promise<void>;
-  setup2FA: () => Promise<any>;
+  updateProfile: (data: ProfileUpdatePayload) => Promise<void>;
+  getProfilePhoto: () => Promise<ProfilePhotoPayload | null>;
+  updateProfilePhoto: (photoBase64: string | null) => Promise<string | null>;
+  setup2FA: () => Promise<TwoFASetupPayload>;
   enable2FA: (code: string) => Promise<void>;
   disable2FA: (currentPassword: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -66,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, []);
 
-  const register = async (data: any) => {
+  const register = async (data: RegisterPayload) => {
     await authService.register(data);
     return { email: data.email };
   };
@@ -109,10 +130,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.changePassword(currentPassword, newPassword);
   };
 
-  const updateProfile = async (data: { nom?: string; prenoms?: string; email?: string; username?: string }) => {
+  const updateProfile = async (data: ProfileUpdatePayload) => {
     const updatedUser = await authService.updateMe(data);
     setUser(updatedUser);
   };
+
+  const getProfilePhoto = useCallback(async () => {
+    const response = await authService.getMyProfilePhoto();
+    return response?.photo_base64
+      ? { photoBase64: response.photo_base64, mimeType: response.mime_type || null }
+      : null;
+  }, []);
+
+  const updateProfilePhoto = useCallback(async (photoBase64: string | null) => {
+    const response = await authService.updateMyProfilePhoto(photoBase64);
+    return response?.photo_base64 || null;
+  }, []);
 
   const setup2FA = async () => {
     const response = await authService.setup2FA();
@@ -163,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       changePassword,
       updateProfile,
+      getProfilePhoto,
+      updateProfilePhoto,
       setup2FA,
       enable2FA,
       disable2FA,
@@ -173,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');

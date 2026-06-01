@@ -1,5 +1,6 @@
-import { Menu, User, LogOut, Search, ChevronsLeft, AlignLeft } from 'lucide-react';
+import { Menu, User, LogOut, Search, ChevronsLeft, AlignLeft, Moon, Sun, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -13,8 +14,10 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, onToggleSidebar, isCompact = false }: HeaderProps) {
   const { user, logout } = useAuth();
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const shouldCompleteProfile = Boolean(user && (!user.nom || !user.prenoms));
 
   return (
     <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
@@ -70,21 +73,55 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
         <div className="flex items-center gap-2 md:gap-3">
 
           {user && (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">
-              <NotificationBell />
-            </motion.div>
+            <>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">
+                <button
+                  onClick={toggleDarkMode}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-theme-subtle bg-theme-surface text-theme-muted shadow-theme-sm transition hover:border-secondary/30 hover:bg-secondary/10 hover:text-secondary"
+                  title={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
+                  aria-label={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
+                >
+                  {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                </button>
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">
+                <NotificationBell />
+              </motion.div>
+            </>
           )}
 
           {user ? (
-            <div className="flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1 dark:bg-slate-800">
-              <User className="h-5 w-5 text-gray-600 hidden sm:block dark:text-slate-300" />
-              <Link to="/profile" className="text-sm font-medium hover:text-secondary transition truncate max-w-[100px] dark:text-slate-100">
-                {user.username || 'Profil'}
-              </Link>
-              <button onClick={logout} className="p-1 text-gray-400 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-300">
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
+            <>
+              {shouldCompleteProfile ? (
+                <Link
+                  to="/profile"
+                  className="hidden items-center gap-2 rounded-full border border-secondary/25 bg-secondary/10 px-3 py-2 text-sm font-semibold text-secondary transition hover:bg-secondary/15 lg:flex"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Compléter profil
+                </Link>
+              ) : (
+                <div className="flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1 dark:bg-slate-800">
+                  <User className="h-5 w-5 text-gray-600 hidden sm:block dark:text-slate-300" />
+                  <Link to="/profile" className="text-sm font-medium hover:text-secondary transition truncate max-w-[100px] dark:text-slate-100">
+                    {user.username || 'Profil'}
+                  </Link>
+                  <button onClick={logout} className="p-1 text-gray-400 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-300">
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              {shouldCompleteProfile && (
+                <button
+                  onClick={logout}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:text-red-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-red-300"
+                  title="Se déconnecter"
+                  aria-label="Se déconnecter"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              )}
+            </>
           ) : (
             <Link to="/login" className="px-3 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition text-sm whitespace-nowrap">
               Se connecter

@@ -18,6 +18,7 @@ import AbsencesPage from './pages/AbsencesPage';
 import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
+import MessageriePage from './pages/MessageriePage';
 import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
@@ -56,6 +57,7 @@ function App() {
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/messagerie" element={<MessageriePage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
