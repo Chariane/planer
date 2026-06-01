@@ -181,7 +181,13 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
         recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
 
     for user_id in recipients:
-        _create_notification(db, user_id=user_id, message=message, type_="info")
+        _create_notification(
+            db,
+            user_id=user_id,
+            message=message,
+            type_="info",
+            dedupe_today=True
+        )
 
 
 def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id: str, is_absence: bool) -> None:
@@ -191,7 +197,13 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
 
     if not is_absence:
         message = f"Un congé a été planifié pour vous dans la liste « {liste.nom or 'une liste'} »."
-        _create_notification(db, user_id=absence_member.id_utilisateur, message=message, type_="evenement")
+        _create_notification(
+            db,
+            user_id=absence_member.id_utilisateur,
+            message=message,
+            type_="evenement",
+            dedupe_today=True
+        )
         return
 
     author = db.query(Utilisateur).filter(Utilisateur.id == absence_member.id_utilisateur).first()
@@ -204,14 +216,26 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
         recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
 
     for user_id in recipients:
-        _create_notification(db, user_id=user_id, message=message, type_="alerte")
+        _create_notification(
+            db,
+            user_id=user_id,
+            message=message,
+            type_="alerte",
+            dedupe_today=True
+        )
 
 
 def notify_absence_decision(db: Session, *, absence_member: Membre, accepted: bool) -> None:
     status_label = "acceptée" if accepted else "refusée"
     type_ = "evenement" if accepted else "warning"
     message = f"Votre demande d'absence a été {status_label}."
-    _create_notification(db, user_id=absence_member.id_utilisateur, message=message, type_=type_)
+    _create_notification(
+        db,
+        user_id=absence_member.id_utilisateur,
+        message=message,
+        type_=type_,
+        dedupe_today=True
+    )
 
 
 def notify_task_assigned(db: Session, *, tache: Tache, assigned_user_id: str) -> None:
@@ -220,7 +244,13 @@ def notify_task_assigned(db: Session, *, tache: Tache, assigned_user_id: str) ->
         liste = db.query(Liste).filter(Liste.id == tache.id_liste).first()
         liste_name = f" dans la liste « {liste.nom} »" if liste else ""
     message = f"La tâche « {tache.titre} » vous a été assignée{liste_name}."
-    _create_notification(db, user_id=assigned_user_id, message=message, type_="info")
+    _create_notification(
+        db,
+        user_id=assigned_user_id,
+        message=message,
+        type_="info",
+        dedupe_today=True
+    )
 
 
 def notify_overdue_tasks_for_liste(db: Session, *, liste_id: str) -> None:

@@ -21,6 +21,14 @@ import type {
 import { useNavigationStore } from '../store/useNavigationStore';
 
 export type { Member, Task, ChecklistItem, Period, List, Space, Workspace };
+
+export interface DashboardStats {
+  total_projects: number;
+  total_spaces: number;
+  active_members: number;
+  recent_activities: any[];
+}
+
 const EMPTY_JOINED_ITEMS: JoinedResource[] = [];
 
 const createEmptyLocalResources = (workspaceId: string): WorkspaceLocalResourcesResponse => ({
@@ -75,6 +83,8 @@ interface AppContextType {
   toggleSubTask: (taskId: string, subTaskId: string) => void;
   toggleChecklistItem: (listId: string, periodId: string, itemId: string) => void;
   addMember: (workspaceId: string, member: Member) => void;
+  dashboardStats: DashboardStats | null;
+  loadDashboardStats: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -90,6 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [activeListId, setActiveListId] = useState<string | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
   const applyWorkspaceAccessListing = (data: WorkspaceAccessListingResponse) => {
     const owned = Array.isArray(data.owned) ? data.owned : [];
@@ -99,10 +110,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setWorkspaces([...owned, ...joined]);
   };
 
+  const loadDashboardStats = async () => {
+    try {
+      const stats = await listeService.getDashboardStats();
+      setDashboardStats(stats);
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+    }
+  };
+
   const applyNavigationData = async (data: WorkspaceNavigationResponse) => {
     const store = useNavigationStore.getState();
     store.setLoading(true);
-    
+
     try {
       const owned = Array.isArray(data.owned_workspaces) ? data.owned_workspaces : [];
       const joined = Array.isArray(data.joined_workspaces) ? data.joined_workspaces : [];
@@ -120,6 +140,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         joinedListes: Array.isArray(data.joined_listes) ? data.joined_listes : [],
         joinedTaches: Array.isArray(data.joined_taches) ? data.joined_taches : []
       });
+
+      // Mettre à jour les states locaux pour les ressources rejointes
+      setJoinedEspaces(Array.isArray(data.joined_espaces) ? data.joined_espaces : []);
+      setJoinedListes(Array.isArray(data.joined_listes) ? data.joined_listes : []);
+      setJoinedTaches(Array.isArray(data.joined_taches) ? data.joined_taches : []);
 
       // Identifier les workspaces "partiels" (ceux dont on a rejoint une ressource mais pas le workspace entier)
       const allJoined = [
@@ -365,9 +390,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Fonctions vides
-  const toggleSubTask = (taskId: string, subTaskId: string) => { };
-  const toggleChecklistItem = (listId: string, periodId: string, itemId: string) => { };
-  const addMember = (workspaceId: string, member: Member) => { };
+  const toggleSubTask = (_taskId: string, _subTaskId: string) => { };
+  const toggleChecklistItem = (_listId: string, _periodId: string, _itemId: string) => { };
+  const addMember = (_workspaceId: string, _member: Member) => { };
 
   // Chargement initial
   useEffect(() => {
@@ -417,6 +442,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggleSubTask,
         toggleChecklistItem,
         addMember,
+        dashboardStats,
+        loadDashboardStats,
       }}
     >
       {children}

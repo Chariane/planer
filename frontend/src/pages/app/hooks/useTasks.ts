@@ -51,7 +51,7 @@ export function useTasks(listId: string | undefined) {
       }
 
       const transformed = (Array.isArray(data) ? data : []).map(transformTask);
-      
+
       const tasksWithMembers = await Promise.all(
         transformed.map(async (task) => {
           try {
@@ -83,7 +83,7 @@ export function useTasks(listId: string | undefined) {
 
   const addTask = async (newTask: Omit<Task, 'id' | 'createdAt' | 'checklists' | 'progression'>) => {
     if (!listId) return null;
-    
+
     try {
       const apiTask = {
         titre: newTask.title,
@@ -104,15 +104,19 @@ export function useTasks(listId: string | undefined) {
 
   const updateTask = async (updatedTask: Task) => {
     if (!updatedTask.id) return;
-    
+
     try {
       const apiTask = {
         titre: updatedTask.title,
         description: updatedTask.description,
         statut: updatedTask.status,
         priorite: updatedTask.priority,
-        date_debut: updatedTask.startDate ? new Date(updatedTask.startDate).toISOString() : undefined,
-        date_fin_prevue: updatedTask.dueDate ? new Date(updatedTask.dueDate).toISOString() : undefined,
+        date_debut: updatedTask.startDate && !isNaN(new Date(updatedTask.startDate).getTime())
+          ? new Date(updatedTask.startDate).toISOString()
+          : undefined,
+        date_fin_prevue: updatedTask.dueDate && !isNaN(new Date(updatedTask.dueDate).getTime())
+          ? new Date(updatedTask.dueDate).toISOString()
+          : undefined,
       };
       await tacheService.update(updatedTask.id, apiTask);
       await loadTasks();
@@ -153,14 +157,14 @@ export function useTasks(listId: string | undefined) {
     setFilters({});
   };
 
-  return { 
-    tasks, 
-    loading, 
-    error, 
+  return {
+    tasks,
+    loading,
+    error,
     filters,
-    loadTasks, 
-    addTask, 
-    updateTask, 
+    loadTasks,
+    addTask,
+    updateTask,
     updateTaskStatus,
     deleteTask,
     updateFilters,

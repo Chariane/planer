@@ -119,7 +119,6 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         {!isCompact && (
           <div className="flex flex-col">
             <span className="text-lg font-black text-white tracking-tight leading-none">K-Planner</span>
-            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-1">Enterprise</span>
           </div>
         )}
       </div>
@@ -128,12 +127,12 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       <div className={`w-full ${isCompact ? 'px-2 mt-6' : 'px-4 mt-6'}`}>
         <div className={`p-2.5 bg-white/5 rounded-2xl flex ${isCompact ? 'flex-col items-center justify-center' : 'items-center gap-3'} border border-white/5 group hover:bg-white/10 transition-all cursor-pointer`}>
           <div className={`${isCompact ? 'h-8 w-8 text-xs' : 'h-10 w-10 text-sm'} flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-white/10 flex items-center justify-center text-white font-black shadow-lg`}>
-            {user?.username?.charAt(0)?.toUpperCase() || 'U'}
+            {user?.email?.charAt(0)?.toUpperCase() || 'U'}
           </div>
           {!isCompact && (
             <div className="flex-1 min-w-0 flex flex-col">
               <p className="text-sm font-bold text-white truncate group-hover:text-secondary transition-colors">
-                {user?.username || 'Invité'}
+                {user?.email || 'Invité'}
               </p>
               <p className="text-[10px] font-black text-white/30 truncate uppercase tracking-tight">Espace Personnel</p>
             </div>
@@ -211,11 +210,17 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
 
         {/* Joined Workspaces */}
         {joinedWorkspaces.length > 0 && (
-          <div className="mt-6 w-full flex flex-col">
+          <div className="mt-4 w-full flex flex-col">
             <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-5'} mb-3 w-full`}>
-              <button onClick={() => setJoinedOpen(!joinedOpen)} className="text-[10px] font-black text-white/40 uppercase tracking-widest hover:text-white flex items-center">
-                <Users className="h-3 w-3 mr-1" />
-                {!isCompact && "Collaborations"}
+              <button
+                onClick={() => setJoinedOpen(!joinedOpen)}
+                className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors`}
+              >
+                <div className="flex items-center">
+                  {joinedOpen ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                  <Users className="h-3 w-3 mr-1" />
+                  {!isCompact && "Collaborations"}
+                </div>
               </button>
             </div>
             <AnimatePresence>
@@ -242,11 +247,17 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
 
         {/* Joined Espaces */}
         {joinedEspaces.length > 0 && (
-          <div className="mt-6 w-full flex flex-col">
+          <div className="mt-4 w-full flex flex-col">
             <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-5'} mb-3 w-full`}>
-              <button onClick={() => setEspacesOpen(!espacesOpen)} className="text-[10px] font-black text-white/40 uppercase tracking-widest hover:text-white flex items-center">
-                <FolderOpen className="h-3 w-3 mr-1" />
-                {!isCompact && "Sous-Espaces"}
+              <button
+                onClick={() => setEspacesOpen(!espacesOpen)}
+                className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors`}
+              >
+                <div className="flex items-center">
+                  {espacesOpen ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                  <FolderOpen className="h-3 w-3 mr-1" />
+                  {!isCompact && "Sous-Espaces"}
+                </div>
               </button>
             </div>
             <AnimatePresence>
@@ -272,10 +283,58 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             </AnimatePresence>
           </div>
         )}
+
+        {/* Joined Listes */}
+        {joinedListes.length > 0 && (
+          <div className="mt-4 w-full flex flex-col">
+            <div className={`flex items-center ${isCompact ? 'justify-center' : 'justify-between px-5'} mb-3 w-full`}>
+              <button
+                onClick={() => setListesOpen(!listesOpen)}
+                className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors`}
+              >
+                <div className="flex items-center">
+                  {listesOpen ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                  <ListTodo className="h-3 w-3 mr-1" />
+                  {!isCompact && "Projets"}
+                </div>
+              </button>
+            </div>
+            <AnimatePresence>
+              {listesOpen && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}>
+                  {joinedListes.map((list) => (
+                    <Link
+                      key={list.id}
+                      to={`/liste/${list.id}`}
+                      className="flex items-center px-4 py-2 gap-3 rounded-xl w-full transition-all group text-white/40 hover:bg-white/5 hover:text-white"
+                    >
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-400/40 group-hover:bg-emerald-400 transition-colors" />
+                      {!isCompact && (
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm truncate">{list.nom}</span>
+                          <span className="text-[8px] font-black uppercase text-white/10 group-hover:text-white/20 transition-colors">{list.workspace_nom}</span>
+                        </div>
+                      )}
+                    </Link>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
       {/* Footer / Exit */}
-      <div className={`mt-auto pt-6 border-t border-white/5 w-full ${isCompact ? 'px-2 flex flex-col items-center pb-6' : 'px-4 pb-6'}`}>
+      <div className={`mt-auto pt-6 border-t border-white/5 w-full ${isCompact ? 'px-2 flex flex-col items-center pb-6' : 'px-4 pb-6'} space-y-3`}>
+        <Link
+          to="/"
+          className={`group w-full flex ${isCompact ? 'flex-col items-center justify-center p-2.5' : 'items-center gap-3 px-4 py-2'} rounded-xl text-white/10 hover:text-white/60 transition-all font-bold border border-transparent hover:bg-white/5`}
+          title="Explorer le site"
+        >
+          <Globe size={isCompact ? 18 : 16} className="flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+          {!isCompact && <span className="text-[9px] uppercase tracking-[0.2em] opacity-40 group-hover:opacity-100">Visiter le site</span>}
+        </Link>
+
         <button
           onClick={() => logout()}
           className={`group w-full flex ${isCompact ? 'flex-col items-center justify-center p-3' : 'items-center gap-3 px-4 py-3'} rounded-xl text-white/30 hover:bg-red-500/10 hover:text-red-400 transition-all font-black border border-transparent hover:border-red-500/20`}

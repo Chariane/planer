@@ -608,7 +608,7 @@ class Notification(Base):
     evenement: Mapped[Optional['Evenement']] = relationship('Evenement', foreign_keys=[id_evenement])
     commentaire: Mapped[Optional['Commentaire']] = relationship('Commentaire', foreign_keys=[id_commentaire])
     reponsecommentaire: Mapped[Optional['Reponsecommentaire']] = relationship('Reponsecommentaire', foreign_keys=[id_reponsecommentaire])
-    message: Mapped[Optional['Message']] = relationship('Message', foreign_keys=[id_message])
+    message_rel: Mapped[Optional['Message']] = relationship('Message', foreign_keys=[id_message])
     groupe: Mapped[Optional['Groupe']] = relationship('Groupe', foreign_keys=[id_groupe])
     reaction: Mapped[Optional['Reaction']] = relationship('Reaction', foreign_keys=[id_reaction])
     historique_connexion: Mapped[Optional['HistoriqueConnexion']] = relationship('HistoriqueConnexion', foreign_keys=[id_historique_connexion])

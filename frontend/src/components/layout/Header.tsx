@@ -1,6 +1,5 @@
-import { Menu, User, LogOut, Search, Moon, Sun, ChevronsLeft, AlignLeft } from 'lucide-react';
+import { Menu, User, LogOut, Search, ChevronsLeft, AlignLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -14,7 +13,6 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, onToggleSidebar, isCompact = false }: HeaderProps) {
   const { user, logout } = useAuth();
-  const { isDarkMode, toggleDarkMode } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -70,14 +68,6 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 transition-colors dark:text-amber-200 dark:hover:bg-slate-800 dark:hover:text-amber-100"
-            title={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
-            aria-label={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
-          >
-            {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
 
           {user && (
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex">

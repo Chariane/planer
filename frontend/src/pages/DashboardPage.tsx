@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FolderKanban, CheckSquare, Users,
-  ArrowRight, TrendingUp, Zap,
+  ArrowRight, TrendingUp,
   Star, Briefcase, PlusCircle, Bell, ChevronRight,
   Activity, Clock, LayoutGrid
 } from 'lucide-react';
@@ -14,57 +14,41 @@ import { Button } from '../components/ui/Button';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
 export default function DashboardPage() {
-  const { workspaces, joinedEspaces, joinedTaches, loadWorkspaces, loadNavigationData } = useApp();
-  const [stats, setStats] = useState({
-    totalTasks: 0,
-    pendingTasks: 0,
-    completedTasks: 0,
-    activeMembers: 0,
-    recentActivities: [] as any[]
-  });
+  const {
+    workspaces = [],
+    joinedWorkspaces = [],
+    joinedEspaces = [],
+    joinedListes = [],
+    loadWorkspaces,
+    loadNavigationData,
+    dashboardStats,
+    loadDashboardStats
+  } = useApp();
+
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
-    loadWorkspaces();
-    loadNavigationData();
-    loadDashboardStats();
-  }, []);
-
-  const loadDashboardStats = async () => {
-    try {
-      // Simulation de données dynamiques
-      const totalTasks = 42;
-      const pendingTasks = 15;
-      const completedTasks = 27;
-      const activeMembers = workspaces.reduce((acc, ws) => acc + (ws.membres?.length || 0), 0);
-
-      setStats({
-        totalTasks,
-        pendingTasks,
-        completedTasks,
-        activeMembers,
-        recentActivities: [
-          { id: 1, user: "Thomas D.", action: "a créé", target: "Design System", time: "2h", icon: "zap", color: "text-primary" },
-          { id: 2, user: "Alice M.", action: "a terminé", target: "API Integration", time: "5h", icon: "check", color: "text-emerald-500" },
-          { id: 3, user: "Lucas B.", action: "a rejoint", target: "K-Planner", time: "1j", icon: "user", color: "text-secondary" }
-        ]
-      });
-    } catch (error) {
-      console.error("Erreur chargement stats", error);
-    } finally {
+    const init = async () => {
+      await Promise.all([
+        loadWorkspaces(),
+        loadNavigationData(),
+        loadDashboardStats()
+      ]);
       setLoading(false);
-    }
-  };
+    };
+    init();
+  }, []);
 
   const handleWorkspaceCreated = () => {
     loadWorkspaces();
+    loadDashboardStats();
   };
 
   const statCards = [
     {
       label: "Workspaces",
-      value: workspaces.length,
+      value: (workspaces || []).length + (joinedWorkspaces || []).length,
       icon: <Briefcase size={24} />,
       color: "bg-primary/10 text-primary",
       trend: "+12%",
@@ -72,15 +56,15 @@ export default function DashboardPage() {
     },
     {
       label: "Espaces",
-      value: workspaces.reduce((acc, ws) => acc + (ws.espaces?.length || 0), 0) + joinedEspaces.length,
+      value: dashboardStats?.total_spaces || 0,
       icon: <FolderKanban size={24} />,
       color: "bg-secondary/10 text-secondary",
       trend: "+8%",
       link: "#"
     },
     {
-      label: "Tâches totales",
-      value: stats.totalTasks + joinedTaches.length,
+      label: "Projets",
+      value: dashboardStats?.total_projects || 0,
       icon: <CheckSquare size={24} />,
       color: "bg-emerald-500/10 text-emerald-500",
       trend: "+23%",
@@ -88,7 +72,7 @@ export default function DashboardPage() {
     },
     {
       label: "Membres actifs",
-      value: stats.activeMembers,
+      value: dashboardStats?.active_members || 0,
       icon: <Users size={24} />,
       color: "bg-purple-500/10 text-purple-400",
       trend: "+5%",
@@ -183,7 +167,7 @@ export default function DashboardPage() {
 
           <GlassCard className="p-2 border-white/5 bg-theme-surface/30">
             <div className="space-y-1">
-              {stats.recentActivities.map((activity, idx) => (
+              {(dashboardStats?.recent_activities || []).map((activity: any, idx: number) => (
                 <motion.div
                   key={activity.id}
                   initial={{ opacity: 0, x: -10 }}
@@ -191,24 +175,27 @@ export default function DashboardPage() {
                   transition={{ delay: 0.4 + idx * 0.1 }}
                   className="flex items-center gap-4 p-4 rounded-xl hover:bg-white/[0.03] transition-colors group cursor-pointer"
                 >
-                  <div className={`w-10 h-10 rounded-xl bg-theme-surface border border-white/5 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform ${activity.color}`}>
-                    {activity.icon === 'zap' && <Zap size={18} />}
-                    {activity.icon === 'check' && <CheckSquare size={18} />}
-                    {activity.icon === 'user' && <Users size={18} />}
+                  <div className={`w-10 h-10 rounded-xl bg-theme-surface border border-white/5 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}>
+                    <Bell size={18} className="text-secondary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-theme-main font-medium leading-tight">
-                      <span className="font-bold">{activity.user}</span>
-                      <span className="text-theme-muted opacity-60"> {activity.action} </span>
-                      <span className="font-bold text-primary group-hover:text-secondary transition-colors">{activity.target}</span>
+                      <span className="text-theme-muted opacity-60"> {activity.message} </span>
                     </p>
                     <div className="flex items-center gap-2 mt-1 px-0.5">
                       <Clock size={10} className="text-theme-muted opacity-30" />
-                      <span className="text-[10px] font-black text-theme-muted opacity-30 uppercase tracking-tighter">il y a {activity.time}</span>
+                      <span className="text-[10px] font-black text-theme-muted opacity-30 uppercase tracking-tighter">
+                        {new Date(activity.date_creation).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
               ))}
+              {(!dashboardStats?.recent_activities || dashboardStats.recent_activities.length === 0) && (
+                <div className="py-12 text-center">
+                  <p className="text-xs font-black text-theme-muted uppercase tracking-widest opacity-20 italic">Aucune activité récente</p>
+                </div>
+              )}
             </div>
           </GlassCard>
         </div>
@@ -221,8 +208,8 @@ export default function DashboardPage() {
               Favoris
             </h3>
             <GlassCard className="p-4 border-white/5 space-y-2">
-              {workspaces.slice(0, 4).length > 0 ? (
-                workspaces.slice(0, 4).map((ws) => (
+              {workspaces.filter(ws => ws.current_user_role !== null).slice(0, 4).length > 0 ? (
+                workspaces.filter(ws => ws.current_user_role !== null).slice(0, 4).map((ws) => (
                   <Link
                     key={ws.id}
                     to={`/workspace/${ws.id}`}
@@ -248,6 +235,54 @@ export default function DashboardPage() {
               <Link to="/workspaces" className="mt-4 px-3 text-[10px] font-black text-secondary hover:underline inline-flex items-center gap-1.5 uppercase tracking-widest opacity-80 hover:opacity-100 transition-all">
                 Voir tout <ArrowRight size={12} />
               </Link>
+            </GlassCard>
+          </div>
+
+          {/* Collaborations */}
+          <div className="space-y-6">
+            <h3 className="text-xl font-black text-theme-main tracking-tighter flex items-center gap-3 uppercase px-1">
+              <Users className="h-5 w-5 text-secondary" />
+              Collaborations
+            </h3>
+            <GlassCard className="p-4 border-white/5 space-y-3">
+              {(joinedWorkspaces.length > 0 || joinedEspaces.length > 0 || joinedListes.length > 0) ? (
+                <div className="space-y-4">
+                  {/* Joined Workspaces */}
+                  {joinedWorkspaces.map(ws => (
+                    <Link key={ws.id} to={`/workspace/${ws.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group">
+                      <div className="h-8 w-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center font-black text-[10px] border border-secondary/20">WS</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{ws.nom}</p>
+                        <p className="text-[9px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">Workspace rejoint</p>
+                      </div>
+                    </Link>
+                  ))}
+                  {/* Joined Spaces */}
+                  {joinedEspaces.map(es => (
+                    <Link key={es.id} to={`/espace/${es.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black text-[10px] border border-primary/20">ES</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{es.nom}</p>
+                        <p className="text-[9px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">Espace • {es.workspace_nom}</p>
+                      </div>
+                    </Link>
+                  ))}
+                  {/* Joined Lists */}
+                  {joinedListes.map(ls => (
+                    <Link key={ls.id} to={`/liste/${ls.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-black text-[10px] border border-emerald-500/20">LS</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{ls.nom}</p>
+                        <p className="text-[9px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">Liste • {ls.workspace_nom}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-xs font-black text-theme-muted uppercase tracking-widest opacity-20 italic">Aucune collaboration</p>
+                </div>
+              )}
             </GlassCard>
           </div>
 

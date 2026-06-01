@@ -61,13 +61,14 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "En attent
     )
 
 
-def _serialize_absence(absence: AbsenceEtConge) -> dict:
-    owner_name = "inconnu"
-    if absence.membres and absence.membres.utilisateur:
-        user = absence.membres.utilisateur
-        owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
-    elif absence.membres and not absence.membres.utilisateur:
-        owner_name = "Utilisateur supprimé"
+    author_role = "Membre"
+    if absence.membres:
+        author_role = absence.membres.role
+        if absence.membres.utilisateur:
+            user = absence.membres.utilisateur
+            owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+        else:
+            owner_name = "Utilisateur supprimé"
         
     return {
         "id": absence.id,
@@ -82,7 +83,8 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
         "duree_demandee_en_jours": absence.duree_demandee_en_jours,
         "conge_interrompu_at": absence.conge_interrompu_at,
         "id_membre": absence.id_membre,
-        "owner_name": owner_name
+        "owner_name": owner_name,
+        "author_role": author_role
     }
 
 

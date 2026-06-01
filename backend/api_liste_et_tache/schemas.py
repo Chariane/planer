@@ -698,7 +698,7 @@ class TacheBulkUpdate(BaseModel):
 
 # Membre
 class MembreBase(BaseModel):
-    id_utilisateur: str
+    id_utilisateur: Optional[str] = None
     role: str = Field(default="Membre")
     statut: str = Field(default="Actif")
 
@@ -1056,7 +1056,7 @@ class ListeInvitationAcceptRequest(BaseModel):
 class NotificationOut(BaseModel):
     id: str
     type: str
-    message: str
+    message: Optional[str] = None
     est_lu: bool = False
     est_globale: bool = False
     date_creation: Optional[datetime] = None
@@ -1074,5 +1074,10 @@ class NotificationCreate(BaseModel):
     est_globale: bool = False
 
 
-class UnreadCountOut(BaseModel):
-    count: int
+class DashboardStatsOut(BaseModel):
+    total_projects: int
+    total_spaces: int
+    active_members: int
+    recent_activities: List[NotificationOut]
+
+    model_config = ConfigDict(from_attributes=True)

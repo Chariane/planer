@@ -103,15 +103,15 @@ export default function TaskFormModal({
     if (!title.trim()) return;
     const assigneeMembers = members.filter(m => assignedMemberIds.includes(m.id));
     await onSubmit({
-        title,
-        description,
-        startDate,
-        dueDate,
-        status,
-        priority,
-        assignees: assigneeMembers,
-        checklists,
-      });
+      title,
+      description,
+      startDate,
+      dueDate,
+      status,
+      priority,
+      assignees: assigneeMembers,
+      checklists,
+    });
   };
 
   const handleAddChecklist = async () => {
@@ -228,25 +228,25 @@ export default function TaskFormModal({
         )}
 
         {canEditTaskFields && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Modifier les membres assignés</label>
-          <select
-            multiple
-            value={assignedMemberIds}
-            onChange={e => {
-              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
-              setAssignedMemberIds(selected);
-            }}
-            className="w-full p-2 border rounded-lg h-32 focus:ring-2 focus:ring-secondary"
-          >
-            {members.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({roleLabels[m.role] || m.role})
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-400 mt-1">Maintenez Ctrl (ou Cmd) pour sélectionner plusieurs</p>
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Modifier les membres assignés</label>
+            <select
+              multiple
+              value={assignedMemberIds}
+              onChange={e => {
+                const selected = Array.from(e.target.selectedOptions, opt => opt.value);
+                setAssignedMemberIds(selected);
+              }}
+              className="w-full p-2 border rounded-lg h-32 focus:ring-2 focus:ring-secondary"
+            >
+              {members.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({roleLabels[m.role] || m.role})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Maintenez Ctrl (ou Cmd) pour sélectionner plusieurs</p>
+          </div>
         )}
 
         <div className="border-t border-gray-100 pt-4">
@@ -293,7 +293,7 @@ export default function TaskFormModal({
                 )}
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                  {canEditTaskFields && editingChecklistId !== checklist.id && (
+                  {editingChecklistId !== checklist.id && (
                     <button
                       onClick={() => {
                         setEditingChecklistId(checklist.id);
@@ -304,7 +304,7 @@ export default function TaskFormModal({
                       <Edit className="h-3 w-3" />
                     </button>
                   )}
-                  {canEditTaskFields && editingChecklistId === checklist.id && (
+                  {editingChecklistId === checklist.id && (
                     <button
                       onClick={() => onUpdateChecklistText(checklist.id, editingChecklistText).then(() => {
                         setEditingChecklistId(null);
@@ -322,19 +322,17 @@ export default function TaskFormModal({
                       )}
                     </button>
                   )}
-                  {canEditTaskFields && (
-                    <button
-                      onClick={() => onDeleteChecklist(checklist.id)}
-                      disabled={checklistLoading === `delete-${checklist.id}`}
-                      className="p-1 text-gray-400 hover:text-red-500"
-                    >
-                      {checklistLoading === `delete-${checklist.id}` ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Trash className="h-3 w-3" />
-                      )}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => onDeleteChecklist(checklist.id)}
+                    disabled={checklistLoading === `delete-${checklist.id}`}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    {checklistLoading === `delete-${checklist.id}` ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Trash className="h-3 w-3" />
+                    )}
+                  </button>
                 </div>
               </div>
             ))}

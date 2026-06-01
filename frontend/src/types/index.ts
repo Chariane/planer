@@ -190,3 +190,38 @@ export interface TacheBulkUpdateItem {
   statut?: string;
   ordre_affichage?: number;
 }
+
+// === Absence & Congés (Original Schema) ===
+export interface AbsenceEtConge {
+  id: string;
+  is_absence: boolean;
+  date_debut: string;
+  date_fin: string;
+  statut: string;
+  statut_date: string;
+  motif?: string;
+  is_conge_planifie: boolean;
+  created_at: string;
+  duree_demandee_en_jours?: number;
+  id_membre?: string;
+  owner_name?: string;
+}
+
+export interface AbsenceCalendarOut {
+  id: string;
+  id_membre: string;
+  member_name: string;
+  date_debut: string;
+  date_fin: string;
+  statut: string;
+  is_absence: boolean;
+}
+
+export interface AbsenceConflictOut {
+  id: string;
+  id_membre: string;
+  date_debut: string;
+  date_fin: string;
+  statut: string;
+  motif?: string;
+}

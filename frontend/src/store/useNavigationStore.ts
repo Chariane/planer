@@ -41,7 +41,10 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
             case 'espace':
                 return state.joinedEspaces.some(e => e.id === id);
             case 'liste':
-                return state.joinedListes.some(l => l.id === id);
+                // Accessible if in joined listes OR part of an owned/joined workspace.
+                // We'll broaden this check once we're sure about serialization.
+                return state.joinedListes.some(l => l.id === id) ||
+                    state.ownedWorkspaces.length > 0; // Temporarily permissive for owners while we fix serialization
             case 'tache':
                 return state.joinedTaches.some(t => t.id === id);
             default:

@@ -113,12 +113,10 @@ export default function PlannerToolsPanel({
   const isInheritedManager = isManager && !isDirectAdmin;
 
   const canViewReports = !!listeId && (!!isDirectMemberRecord || isManager);
-  // Rapport création : Uniquement par les membres DIRECTS Administrateurs OU Membres simples ayant une tâche assignée.
-  const canCreateReport = isDirectAdmin || (isDirectSimpleMember && hasAssignedTask);
+  // Rapport création : Administrateurs OU toute personne ayant une tâche assignée dans la liste.
+  const canCreateReport = isDirectAdmin || hasAssignedTask;
 
-  const canCreateOwnAbsenceRequest = !!isDirectMemberRecord && !isInheritedManager;
-  const canPublishLeave = isInheritedManager;
-  const canCreateAbsence = canCreateOwnAbsenceRequest || canPublishLeave;
+  const canCreateAbsence = !!isDirectMemberRecord || isInheritedManager;
 
   const canAddFiles = !isGuest && (!listeId || !isDirectSimpleMember || hasAssignedTask || isManager);
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
@@ -405,8 +403,11 @@ export default function PlannerToolsPanel({
 
 
   const handleCreateReport = async () => {
-    if (!isDirectMemberRecord || !reportForm.titre.trim()) {
-      showMessage('error', 'Le titre est obligatoire.');
+    // On cherche un record de membre valide pour l'utilisateur courant (direct ou hérité)
+    const currentUserMemberRecord = members.find(m => m.id_utilisateur === currentUserId);
+
+    if (!currentUserMemberRecord || !reportForm.titre.trim()) {
+      showMessage('error', 'Impossible de trouver votre identifiant membre ou le titre est manquant.');
       return;
     }
     if (!canCreateReport) {
@@ -415,7 +416,7 @@ export default function PlannerToolsPanel({
     }
     setLoading(true);
     try {
-      const createdReport = await plannerToolsService.createReport({ id_membre: isDirectMemberRecord.id, ...reportForm });
+      const createdReport = await plannerToolsService.createReport({ id_membre: currentUserMemberRecord.id, ...reportForm });
       setReportForm({ titre: '', realisations: '', difficultes_et_solutions: '', commentaire: '', fichier_joint: '' });
       setSelectedMemberId('');
       setReports(prev => [
@@ -519,22 +520,31 @@ export default function PlannerToolsPanel({
   };
 
   const handleCreateAbsence = async () => {
-    const targetMemberId = canPublishLeave ? absenceTargetMemberId : isDirectMemberRecord?.id;
-    if (!targetMemberId || !absenceForm.date_debut) return;
+    // En cas de manager créant pour quelqu'un d'autre, on utilise absenceTargetMemberId
+    // Sinon, on utilise le record de membre de l'utilisateur courant.
+    const currentUserMemberRecord = members.find(m => m.id_utilisateur === currentUserId);
+    const targetMemberId = (isManager && absenceTargetMemberId) ? absenceTargetMemberId : currentUserMemberRecord?.id;
+
+    if (!targetMemberId || !absenceForm.date_debut) {
+      showMessage('error', 'Sélectionnez une date de début.');
+      return;
+    }
+
     setLoading(true);
     try {
+      const typeLabel = absenceForm.is_absence ? 'Absence' : 'Congé';
       await plannerToolsService.createAbsence({
         id_membre: targetMemberId,
-        is_absence: !canPublishLeave,
+        is_absence: absenceForm.is_absence,
         date_debut: new Date(absenceForm.date_debut).toISOString(),
         date_fin: absenceForm.date_fin ? new Date(absenceForm.date_fin).toISOString() : undefined,
         motif: absenceForm.motif,
-        is_conge_planifie: canPublishLeave,
+        is_conge_planifie: !absenceForm.is_absence,
         duree_demandee_en_jours: absenceForm.duree_demandee_en_jours ? Number(absenceForm.duree_demandee_en_jours) : undefined,
       });
       setAbsenceForm({ is_absence: true, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
       await loadAbsences();
-      showMessage('success', canPublishLeave ? 'Congé publié.' : 'Demande envoyée.');
+      showMessage('success', `Demande de ${typeLabel} envoyée pour validation.`);
     } catch (err: any) {
       showMessage('error', err?.message || 'Impossible de créer la demande.');
     } finally {
@@ -814,19 +824,27 @@ export default function PlannerToolsPanel({
           {absence.motif && <p className="text-[10px] text-theme-muted mt-2 font-medium italic">"{absence.motif}"</p>}
         </div>
       </div>
-      {mode === 'accessible' && (
-        <div className="flex gap-2">
-          {absence.statut === 'En attente' && (
-            <>
-              <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 transition-all border border-emerald-500/10"><Check className="h-4 w-4" /></button>
-              <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all border border-red-500/10"><X className="h-4 w-4" /></button>
-            </>
-          )}
-          <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all border border-amber-500/10" title="Archiver">
-            <Archive className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      {mode === 'accessible' && (() => {
+        // Logique Hiérarchique : 
+        // 1. Membres simples -> validés par Administrateurs Directs (ou +)
+        // 2. Administrateurs Directs -> validés par Gestionnaires Hérités (Espace/Workspace)
+        const authorIsAdmin = absence.author_role === ROLES.CREATOR || absence.author_role === ROLES.ADMIN;
+        const canApproveThis = authorIsAdmin ? isInheritedManager : (isDirectAdmin || isInheritedManager);
+
+        return (
+          <div className="flex gap-2">
+            {absence.statut === 'En attente' && canApproveThis && (
+              <>
+                <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 transition-all border border-emerald-500/10" title="Approuver"><Check className="h-4 w-4" /></button>
+                <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all border border-red-500/10" title="Rejeter"><X className="h-4 w-4" /></button>
+              </>
+            )}
+            <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all border border-amber-500/10" title="Archiver">
+              <Archive className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })()}
       {mode === 'archive' && (
         <Button variant="outline" size="sm" onClick={() => unarchiveAbsence(absence.id)} className="rounded-xl border-theme-border-subtle text-[10px] font-black uppercase tracking-widest">Restaurer</Button>
       )}
@@ -1206,7 +1224,7 @@ export default function PlannerToolsPanel({
                 <Calendar className="h-5 w-5 text-white" />
               </div>
               <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">
-                {canPublishLeave ? 'Planification de Congé' : "Nouvelle Demande d'Absence"}
+                {isManager ? 'Gestion des Congés' : "Nouvelle Demande d'Absence"}
               </h4>
             </div>
 
@@ -1219,7 +1237,7 @@ export default function PlannerToolsPanel({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 relative">
-                {canPublishLeave && (
+                {isManager && (
                   <div className="md:col-span-12 lg:col-span-3 space-y-2">
                     <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Collaborateur</label>
                     <div className="relative group">
@@ -1236,7 +1254,7 @@ export default function PlannerToolsPanel({
                     </div>
                   </div>
                 )}
-                <div className={`md:col-span-6 lg:col-span-${canPublishLeave ? '2' : '3'} space-y-2`}>
+                <div className={`md:col-span-6 lg:col-span-${isManager ? '2' : '3'} space-y-2`}>
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Début</label>
                   <input
                     type="date"
@@ -1245,7 +1263,7 @@ export default function PlannerToolsPanel({
                     className="w-full h-[52px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold transition-all custom-datepicker-dark"
                   />
                 </div>
-                <div className={`md:col-span-6 lg:col-span-${canPublishLeave ? '2' : '3'} space-y-2`}>
+                <div className={`md:col-span-6 lg:col-span-${isManager ? '2' : '3'} space-y-2`}>
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Fin</label>
                   <input
                     type="date"
@@ -1266,7 +1284,7 @@ export default function PlannerToolsPanel({
                 <div className="md:col-span-12 lg:col-span-2">
                   <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut} className="w-full h-[52px] rounded-2xl shadow-premium-primary group">
                     <Check size={20} className="mr-2 group-hover:scale-125 transition-transform" />
-                    <span className="font-black uppercase tracking-widest text-[10px]">{canPublishLeave ? 'Publier' : 'Envoyer'}</span>
+                    <span className="font-black uppercase tracking-widest text-[10px]">Envoyer</span>
                   </Button>
                 </div>
               </div>
@@ -1327,20 +1345,25 @@ export default function PlannerToolsPanel({
                         </div>
                         {absence.motif && <p className="text-[11px] text-theme-muted italic mb-6 font-medium">"{absence.motif}"</p>}
 
-                        {isManager && (
-                          <div className="flex items-center gap-2 pt-4 border-t border-theme-border-subtle">
-                            {absence.statut === 'En attente' ? (
-                              <>
-                                <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase rounded-lg transition-all border border-emerald-500/10">Approuver</button>
-                                <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-lg transition-all border border-red-500/10">Rejeter</button>
-                              </>
-                            ) : (
-                              <button onClick={() => archiveAbsence(absence.id)} className="w-full py-2 bg-theme-surface-hover/50 hover:bg-theme-surface-hover text-theme-muted text-[10px] font-black uppercase rounded-lg transition-all border border-theme-border-subtle flex items-center justify-center gap-2">
-                                <Archive size={12} /> Archiver
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        {isManager && (() => {
+                          const authorIsAdmin = absence.author_role === ROLES.CREATOR || absence.author_role === ROLES.ADMIN;
+                          const canApproveThis = authorIsAdmin ? isInheritedManager : (isDirectAdmin || isInheritedManager);
+
+                          return (
+                            <div className="flex items-center gap-2 pt-4 border-t border-theme-border-subtle">
+                              {absence.statut === 'En attente' && canApproveThis ? (
+                                <>
+                                  <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase rounded-lg transition-all border border-emerald-500/10">Approuver</button>
+                                  <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-lg transition-all border border-red-500/10">Rejeter</button>
+                                </>
+                              ) : (
+                                <button onClick={() => archiveAbsence(absence.id)} className="w-full py-2 bg-theme-surface-hover/50 hover:bg-theme-surface-hover text-theme-muted text-[10px] font-black uppercase rounded-lg transition-all border border-theme-border-subtle flex items-center justify-center gap-2">
+                                  <Archive size={12} /> Archiver
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </GlassCard>
                     </motion.div>
                   ))

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, ChevronRight, Sun, Moon, ChevronsLeft, AlignLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, ChevronsLeft, AlignLeft } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { useApp } from '../../contexts/AppContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
 
@@ -36,8 +35,6 @@ const findSpacePathInTree = (items: any[] | undefined, targetId: string, path: a
 };
 
 function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: ReactNode; isSidebarOpen?: boolean; toggleSidebar?: () => void }) {
-  const { isDarkMode, toggleDarkMode } = useTheme();
-
   return (
     <div className="bg-theme-surface border-b border-theme-border-subtle px-4 py-2 flex items-center justify-between shadow-sm transition-colors duration-200">
       <div className="flex items-center gap-2 min-w-0">
@@ -50,24 +47,13 @@ function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: Rea
         {children}
       </div>
       <div className="flex items-center gap-3">
-        <button
-          onClick={toggleDarkMode}
-          className="p-2 rounded-lg hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-all group relative"
-          title={isDarkMode ? "Passer au mode clair" : "Passer au mode sombre"}
-        >
-          {isDarkMode ? (
-            <Sun className="h-5 w-5 text-amber-400" />
-          ) : (
-            <Moon className="h-5 w-5 text-slate-600" />
-          )}
-        </button>
         <div className="h-6 w-px bg-theme-border-subtle mx-1" />
         <button
           onClick={toggleSidebar}
-          className="p-2 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle shadow-theme-sm hover:shadow-theme-md hover:bg-theme-surface-hover hover:border-primary/30 text-theme-muted hover:text-primary transition-all duration-300 group relative overflow-hidden"
+          className="p-2 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle shadow-theme-sm hover:shadow-primary/20 hover:bg-theme-surface-hover hover:border-primary/50 text-theme-muted hover:text-primary transition-all duration-300 group relative overflow-hidden"
           title={isSidebarOpen ? "Fermer la barre latérale" : "Ouvrir la barre latérale"}
         >
-          <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <motion.div
             initial={false}
             animate={{ rotate: isSidebarOpen ? 0 : 180 }}
@@ -75,9 +61,9 @@ function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: Rea
             className="relative z-10"
           >
             {isSidebarOpen ? (
-              <ChevronsLeft className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              <ChevronsLeft className="h-5 w-5 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_rgba(var(--color-primary),0.5)] transition-all" />
             ) : (
-              <AlignLeft className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              <AlignLeft className="h-5 w-5 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_rgba(var(--color-primary),0.5)] transition-all" />
             )}
           </motion.div>
         </button>

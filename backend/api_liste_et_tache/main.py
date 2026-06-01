@@ -12,9 +12,11 @@ if __package__ in {None, ""}:
 
     from backend.api_liste_et_tache.routes.utilisateur import router as utilisateur_router
     from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
+    from backend.api_liste_et_tache.routes.dashboard import router as dashboard_router
 else:
     from .routes.utilisateur import router as utilisateur_router
     from .routes.entreprise import router as entreprise_router
+    from .routes.dashboard import router as dashboard_router
 
 app = FastAPI(
     title="Microservice Api Liste",
@@ -33,6 +35,7 @@ app.add_middleware(
 
 app.include_router(utilisateur_router)
 app.include_router(entreprise_router)
+app.include_router(dashboard_router)
 
 # Monter le dossier des uploads pour servir les fichiers statiques
 uploads_dir = Path(__file__).resolve().parent / "uploads"

@@ -583,6 +583,7 @@ export default function CenterContent() {
               onEditTask={openEditTask}
               onDeleteTask={canCreateContent ? deleteTask : () => { }}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
+              onUpdateTaskStatus={updateTaskStatus}
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
@@ -591,7 +592,7 @@ export default function CenterContent() {
             />
           )}
 
-          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
+          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={(canCreateContent || isListGuest) ? updateTask : () => { }} />}
           {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
           {activeTab === 'outils' && (
             <PlannerToolsPanel
@@ -628,8 +629,8 @@ export default function CenterContent() {
             checklistLoading={checklistLoading}
             onAddChecklist={addChecklist}
             onToggleChecklist={toggleChecklist}
-            onUpdateChecklistText={isTaskModalLimited ? async () => { } : updateChecklistText}
-            onDeleteChecklist={isTaskModalLimited ? async () => { } : deleteChecklist}
+            onUpdateChecklistText={updateChecklistText}
+            onDeleteChecklist={deleteChecklist}
             onSubmit={handleTaskSubmit}
             limitedOperational={isTaskModalLimited}
           />

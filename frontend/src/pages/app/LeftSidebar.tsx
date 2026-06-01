@@ -733,14 +733,14 @@ export default function LeftSidebar() {
                   : 'text-theme-main hover:bg-theme-surface-hover'
                   }`}
               >
-                <div className={`shrink-0 p-1 rounded-lg transition-colors ${spaceId === item.id ? 'bg-primary shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]' : 'bg-theme-surface-hover group-hover:bg-theme-surface'}`}>
-                  <FolderTree className={`h-3 w-3 ${spaceId === item.id ? 'text-white' : 'text-theme-muted'}`} />
+                <div className={`shrink-0 p-1.5 rounded-xl transition-all duration-300 ${spaceId === item.id ? 'bg-primary text-white shadow-[0_0_15px_rgba(var(--color-primary),0.4)]' : 'bg-theme-surface-hover group-hover:bg-theme-surface group-hover:shadow-theme-sm'}`}>
+                  <FolderTree className={`h-3.5 w-3.5 ${spaceId === item.id ? 'text-white' : 'text-theme-muted group-hover:text-theme-main'}`} />
                 </div>
-                <span className="truncate tracking-tight">{item.nom}</span>
+                <span className={`truncate tracking-tight transition-colors ${spaceId === item.id ? 'text-primary' : 'text-theme-main/80 group-hover:text-theme-main'}`}>{item.nom}</span>
 
                 {/* Subtle active glow background */}
                 {spaceId === item.id && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent -z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent -z-10" />
                 )}
               </Link>
             </div>
@@ -893,12 +893,15 @@ export default function LeftSidebar() {
       {currentWorkspace && (
         <div
           onContextMenu={handleWorkspaceContextMenu}
-          className="mb-3 rounded-lg border border-theme-border-subtle bg-theme-surface px-2 py-1.5 shadow-sm transition-colors"
+          className="mb-3 rounded-xl border border-theme-border-strong/10 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-3 py-2 shadow-theme-md transition-all hover:border-primary/30 group relative overflow-hidden"
           title={isWorkspaceCreator ? 'Clic droit pour modifier ou supprimer le workspace' : undefined}
         >
-          <div className="flex items-center gap-1.5">
-            <Hash className="h-3.5 w-3.5 text-primary" />
-            <span className="truncate text-[11px] font-bold text-theme-main tracking-tight">{currentWorkspace.nom}</span>
+          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-2 relative z-10">
+            <div className="p-1 rounded-lg bg-primary/20 text-primary shadow-theme-sm group-hover:shadow-[0_0_12px_rgba(var(--color-primary),0.3)] transition-all">
+              <Hash className="h-4 w-4" />
+            </div>
+            <span className="truncate text-xs font-black text-theme-main tracking-tight uppercase">{currentWorkspace.nom}</span>
           </div>
         </div>
       )}

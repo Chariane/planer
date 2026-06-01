@@ -614,9 +614,10 @@ def get_user_memberships_by_type(
             Membre.role.in_(Role.DIRECT_ACCESS_ROLES)
         )
         query = query.options(
-            joinedload(Membre.liste)
-            .joinedload(Liste.espace)
-            .joinedload(Espace.workspace)
+            joinedload(Membre.liste).options(
+                joinedload(Liste.workspace),
+                joinedload(Liste.espace).joinedload(Espace.workspace)
+            )
         )
     elif resource_type == ResourceType.TACHE:
         query = query.filter(
@@ -624,10 +625,10 @@ def get_user_memberships_by_type(
             Membre.role.in_(Role.DIRECT_ACCESS_ROLES)
         )
         query = query.options(
-            joinedload(Membre.tache)
-            .joinedload(Tache.liste)
-            .joinedload(Liste.espace)
-            .joinedload(Espace.workspace)
+            joinedload(Membre.tache).joinedload(Tache.liste).options(
+                joinedload(Liste.workspace),
+                joinedload(Liste.espace).joinedload(Espace.workspace)
+            )
         )
     
     memberships = query.all()
@@ -652,10 +653,14 @@ def _is_from_owned_workspace(membre: Membre, owned_ids: Set[str]) -> bool:
         return membre.espace.id_workspace in owned_ids
     
     if membre.id_liste and membre.liste:
+        if membre.liste.id_workspace:
+            return membre.liste.id_workspace in owned_ids
         if membre.liste.espace:
             return membre.liste.espace.id_workspace in owned_ids
     
     if membre.id_tache and membre.tache and membre.tache.liste:
+        if membre.tache.liste.id_workspace:
+            return membre.tache.liste.id_workspace in owned_ids
         if membre.tache.liste.espace:
             return membre.tache.liste.espace.id_workspace in owned_ids
     
@@ -854,55 +859,65 @@ def _serialize_member(membre: Membre) -> dict:
 
 def _serialize_resource_membership(membre: Membre, resource_type: str) -> dict:
     """Sérialise un membership de ressource (espace, liste, tache)."""
-    base = {
-        "id": None,
-        "nom": "Inconnu",
+    # Force l'ID de la ressource cible comme ID principal pour le frontend
+    target_id = None
+    if resource_type == ResourceType.ESPACE:
+        target_id = membre.id_espace
+    elif resource_type == ResourceType.LISTE:
+        target_id = membre.id_liste
+    elif resource_type == ResourceType.TACHE:
+        target_id = membre.id_tache
+        
+    data = {
+        "id": target_id or membre.id,
+        "nom": "Élément sans nom",
         "role": membre.role,
         "workspace_id": None,
-        "workspace_nom": None,
+        "workspace_nom": "Workspace inconnu",
     }
     
-    if resource_type == ResourceType.ESPACE and membre.espace:
-        workspace = membre.espace.workspace
-        return {
-            **base,
-            "id": membre.id_espace,
-            "id_espace": membre.id_espace,
-            "nom": membre.espace.nom,
-            "workspace_id": workspace.id if workspace else None,
-            "id_workspace": workspace.id if workspace else None,
-            "workspace_nom": workspace.nom if workspace else None,
-        }
+    if resource_type == ResourceType.ESPACE:
+        data["id_espace"] = membre.id_espace
+        if membre.espace:
+            data["nom"] = membre.espace.nom
+            workspace = membre.espace.workspace
+            if workspace:
+                data["workspace_id"] = workspace.id
+                data["id_workspace"] = workspace.id
+                data["workspace_nom"] = workspace.nom
     
-    elif resource_type == ResourceType.LISTE and membre.liste:
-        workspace = membre.liste.espace.workspace if membre.liste.espace else None
-        return {
-            **base,
-            "id": membre.id_liste,
-            "id_liste": membre.id_liste,
-            "nom": membre.liste.nom,
-            "workspace_id": workspace.id if workspace else None,
-            "id_workspace": workspace.id if workspace else None,
-            "workspace_nom": workspace.nom if workspace else None,
-            "id_espace": membre.liste.id_espace,
-        }
+    elif resource_type == ResourceType.LISTE:
+        data["id_liste"] = membre.id_liste
+        if membre.liste:
+            data["nom"] = membre.liste.nom
+            data["id_espace"] = membre.liste.id_espace
+            # Priorité : Liste -> Workspace, puis Liste -> Espace -> Workspace
+            workspace = membre.liste.workspace
+            if not workspace and membre.liste.espace:
+                workspace = membre.liste.espace.workspace
+            
+            if workspace:
+                data["workspace_id"] = workspace.id
+                data["id_workspace"] = workspace.id
+                data["workspace_nom"] = workspace.nom
     
-    elif resource_type == ResourceType.TACHE and membre.tache:
-        liste = membre.tache.liste
-        workspace = liste.espace.workspace if (liste and liste.espace) else None
-        return {
-            **base,
-            "id": membre.id_tache,
-            "id_tache": membre.id_tache,
-            "nom": membre.tache.titre,
-            "workspace_id": workspace.id if workspace else None,
-            "id_workspace": workspace.id if workspace else None,
-            "workspace_nom": workspace.nom if workspace else None,
-            "id_espace": liste.id_espace if liste else None,
-            "id_liste": membre.tache.id_liste,
-        }
-    
-    return base
+    elif resource_type == ResourceType.TACHE:
+        data["id_tache"] = membre.id_tache
+        if membre.tache:
+            data["nom"] = membre.tache.titre
+            liste = membre.tache.liste
+            if liste:
+                data["id_liste"] = liste.id
+                workspace = liste.workspace
+                if not workspace and liste.espace:
+                    workspace = liste.espace.workspace
+                
+                if workspace:
+                    data["workspace_id"] = workspace.id
+                    data["id_workspace"] = workspace.id
+                    data["workspace_nom"] = workspace.nom
+                    
+    return data
 
 
 # ============================================================================

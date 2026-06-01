@@ -42,6 +42,7 @@ interface ListViewProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   onAssignTask: (task: Task) => void;
+  onUpdateTaskStatus?: (taskId: string, status: string) => Promise<void>;
   getTaskProgress: (task: Task) => number;
   readOnly?: boolean;
   canEditTask?: (task: Task) => boolean;
@@ -195,8 +196,10 @@ export default function ListView({
   onEditTask,
   onDeleteTask,
   onAssignTask,
+  onUpdateTaskStatus,
   getTaskProgress,
   readOnly = false,
+  canEditTask,
 }: ListViewProps) {
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
@@ -269,10 +272,19 @@ export default function ListView({
                         className="group flex flex-wrap items-center gap-4 p-4 hover:border-secondary/30 hover:bg-theme-surface-hover transition-all cursor-pointer border-theme-border-subtle/50 shadow-theme-sm hover:shadow-theme-md"
                         onClick={() => openTaskDetail(task)}
                       >
-                        {/* Checkbox Icon */}
-                        <div className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10'}`}>
+                        {/* Checkbox Icon - Now a Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onUpdateTaskStatus) {
+                              const newStatus = task.status === 'terminé' ? 'en attente' : 'terminé';
+                              onUpdateTaskStatus(task.id, newStatus);
+                            }
+                          }}
+                          className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20'}`}
+                        >
                           {task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
-                        </div>
+                        </button>
 
                         {/* Title & Info */}
                         <div className="flex-1 min-w-0">
@@ -306,8 +318,8 @@ export default function ListView({
                         </div>
 
                         {/* Actions */}
-                        {!readOnly && (
-                          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          {!readOnly && (
                             <button
                               onClick={() => onAssignTask(task)}
                               className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
@@ -315,6 +327,8 @@ export default function ListView({
                             >
                               <UserPlus size={16} />
                             </button>
+                          )}
+                          {(canEditTask ? canEditTask(task) : !readOnly) && (
                             <button
                               onClick={() => onEditTask(task)}
                               className="p-2 rounded-lg text-theme-muted hover:bg-blue-500/10 hover:text-blue-500 transition-all"
@@ -322,6 +336,8 @@ export default function ListView({
                             >
                               <Edit size={16} />
                             </button>
+                          )}
+                          {!readOnly && (
                             <button
                               onClick={() => onDeleteTask(task.id)}
                               className="p-2 rounded-lg text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-all"
@@ -329,8 +345,8 @@ export default function ListView({
                             >
                               <Trash size={16} />
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </GlassCard>
                     </motion.div>
                   ))

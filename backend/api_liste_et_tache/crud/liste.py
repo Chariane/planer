@@ -332,13 +332,40 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
 
 
 def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
-    """Recupere tous les membres assignes directement a une liste."""
-    return (
+    """Recupere tous les membres assignés directement à une liste OU à ses tâches."""
+    # 1. Membres directs de la liste
+    direct_query = (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
         .filter(Membre.id_liste == liste_id)
-        .all()
     )
+    direct_members = direct_query.all()
+
+    # 2. Membres des tâches de cette liste
+    task_members_query = (
+        db.query(Membre)
+        .options(joinedload(Membre.utilisateur))
+        .join(Tache, Membre.id_tache == Tache.id)
+        .filter(Tache.id_liste == liste_id)
+    )
+    task_members = task_members_query.all()
+
+    # Fusionner sans doublons (basé sur id_utilisateur)
+    # On privilégie le record direct (rôle souvent plus élevé)
+    seen_users = set()
+    result = []
+    
+    for m in direct_members:
+        if m.id_utilisateur not in seen_users:
+            result.append(m)
+            seen_users.add(m.id_utilisateur)
+            
+    for m in task_members:
+        if m.id_utilisateur not in seen_users:
+            result.append(m)
+            seen_users.add(m.id_utilisateur)
+            
+    return result
 
 
 # ============================================================================

@@ -54,17 +54,20 @@ def get_taches_for_liste(
         if total > 0:
             checked = len([c for c in t.checklists if c.is_checked])
             t.progression = round((checked / total) * 100, 2)
-            expected_status = _status_from_checklist_counts(checked, total)
-            if t.statut != expected_status:
-                t.statut = expected_status
+            
+            # Transition automatique basée sur les checklists (moins agressive)
+            next_status = t.statut
+            if checked >= total:
+                next_status = "terminé"
+            elif checked > 0 and t.statut == "en attente":
+                next_status = "en cours"
+                
+            if t.statut != next_status:
+                t.statut = next_status
                 t.statut_date = datetime.now()
                 statuses_changed = True
         else:
             t.progression = 0.0
-            if t.statut != "en attente":
-                t.statut = "en attente"
-                t.statut_date = datetime.now()
-                statuses_changed = True
 
     if statuses_changed:
         db.commit()
@@ -311,11 +314,13 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
 
 # backend/api_liste_et_tache/crud/tache.py
 def _status_from_checklist_counts(checked_count: int, total: int) -> str:
-    if total <= 0 or checked_count <= 0:
-        return "en attente"
+    if total <= 0:
+        return "en attente" # Comportement par défaut pour création
     if checked_count >= total:
         return "terminé"
-    return "en cours"
+    if checked_count > 0:
+        return "en cours"
+    return "en attente"
 
 
 def update_tache_status_based_on_checklists(db: Session, tache_id: str):
@@ -336,7 +341,12 @@ def update_tache_status_based_on_checklists(db: Session, tache_id: str):
     if not tache:
         return
     
-    next_status = _status_from_checklist_counts(checked_count, total)
+    next_status = tache.statut
+    if checked_count >= total and total > 0:
+        next_status = "terminé"
+    elif checked_count > 0:
+        next_status = "en cours"
+    # Note: On ne force pas "en attente" si checked_count == 0 pour laisser le choix manuel
 
     if tache.statut != next_status:
         tache.statut = next_status
