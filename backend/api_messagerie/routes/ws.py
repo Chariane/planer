@@ -72,6 +72,7 @@ async def private_chat_ws(websocket: WebSocket, receiver_id: str):
                     await manager.send_private_message({"type": "seen", "from": user.id}, receiver_id, user.id)
                     continue
                 if isinstance(data, dict) and str(data.get("type", "")).startswith("call_"):
+                    data["from"] = user.id
                     await manager.send_private_message(data, receiver_id, user.id)
                     continue
 
@@ -105,6 +106,13 @@ async def group_chat(websocket: WebSocket, group_id: str):
         while True:
             raw = await websocket.receive_text()
             try:
+                data = json.loads(raw)
+                if isinstance(data, dict) and str(data.get("type", "")).startswith("call_"):
+                    data["from"] = user.id
+                    data["id_groupe"] = group_id
+                    await manager.broadcast_group_message(db, group_id, data)
+                    continue
+
                 message = create_group_message(
                     db,
                     group_id=group_id,

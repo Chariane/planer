@@ -136,6 +136,8 @@ type CallSignalPayload = {
   answer?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   from?: string;
+  to?: string;
+  id_groupe?: string | null;
 };
 
 const rtcConfig: RTCConfiguration = {
@@ -413,11 +415,11 @@ export default function MessageriePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
-  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const peerRefs = useRef<Record<string, RTCPeerConnection>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const callSignalHandlerRef = useRef<(payload: CallSignalPayload) => void>(() => undefined);
+  const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; stream: MediaStream }>>([]);
 
   const activeGroup = groups.find(group => group.id === activeGroupId) || null;
   const desiredResourceType = searchParams.get('resource_type');
@@ -426,7 +428,9 @@ export default function MessageriePage() {
   const privateUserId = selectedPrivateUserId;
   const isPrivateMode = Boolean(privateUserId);
   const privateMember = profileAsMember(privateProfile);
-  const threadTitle = isPrivateMode ? displayProfile(privateProfile) : activeGroup?.name;
+  const threadTitle = isPrivateMode
+    ? (privateProfile ? displayProfile(privateProfile) : 'Discussion privée')
+    : activeGroup?.name;
   const threadSubtitle = isPrivateMode
     ? `${presenceLabel(privateOnline, privateLastSeen)} • Discussion privée`
     : activeGroup
@@ -568,6 +572,10 @@ export default function MessageriePage() {
     socket.onmessage = event => {
       try {
         const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        if (typeof payload.type === 'string' && payload.type.startsWith('call_')) {
+          callSignalHandlerRef.current(payload as CallSignalPayload);
+          return;
+        }
         if (payload.event === 'message_updated' && payload.updated_message) {
           setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
           return;
@@ -600,6 +608,10 @@ export default function MessageriePage() {
     socket.onmessage = event => {
       try {
         const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        if (typeof payload.type === 'string' && payload.type.startsWith('call_')) {
+          callSignalHandlerRef.current(payload as CallSignalPayload);
+          return;
+        }
         if (payload.event === 'message_updated' && payload.updated_message) {
           setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
           return;
@@ -626,6 +638,9 @@ export default function MessageriePage() {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
+    Object.values(peerRefs.current).forEach(peer => peer.close());
+    peerRefs.current = {};
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
   }, []);
 
   const filteredGroups = useMemo(() => {
@@ -684,6 +699,217 @@ export default function MessageriePage() {
     members.forEach(member => map.set(member.id, member));
     return map;
   }, [members]);
+
+  const waitForRealtimeSocket = () =>
+    new Promise<boolean>(resolve => {
+      const socket = socketRef.current;
+      if (!socket) {
+        resolve(false);
+        return;
+      }
+      if (socket.readyState === WebSocket.OPEN) {
+        resolve(true);
+        return;
+      }
+      if (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+        resolve(false);
+        return;
+      }
+
+      const timeout = window.setTimeout(() => {
+        socket.removeEventListener('open', handleOpen);
+        resolve(socket.readyState === WebSocket.OPEN);
+      }, 2500);
+      const handleOpen = () => {
+        window.clearTimeout(timeout);
+        resolve(true);
+      };
+      socket.addEventListener('open', handleOpen, { once: true });
+    });
+
+  const sendCallSignal = useCallback((payload: CallSignalPayload) => {
+    if ((!privateUserId && !activeGroupId) || socketRef.current?.readyState !== WebSocket.OPEN) {
+      setError("La connexion temps réel n'est pas prête pour lancer l'appel.");
+      return false;
+    }
+    socketRef.current.send(JSON.stringify({ ...payload, from: user?.id }));
+    return true;
+  }, [activeGroupId, privateUserId, user?.id]);
+
+  const attachMediaStreams = useCallback(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+    }
+  }, []);
+
+  const stopCall = useCallback((notify = true) => {
+    if (notify && callStatus !== 'idle') {
+      sendCallSignal({ type: 'call_end' });
+    }
+    Object.values(peerRefs.current).forEach(peer => peer.close());
+    peerRefs.current = {};
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+    setRemoteStreams([]);
+    setIncomingCall(null);
+    setCallStatus('idle');
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+  }, [callStatus, sendCallSignal]);
+
+  const createPeerConnection = useCallback((peerId: string) => {
+    peerRefs.current[peerId]?.close();
+    const peer = new RTCPeerConnection(rtcConfig);
+
+    peer.onicecandidate = event => {
+      if (event.candidate) {
+        sendCallSignal({ type: 'call_ice', candidate: event.candidate.toJSON(), to: peerId });
+      }
+    };
+
+    peer.ontrack = event => {
+      const [stream] = event.streams;
+      if (!stream) return;
+      setRemoteStreams(current => {
+        const withoutPeer = current.filter(item => item.peerId !== peerId);
+        return [...withoutPeer, { peerId, stream }];
+      });
+    };
+
+    peer.onconnectionstatechange = () => {
+      if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) {
+        setRemoteStreams(current => current.filter(item => item.peerId !== peerId));
+      }
+    };
+
+    peerRefs.current[peerId] = peer;
+    return peer;
+  }, [sendCallSignal]);
+
+  const getCallMedia = async (kind: CallKind) => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: kind === 'video',
+    });
+    localStreamRef.current = stream;
+    attachMediaStreams();
+    return stream;
+  };
+
+  const startCall = async (kind: CallKind) => {
+    const recipients = privateUserId
+      ? [privateUserId]
+      : members.filter(member => member.id !== user?.id).map(member => member.id);
+
+    if (recipients.length === 0) {
+      setError(isPrivateMode ? 'Aucun destinataire disponible.' : 'Aucun autre membre chargé pour cet appel de groupe.');
+      return;
+    }
+    if (callStatus !== 'idle') return;
+
+    try {
+      setCallKind(kind);
+      setCallStatus('outgoing');
+      setError(null);
+      const socketReady = await waitForRealtimeSocket();
+      if (!socketReady) {
+        stopCall(false);
+        setError("La connexion temps réel n'est pas prête. Réessayez dans un instant.");
+        return;
+      }
+      const stream = await getCallMedia(kind);
+      for (const recipientId of recipients) {
+        const peer = createPeerConnection(recipientId);
+        stream.getTracks().forEach(track => peer.addTrack(track, stream));
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        if (!sendCallSignal({ type: 'call_offer', call_type: kind, offer, to: recipientId })) {
+          stopCall(false);
+          return;
+        }
+      }
+    } catch (err: unknown) {
+      stopCall(false);
+      setError(getErrorMessage(err, "Impossible de lancer l'appel."));
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall?.offer || !incomingCall.from) return;
+    const kind = incomingCall.call_type || 'audio';
+    try {
+      setCallKind(kind);
+      setCallStatus('active');
+      const stream = await getCallMedia(kind);
+      const peer = createPeerConnection(incomingCall.from);
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      await peer.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      sendCallSignal({ type: 'call_answer', call_type: kind, answer, to: incomingCall.from });
+      setIncomingCall(null);
+    } catch (err: unknown) {
+      stopCall(false);
+      setError(getErrorMessage(err, "Impossible d'accepter l'appel."));
+    }
+  };
+
+  const rejectCall = () => {
+    sendCallSignal({ type: 'call_reject', to: incomingCall?.from });
+    setIncomingCall(null);
+    setCallStatus('idle');
+  };
+
+  async function handleCallSignal(payload: CallSignalPayload) {
+    try {
+      if (payload.from && payload.from === user?.id) {
+        return;
+      }
+      if (payload.to && payload.to !== user?.id) {
+        return;
+      }
+
+      if (payload.type === 'call_offer') {
+        if (callStatus !== 'idle') {
+          sendCallSignal({ type: 'call_reject' });
+          return;
+        }
+        setCallKind(payload.call_type || 'audio');
+        setIncomingCall(payload);
+        setCallStatus('incoming');
+        return;
+      }
+
+      if (payload.type === 'call_answer' && payload.answer && payload.from && peerRefs.current[payload.from]) {
+        await peerRefs.current[payload.from].setRemoteDescription(new RTCSessionDescription(payload.answer));
+        setCallStatus('active');
+        return;
+      }
+
+      if (payload.type === 'call_ice' && payload.candidate && payload.from && peerRefs.current[payload.from]) {
+        await peerRefs.current[payload.from].addIceCandidate(new RTCIceCandidate(payload.candidate));
+        return;
+      }
+
+      if (payload.type === 'call_reject') {
+        stopCall(false);
+        setError('Appel refusé.');
+        return;
+      }
+
+      if (payload.type === 'call_end') {
+        stopCall(false);
+      }
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Erreur pendant l'appel."));
+    }
+  }
+  callSignalHandlerRef.current = payload => {
+    void handleCallSignal(payload);
+  };
+
+  useEffect(() => {
+    attachMediaStreams();
+  }, [attachMediaStreams, callStatus]);
 
   const sendPayload = async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -871,6 +1097,104 @@ export default function MessageriePage() {
           </motion.div>
         )}
 
+        {callStatus !== 'idle' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl border border-theme-subtle bg-theme-surface shadow-theme-md overflow-hidden"
+          >
+            <div className="flex flex-col gap-4 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`h-11 w-11 rounded-2xl flex items-center justify-center ${callKind === 'video' ? 'bg-secondary/10 text-secondary' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                    {callKind === 'video' ? <Video size={20} /> : <Phone size={19} />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-theme-main">
+                      {callStatus === 'incoming'
+                        ? `${callKind === 'video' ? 'Appel vidéo' : 'Appel audio'} entrant`
+                        : callStatus === 'outgoing'
+                          ? `${callKind === 'video' ? 'Appel vidéo' : 'Appel audio'} en cours de lancement`
+                          : `${callKind === 'video' ? 'Appel vidéo' : 'Appel audio'} actif`}
+                    </p>
+                    <p className="text-xs font-semibold text-theme-muted">
+                      {isPrivateMode ? displayProfile(privateProfile) : activeGroup?.name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {callStatus === 'incoming' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={acceptCall}
+                        className="h-10 px-4 rounded-2xl bg-emerald-500 text-white text-xs font-black hover:bg-emerald-600 transition flex items-center gap-2"
+                      >
+                        <Phone size={16} />
+                        Accepter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={rejectCall}
+                        className="h-10 px-4 rounded-2xl bg-red-500 text-white text-xs font-black hover:bg-red-600 transition flex items-center gap-2"
+                      >
+                        <PhoneOff size={16} />
+                        Refuser
+                      </button>
+                    </>
+                  )}
+                  {(callStatus === 'outgoing' || callStatus === 'active') && (
+                    <button
+                      type="button"
+                      onClick={() => stopCall(true)}
+                      className="h-10 px-4 rounded-2xl bg-red-500 text-white text-xs font-black hover:bg-red-600 transition flex items-center gap-2"
+                    >
+                      <PhoneOff size={16} />
+                      Raccrocher
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {callStatus === 'active' && callKind === 'video' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {remoteStreams.map(({ peerId, stream }) => (
+                    <div key={peerId} className="aspect-video overflow-hidden rounded-3xl bg-black">
+                      <video
+                        autoPlay
+                        playsInline
+                        className="h-full w-full object-cover"
+                        ref={element => {
+                          if (element) element.srcObject = stream;
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <div className="aspect-video overflow-hidden rounded-3xl bg-black ring-2 ring-secondary/40">
+                    <video ref={localVideoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                  </div>
+                </div>
+              )}
+
+              {callStatus === 'active' && callKind === 'audio' && (
+                <div className="rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm font-bold text-theme-muted">
+                  {remoteStreams.map(({ peerId, stream }) => (
+                    <audio
+                      key={peerId}
+                      autoPlay
+                      ref={element => {
+                        if (element) element.srcObject = stream;
+                      }}
+                    />
+                  ))}
+                  Appel audio actif. Gardez cette discussion ouverte pendant l'appel.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)_300px] gap-4 sm:gap-5 xl:overflow-hidden">
           <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[380px] sm:h-[440px] xl:h-full" hover={false}>
             <div className="p-4 border-b border-theme-subtle">
@@ -1030,7 +1354,7 @@ export default function MessageriePage() {
           </GlassCard>
 
           <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[620px] xl:h-full" hover={false}>
-            {activeGroup || privateProfile ? (
+            {activeGroup || isPrivateMode ? (
               <>
                 <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-theme-subtle flex items-center justify-between gap-3 sm:gap-4 bg-theme-surface/90">
                   <div className="min-w-0">
@@ -1048,6 +1372,18 @@ export default function MessageriePage() {
                           </p>
                         </div>
                       </Link>
+                    ) : isPrivateMode ? (
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary/10 text-primary dark:text-sky-200 flex items-center justify-center font-black shadow-lg">
+                          {initials(threadTitle)}
+                        </div>
+                        <div className="min-w-0">
+                          <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
+                          <p className="text-xs text-theme-muted font-medium">
+                            {loadingThread ? 'Chargement du profil...' : threadSubtitle || 'Discussion privée'}
+                          </p>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary text-white flex items-center justify-center font-black shadow-lg">
@@ -1062,9 +1398,33 @@ export default function MessageriePage() {
                       </div>
                     )}
                   </div>
-                  <div className="hidden sm:flex items-center gap-2 text-xs text-theme-muted font-bold">
-                    <MessageSquareText size={16} />
-                    {messages.length} message{messages.length > 1 ? 's' : ''}
+                  <div className="flex items-center gap-2">
+                    {(isPrivateMode || activeGroup) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => startCall('audio')}
+                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 transition flex items-center justify-center disabled:opacity-50"
+                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
+                        >
+                          <Phone size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startCall('video')}
+                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
+                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
+                        >
+                          <Video size={18} />
+                        </button>
+                      </>
+                    )}
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-theme-muted font-bold">
+                      <MessageSquareText size={16} />
+                      {messages.length} message{messages.length > 1 ? 's' : ''}
+                    </div>
                   </div>
                 </div>
 
