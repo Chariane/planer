@@ -47,6 +47,7 @@ from ..schemas import (
     LoginResponse,
     LoginRequest,
     MessageResponse,
+    PublicUserProfileOut,
     ProfilePhotoResponse,
     ProfilePhotoUpdate,
     RegisterWithWorkspaceResponse,
@@ -569,6 +570,31 @@ def get_user_profile_photo(
     return {
         "photo_base64": _encode_profile_photo(user.photo),
         "mime_type": _guess_profile_photo_mime(user.photo),
+    }
+
+
+@router.get("/users/{user_id}/profile", response_model=PublicUserProfileOut)
+def get_user_public_profile(
+    user_id: str,
+    current_user: UtilisateurOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = get_utilisateur_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "nom": user.nom,
+        "prenoms": user.prenoms,
+        "telephone": user.telephone,
+        "biographie": user.biographie,
+        "genre": user.genre,
+        "pays": user.pays,
+        "ville": user.ville,
+        "photo_base64": _encode_profile_photo(user.photo),
     }
 
 

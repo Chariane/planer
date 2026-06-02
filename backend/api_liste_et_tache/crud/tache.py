@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
 from ..models import Tache, Membre, Checklist, Liste
-from .notification_events import commit_notification_events, notify_overdue_tasks_for_liste, notify_task_assigned
+from .notification_events import commit_notification_events, notify_task_assigned
 
 def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
@@ -72,9 +72,6 @@ def get_taches_for_liste(
     if statuses_changed:
         db.commit()
 
-    notify_overdue_tasks_for_liste(db, liste_id=liste_id)
-    commit_notification_events(db)
-            
     return taches
 
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from ..models import Espace, Liste, Membre, Tache, Utilisateur, Workspace
@@ -52,16 +52,46 @@ def _create_notification(
     message: str,
     type_: str = "info",
     dedupe_today: bool = False,
-) -> None:
+) -> bool:
     if not user_id:
-        return
+        return False
     if dedupe_today and _already_notified_today(db, user_id=user_id, message=message, type_=type_):
-        return
+        return False
     db.execute(
         text(
             """
-            INSERT INTO notification.notification (id_utilisateur, type, message, est_lu, est_globale)
-            VALUES (:user_id, :type, :message, false, false)
+            WITH inserted AS (
+                INSERT INTO notification.notification (id_utilisateur, type, message, est_lu, est_globale)
+                VALUES (:user_id, :type, :message, false, false)
+                RETURNING
+                    id,
+                    type,
+                    COALESCE(message, 'Notification indisponible') AS message,
+                    COALESCE(est_lu, false) AS est_lu,
+                    COALESCE(est_globale, false) AS est_globale,
+                    date_creation,
+                    date_modif,
+                    date_lecture,
+                    id_utilisateur
+            )
+            SELECT pg_notify(
+                'kplanner_notifications',
+                json_build_object(
+                    'event', 'notification.created',
+                    'notification', json_build_object(
+                        'id', id,
+                        'type', type,
+                        'message', message,
+                        'est_lu', est_lu,
+                        'est_globale', est_globale,
+                        'date_creation', date_creation,
+                        'date_modif', date_modif,
+                        'date_lecture', date_lecture,
+                        'id_utilisateur', id_utilisateur
+                    )
+                )::text
+            )
+            FROM inserted
             """
         ),
         {
@@ -70,6 +100,7 @@ def _create_notification(
             "message": message,
         },
     )
+    return True
 
 
 def commit_notification_events(db: Session) -> None:
@@ -245,13 +276,14 @@ def notify_task_assigned(db: Session, *, tache: Tache, assigned_user_id: str) ->
 
 def notify_overdue_tasks_for_liste(db: Session, *, liste_id: str) -> None:
     now = datetime.now()
+    today = now.date()
     overdue_tasks = (
         db.query(Tache)
         .filter(
             Tache.id_liste == liste_id,
             Tache.date_fin_prevue.isnot(None),
-            Tache.date_fin_prevue < now,
-            Tache.statut != "terminé",
+            func.date(Tache.date_fin_prevue) < today,
+            func.lower(Tache.statut) != "terminé",
         )
         .all()
     )
@@ -291,3 +323,139 @@ def notify_overdue_tasks_for_liste(db: Session, *, liste_id: str) -> None:
                 type_="warning",
                 dedupe_today=True,
             )
+
+
+def _task_notification_recipients(db: Session, *, tache: Tache, liste: Liste) -> list[str]:
+    manager_ids = _unique_user_ids(
+        _direct_list_manager_user_ids(db, liste.id)
+        + _inherited_list_manager_user_ids(db, liste)
+    )
+    assigned_members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_tache == tache.id,
+            Membre.statut == "Actif",
+        )
+        .all()
+    )
+    assigned_user_ids = [member.id_utilisateur for member in assigned_members]
+    return _unique_user_ids(manager_ids + assigned_user_ids)
+
+
+def _notify_task_deadline(
+    db: Session,
+    *,
+    tache: Tache,
+    liste: Liste,
+    message: str,
+    type_: str,
+) -> tuple[int, int]:
+    recipients = _task_notification_recipients(db, tache=tache, liste=liste)
+    created_count = 0
+    for user_id in recipients:
+        created = _create_notification(
+            db,
+            user_id=user_id,
+            message=message,
+            type_=type_,
+            dedupe_today=True,
+        )
+        if created:
+            created_count += 1
+    return len(recipients), created_count
+
+
+def notify_deadline_reminders(db: Session, *, now: datetime | None = None) -> dict[str, int]:
+    """Scan all open tasks and emit deadline reminders.
+
+    Notifications are deduplicated per recipient/message/day by _create_notification,
+    so this function is safe to run periodically.
+    """
+    now = now or datetime.now()
+    today_start = datetime.combine(now.date(), time.min)
+    tomorrow_start = today_start + timedelta(days=1)
+
+    open_statuses = ["en attente", "en cours", "bloqué"]
+    tasks = (
+        db.query(Tache)
+        .filter(
+            Tache.date_fin_prevue.isnot(None),
+            func.date(Tache.date_fin_prevue) <= tomorrow_start.date(),
+            func.lower(Tache.statut).in_(open_statuses),
+        )
+        .all()
+    )
+
+    stats = {
+        "tasks_scanned": len(tasks),
+        "overdue_tasks": 0,
+        "due_today_tasks": 0,
+        "due_tomorrow_tasks": 0,
+        "notifications_targets": 0,
+        "notifications_created": 0,
+        "skipped_lock": 0,
+    }
+
+    for tache in tasks:
+        if not tache.id_liste:
+            continue
+
+        liste = db.query(Liste).filter(Liste.id == tache.id_liste).first()
+        if not liste or not tache.date_fin_prevue:
+            continue
+
+        due_date = tache.date_fin_prevue.strftime("%d/%m/%Y")
+
+        task_due_day = tache.date_fin_prevue.date()
+
+        if task_due_day < now.date():
+            stats["overdue_tasks"] += 1
+            message = (
+                f"La tâche « {tache.titre} » est en retard depuis le {due_date} "
+                f"dans la liste « {liste.nom or 'une liste'} »."
+            )
+            targets, created = _notify_task_deadline(
+                db,
+                tache=tache,
+                liste=liste,
+                message=message,
+                type_="warning",
+            )
+            stats["notifications_targets"] += targets
+            stats["notifications_created"] += created
+            continue
+
+        if task_due_day == today_start.date():
+            stats["due_today_tasks"] += 1
+            message = (
+                f"Rappel deadline : la tâche « {tache.titre} » arrive à échéance aujourd'hui "
+                f"dans la liste « {liste.nom or 'une liste'} »."
+            )
+            targets, created = _notify_task_deadline(
+                db,
+                tache=tache,
+                liste=liste,
+                message=message,
+                type_="alerte",
+            )
+            stats["notifications_targets"] += targets
+            stats["notifications_created"] += created
+            continue
+
+        if task_due_day == tomorrow_start.date():
+            stats["due_tomorrow_tasks"] += 1
+            message = (
+                f"Rappel deadline : la tâche « {tache.titre} » arrive à échéance demain "
+                f"dans la liste « {liste.nom or 'une liste'} »."
+            )
+            targets, created = _notify_task_deadline(
+                db,
+                tache=tache,
+                liste=liste,
+                message=message,
+                type_="info",
+            )
+            stats["notifications_targets"] += targets
+            stats["notifications_created"] += created
+
+    return stats

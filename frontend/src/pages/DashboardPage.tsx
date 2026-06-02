@@ -90,7 +90,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-10 pb-16">
+    <div className="space-y-8 sm:space-y-10 pb-16">
       {/* Hero Header */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
         <div className="space-y-4">
@@ -98,8 +98,8 @@ export default function DashboardPage() {
             <div className="h-12 w-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/10 shadow-lg shadow-secondary/5 transition-transform hover:scale-105">
               <LayoutGrid size={24} />
             </div>
-            <div>
-              <h1 className="text-4xl font-black text-theme-main tracking-tight uppercase leading-none">Tableau de bord</h1>
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-black text-theme-main tracking-tight uppercase leading-none">Tableau de bord</h1>
               <div className="flex items-center gap-2 mt-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.6)]" />
                 <p className="text-xs font-bold text-theme-muted uppercase tracking-widest opacity-60">Vue d'ensemble de vos projets</p>
@@ -109,7 +109,7 @@ export default function DashboardPage() {
         </div>
         <Button
           onClick={() => setIsCreateModalOpen(true)}
-          className="rounded-2xl px-8 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]"
+          className="w-full rounded-2xl px-6 py-5 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px] sm:w-auto sm:px-8 sm:py-6"
         >
           <PlusCircle className="w-4 h-4 mr-2" />
           Nouveau workspace
@@ -117,7 +117,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {statCards.map((card, index) => (
           <motion.div
             key={index}
@@ -126,7 +126,7 @@ export default function DashboardPage() {
             transition={{ delay: index * 0.1 }}
           >
             <Link to={card.link} className="block group">
-              <GlassCard className="p-6 transition-all duration-300 hover:border-secondary/30 hover:bg-theme-surface-hover shadow-theme-sm hover:shadow-theme-md relative overflow-hidden">
+              <GlassCard className="p-4 sm:p-6 transition-all duration-300 hover:border-secondary/30 hover:bg-theme-surface-hover shadow-theme-sm hover:shadow-theme-md relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-10 transition-opacity">
                   <div className="scale-[4] rotate-12">{card.icon}</div>
                 </div>
@@ -152,7 +152,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid pour Activités et Workspaces */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Activités récentes */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between px-1">

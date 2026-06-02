@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import sys
 import os
 from pathlib import Path
@@ -13,15 +14,27 @@ if __package__ in {None, ""}:
     from backend.api_liste_et_tache.routes.utilisateur import router as utilisateur_router
     from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
     from backend.api_liste_et_tache.routes.dashboard import router as dashboard_router
+    from backend.api_liste_et_tache.core.deadline_scheduler import deadline_reminder_scheduler
 else:
     from .routes.utilisateur import router as utilisateur_router
     from .routes.entreprise import router as entreprise_router
     from .routes.dashboard import router as dashboard_router
+    from .core.deadline_scheduler import deadline_reminder_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    deadline_reminder_scheduler.start()
+    try:
+        yield
+    finally:
+        deadline_reminder_scheduler.stop()
 
 app = FastAPI(
     title="Microservice Api Liste",
     description="API pour la gestion des listes, tâches, canevas, sections et checklists",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configuration CORS (à adapter selon tes besoins)
@@ -45,6 +58,32 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 @app.get("/")
 def root():
     return {"message": "Bienvenue sur le microservice Api Liste"}
+
+
+@app.get("/health")
+def health():
+    return {"service": "api_liste_et_tache", "status": "ok"}
+
+
+@app.post("/deadlines/reminders/run")
+def run_deadline_reminders_once(x_deadline_token: str | None = Header(default=None)):
+    expected_token = os.getenv("DEADLINE_REMINDER_ADMIN_TOKEN")
+    if expected_token and x_deadline_token != expected_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de rappel invalide.")
+    if not expected_token and os.getenv("ENV", "Dev") == "Prod":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Endpoint de rappel manuel desactive.")
+    return deadline_reminder_scheduler.run_once()
+
+
+@app.get("/deadlines/reminders/status")
+def deadline_reminders_status():
+    return {
+        "enabled": deadline_reminder_scheduler.is_enabled,
+        "running": deadline_reminder_scheduler.is_running,
+        "interval_seconds": deadline_reminder_scheduler.interval_seconds,
+        "manual_run_protected": bool(os.getenv("DEADLINE_REMINDER_ADMIN_TOKEN")),
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

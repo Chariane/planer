@@ -467,7 +467,7 @@ export default function RightCanevas() {
 
   if (!permissionChecked) {
     return (
-      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
+      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-full">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 text-secondary animate-spin" />
         </div>
@@ -478,7 +478,7 @@ export default function RightCanevas() {
   // Vue pour les invités (lecture seule)
   if (isReadOnly) {
     return (
-      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
+      <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-full">
         <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-secondary" />
@@ -557,7 +557,7 @@ export default function RightCanevas() {
 
   // Vue normale (avec modifications possibles)
   return (
-    <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-96">
+    <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-full">
       <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-secondary" />

@@ -67,7 +67,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
     const isAbsence = formData.is_absence;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center p-2 sm:items-center sm:p-4">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -80,16 +80,16 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                 initial={{ opacity: 0, scale: 0.95, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 30 }}
-                className="relative w-full max-w-xl bg-[#0a0a0a] border border-white/10 rounded-[40px] shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden"
+                className="relative max-h-[94dvh] w-full max-w-xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0a0a0a] shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] sm:rounded-[40px]"
             >
-                <div className="p-10 space-y-10">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center border transition-all duration-500 rotate-[-5deg] ${isAbsence ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-lg shadow-amber-500/10' : 'bg-primary/10 text-primary border-primary/20 shadow-lg shadow-primary/10'}`}>
+                <div className="max-h-[94dvh] overflow-y-auto p-5 space-y-7 sm:p-10 sm:space-y-10">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                            <div className={`h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center border transition-all duration-500 rotate-[-5deg] sm:h-14 sm:w-14 ${isAbsence ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-lg shadow-amber-500/10' : 'bg-primary/10 text-primary border-primary/20 shadow-lg shadow-primary/10'}`}>
                                 {isAbsence ? <AlertCircle size={24} /> : <Umbrella size={24} />}
                             </div>
-                            <div>
-                                <h2 className="text-2xl font-black text-white uppercase tracking-tight italic">
+                            <div className="min-w-0">
+                                <h2 className="text-lg sm:text-2xl font-black text-white uppercase tracking-tight italic">
                                     {isAbsence ? 'Demander une Absence' : 'Planifier un Congé'}
                                 </h2>
                                 <p className="text-[10px] text-theme-muted font-black uppercase tracking-[0.3em]">
@@ -129,7 +129,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2 px-1">
                                     <CalendarIcon size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> Date de Début
@@ -169,7 +169,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                             />
                         </div>
 
-                        <div className={`p-6 rounded-3xl border flex items-center justify-between transition-colors duration-500 ${isAbsence ? 'bg-amber-500/5 border-amber-500/10' : 'bg-primary/5 border-primary/10'}`}>
+                        <div className={`p-4 sm:p-6 rounded-3xl border flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between transition-colors duration-500 ${isAbsence ? 'bg-amber-500/5 border-amber-500/10' : 'bg-primary/5 border-primary/10'}`}>
                             <div className="flex items-center gap-4">
                                 <div className={`h-12 w-12 rounded-xl flex items-center justify-center transition-colors duration-500 ${isAbsence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
                                     <Clock size={24} />
@@ -186,7 +186,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                             </div>
                         </div>
 
-                        <div className="pt-6 flex items-center gap-4">
+                        <div className="pt-4 sm:pt-6 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
                             <Button
                                 type="button"
                                 onClick={onClose}
@@ -205,7 +205,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                     </form>
                 </div>
 
-                <div className="bg-white/[0.02] p-6 flex items-start gap-4 border-t border-white/5">
+                <div className="bg-white/[0.02] p-4 sm:p-6 flex items-start gap-4 border-t border-white/5">
                     <Info className="text-primary shrink-0" size={20} />
                     <p className="text-[11px] text-theme-muted font-medium leading-relaxed">
                         {isAbsence

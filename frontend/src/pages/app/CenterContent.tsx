@@ -193,10 +193,10 @@ export default function CenterContent() {
     );
 
     return (
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="mb-6 sm:mb-8 grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4">
         {/* Main Gauge Widget */}
-        <div className="md:col-span-2 flex items-center gap-6 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-6 shadow-theme-md hover:shadow-theme-lg transition-all duration-300">
-          <div className="relative h-24 w-24 shrink-0">
+        <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-4 sm:p-6 shadow-theme-md hover:shadow-theme-lg transition-all duration-300">
+          <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0">
             <svg className="h-full w-full -rotate-90">
               <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-theme-border-subtle" />
               <circle
@@ -213,14 +213,14 @@ export default function CenterContent() {
             </div>
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-black text-theme-main tracking-tight flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-black text-theme-main tracking-tight flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-secondary" />
               Santé de la Liste
             </h3>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
               Progression globale basée sur les checklists complétées.
             </p>
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex flex-wrap gap-3">
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-theme-main">{tasks.length}</span>
                 <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Tâches</span>
@@ -240,29 +240,29 @@ export default function CenterContent() {
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="md:col-span-2 grid grid-cols-2 gap-4">
-          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between">
+        <div className="md:col-span-2 grid grid-cols-2 gap-3 sm:gap-4">
+          <div className="bg-theme-surface p-3 sm:p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <Clock className="h-4 w-4 text-theme-muted" />
               <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">En attente</span>
             </div>
             <span className="text-2xl font-black text-theme-main mt-1">{pendingCount}</span>
           </div>
-          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-blue-500">
+          <div className="bg-theme-surface p-3 sm:p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-blue-500">
             <div className="flex justify-between items-start">
               <CheckCircle2 className="h-4 w-4 text-blue-500" />
               <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">En cours</span>
             </div>
             <span className="text-2xl font-black text-theme-main mt-1">{inProgressCount}</span>
           </div>
-          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-emerald-500">
+          <div className="bg-theme-surface p-3 sm:p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-emerald-500">
             <div className="flex justify-between items-start">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Terminées</span>
             </div>
             <span className="text-2xl font-black text-theme-main mt-1">{doneCount}</span>
           </div>
-          <div className="bg-theme-surface p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-red-500">
+          <div className="bg-theme-surface p-3 sm:p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between border-l-4 border-l-red-500">
             <div className="flex justify-between items-start">
               <AlertTriangle className="h-4 w-4 text-red-500" />
               <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Bloquées</span>
@@ -288,10 +288,10 @@ export default function CenterContent() {
     if (!listId) return null;
 
     return (
-      <div className="mb-5 flex justify-end">
+      <div className="mb-5 flex justify-stretch sm:justify-end">
         <Link
           to={`/messagerie?resource_type=liste&resource_id=${listId}`}
-          className="inline-flex items-center justify-center rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-2 text-sm font-bold text-secondary shadow-theme-sm transition-all hover:border-secondary hover:bg-secondary hover:text-white"
+          className="inline-flex w-full items-center justify-center rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-2 text-sm font-bold text-secondary shadow-theme-sm transition-all hover:border-secondary hover:bg-secondary hover:text-white sm:w-auto"
         >
           <MessageCircle className="mr-2 h-4 w-4" />
           Voir la discussion
@@ -362,7 +362,7 @@ export default function CenterContent() {
   if (!listId) {
     if (spaceId && spaceId !== 'list') {
       return (
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-6">
           <SpaceDashboard spaceId={spaceId} />
           <PlannerToolsPanel
             workspaceId={workspaceId}
@@ -376,7 +376,7 @@ export default function CenterContent() {
     }
     if (workspaceId) {
       return (
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-6">
           <WorkspaceDashboardPanel workspaceId={workspaceId} />
           <PlannerToolsPanel
             workspaceId={workspaceId}
@@ -388,7 +388,7 @@ export default function CenterContent() {
       );
     }
     return (
-      <div className="p-6 flex items-center justify-center h-full">
+      <div className="p-4 sm:p-6 flex items-center justify-center h-full">
         <div className="text-center text-theme-muted">
           <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-20" />
           <p className="text-lg font-medium text-theme-main">Aucune liste sélectionnée</p>
@@ -398,8 +398,8 @@ export default function CenterContent() {
     );
   }
 
-  if (loading) return <div className="p-6 flex justify-center">Chargement des tâches...</div>;
-  if (error) return <div className="p-6 flex justify-center text-red-500">{error}</div>;
+  if (loading) return <div className="p-4 sm:p-6 flex justify-center">Chargement des tâches...</div>;
+  if (error) return <div className="p-4 sm:p-6 flex justify-center text-red-500">{error}</div>;
 
   // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
   const isListGuest = effectiveRole === ROLES.GUEST;
@@ -412,8 +412,8 @@ export default function CenterContent() {
   // Vue invité (lecture seule) - mais ils peuvent voir les vues liste, kanban, gantt
   if (isGuest || isListGuest) {
     return (
-      <div className="p-6">
-        <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-6 mb-6 shadow-theme-sm">
+      <div className="p-4 sm:p-6">
+        <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-4 sm:p-6 mb-6 shadow-theme-sm">
           <p className="text-sm text-theme-main font-bold uppercase tracking-widest text-[11px] flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.6)]" />
             Mode <strong>lecture seule</strong> {isListGuest ? 'dans cette liste' : 'dans cet espace'}
@@ -479,7 +479,7 @@ export default function CenterContent() {
   }
 
   return (
-    <div className="p-6">
+      <div className="p-4 sm:p-6">
       {renderListDiscussionButton()}
       {renderListProgressSummary()}
       {renderListDescription()}
@@ -522,7 +522,7 @@ export default function CenterContent() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
             <select value={taskFilters.statut} onChange={e => setTaskFilters(prev => ({ ...prev, statut: e.target.value }))} className="border border-theme-border-subtle bg-theme-surface rounded-lg px-2 py-2 text-sm text-theme-main outline-none">
               <option value="">Tous statuts</option>
               <option value="en attente">En attente</option>
@@ -558,15 +558,15 @@ export default function CenterContent() {
       )}
 
       {/* Boutons d'action - Visibilité contextuelle */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-col gap-2 mb-6 sm:flex-row sm:flex-wrap">
         {(isAdmin || isCreator) && activeTab !== 'membres' && activeTab !== 'outils' && (
-          <Button variant="primary" size="sm" onClick={openCreateTask}>
+          <Button variant="primary" size="sm" onClick={openCreateTask} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-1" /> Nouvelle tâche
           </Button>
         )}
         {(isAdmin || isCreator) && activeTab === 'membres' && (
           <div className="flex-1 flex gap-2">
-            <div className="relative max-w-sm flex-1">
+            <div className="relative w-full sm:max-w-sm sm:flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted" />
               <input
                 type="text"
@@ -579,7 +579,7 @@ export default function CenterContent() {
           </div>
         )}
         {(isAdmin || isCreator) && canAssignToList && activeTab !== 'outils' && (
-          <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setIsAssignListModalOpen(true)} className="w-full sm:w-auto">
             <UserPlus className="h-4 w-4 mr-1" /> Ajouter membre à la liste
           </Button>
         )}

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, ChevronRight, ChevronsLeft, AlignLeft, MessageCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, ChevronsLeft, AlignLeft } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { useApp } from '../../contexts/AppContext';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
-import { messagerieService } from '../../services/messagerie.service';
 
 interface BreadcrumbItem {
   name: string;
@@ -46,57 +45,18 @@ const findSpacePathInTree = (
 };
 
 function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: ReactNode; isSidebarOpen?: boolean; toggleSidebar?: () => void }) {
-  const [unreadDiscussionsCount, setUnreadDiscussionsCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadUnreadSummary = async () => {
-      try {
-        const summary = await messagerieService.getUnreadSummary();
-        if (!cancelled) {
-          setUnreadDiscussionsCount(summary.unread_discussions_count || 0);
-        }
-      } catch {
-        if (!cancelled) {
-          setUnreadDiscussionsCount(0);
-        }
-      }
-    };
-
-    loadUnreadSummary();
-    const intervalId = window.setInterval(loadUnreadSummary, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
   return (
-    <div className="bg-theme-surface border-b border-theme-border-subtle px-4 py-2 flex items-center justify-between shadow-sm transition-colors duration-200">
-      <div className="flex items-center gap-2 min-w-0">
-        <button className="p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
+    <div className="bg-theme-surface border-b border-theme-border-subtle px-2 py-2 sm:px-4 flex items-center justify-between gap-2 shadow-sm transition-colors duration-200">
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <button className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <button className="p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
+        <button className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
           <ArrowRight className="h-5 w-5" />
         </button>
         {children}
       </div>
-      <div className="flex items-center gap-3">
-        <Link
-          to="/messagerie"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-theme-border-subtle bg-theme-surface/50 text-theme-muted shadow-theme-sm transition-all hover:border-secondary/40 hover:bg-secondary/10 hover:text-secondary"
-          title="Messagerie"
-          aria-label="Messagerie"
-        >
-          <MessageCircle className="h-5 w-5" />
-          {unreadDiscussionsCount > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-black text-white shadow-lg">
-              {unreadDiscussionsCount > 9 ? '9+' : unreadDiscussionsCount}
-            </span>
-          )}
-        </Link>
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <button
           onClick={toggleSidebar}
           className="p-2 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle shadow-theme-sm hover:shadow-primary/20 hover:bg-theme-surface-hover hover:border-primary/50 text-theme-muted hover:text-primary transition-all duration-300 group relative overflow-hidden"
@@ -259,7 +219,7 @@ export default function TopBar({ isSidebarOpen, toggleSidebar }: { isSidebarOpen
 
   return (
     <TopBarShell isSidebarOpen={isSidebarOpen} toggleSidebar={toggleSidebar}>
-      <div className="ml-2 text-sm text-theme-muted font-mono bg-theme-surface-hover px-3 py-1 rounded flex items-center gap-1 min-w-0 overflow-x-auto transition-colors duration-200">
+      <div className="ml-1 sm:ml-2 max-w-[calc(100vw-84px)] text-xs sm:text-sm text-theme-muted font-mono bg-theme-surface-hover px-2 sm:px-3 py-1 rounded flex items-center gap-1 min-w-0 overflow-x-auto transition-colors duration-200">
         {visibleBreadcrumb.map((item, idx) => (
           <span key={`${item.path}-${idx}`} className="flex items-center shrink-0">
             {idx > 0 && <ChevronRight className="h-3 w-3 mx-1 opacity-50" />}

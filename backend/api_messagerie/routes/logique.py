@@ -30,6 +30,12 @@ def _encode_bytes(value: Optional[bytes]) -> Optional[str]:
     return base64.b64encode(value).decode("utf-8")
 
 
+def _encode_photo(value: Optional[bytes]) -> Optional[str]:
+    if value is None:
+        return None
+    return base64.b64encode(value).decode("ascii")
+
+
 def _decode_payload(value: Optional[str]) -> Optional[bytes]:
     if not value:
         return None
@@ -79,8 +85,13 @@ def serialize_group(db: Session, group: Groupe) -> dict:
 
 def _display_user(user: Optional[Utilisateur]) -> dict:
     if not user:
-        return {"id": "", "username": "Utilisateur supprimé", "email": None}
-    return {"id": user.id, "username": user.username, "email": user.email}
+        return {"id": "", "username": "Utilisateur supprimé", "email": None, "photo_base64": None}
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "photo_base64": _encode_photo(user.photo),
+    }
 
 
 def _display_group_name(raw_name: str) -> str:
@@ -213,6 +224,7 @@ def create_private_message(
 
 def get_private_messages(db: Session, *, current_user_id: str, other_user_id: str) -> list[dict]:
     room = get_or_create_private_room(db, current_user_id, other_user_id)
+    mark_private_notifications_as_read(db, user_id=current_user_id)
     messages = (
         db.query(Message)
         .filter(Message.id_room == room.id, Message.id_groupe.is_(None), Message.date_sup.is_(None))
@@ -220,6 +232,59 @@ def get_private_messages(db: Session, *, current_user_id: str, other_user_id: st
         .all()
     )
     return [serialize_message(message) for message in messages]
+
+
+def list_private_conversations(db: Session, *, current_user_id: str) -> list[dict]:
+    rooms = (
+        db.query(Room)
+        .filter(
+            or_(Room.member1 == current_user_id, Room.member2 == current_user_id),
+            ~Room.member1.like("group:%"),
+            ~Room.member2.like("group:%"),
+        )
+        .all()
+    )
+
+    conversations = []
+    for room in rooms:
+        other_user_id = room.member2 if room.member1 == current_user_id else room.member1
+        other_user = db.query(Utilisateur).filter(Utilisateur.id == other_user_id).first()
+        last_message = (
+            db.query(Message)
+            .filter(Message.id_room == room.id, Message.id_groupe.is_(None), Message.date_sup.is_(None))
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+        conversations.append({
+            "room_id": room.id,
+            "user": _display_user(other_user),
+            "last_message": serialize_message(last_message) if last_message else None,
+            "updated_at": last_message.created_at if last_message else room.created_at,
+        })
+
+    return sorted(
+        conversations,
+        key=lambda conversation: conversation.get("updated_at") or datetime.min,
+        reverse=True,
+    )
+
+
+def mark_private_notifications_as_read(db: Session, *, user_id: str) -> None:
+    unread_notifications = (
+        db.query(NotificationMessagerie)
+        .filter(
+            NotificationMessagerie.id_utilisateur == user_id,
+            NotificationMessagerie.id_groupe.is_(None),
+            NotificationMessagerie.type == "private_message",
+            or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
+        )
+        .all()
+    )
+    if not unread_notifications:
+        return
+    for notification in unread_notifications:
+        notification.est_lu = True
+    db.commit()
 
 
 def create_group(

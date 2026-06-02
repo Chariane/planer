@@ -1,6 +1,7 @@
 from typing import Optional, List, Any
 from decimal import Decimal
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, model_validator, field_validator
+import base64
 import re
 from datetime import date, datetime
 
@@ -166,7 +167,15 @@ class UtilisateurOut(UtilisateurBase):
     date_nais: Optional[datetime] = None
     pays: Optional[str] = None
     ville: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 # ----------------------------------------
 # 🔐 AUTHENTIFICATION

@@ -42,6 +42,12 @@ app.include_router(super_admin_router)
 def root():
     return {"message": "Bienvenue sur le microservice Api Gateway"}
 
+
+@app.get("/health")
+def health():
+    return {"service": "api_gateway", "status": "ok"}
+
+
 if __name__ == "__main__":
     import uvicorn
 

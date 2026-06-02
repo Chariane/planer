@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
+import json
 from typing import Any
 
 from fastapi import HTTPException
@@ -6,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..schemas import NotificationCreate
+from ..realtime import NOTIFICATION_CHANNEL
 
 
 NOTIFICATION_FIELDS = """
@@ -23,6 +25,28 @@ NOTIFICATION_FIELDS = """
 
 def _row_to_dict(row: Any) -> dict:
     return dict(row._mapping)
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
+def _emit_notification_created(db: Session, notification: dict) -> None:
+    db.execute(
+        text("SELECT pg_notify(:channel, :payload)"),
+        {
+            "channel": NOTIFICATION_CHANNEL,
+            "payload": json.dumps(
+                {
+                    "event": "notification.created",
+                    "notification": notification,
+                },
+                default=_json_default,
+            ),
+        },
+    )
 
 
 def create_notification(db: Session, payload: NotificationCreate) -> dict:
@@ -48,8 +72,10 @@ def create_notification(db: Session, payload: NotificationCreate) -> dict:
             "est_globale": payload.est_globale,
         },
     ).first()
+    notification = _row_to_dict(row)
+    _emit_notification_created(db, notification)
     db.commit()
-    return _row_to_dict(row)
+    return notification
 
 
 def list_notifications(

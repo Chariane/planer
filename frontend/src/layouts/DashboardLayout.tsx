@@ -1,6 +1,6 @@
 // frontend/src/layouts/DashboardLayout.tsx
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
@@ -38,7 +38,7 @@ export default function DashboardLayout() {
         style={{ paddingLeft: `calc(${sidebarWidth}px + 0.375rem)` }}
       >
         <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} isCompact={isCompact} />
-        <main className="h-[calc(100vh-64px)] overflow-hidden">
+        <main className="h-[calc(100dvh-64px)] overflow-hidden">
           <Outlet />
         </main>
       </div>

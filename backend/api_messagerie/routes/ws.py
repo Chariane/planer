@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from jose import JWTError, jwt
 
 from ..core.database import SessionLocal
@@ -10,6 +10,7 @@ from ..models import Utilisateur
 from ..schemas import MessageCreate
 from .logique import create_group_message, create_private_message, serialize_message
 from .manager import manager
+from .presence import record_user_disconnect
 
 
 def _get_ws_user(token: Optional[str]):
@@ -83,10 +84,12 @@ async def private_chat_ws(websocket: WebSocket, receiver_id: str):
                 await manager.send_private_message(serialize_message(message), receiver_id, user.id)
             except Exception as exc:
                 await websocket.send_text(json.dumps({"error": str(exc)}))
-    except WebSocketDisconnect:
-        manager.disconnect(user.id)
     finally:
-        db.close()
+        manager.disconnect(user.id)
+        try:
+            record_user_disconnect(db, user.id)
+        finally:
+            db.close()
 
 
 async def group_chat(websocket: WebSocket, group_id: str):
@@ -111,7 +114,9 @@ async def group_chat(websocket: WebSocket, group_id: str):
                 await manager.broadcast_group_message(db, group_id, serialize_message(message))
             except Exception as exc:
                 await websocket.send_text(json.dumps({"error": str(exc)}))
-    except WebSocketDisconnect:
-        manager.disconnect(user.id)
     finally:
-        db.close()
+        manager.disconnect(user.id)
+        try:
+            record_user_disconnect(db, user.id)
+        finally:
+            db.close()

@@ -24,6 +24,9 @@ class ConnectionManager:
     def get_users(self) -> List[str]:
         return list(self.registered_users)
 
+    def is_online(self, user_id: str) -> bool:
+        return user_id in self.active_connections
+
     async def send_private_message(self, msg_obj: dict, receiver: str, sender: str):
         ws_receiver = self.active_connections.get(receiver)
         ws_sender = self.active_connections.get(sender)

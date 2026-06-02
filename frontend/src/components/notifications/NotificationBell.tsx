@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { notificationService } from '../../services/notification.service';
+import { notificationService, type NotificationRealtimeEvent } from '../../services/notification.service';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface NotificationBellProps {
@@ -29,9 +29,60 @@ export default function NotificationBell({
   }, []);
 
   useEffect(() => {
-    loadUnreadCount();
-    const interval = window.setInterval(loadUnreadCount, 30000);
-    return () => window.clearInterval(interval);
+    const timeoutId = window.setTimeout(loadUnreadCount, 0);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadUnreadCount();
+      }
+    };
+    const interval = window.setInterval(refreshWhenVisible, 10000);
+    window.addEventListener('focus', loadUnreadCount);
+    window.addEventListener('online', loadUnreadCount);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(interval);
+      window.removeEventListener('focus', loadUnreadCount);
+      window.removeEventListener('online', loadUnreadCount);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadUnreadCount]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return undefined;
+
+    let retryTimeout: number | undefined;
+    let closedByEffect = false;
+    let socket: WebSocket | null = null;
+
+    const connect = () => {
+      socket = new WebSocket(notificationService.socketUrl());
+      socket.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data) as NotificationRealtimeEvent;
+          if (payload.event === 'notification.created' && payload.notification && !payload.notification.est_lu) {
+            setUnreadCount(current => current + 1);
+            loadUnreadCount();
+          }
+        } catch {
+          loadUnreadCount();
+        }
+      };
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          retryTimeout = window.setTimeout(connect, 3000);
+        }
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      closedByEffect = true;
+      if (retryTimeout) window.clearTimeout(retryTimeout);
+      socket?.close();
+    };
   }, [loadUnreadCount]);
 
   return (

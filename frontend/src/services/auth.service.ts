@@ -8,7 +8,6 @@ export interface ProfileUpdatePayload {
   email?: string;
   username?: string;
   telephone?: string;
-  delivery_address?: string;
   biographie?: string;
   genre?: string;
   date_nais?: string;
@@ -19,6 +18,20 @@ export interface ProfileUpdatePayload {
 export interface RegisterPayload {
   email: string;
   [key: string]: unknown;
+}
+
+export interface PublicUserProfile {
+  id: string;
+  username: string;
+  email?: string | null;
+  nom?: string | null;
+  prenoms?: string | null;
+  telephone?: string | null;
+  biographie?: string | null;
+  genre?: string | null;
+  pays?: string | null;
+  ville?: string | null;
+  photo_base64?: string | null;
 }
 
 export const authService = {
@@ -34,6 +47,7 @@ export const authService = {
   getMyProfilePhoto: () => apiFetch(AUTH_BASE_URL, '/auth/me/photo'),
   updateMyProfilePhoto: (photo_base64: string | null) => apiFetch(AUTH_BASE_URL, '/auth/me/photo', { method: 'PUT', body: JSON.stringify({ photo_base64 }) }),
   getUserProfilePhoto: (userId: string) => apiFetch(AUTH_BASE_URL, `/auth/users/${userId}/photo`),
+  getUserProfile: (userId: string) => apiFetch(AUTH_BASE_URL, `/auth/users/${userId}/profile`) as Promise<PublicUserProfile>,
   logout: () => apiFetch(AUTH_BASE_URL, '/auth/logout', { method: 'POST' }),
   verify2FA: (challenge_token: string, code: string) => apiFetch(AUTH_BASE_URL, '/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge_token, code }) }),
   setup2FA: () => apiFetch(AUTH_BASE_URL, '/auth/2fa/setup'),

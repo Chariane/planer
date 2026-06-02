@@ -11,7 +11,7 @@ import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { useNavigationStore } from '../../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
-import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 
@@ -168,6 +168,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           name: getMemberDisplayName(m),
           email: getMemberEmail(m),
           role: m.role,
+          photo_base64: getMemberPhotoBase64(m),
         }));
         membersCount = formattedMembers.length;
       } catch { /* Suppress */ }
@@ -338,15 +339,19 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               {members.map((member, i) => (
                 <motion.div key={member.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
                   <GlassCard className="p-5 flex items-center justify-between gap-4 group hover:bg-theme-surface-hover/30 transition-all border-theme-border-subtle/30">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-secondary/20 to-primary/20 border border-theme-border-subtle/20 flex items-center justify-center font-black text-secondary text-base group-hover:rotate-6 transition-transform shadow-inner">
-                        {member.name.substring(0, 2).toUpperCase()}
+                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-secondary/20 to-primary/20 border border-theme-border-subtle/20 flex items-center justify-center overflow-hidden font-black text-secondary text-base group-hover:rotate-6 transition-transform shadow-inner">
+                        {getAvatarSrc(member.photo_base64) ? (
+                          <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
+                        ) : (
+                          getInitials(member.name)
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="font-bold text-theme-main truncate tracking-tight text-base group-hover:text-secondary transition-colors">{member.name}</p>
                         <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
                       </div>
-                    </div>
+                    </Link>
                     {canManageMemberRoles && member.role !== ROLES.CREATOR ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}

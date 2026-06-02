@@ -12,7 +12,6 @@ interface User {
   nom?: string;
   prenoms?: string;
   telephone?: string;
-  delivery_address?: string;
   biographie?: string;
   genre?: string;
   date_nais?: string;

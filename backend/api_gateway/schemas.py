@@ -1,6 +1,7 @@
 from typing import Optional, List, Any
 from decimal import Decimal
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, model_validator, field_validator
+import base64
 import re
 from datetime import date, datetime
 
@@ -167,7 +168,15 @@ class UtilisateurOut(UtilisateurBase):
     date_nais: Optional[date] = None
     pays: Optional[str] = None
     ville: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 
 class ProfilePhotoUpdate(BaseModel):
@@ -177,6 +186,20 @@ class ProfilePhotoUpdate(BaseModel):
 class ProfilePhotoResponse(BaseModel):
     photo_base64: Optional[str] = None
     mime_type: Optional[str] = None
+
+
+class PublicUserProfileOut(BaseModel):
+    id: str
+    username: str
+    email: Optional[EmailStr] = None
+    nom: Optional[str] = None
+    prenoms: Optional[str] = None
+    telephone: Optional[str] = None
+    biographie: Optional[str] = None
+    genre: Optional[str] = None
+    pays: Optional[str] = None
+    ville: Optional[str] = None
+    photo_base64: Optional[str] = None
 
 # ----------------------------------------
 # 🔐 AUTHENTIFICATION

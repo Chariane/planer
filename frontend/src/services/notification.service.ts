@@ -14,6 +14,11 @@ export interface NotificationItem {
   id_utilisateur?: string | null;
 }
 
+export interface NotificationRealtimeEvent {
+  event: 'connected' | 'notification.created';
+  notification?: NotificationItem;
+}
+
 const withParams = (path: string, params: Record<string, string | number | boolean | null | undefined>) => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -24,6 +29,8 @@ const withParams = (path: string, params: Record<string, string | number | boole
   const query = search.toString();
   return query ? `${path}?${query}` : path;
 };
+
+const wsBaseUrl = () => NOTIFICATION_BASE_URL.replace(/^http/, 'ws');
 
 export const notificationService = {
   list: (params: { unread_only?: boolean; include_global?: boolean; limit?: number } = {}) =>
@@ -40,4 +47,10 @@ export const notificationService = {
 
   delete: (notificationId: string) =>
     apiFetch(NOTIFICATION_BASE_URL, `/notifications/${notificationId}`, { method: 'DELETE' }),
+
+  socketUrl: () => {
+    const token = localStorage.getItem('access_token') || '';
+    const query = new URLSearchParams({ token });
+    return `${wsBaseUrl()}/notifications/ws?${query.toString()}`;
+  },
 };

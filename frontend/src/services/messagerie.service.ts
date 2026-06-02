@@ -42,6 +42,7 @@ export interface MessagerieMember {
   id: string;
   username?: string | null;
   email?: string | null;
+  photo_base64?: string | null;
   role: 'Administrateur' | 'Membre' | string;
 }
 
@@ -49,6 +50,21 @@ export interface MessagerieUnreadSummary {
   unread_discussions_count: number;
   unread_group_ids: string[];
   has_private_unread: boolean;
+}
+
+export interface PrivateConversation {
+  room_id: string;
+  user: MessagerieMember;
+  last_message?: MessageItem | null;
+  updated_at?: string | null;
+  is_online?: boolean;
+  last_seen?: string | null;
+}
+
+export interface PresenceResponse {
+  user_id: string;
+  is_online: boolean;
+  last_seen?: string | null;
 }
 
 const wsBaseUrl = () => MESSAGERIE_BASE_URL.replace(/^http/, 'ws');
@@ -72,9 +88,30 @@ export const messagerieService = {
       body: JSON.stringify(payload),
     }) as Promise<MessageItem>,
 
+  getPrivateMessages: (otherUserId: string) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/private/${otherUserId}/messages`) as Promise<{ messages: MessageItem[] }>,
+
+  listPrivateConversations: () =>
+    apiFetch(MESSAGERIE_BASE_URL, '/messagerie/private/conversations') as Promise<{ conversations: PrivateConversation[] }>,
+
+  sendPrivateMessage: (receiverId: string, payload: MessagePayload) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/private/${receiverId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }) as Promise<MessageItem>,
+
+  getPresence: (userId: string) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/presence/${userId}`) as Promise<PresenceResponse>,
+
   groupSocketUrl: (groupId: string) => {
     const token = localStorage.getItem('access_token') || '';
     const query = new URLSearchParams({ token });
     return `${wsBaseUrl()}/messagerie/ws/groups/${groupId}?${query.toString()}`;
+  },
+
+  privateSocketUrl: (receiverId: string) => {
+    const token = localStorage.getItem('access_token') || '';
+    const query = new URLSearchParams({ token });
+    return `${wsBaseUrl()}/messagerie/ws/private/${receiverId}?${query.toString()}`;
   },
 };

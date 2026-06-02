@@ -38,3 +38,22 @@ export const getMemberEmail = (member: any): string => {
     member?.email,
   );
 };
+
+export const getMemberPhotoBase64 = (member: any): string | null => {
+  const photo = member?.utilisateur?.photo_base64 || member?.user?.photo_base64 || member?.photo_base64;
+  return typeof photo === 'string' && photo.trim() ? photo : null;
+};
+
+export const getAvatarSrc = (photoBase64?: string | null): string | null =>
+  photoBase64 ? `data:image/jpeg;base64,${photoBase64}` : null;
+
+export const getInitials = (label?: string | null): string => {
+  const clean = (label || '').trim();
+  if (!clean) return 'U';
+  return clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase();
+};

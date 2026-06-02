@@ -44,6 +44,11 @@ def root():
     }
 
 
+@app.get("/health")
+def health():
+    return {"service": "api_messagerie", "status": "ok"}
+
+
 if __name__ == "__main__":
     import uvicorn
 

@@ -5,6 +5,7 @@ export interface Member {
   name: string;
   email: string;
   role: string;
+  photo_base64?: string | null;
 }
 
 export interface ChecklistItem {

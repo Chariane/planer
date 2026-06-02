@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Camera, Check, Copy, Edit2, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X } from 'lucide-react';
+import { Camera, Check, Copy, Edit2, Eye, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -17,7 +17,6 @@ const emptyProfileForm = {
   ville: '',
   genre: '',
   date_nais: '',
-  delivery_address: '',
   biographie: '',
 };
 
@@ -56,6 +55,8 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<ProfileForm>(emptyProfileForm);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isPhotoMenuOpen, setIsPhotoMenuOpen] = useState(false);
+  const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
   const [twoFASetup, setTwoFASetup] = useState<TwoFASetupPayload | null>(null);
@@ -95,7 +96,6 @@ export default function ProfilePage() {
       ville: user?.ville || '',
       genre: user?.genre || '',
       date_nais: toDateInputValue(user?.date_nais),
-      delivery_address: user?.delivery_address || '',
       biographie: user?.biographie || '',
     });
   }, [user]);
@@ -236,16 +236,16 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto max-w-5xl space-y-6 px-3 sm:px-0">
+      <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-start">
         <div>
-          <h1 className="text-3xl font-bold text-theme-main">Mon profil</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-theme-main">Mon profil</h1>
           <p className="mt-1 text-sm text-theme-muted">
             Ces informations seront utilisées dans la messagerie, les rapports et les espaces collaboratifs.
           </p>
         </div>
         {!isEditing && (
-          <Button onClick={() => setIsEditing(true)}>
+          <Button onClick={() => setIsEditing(true)} className="w-full sm:w-auto">
             <Edit2 className="mr-2 h-4 w-4" />
             Compléter mon profil
           </Button>
@@ -254,7 +254,7 @@ export default function ProfilePage() {
 
       <GlassCard className="overflow-hidden" hover={false}>
         <div className="grid gap-0 lg:grid-cols-[320px_1fr]">
-          <div className="border-b border-theme-subtle bg-theme-surface-hover/50 p-6 lg:border-b-0 lg:border-r">
+          <div className="border-b border-theme-subtle bg-theme-surface-hover/50 p-4 sm:p-6 lg:border-b-0 lg:border-r">
             <div className="flex flex-col items-center text-center">
               <div className="relative">
                 <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-4 border-theme-surface bg-secondary/10 text-4xl font-bold text-secondary shadow-theme-lg">
@@ -265,13 +265,46 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setIsPhotoMenuOpen(prev => !prev)}
+                  disabled={photoLoading}
+                  className="absolute inset-0 rounded-full transition hover:bg-black/10 disabled:opacity-60"
+                  title="Options de photo"
+                  aria-label="Options de photo"
+                />
+                <button
+                  onClick={() => setIsPhotoMenuOpen(prev => !prev)}
                   disabled={photoLoading}
                   className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-white shadow-lg transition hover:bg-secondary/90 disabled:opacity-60"
-                  title="Changer la photo"
+                  title="Options de photo"
+                  aria-label="Options de photo"
                 >
                   <Camera className="h-5 w-5" />
                 </button>
+                {isPhotoMenuOpen && (
+                  <div className="absolute left-1/2 top-full z-20 mt-3 w-44 -translate-x-1/2 rounded-2xl border border-theme-border-subtle bg-theme-surface p-1.5 text-left shadow-2xl">
+                    <button
+                      onClick={() => {
+                        setIsPhotoViewerOpen(true);
+                        setIsPhotoMenuOpen(false);
+                      }}
+                      disabled={!photoPreview}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-theme-main transition hover:bg-theme-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Eye className="h-4 w-4" />
+                      Voir
+                    </button>
+                    <button
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        setIsPhotoMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-theme-main transition hover:bg-theme-surface-hover"
+                    >
+                      <Camera className="h-4 w-4" />
+                      Modifier
+                    </button>
+                  </div>
+                )}
               </div>
               <input
                 ref={fileInputRef}
@@ -300,9 +333,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-6 border-b border-theme-subtle">
-              <nav className="flex gap-4">
+              <nav className="flex gap-4 overflow-x-auto">
                 <button onClick={() => setActiveTab('profile')} className={`pb-3 text-sm font-semibold ${activeTab === 'profile' ? 'border-b-2 border-secondary text-secondary' : 'text-theme-muted'}`}>Informations</button>
                 <button onClick={() => setActiveTab('security')} className={`pb-3 text-sm font-semibold ${activeTab === 'security' ? 'border-b-2 border-secondary text-secondary' : 'text-theme-muted'}`}>Sécurité</button>
               </nav>
@@ -318,7 +351,6 @@ export default function ProfilePage() {
                       <InfoItem icon={<Phone className="h-4 w-4" />} label="Téléphone" value={user?.telephone} />
                       <InfoItem icon={<MapPin className="h-4 w-4" />} label="Localisation" value={[user?.ville, user?.pays].filter(Boolean).join(', ')} />
                     </div>
-                    <InfoItem label="Adresse de livraison" value={user?.delivery_address} />
                     <InfoItem label="Biographie" value={user?.biographie} multiline />
                     <Button variant="outline" onClick={() => setIsEditing(true)}>
                       <Edit2 className="mr-2 h-4 w-4" />
@@ -338,14 +370,13 @@ export default function ProfilePage() {
                       <TextField label="Pays" value={editForm.pays} onChange={value => updateField('pays', value)} />
                       <SelectField label="Genre" value={editForm.genre} onChange={value => updateField('genre', value)} />
                     </div>
-                    <TextField label="Adresse de livraison" value={editForm.delivery_address} onChange={value => updateField('delivery_address', value)} />
                     <TextAreaField label="Biographie" value={editForm.biographie} onChange={value => updateField('biographie', value)} />
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button variant="outline" onClick={() => setIsEditing(false)}>
+                    <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+                      <Button variant="outline" onClick={() => setIsEditing(false)} className="w-full sm:w-auto">
                         <X className="mr-2 h-4 w-4" />
                         Annuler
                       </Button>
-                      <Button onClick={handleEditSubmit}>
+                      <Button onClick={handleEditSubmit} className="w-full sm:w-auto">
                         <Save className="mr-2 h-4 w-4" />
                         Enregistrer
                       </Button>
@@ -399,6 +430,18 @@ export default function ProfilePage() {
             <Button onClick={handleEnable2FA}>Activer</Button>
           </div>
         )}
+      </Modal>
+
+      <Modal isOpen={isPhotoViewerOpen} onClose={() => setIsPhotoViewerOpen(false)} title="Photo de profil" size="md">
+        <div className="flex justify-center">
+          {photoPreview ? (
+            <img src={photoPreview} alt="Photo de profil" className="max-h-[60vh] rounded-2xl object-contain shadow-theme-lg" />
+          ) : (
+            <div className="flex h-40 w-40 items-center justify-center rounded-full bg-secondary/10 text-5xl font-black text-secondary">
+              {initials}
+            </div>
+          )}
+        </div>
       </Modal>
 
       {message && <div className="fixed bottom-4 right-4 rounded-lg bg-green-100 p-3 text-green-700 shadow">{message}</div>}

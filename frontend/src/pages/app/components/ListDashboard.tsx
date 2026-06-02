@@ -9,7 +9,7 @@ import { listeService } from '../../../services/liste.service';
 import { tacheService } from '../../../services/tache.service';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
-import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import type { Member } from '../../../types';
 
 interface ListDashboardProps {
@@ -96,6 +96,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           name: getMemberDisplayName(m),
           email: getMemberEmail(m),
           role: m.role,
+          photo_base64: getMemberPhotoBase64(m),
         }));
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
@@ -300,10 +301,19 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {members.map(member => (
               <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
-                <div>
-                  <p className="font-medium text-gray-800">{member.name}</p>
-                  <p className="text-sm text-gray-500">{member.email}</p>
-                </div>
+                <Link to={`/users/${member.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-90">
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
+                    {getAvatarSrc(member.photo_base64) ? (
+                      <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
+                    ) : (
+                      getInitials(member.name)
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{member.name}</p>
+                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  </div>
+                </Link>
                 <span className={`text-xs px-2 py-1 rounded-full ${member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700' :
                     member.role === 'Créateur' ? 'bg-purple-100 text-purple-700' :
                       'bg-gray-100 text-gray-600'
