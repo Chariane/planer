@@ -1,9 +1,10 @@
 import base64
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from typing import Iterable, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, text
+from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -22,6 +23,8 @@ from ..schemas import MessageCreate
 
 RESOURCE_TYPES = {"workspace", "espace", "liste"}
 MANAGER_ROLES = {"Créateur", "Administrateur"}
+MESSAGE_EDIT_WINDOW = timedelta(minutes=30)
+LEGACY_ATTACHMENT_META_PREFIX = "__kp_attachment__:"
 
 
 def _encode_bytes(value: Optional[bytes]) -> Optional[str]:
@@ -45,6 +48,23 @@ def _decode_payload(value: Optional[str]) -> Optional[bytes]:
         return value.encode("utf-8")
 
 
+def _clean_message_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(LEGACY_ATTACHMENT_META_PREFIX):
+        return cleaned
+
+    try:
+        meta = json.loads(cleaned[len(LEGACY_ATTACHMENT_META_PREFIX):])
+    except Exception:
+        return None
+    caption = str(meta.get("caption") or "").strip() if isinstance(meta, dict) else ""
+    return caption or None
+
+
 def serialize_message(message: Message) -> dict:
     created_at = message.created_at
     return {
@@ -62,6 +82,60 @@ def serialize_message(message: Message) -> dict:
         "created_at": created_at,
         "time": created_at.strftime("%d/%m/%Y %H:%M") if created_at else None,
     }
+
+
+def _get_message_or_404(db: Session, message_id: str) -> Message:
+    message = db.query(Message).filter(Message.id == message_id, Message.date_sup.is_(None)).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message introuvable.")
+    return message
+
+
+def _ensure_message_owner(message: Message, user_id: str) -> None:
+    if message.sender != user_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres messages.")
+
+
+def _ensure_message_edit_window(message: Message) -> None:
+    if not message.created_at:
+        raise HTTPException(status_code=403, detail="Ce message ne peut plus etre modifie.")
+    if datetime.utcnow() - message.created_at > MESSAGE_EDIT_WINDOW:
+        raise HTTPException(status_code=403, detail="Le delai de modification de 30 minutes est depasse.")
+
+
+def get_private_message_recipient(db: Session, message: Message, current_user_id: str) -> Optional[str]:
+    if message.id_groupe:
+        return None
+
+    room = db.query(Room).filter(Room.id == message.id_room).first()
+    if not room:
+        return None
+    if room.member1 == current_user_id:
+        return room.member2
+    if room.member2 == current_user_id:
+        return room.member1
+    return None
+
+
+def update_message_content(db: Session, *, message_id: str, user_id: str, content: str) -> Message:
+    message = _get_message_or_404(db, message_id)
+    _ensure_message_owner(message, user_id)
+    _ensure_message_edit_window(message)
+    message.message = _clean_message_text(content)
+    message.date_modif = datetime.utcnow()
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+def delete_message(db: Session, *, message_id: str, user_id: str) -> Message:
+    message = _get_message_or_404(db, message_id)
+    _ensure_message_owner(message, user_id)
+    message.date_sup = datetime.utcnow()
+    message.date_modif = datetime.utcnow()
+    db.commit()
+    db.refresh(message)
+    return message
 
 
 def serialize_group(db: Session, group: Groupe) -> dict:
@@ -207,7 +281,7 @@ def create_private_message(
         id_room=room.id,
         id_groupe=None,
         type=payload.type or "text",
-        message=payload.message,
+        message=_clean_message_text(payload.message),
         audio=_decode_payload(payload.audio),
         file=_decode_payload(payload.file),
         image=_decode_payload(payload.image),
@@ -225,6 +299,17 @@ def create_private_message(
 def get_private_messages(db: Session, *, current_user_id: str, other_user_id: str) -> list[dict]:
     room = get_or_create_private_room(db, current_user_id, other_user_id)
     mark_private_notifications_as_read(db, user_id=current_user_id)
+    (
+        db.query(Message)
+        .filter(
+            Message.id_room == room.id,
+            Message.id_groupe.is_(None),
+            Message.sender == other_user_id,
+            or_(Message.seen.is_(False), Message.seen.is_(None)),
+        )
+        .update({Message.seen: True}, synchronize_session=False)
+    )
+    db.commit()
     messages = (
         db.query(Message)
         .filter(Message.id_room == room.id, Message.id_groupe.is_(None), Message.date_sup.is_(None))
@@ -486,7 +571,7 @@ def create_group_message(
         id_room=room.id,
         id_groupe=group_id,
         type=payload.type or "text",
-        message=payload.message,
+        message=_clean_message_text(payload.message),
         audio=_decode_payload(payload.audio),
         file=_decode_payload(payload.file),
         image=_decode_payload(payload.image),
@@ -538,34 +623,50 @@ def mark_group_notifications_as_read(db: Session, *, group_id: str, user_id: str
 
 
 def get_unread_summary(db: Session, *, user_id: str) -> dict:
-    unread_group_ids = {
-        row[0]
-        for row in (
-            db.query(NotificationMessagerie.id_groupe)
+    unread_group_counts = {
+        group_id: count
+        for group_id, count in (
+            db.query(NotificationMessagerie.id_groupe, func.count(NotificationMessagerie.id))
             .filter(
                 NotificationMessagerie.id_utilisateur == user_id,
                 or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
                 NotificationMessagerie.id_groupe.isnot(None),
             )
-            .distinct()
+            .group_by(NotificationMessagerie.id_groupe)
             .all()
         )
-        if row[0]
+        if group_id
     }
-    has_private_unread = (
-        db.query(NotificationMessagerie.id)
+    unread_private_counts = {}
+    private_rows = (
+        db.query(Room, Message.sender, func.count(Message.id))
+        .join(Message, Message.id_room == Room.id)
         .filter(
-            NotificationMessagerie.id_utilisateur == user_id,
-            or_(NotificationMessagerie.est_lu.is_(False), NotificationMessagerie.est_lu.is_(None)),
-            NotificationMessagerie.id_groupe.is_(None),
+            or_(Room.member1 == user_id, Room.member2 == user_id),
+            ~Room.member1.like("group:%"),
+            ~Room.member2.like("group:%"),
+            Message.id_groupe.is_(None),
+            Message.sender != user_id,
+            or_(Message.seen.is_(False), Message.seen.is_(None)),
+            Message.date_sup.is_(None),
         )
-        .first()
-        is not None
+        .group_by(Room.id, Message.sender)
+        .all()
     )
+    for room, sender_id, count in private_rows:
+        other_user_id = room.member2 if room.member1 == user_id else room.member1
+        if sender_id == other_user_id:
+            unread_private_counts[other_user_id] = int(count)
+
+    unread_group_ids = list(unread_group_counts.keys())
+    unread_private_user_ids = list(unread_private_counts.keys())
     return {
-        "unread_discussions_count": len(unread_group_ids) + (1 if has_private_unread else 0),
-        "unread_group_ids": list(unread_group_ids),
-        "has_private_unread": has_private_unread,
+        "unread_discussions_count": len(unread_group_ids) + len(unread_private_user_ids),
+        "unread_group_ids": unread_group_ids,
+        "unread_group_counts": unread_group_counts,
+        "unread_private_user_ids": unread_private_user_ids,
+        "unread_private_counts": unread_private_counts,
+        "has_private_unread": len(unread_private_user_ids) > 0,
     }
 
 

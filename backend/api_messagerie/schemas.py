@@ -984,6 +984,10 @@ class MessageCreate(BaseModel):
     video: Optional[str] = None
 
 
+class MessageUpdate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=5000)
+
+
 class MessageOut(BaseModel):
     id: str
     sender: str

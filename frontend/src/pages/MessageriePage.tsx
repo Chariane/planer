@@ -1,21 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   AlertCircle,
+  Check,
   Crown,
+  Download,
+  Edit3,
+  FileText,
+  Image as ImageIcon,
   Loader2,
   MessageCircle,
   MessageSquareText,
+  Mic,
+  Paperclip,
+  Phone,
+  PhoneOff,
   RefreshCw,
   Search,
   Send,
   Shield,
   Sparkles,
+  Square,
+  Trash2,
   Users,
+  Video,
   Wifi,
   WifiOff,
   Briefcase,
   FolderTree,
   ListTodo,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -29,6 +42,7 @@ import {
   type MessageItem,
   type MessagerieGroup,
   type MessagerieMember,
+  type MessagerieUnreadSummary,
   type PrivateConversation,
 } from '../services/messagerie.service';
 
@@ -103,6 +117,171 @@ const avatarSrc = (member?: Pick<MessagerieMember, 'photo_base64'> | null) =>
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
+const MAX_CHAT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+
+type PendingAttachment = {
+  kind: 'audio' | 'image' | 'video' | 'file';
+  name: string;
+  mimeType: string;
+  base64: string;
+};
+
+type CallKind = 'audio' | 'video';
+type CallStatus = 'idle' | 'outgoing' | 'incoming' | 'active';
+
+type CallSignalPayload = {
+  type: 'call_offer' | 'call_answer' | 'call_ice' | 'call_end' | 'call_reject';
+  call_type?: CallKind;
+  offer?: RTCSessionDescriptionInit;
+  answer?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  from?: string;
+};
+
+const rtcConfig: RTCConfiguration = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+};
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Lecture impossible.'));
+    reader.readAsDataURL(file);
+  });
+
+const splitDataUrl = (dataUrl?: string | null) => {
+  if (!dataUrl) return { mimeType: 'application/octet-stream', base64: '' };
+  const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+  if (!match) return { mimeType: 'application/octet-stream', base64: dataUrl };
+  return { mimeType: match[1], base64: match[2] };
+};
+
+const dataUrlFromBase64 = (base64?: string | null, mimeType = 'application/octet-stream') =>
+  base64 ? `data:${mimeType};base64,${base64}` : '';
+
+const attachmentKindFromFile = (file: File): PendingAttachment['kind'] => {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  return 'file';
+};
+
+const MESSAGE_EDIT_WINDOW_MS = 30 * 60 * 1000;
+const legacyAttachmentMetaPrefix = '__kp_attachment__:';
+
+const cleanMessageText = (value?: string | null) => {
+  if (!value) return '';
+  if (!value.startsWith(legacyAttachmentMetaPrefix)) return value;
+
+  try {
+    const meta = JSON.parse(value.slice(legacyAttachmentMetaPrefix.length)) as { caption?: string };
+    return meta.caption || '';
+  } catch {
+    return '';
+  }
+};
+
+const isAttachmentMessage = (message: MessageItem) =>
+  Boolean(message.audio || message.image || message.video || message.file);
+
+const attachmentLabel = (message: MessageItem) => {
+  if (message.audio) return 'Message vocal';
+  if (message.image) return 'Image jointe';
+  if (message.video) return 'Video jointe';
+  if (message.file) return 'Fichier joint';
+  return '';
+};
+
+const conversationPreview = (message?: MessageItem | null) => {
+  if (!message) return '';
+  const cleanText = cleanMessageText(message.message);
+  if (isAttachmentMessage(message)) {
+    return cleanText ? `${attachmentLabel(message)} - ${cleanText}` : attachmentLabel(message);
+  }
+  return cleanText;
+};
+
+const editableMessageText = (message: MessageItem) => {
+  return cleanMessageText(message.message);
+};
+
+const updatedMessageContent = (_message: MessageItem, nextText: string) => {
+  return nextText.trim();
+};
+
+const canEditMessage = (message: MessageItem) => {
+  if (!message.created_at) return false;
+  const createdAt = new Date(message.created_at).getTime();
+  if (Number.isNaN(createdAt)) return false;
+  return Date.now() - createdAt <= MESSAGE_EDIT_WINDOW_MS;
+};
+
+function MessageContent({ message, isMine }: { message: MessageItem; isMine: boolean }) {
+  const textColor = isMine ? 'text-white/90' : 'text-theme-main';
+  const subtleColor = isMine ? 'text-white/70' : 'text-theme-muted';
+
+  if (message.audio) {
+    const src = dataUrlFromBase64(message.audio, 'audio/webm');
+    return (
+      <div className="space-y-2">
+        <div className={`flex items-center gap-2 text-xs font-black ${subtleColor}`}>
+          <Mic size={14} />
+          Message vocal
+        </div>
+        <audio controls src={src} className="max-w-full h-10" />
+        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+      </div>
+    );
+  }
+
+  if (message.image) {
+    const src = dataUrlFromBase64(message.image, 'image/jpeg');
+    return (
+      <div className="space-y-2">
+        <img src={src} alt="Image jointe" className="max-h-72 w-full rounded-xl object-cover" />
+        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+      </div>
+    );
+  }
+
+  if (message.video) {
+    const src = dataUrlFromBase64(message.video, 'video/mp4');
+    return (
+      <div className="space-y-2">
+        <video controls src={src} className="max-h-72 w-full rounded-xl bg-black" />
+        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+      </div>
+    );
+  }
+
+  if (message.file) {
+    const src = dataUrlFromBase64(message.file, 'application/octet-stream');
+    return (
+      <div className="flex items-center gap-3">
+        <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${isMine ? 'bg-white/15 text-white' : 'bg-secondary/10 text-secondary'}`}>
+          <FileText size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-sm font-black ${textColor}`}>Fichier joint</p>
+          <p className={`truncate text-xs ${subtleColor}`}>Piece jointe</p>
+          {cleanMessageText(message.message) && <p className={`mt-1 text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+        </div>
+        <a
+          href={src}
+          download={`fichier-message-${message.id}`}
+          className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center transition ${isMine ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-theme-surface-hover hover:bg-secondary/10 text-theme-muted hover:text-secondary'}`}
+          title="Télécharger"
+        >
+          <Download size={17} />
+        </a>
+      </div>
+    );
+  }
+
+  return <>{cleanMessageText(message.message)}</>;
+}
+
 const resourceLabel = (group: MessagerieGroup) => {
   const typeLabels: Record<string, string> = {
     workspace: 'Workspace',
@@ -146,6 +325,39 @@ const sectionKeyFor = (group: MessagerieGroup) => {
   return 'group';
 };
 
+const emptyUnreadSummary: MessagerieUnreadSummary = {
+  unread_discussions_count: 0,
+  unread_group_ids: [],
+  unread_group_counts: {},
+  unread_private_user_ids: [],
+  unread_private_counts: {},
+  has_private_unread: false,
+};
+
+const unreadBadgeLabel = (count: number) => {
+  if (count <= 0) return null;
+  return count > 9 ? '+9' : String(count);
+};
+
+function UnreadBadge({ count, selected }: { count: number; selected: boolean }) {
+  const label = unreadBadgeLabel(count);
+  if (!label) return null;
+
+  return (
+    <span
+      className={`ml-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-black leading-none shadow-sm ${
+        selected
+          ? 'bg-white text-secondary'
+          : 'bg-secondary text-white shadow-secondary/20'
+      }`}
+      title={`${count} message${count > 1 ? 's' : ''} non lu${count > 1 ? 's' : ''}`}
+      aria-label={`${count} message${count > 1 ? 's' : ''} non lu${count > 1 ? 's' : ''}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function UserAvatar({
   member,
   label,
@@ -176,6 +388,7 @@ export default function MessageriePage() {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [selectedPrivateUserId, setSelectedPrivateUserId] = useState<string | null>(searchParams.get('private_user_id'));
   const [members, setMembers] = useState<MessagerieMember[]>([]);
+  const [unreadSummary, setUnreadSummary] = useState<MessagerieUnreadSummary>(emptyUnreadSummary);
   const [privateProfile, setPrivateProfile] = useState<PublicUserProfile | null>(null);
   const [privateOnline, setPrivateOnline] = useState(false);
   const [privateLastSeen, setPrivateLastSeen] = useState<string | null>(null);
@@ -184,11 +397,27 @@ export default function MessageriePage() {
   const [loadingThread, setLoadingThread] = useState(false);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
+  const [messageActionLoading, setMessageActionLoading] = useState<string | null>(null);
+  const [callStatus, setCallStatus] = useState<CallStatus>('idle');
+  const [callKind, setCallKind] = useState<CallKind>('audio');
+  const [incomingCall, setIncomingCall] = useState<CallSignalPayload | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRealtime, setIsRealtime] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const activeGroup = groups.find(group => group.id === activeGroupId) || null;
   const desiredResourceType = searchParams.get('resource_type');
@@ -219,9 +448,13 @@ export default function MessageriePage() {
       setGroups(nextGroups);
       setPrivateConversations(privateResponse.conversations || []);
       setActiveGroupId(current => privateUserId ? current : requestedGroup?.id || current || nextGroups[0]?.id || null);
+      messagerieService.getUnreadSummary()
+        .then(summary => setUnreadSummary({ ...emptyUnreadSummary, ...summary }))
+        .catch(() => setUnreadSummary(emptyUnreadSummary));
     } catch (err: unknown) {
       setGroups([]);
       setPrivateConversations([]);
+      setUnreadSummary(emptyUnreadSummary);
       setError(getErrorMessage(err, 'Impossible de charger vos conversations.'));
     } finally {
       setLoadingGroups(false);
@@ -255,6 +488,12 @@ export default function MessageriePage() {
       ]);
       setMessages(messagesResponse.messages || []);
       setMembers(membersResponse.members || []);
+      setUnreadSummary(current => ({
+        ...current,
+        unread_group_ids: current.unread_group_ids.filter(id => id !== groupId),
+        unread_group_counts: { ...(current.unread_group_counts || {}), [groupId]: 0 },
+        unread_discussions_count: Math.max(0, current.unread_discussions_count - (current.unread_group_counts?.[groupId] ? 1 : 0)),
+      }));
     } catch (err: unknown) {
       setMessages([]);
       setMembers([]);
@@ -278,6 +517,13 @@ export default function MessageriePage() {
       setPrivateLastSeen(presenceData.last_seen || null);
       setMessages(messagesResponse.messages || []);
       setMembers([]);
+      setUnreadSummary(current => ({
+        ...current,
+        unread_private_user_ids: (current.unread_private_user_ids || []).filter(id => id !== otherUserId),
+        unread_private_counts: { ...(current.unread_private_counts || {}), [otherUserId]: 0 },
+        unread_discussions_count: Math.max(0, current.unread_discussions_count - (current.unread_private_counts?.[otherUserId] ? 1 : 0)),
+        has_private_unread: (current.unread_private_user_ids || []).some(id => id !== otherUserId),
+      }));
     } catch (err: unknown) {
       setMessages([]);
       setPrivateProfile(null);
@@ -321,7 +567,15 @@ export default function MessageriePage() {
     socket.onerror = () => setIsRealtime(false);
     socket.onmessage = event => {
       try {
-        const payload = JSON.parse(event.data) as MessageItem;
+        const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        if (payload.event === 'message_updated' && payload.updated_message) {
+          setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
+          return;
+        }
+        if (payload.event === 'message_deleted' && payload.message_id) {
+          setMessages(prev => prev.filter(item => item.id !== payload.message_id));
+          return;
+        }
         if (!payload.id || payload.id_groupe !== activeGroupId) return;
         setMessages(prev => prev.some(item => item.id === payload.id) ? prev : [...prev, payload]);
       } catch {
@@ -345,7 +599,15 @@ export default function MessageriePage() {
     socket.onerror = () => setIsRealtime(false);
     socket.onmessage = event => {
       try {
-        const payload = JSON.parse(event.data) as MessageItem;
+        const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        if (payload.event === 'message_updated' && payload.updated_message) {
+          setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
+          return;
+        }
+        if (payload.event === 'message_deleted' && payload.message_id) {
+          setMessages(prev => prev.filter(item => item.id !== payload.message_id));
+          return;
+        }
         if (!payload.id) return;
         setMessages(prev => prev.some(item => item.id === payload.id) ? prev : [...prev, payload]);
       } catch {
@@ -359,6 +621,12 @@ export default function MessageriePage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, activeGroupId]);
+
+  useEffect(() => () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  }, []);
 
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -417,27 +685,158 @@ export default function MessageriePage() {
     return map;
   }, [members]);
 
+  const sendPayload = async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(payload));
+      return;
+    }
+
+    if (privateUserId) {
+      const sent = await messagerieService.sendPrivateMessage(privateUserId, payload);
+      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+      return;
+    }
+
+    const sent = await messagerieService.sendGroupMessage(activeGroupId!, payload);
+    setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+  };
+
+  const handleFileSelect = async (file?: File) => {
+    if (!file) return;
+    if (file.size > MAX_CHAT_ATTACHMENT_SIZE) {
+      setError('Le fichier est trop volumineux pour la discussion. Taille maximale : 8 Mo.');
+      return;
+    }
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const { mimeType, base64 } = splitDataUrl(dataUrl);
+      setPendingAttachment({
+        kind: attachmentKindFromFile(file),
+        name: file.name,
+        mimeType: mimeType || file.type || 'application/octet-stream',
+        base64,
+      });
+      setError(null);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Impossible de lire ce fichier.'));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError("L'enregistrement vocal n'est pas disponible dans ce navigateur.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        const mimeType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (blob.size > MAX_CHAT_ATTACHMENT_SIZE) {
+          setError('Le message vocal est trop volumineux. Réessayez avec un enregistrement plus court.');
+          return;
+        }
+        const dataUrl = await fileToDataUrl(blob);
+        const parsed = splitDataUrl(dataUrl);
+        setPendingAttachment({
+          kind: 'audio',
+          name: `Message vocal ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.webm`,
+          mimeType: parsed.mimeType || mimeType,
+          base64: parsed.base64,
+        });
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setError(null);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Impossible d'accéder au micro."));
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const startEditingMessage = (message: MessageItem) => {
+    setEditingMessageId(message.id);
+    setEditingDraft(editableMessageText(message));
+  };
+
+  const cancelEditingMessage = () => {
+    setEditingMessageId(null);
+    setEditingDraft('');
+  };
+
+  const saveEditedMessage = async (message: MessageItem) => {
+    const nextContent = updatedMessageContent(message, editingDraft);
+    if (!isAttachmentMessage(message) && !nextContent.trim()) return;
+
+    setMessageActionLoading(`edit-${message.id}`);
+    setError(null);
+    try {
+      const updated = await messagerieService.updateMessage(message.id, nextContent);
+      setMessages(prev => prev.map(item => item.id === updated.id ? updated : item));
+      cancelEditingMessage();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Impossible de modifier ce message.'));
+    } finally {
+      setMessageActionLoading(null);
+    }
+  };
+
+  const removeMessage = async (message: MessageItem) => {
+    if (!confirm('Supprimer ce message ?')) return;
+    setMessageActionLoading(`delete-${message.id}`);
+    setError(null);
+    try {
+      await messagerieService.deleteMessage(message.id);
+      setMessages(prev => prev.filter(item => item.id !== message.id));
+      if (editingMessageId === message.id) cancelEditingMessage();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Impossible de supprimer ce message.'));
+    } finally {
+      setMessageActionLoading(null);
+    }
+  };
+
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if ((!activeGroupId && !privateUserId) || !draft.trim() || sending) return;
+    if ((!activeGroupId && !privateUserId) || (!draft.trim() && !pendingAttachment) || sending) return;
 
     const text = draft.trim();
     setDraft('');
+    const attachment = pendingAttachment;
+    setPendingAttachment(null);
     setSending(true);
     setError(null);
 
     try {
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ message: text, type: 'text' }));
-      } else if (privateUserId) {
-        const sent = await messagerieService.sendPrivateMessage(privateUserId, { message: text, type: 'text' });
-        setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+      if (attachment) {
+        await sendPayload({
+          type: attachment.kind,
+          message: text || null,
+          [attachment.kind]: attachment.base64,
+        });
       } else {
-        const sent = await messagerieService.sendGroupMessage(activeGroupId!, { message: text, type: 'text' });
-        setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+        await sendPayload({ message: text, type: 'text' });
       }
     } catch (err: unknown) {
       setDraft(text);
+      setPendingAttachment(attachment);
       setError(getErrorMessage(err, "Impossible d'envoyer ce message."));
     } finally {
       setSending(false);
@@ -445,8 +844,8 @@ export default function MessageriePage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-theme-page transition-colors duration-300">
-      <div className="min-h-full max-w-[1500px] mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 sm:gap-5">
+    <div className="h-full min-h-0 overflow-y-auto xl:overflow-hidden bg-theme-page transition-colors duration-300">
+      <div className="min-h-full xl:h-full max-w-[1500px] mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 sm:gap-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <div className="h-11 w-11 sm:h-14 sm:w-14 shrink-0 rounded-2xl bg-secondary/10 text-secondary border border-secondary/20 flex items-center justify-center shadow-lg shadow-secondary/10">
@@ -472,8 +871,8 @@ export default function MessageriePage() {
           </motion.div>
         )}
 
-        <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)_300px] gap-4 sm:gap-5">
-          <GlassCard className="!p-0 overflow-hidden flex flex-col min-h-[340px] sm:min-h-[420px]" hover={false}>
+        <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)_300px] gap-4 sm:gap-5 xl:overflow-hidden">
+          <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[380px] sm:h-[440px] xl:h-full" hover={false}>
             <div className="p-4 border-b border-theme-subtle">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
@@ -499,7 +898,7 @@ export default function MessageriePage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2">
               {loadingGroups ? (
                 <div className="h-full flex items-center justify-center text-theme-muted">
                   <Loader2 className="animate-spin text-secondary" />
@@ -532,6 +931,7 @@ export default function MessageriePage() {
                   ) : (
                     visiblePrivateConversations.map(conversation => {
                       const selected = selectedPrivateUserId === conversation.user.id;
+                      const unreadCount = unreadSummary.unread_private_counts?.[conversation.user.id] || 0;
                       return (
                         <button
                           key={conversation.room_id}
@@ -543,15 +943,18 @@ export default function MessageriePage() {
                             ? 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/15'
                             : 'bg-theme-surface hover:bg-theme-surface-hover text-theme-main border-theme-subtle'}`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <div className="relative">
                               <UserAvatar member={conversation.user} label={displayMember(conversation.user)} className="h-11 w-11 rounded-xl" />
                               <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 ${selected ? 'border-secondary' : 'border-theme-surface'} ${conversation.is_online ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="font-black truncate">{displayMember(conversation.user)}</p>
+                              <div className="flex min-w-0 items-center justify-between gap-2">
+                                <p className="min-w-0 flex-1 truncate font-black">{displayMember(conversation.user)}</p>
+                                <UnreadBadge count={unreadCount} selected={selected} />
+                              </div>
                               <p className={`text-xs mt-1 truncate ${selected ? 'text-white/70' : 'text-theme-muted'}`}>
-                                {conversation.last_message?.message || presenceLabel(conversation.is_online, conversation.last_seen)}
+                                {conversationPreview(conversation.last_message) || presenceLabel(conversation.is_online, conversation.last_seen)}
                               </p>
                             </div>
                           </div>
@@ -583,24 +986,30 @@ export default function MessageriePage() {
                           {section.empty}
                         </div>
                       ) : (
-                        sectionGroups.map(group => (
+                        sectionGroups.map(group => {
+                          const selected = activeGroupId === group.id;
+                          const unreadCount = unreadSummary.unread_group_counts?.[group.id] || 0;
+                          return (
                           <button
                             key={group.id}
                             onClick={() => {
                               setActiveGroupId(group.id);
                               setSelectedPrivateUserId(null);
                             }}
-                            className={`w-full text-left rounded-2xl p-3 transition-all border ${activeGroupId === group.id
+                            className={`w-full text-left rounded-2xl p-3 transition-all border ${selected
                               ? 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/15'
                               : 'bg-theme-surface hover:bg-theme-surface-hover text-theme-main border-theme-subtle'}`}
                           >
-                            <div className="flex items-center gap-3">
-                              <div className={`h-11 w-11 rounded-xl flex items-center justify-center font-black text-sm ${activeGroupId === group.id ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary dark:text-sky-200'}`}>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center font-black text-sm ${selected ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary dark:text-sky-200'}`}>
                                 {initials(group.name)}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="font-black truncate">{group.name}</p>
-                                <p className={`text-xs mt-1 flex items-center gap-1 ${activeGroupId === group.id ? 'text-white/70' : 'text-theme-muted'}`}>
+                                <div className="flex min-w-0 items-center justify-between gap-2">
+                                  <p className="min-w-0 flex-1 truncate font-black">{group.name}</p>
+                                  <UnreadBadge count={unreadCount} selected={selected} />
+                                </div>
+                                <p className={`text-xs mt-1 flex items-center gap-1 ${selected ? 'text-white/70' : 'text-theme-muted'}`}>
                                   <Users size={13} />
                                   {group.member_count} membre{group.member_count > 1 ? 's' : ''}
                                   <span className="opacity-60">•</span>
@@ -609,7 +1018,8 @@ export default function MessageriePage() {
                               </div>
                             </div>
                           </button>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   );
@@ -619,7 +1029,7 @@ export default function MessageriePage() {
             </div>
           </GlassCard>
 
-          <GlassCard className="!p-0 overflow-hidden flex flex-col min-h-[520px] sm:min-h-[560px] xl:min-h-[520px]" hover={false}>
+          <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[620px] xl:h-full" hover={false}>
             {activeGroup || privateProfile ? (
               <>
                 <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-theme-subtle flex items-center justify-between gap-3 sm:gap-4 bg-theme-surface/90">
@@ -679,6 +1089,8 @@ export default function MessageriePage() {
                       <AnimatePresence initial={false}>
                         {messages.map(message => {
                           const isMine = message.sender === user?.id;
+                          const isEditing = editingMessageId === message.id;
+                          const editAllowed = isMine && canEditMessage(message);
                           const sender = isPrivateMode && message.sender === privateProfile?.id
                             ? privateMember
                             : memberById.get(message.sender);
@@ -725,8 +1137,62 @@ export default function MessageriePage() {
                                 <div className={`rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 shadow-theme-sm border text-sm leading-relaxed break-words ${isMine
                                   ? 'bg-secondary text-white border-secondary rounded-br-md'
                                   : 'bg-theme-surface text-theme-main border-theme-subtle rounded-bl-md'}`}>
-                                  {message.message}
+                                  {isEditing ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        value={editingDraft}
+                                        onChange={event => setEditingDraft(event.target.value)}
+                                        className="min-h-[80px] w-full resize-none rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/40"
+                                        placeholder={isAttachmentMessage(message) ? 'Ajouter une légende...' : 'Modifier le message...'}
+                                        autoFocus
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={cancelEditingMessage}
+                                          className="h-8 w-8 rounded-xl bg-white/10 text-white/80 hover:bg-white/20 transition flex items-center justify-center"
+                                          title="Annuler"
+                                        >
+                                          <X size={15} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => saveEditedMessage(message)}
+                                          disabled={messageActionLoading === `edit-${message.id}` || (!isAttachmentMessage(message) && !editingDraft.trim())}
+                                          className="h-8 w-8 rounded-xl bg-white text-secondary hover:bg-white/90 transition flex items-center justify-center disabled:opacity-50"
+                                          title="Enregistrer"
+                                        >
+                                          {messageActionLoading === `edit-${message.id}` ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <MessageContent message={message} isMine={isMine} />
+                                  )}
                                 </div>
+                                {isMine && !isEditing && (
+                                  <div className={`flex items-center gap-1 px-1 ${isMine ? 'flex-row-reverse' : ''}`}>
+                                    {editAllowed && (
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditingMessage(message)}
+                                        className="h-7 w-7 rounded-lg text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center"
+                                        title="Modifier le message"
+                                      >
+                                        <Edit3 size={14} />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeMessage(message)}
+                                      disabled={messageActionLoading === `delete-${message.id}`}
+                                      className="h-7 w-7 rounded-lg text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center disabled:opacity-50"
+                                      title="Supprimer le message"
+                                    >
+                                      {messageActionLoading === `delete-${message.id}` ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </motion.div>
                           );
@@ -738,7 +1204,58 @@ export default function MessageriePage() {
                 </div>
 
                 <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={event => handleFileSelect(event.target.files?.[0])}
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                  />
+                  {pendingAttachment && (
+                    <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
+                      <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                        {pendingAttachment.kind === 'audio' ? <Mic size={18} />
+                          : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
+                            : pendingAttachment.kind === 'video' ? <Video size={18} />
+                              : <FileText size={18} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
+                        <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingAttachment(null)}
+                        className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
+                        title="Retirer la pièce jointe"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending || isRecording}
+                      className="h-12 w-12 shrink-0 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
+                      title="Joindre un fichier"
+                    >
+                      <Paperclip size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      disabled={sending}
+                      className={`h-12 w-12 shrink-0 rounded-2xl border transition flex items-center justify-center disabled:opacity-50 ${
+                        isRecording
+                          ? 'border-red-500/30 bg-red-500/10 text-red-500 animate-pulse'
+                          : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
+                      }`}
+                      title={isRecording ? "Arrêter l'enregistrement" : 'Enregistrer un message vocal'}
+                    >
+                      {isRecording ? <Square size={16} /> : <Mic size={18} />}
+                    </button>
                     <textarea
                       value={draft}
                       onChange={event => setDraft(event.target.value)}
@@ -751,7 +1268,7 @@ export default function MessageriePage() {
                       placeholder="Écrire un message..."
                       className="min-h-[48px] max-h-32 flex-1 resize-none rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
                     />
-                    <Button type="submit" loading={sending} disabled={!draft.trim() || sending} className="h-12 w-12 !p-0 rounded-2xl">
+                    <Button type="submit" loading={sending} disabled={(!draft.trim() && !pendingAttachment) || sending || isRecording} className="h-12 w-12 !p-0 rounded-2xl">
                       <Send size={18} />
                     </Button>
                   </div>

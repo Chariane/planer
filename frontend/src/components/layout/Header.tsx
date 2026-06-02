@@ -20,6 +20,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const shouldCompleteProfile = Boolean(user && (!user.nom || !user.prenoms));
+  const profileLabel = user?.username || user?.email || 'Profil';
 
   return (
     <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-2 py-2 sm:px-4 sm:py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
@@ -99,39 +100,35 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
           )}
 
           {user ? (
-            <>
-              {shouldCompleteProfile ? (
-                <Link
-                  to="/profile"
-                  className="hidden items-center gap-2 rounded-full border border-secondary/25 bg-secondary/10 px-3 py-2 text-sm font-semibold text-secondary transition hover:bg-secondary/15 lg:flex"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Compléter profil
-                </Link>
-              ) : (
-                <div className="flex items-center gap-1 rounded-full bg-gray-100 px-1.5 py-1 dark:bg-slate-800 sm:gap-2 sm:px-2">
-                  <User className="h-5 w-5 text-gray-600 hidden sm:block dark:text-slate-300" />
-                  <Link to="/profile" className="hidden text-sm font-medium hover:text-secondary transition truncate max-w-[100px] dark:text-slate-100 sm:inline">
-                    {user.username || 'Profil'}
-                  </Link>
-                  <button onClick={logout} className="p-1 text-gray-400 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-300">
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {shouldCompleteProfile && (
-                <button
-                  onClick={logout}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:text-red-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-red-300"
-                  title="Se déconnecter"
-                  aria-label="Se déconnecter"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              )}
-            </>
+            <div className="flex items-center gap-1 rounded-full bg-gray-100 px-1.5 py-1 dark:bg-slate-800 sm:gap-2 sm:px-2">
+              <Link
+                to="/profile"
+                className="flex min-w-0 items-center gap-1.5 rounded-full px-1 transition hover:text-secondary sm:gap-2"
+                title={shouldCompleteProfile ? 'Compléter mon profil' : 'Mon profil'}
+                aria-label={shouldCompleteProfile ? 'Compléter mon profil' : 'Mon profil'}
+              >
+                <User className="h-5 w-5 shrink-0 text-gray-600 dark:text-slate-300" />
+                <span className="hidden max-w-[110px] truncate text-sm font-medium dark:text-slate-100 sm:inline">
+                  {profileLabel}
+                </span>
+                {shouldCompleteProfile && (
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-secondary" />
+                )}
+              </Link>
+              <button
+                onClick={logout}
+                className="p-1 text-gray-400 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-300"
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           ) : (
-            <Link to="/login" className="px-3 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition text-sm whitespace-nowrap">
+            <Link
+              to="/login"
+              className="px-3 py-2 rounded-lg bg-primary text-white hover:bg-[#1d3a52] transition text-sm whitespace-nowrap"
+            >
               Se connecter
             </Link>
           )}

@@ -6,6 +6,7 @@ from ..core.security import get_current_user
 from ..schemas import (
     GroupCreate,
     MessageCreate,
+    MessageUpdate,
     ResourceGroupEnsure,
     ResourceGroupMemberSync,
     UtilisateurOut,
@@ -14,9 +15,11 @@ from .logique import (
     add_group_member,
     create_group,
     create_group_message,
+    delete_message,
     ensure_resource_group,
     get_group_members,
     get_group_messages,
+    get_private_message_recipient,
     get_resource_group,
     get_unread_summary,
     list_user_groups,
@@ -25,6 +28,7 @@ from .logique import (
     serialize_group,
     serialize_message,
     sync_resource_member,
+    update_message_content,
 )
 from .manager import manager
 from .ws import group_chat
@@ -129,6 +133,47 @@ async def send_group_message(
     message_payload = serialize_message(message)
     await manager.broadcast_group_message(db, group_id, message_payload)
     return message_payload
+
+
+@router.patch("/messages/{message_id}")
+async def edit_message(
+    message_id: str,
+    payload: MessageUpdate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    message = update_message_content(
+        db,
+        message_id=message_id,
+        user_id=current_user.id,
+        content=payload.message,
+    )
+    message_payload = serialize_message(message)
+    event_payload = {"event": "message_updated", "updated_message": message_payload}
+    if message.id_groupe:
+        await manager.broadcast_group_message(db, message.id_groupe, event_payload)
+    else:
+        recipient_id = get_private_message_recipient(db, message, current_user.id)
+        if recipient_id:
+            await manager.send_private_message(event_payload, recipient_id, current_user.id)
+    return message_payload
+
+
+@router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_message(
+    message_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    message = delete_message(db, message_id=message_id, user_id=current_user.id)
+    event_payload = {"event": "message_deleted", "message_id": message.id}
+    if message.id_groupe:
+        await manager.broadcast_group_message(db, message.id_groupe, event_payload)
+    else:
+        recipient_id = get_private_message_recipient(db, message, current_user.id)
+        if recipient_id:
+            await manager.send_private_message(event_payload, recipient_id, current_user.id)
+    return None
 
 
 @router.websocket("/ws/groups/{group_id}")

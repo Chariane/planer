@@ -49,6 +49,9 @@ export interface MessagerieMember {
 export interface MessagerieUnreadSummary {
   unread_discussions_count: number;
   unread_group_ids: string[];
+  unread_group_counts?: Record<string, number>;
+  unread_private_user_ids?: string[];
+  unread_private_counts?: Record<string, number>;
   has_private_unread: boolean;
 }
 
@@ -99,6 +102,17 @@ export const messagerieService = {
       method: 'POST',
       body: JSON.stringify(payload),
     }) as Promise<MessageItem>,
+
+  updateMessage: (messageId: string, message: string) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ message }),
+    }) as Promise<MessageItem>,
+
+  deleteMessage: (messageId: string) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/messages/${messageId}`, {
+      method: 'DELETE',
+    }) as Promise<void>,
 
   getPresence: (userId: string) =>
     apiFetch(MESSAGERIE_BASE_URL, `/messagerie/presence/${userId}`) as Promise<PresenceResponse>,
