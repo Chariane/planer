@@ -25,6 +25,7 @@ import { useNavigationStore } from '../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
 import { useAuth } from '../../contexts/AuthContext';
+import { sanitizeApiErrorMessage } from '../../services/api';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
@@ -96,6 +97,7 @@ export default function CenterContent() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isTaskModalLimited, setIsTaskModalLimited] = useState(false);
+  const [taskModalError, setTaskModalError] = useState<string | null>(null);
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
   const [isAssignTaskModalOpen, setIsAssignTaskModalOpen] = useState(false);
   const [isAssignListModalOpen, setIsAssignListModalOpen] = useState(false);
@@ -304,6 +306,7 @@ export default function CenterContent() {
     if (!canCreateContent) return;
     setEditingTask(null);
     setIsTaskModalLimited(false);
+    setTaskModalError(null);
     setIsTaskModalOpen(true);
   };
 
@@ -315,10 +318,12 @@ export default function CenterContent() {
     if (!canCreateContent && !canOperateAssignedTask(task)) return;
     setEditingTask(task);
     setIsTaskModalLimited(!canCreateContent && canOperateAssignedTask(task));
+    setTaskModalError(null);
     setIsTaskModalOpen(true);
   };
 
   const handleTaskSubmit = async (formData: any) => {
+    setTaskModalError(null);
     try {
       if (isTaskModalLimited && editingTask) {
         await updateTaskStatus(editingTask.id, formData.status);
@@ -338,7 +343,12 @@ export default function CenterContent() {
       setEditingTask(null);
       setIsTaskModalLimited(false);
     } catch (err: any) {
-      alert(err?.message || 'Erreur lors de l’enregistrement de la tâche');
+      const message = sanitizeApiErrorMessage(err, 'Erreur lors de l’enregistrement de la tâche');
+      if (message.toLowerCase().includes('uniquement etre remise en cours ou bloquee')) {
+        setTaskModalError('Une tâche terminée ne peut être remise qu’en cours ou bloquée.');
+        return;
+      }
+      setTaskModalError(message);
     }
   };
 
@@ -641,7 +651,7 @@ export default function CenterContent() {
         <>
           <TaskFormModal
             isOpen={isTaskModalOpen}
-            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); setIsTaskModalLimited(false); }}
+            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); setIsTaskModalLimited(false); setTaskModalError(null); }}
             editingTask={editingTask}
             members={members}
             checklists={checklists}
@@ -652,6 +662,7 @@ export default function CenterContent() {
             onDeleteChecklist={deleteChecklist}
             onSubmit={handleTaskSubmit}
             limitedOperational={isTaskModalLimited}
+            submitError={taskModalError}
           />
 
           {(isAdmin || isCreator) && (

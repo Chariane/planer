@@ -210,6 +210,8 @@ def _get_resource_name_and_creator(db: Session, resource_type: str, resource_id:
             )
             .scalar()
         )
+        if not creator and espace.id_workspace:
+            creator = db.query(Workspace.id_utilisateur).filter(Workspace.id == espace.id_workspace).scalar()
         return espace.nom, creator
 
     liste = db.query(Liste).filter(Liste.id == resource_id).first()
@@ -224,7 +226,356 @@ def _get_resource_name_and_creator(db: Session, resource_type: str, resource_id:
         )
         .scalar()
     )
+    if not creator and liste.id_workspace:
+        creator = db.query(Workspace.id_utilisateur).filter(Workspace.id == liste.id_workspace).scalar()
+    if not creator and liste.id_espace:
+        espace = db.query(Espace).filter(Espace.id == liste.id_espace).first()
+        if espace:
+            creator = (
+                db.query(Membre.id_utilisateur)
+                .filter(
+                    Membre.id_espace == espace.id,
+                    Membre.role == "Créateur",
+                    Membre.statut == "Actif",
+                )
+                .scalar()
+            )
+            if not creator and espace.id_workspace:
+                creator = db.query(Workspace.id_utilisateur).filter(Workspace.id == espace.id_workspace).scalar()
     return liste.nom, creator
+
+
+def _has_direct_active_membership(db: Session, user_id: str, **resource_filter: str) -> bool:
+    filters = [Membre.id_utilisateur == user_id, Membre.statut == "Actif"]
+    for field_name, value in resource_filter.items():
+        filters.append(getattr(Membre, field_name) == value)
+    return bool(db.query(Membre.id).filter(and_(*filters)).first())
+
+
+def _has_direct_manager_membership(db: Session, user_id: str, **resource_filter: str) -> bool:
+    filters = [
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif",
+        Membre.role.in_(MANAGER_ROLES),
+    ]
+    for field_name, value in resource_filter.items():
+        filters.append(getattr(Membre, field_name) == value)
+    return bool(db.query(Membre.id).filter(and_(*filters)).first())
+
+
+def _user_can_access_workspace(db: Session, user_id: str, workspace_id: str) -> bool:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        return False
+    if workspace.id_utilisateur == user_id:
+        return True
+    return _has_direct_active_membership(db, user_id, id_workspace=workspace_id)
+
+
+def _user_can_manage_workspace(db: Session, user_id: str, workspace_id: str) -> bool:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        return False
+    if workspace.id_utilisateur == user_id:
+        return True
+    return _has_direct_manager_membership(db, user_id, id_workspace=workspace_id)
+
+
+def _user_can_access_espace(db: Session, user_id: str, espace_id: str) -> bool:
+    espace = db.query(Espace).filter(Espace.id == espace_id).first()
+    visited: set[str] = set()
+
+    while espace and espace.id not in visited:
+        visited.add(espace.id)
+        if _has_direct_active_membership(db, user_id, id_espace=espace.id):
+            return True
+        if espace.id_workspace and _user_can_access_workspace(db, user_id, espace.id_workspace):
+            return True
+        if not espace.id_espace_parent:
+            break
+        espace = db.query(Espace).filter(Espace.id == espace.id_espace_parent).first()
+
+    return False
+
+
+def _user_can_manage_espace(db: Session, user_id: str, espace_id: str) -> bool:
+    espace = db.query(Espace).filter(Espace.id == espace_id).first()
+    visited: set[str] = set()
+
+    while espace and espace.id not in visited:
+        visited.add(espace.id)
+        if _has_direct_manager_membership(db, user_id, id_espace=espace.id):
+            return True
+        if espace.id_workspace and _user_can_manage_workspace(db, user_id, espace.id_workspace):
+            return True
+        if not espace.id_espace_parent:
+            break
+        espace = db.query(Espace).filter(Espace.id == espace.id_espace_parent).first()
+
+    return False
+
+
+def _user_can_access_liste(db: Session, user_id: str, liste_id: str) -> bool:
+    liste = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not liste:
+        return False
+    if _has_direct_active_membership(db, user_id, id_liste=liste_id):
+        return True
+    if liste.id_workspace:
+        return _user_can_access_workspace(db, user_id, liste.id_workspace)
+    if liste.id_espace:
+        return _user_can_access_espace(db, user_id, liste.id_espace)
+    return False
+
+
+def _user_can_manage_liste(db: Session, user_id: str, liste_id: str) -> bool:
+    liste = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not liste:
+        return False
+    if _has_direct_manager_membership(db, user_id, id_liste=liste_id):
+        return True
+    if liste.id_workspace:
+        return _user_can_manage_workspace(db, user_id, liste.id_workspace)
+    if liste.id_espace:
+        return _user_can_manage_espace(db, user_id, liste.id_espace)
+    return False
+
+
+def _user_can_access_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
+    if resource_type == "workspace":
+        return _user_can_access_workspace(db, user_id, resource_id)
+    if resource_type == "espace":
+        return _user_can_access_espace(db, user_id, resource_id)
+    if resource_type == "liste":
+        return _user_can_access_liste(db, user_id, resource_id)
+    return False
+
+
+def _user_can_manage_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
+    if resource_type == "workspace":
+        return _user_can_manage_workspace(db, user_id, resource_id)
+    if resource_type == "espace":
+        return _user_can_manage_espace(db, user_id, resource_id)
+    if resource_type == "liste":
+        return _user_can_manage_liste(db, user_id, resource_id)
+    return False
+
+
+def _get_workspace_access_user_ids(db: Session, workspace_id: str) -> list[str]:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    user_ids = [workspace.id_utilisateur] if workspace and workspace.id_utilisateur else []
+    member_ids = (
+        db.query(Membre.id_utilisateur)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.statut == "Actif",
+            Membre.id_utilisateur.isnot(None),
+        )
+        .all()
+    )
+    user_ids.extend(member_id for (member_id,) in member_ids if member_id)
+    return list(dict.fromkeys(user_ids))
+
+
+def _get_espace_ancestor_ids(db: Session, espace: Espace) -> list[str]:
+    ancestor_ids: list[str] = []
+    current_parent_id = espace.id_espace_parent
+    seen: set[str] = {espace.id}
+    while current_parent_id and current_parent_id not in seen:
+        seen.add(current_parent_id)
+        ancestor_ids.append(current_parent_id)
+        parent = db.query(Espace).filter(Espace.id == current_parent_id).first()
+        current_parent_id = parent.id_espace_parent if parent else None
+    return ancestor_ids
+
+
+def _get_espace_access_user_ids(db: Session, espace_id: str) -> list[str]:
+    espace = db.query(Espace).filter(Espace.id == espace_id).first()
+    if not espace:
+        return []
+
+    user_ids = _get_workspace_access_user_ids(db, espace.id_workspace) if espace.id_workspace else []
+    espace_ids = [espace.id, *_get_espace_ancestor_ids(db, espace)]
+    member_ids = (
+        db.query(Membre.id_utilisateur)
+        .filter(
+            Membre.id_espace.in_(espace_ids),
+            Membre.statut == "Actif",
+            Membre.id_utilisateur.isnot(None),
+        )
+        .all()
+    )
+    user_ids.extend(member_id for (member_id,) in member_ids if member_id)
+    return list(dict.fromkeys(user_ids))
+
+
+def _get_liste_access_user_ids(db: Session, liste_id: str) -> list[str]:
+    liste = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not liste:
+        return []
+
+    user_ids: list[str] = []
+    if liste.id_workspace:
+        user_ids.extend(_get_workspace_access_user_ids(db, liste.id_workspace))
+    if liste.id_espace:
+        user_ids.extend(_get_espace_access_user_ids(db, liste.id_espace))
+
+    member_ids = (
+        db.query(Membre.id_utilisateur)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.statut == "Actif",
+            Membre.id_utilisateur.isnot(None),
+        )
+        .all()
+    )
+    user_ids.extend(member_id for (member_id,) in member_ids if member_id)
+    return list(dict.fromkeys(user_ids))
+
+
+def _get_resource_access_user_ids(db: Session, resource_type: str, resource_id: str) -> list[str]:
+    if resource_type == "workspace":
+        return _get_workspace_access_user_ids(db, resource_id)
+    if resource_type == "espace":
+        return _get_espace_access_user_ids(db, resource_id)
+    if resource_type == "liste":
+        return _get_liste_access_user_ids(db, resource_id)
+    return []
+
+
+def _sync_resource_group_access_members(db: Session, group: Groupe) -> None:
+    resource_type, resource_id, _ = _parse_group_name(group.name)
+    if not resource_type or not resource_id:
+        return
+
+    user_ids = _get_resource_access_user_ids(db, resource_type, resource_id)
+    for user_id in user_ids:
+        add_group_member(db, group.id, user_id, commit=False)
+    db.commit()
+
+
+def _get_espace_with_descendants(db: Session, espace: Espace) -> list[Espace]:
+    if espace.id_workspace:
+        candidates = db.query(Espace).filter(Espace.id_workspace == espace.id_workspace).all()
+    else:
+        candidates = db.query(Espace).all()
+
+    children_by_parent: dict[Optional[str], list[Espace]] = {}
+    for candidate in candidates:
+        children_by_parent.setdefault(candidate.id_espace_parent, []).append(candidate)
+
+    result: list[Espace] = []
+    queue = [espace]
+    seen: set[str] = set()
+    while queue:
+        current = queue.pop(0)
+        if current.id in seen:
+            continue
+        seen.add(current.id)
+        result.append(current)
+        queue.extend(children_by_parent.get(current.id, []))
+    return result
+
+
+def _ensure_workspace_discussions_for_user(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user_id: str,
+    ensured: set[tuple[str, str]],
+) -> None:
+    _ensure_resource_discussion_for_user(
+        db,
+        resource_type="workspace",
+        resource_id=workspace.id,
+        name=workspace.nom,
+        creator_id=workspace.id_utilisateur,
+        user_id=user_id,
+        ensured=ensured,
+    )
+
+    espaces = db.query(Espace).filter(Espace.id_workspace == workspace.id).all()
+    for espace in espaces:
+        _ensure_resource_discussion_for_user(
+            db,
+            resource_type="espace",
+            resource_id=espace.id,
+            name=espace.nom,
+            creator_id=None,
+            user_id=user_id,
+            ensured=ensured,
+        )
+
+    workspace_listes = db.query(Liste).filter(Liste.id_workspace == workspace.id).all()
+    espace_ids = [espace.id for espace in espaces]
+    espace_listes = db.query(Liste).filter(Liste.id_espace.in_(espace_ids)).all() if espace_ids else []
+    for liste in [*workspace_listes, *espace_listes]:
+        _ensure_resource_discussion_for_user(
+            db,
+            resource_type="liste",
+            resource_id=liste.id,
+            name=liste.nom,
+            creator_id=None,
+            user_id=user_id,
+            ensured=ensured,
+        )
+
+
+def _ensure_espace_discussions_for_user(
+    db: Session,
+    *,
+    espace: Espace,
+    user_id: str,
+    ensured: set[tuple[str, str]],
+) -> None:
+    espaces = _get_espace_with_descendants(db, espace)
+    for current_espace in espaces:
+        _ensure_resource_discussion_for_user(
+            db,
+            resource_type="espace",
+            resource_id=current_espace.id,
+            name=current_espace.nom,
+            creator_id=None,
+            user_id=user_id,
+            ensured=ensured,
+        )
+
+    espace_ids = [current_espace.id for current_espace in espaces]
+    listes = db.query(Liste).filter(Liste.id_espace.in_(espace_ids)).all() if espace_ids else []
+    for liste in listes:
+        _ensure_resource_discussion_for_user(
+            db,
+            resource_type="liste",
+            resource_id=liste.id,
+            name=liste.nom,
+            creator_id=None,
+            user_id=user_id,
+            ensured=ensured,
+        )
+
+
+def _ensure_resource_discussion_for_user(
+    db: Session,
+    *,
+    resource_type: str,
+    resource_id: str,
+    name: str,
+    creator_id: Optional[str],
+    user_id: str,
+    ensured: set[tuple[str, str]],
+) -> None:
+    key = (resource_type, resource_id)
+    if key in ensured:
+        return
+    ensured.add(key)
+    ensure_resource_group(
+        db,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        name=name,
+        creator_id=creator_id,
+        members=[user_id],
+    )
 
 
 def get_or_create_private_room(db: Session, user1_id: str, user2_id: str) -> Room:
@@ -404,6 +755,8 @@ def list_user_groups(db: Session, user_id: str) -> list[dict]:
 
     for group in groups:
         resource_type, resource_id, _ = _parse_group_name(group.name)
+        if resource_type and resource_id and not _user_can_access_resource_group(db, user_id, resource_type, resource_id):
+            continue
         key = (resource_type, resource_id) if resource_type and resource_id else ("group", group.id)
         if key in seen_resources:
             continue
@@ -414,6 +767,12 @@ def list_user_groups(db: Session, user_id: str) -> list[dict]:
 
 
 def ensure_user_resource_groups(db: Session, user_id: str) -> None:
+    ensured: set[tuple[str, str]] = set()
+
+    owned_workspaces = db.query(Workspace).filter(Workspace.id_utilisateur == user_id).all()
+    for workspace in owned_workspaces:
+        _ensure_workspace_discussions_for_user(db, workspace=workspace, user_id=user_id, ensured=ensured)
+
     memberships = (
         db.query(Membre)
         .filter(Membre.id_utilisateur == user_id, Membre.statut == "Actif")
@@ -424,62 +783,42 @@ def ensure_user_resource_groups(db: Session, user_id: str) -> None:
         if membership.id_workspace:
             workspace = db.query(Workspace).filter(Workspace.id == membership.id_workspace).first()
             if workspace:
-                ensure_resource_group(
-                    db,
-                    resource_type="workspace",
-                    resource_id=workspace.id,
-                    name=workspace.nom,
-                    creator_id=workspace.id_utilisateur,
-                    members=[user_id],
-                )
+                _ensure_workspace_discussions_for_user(db, workspace=workspace, user_id=user_id, ensured=ensured)
         elif membership.id_espace:
             espace = db.query(Espace).filter(Espace.id == membership.id_espace).first()
             if espace:
-                creator_id = (
-                    db.query(Membre.id_utilisateur)
-                    .filter(
-                        Membre.id_espace == espace.id,
-                        Membre.role == "Créateur",
-                        Membre.statut == "Actif",
-                    )
-                    .scalar()
-                )
-                ensure_resource_group(
-                    db,
-                    resource_type="espace",
-                    resource_id=espace.id,
-                    name=espace.nom,
-                    creator_id=creator_id,
-                    members=[user_id],
-                )
+                _ensure_espace_discussions_for_user(db, espace=espace, user_id=user_id, ensured=ensured)
         elif membership.id_liste:
             liste = db.query(Liste).filter(Liste.id == membership.id_liste).first()
             if liste:
-                creator_id = (
-                    db.query(Membre.id_utilisateur)
-                    .filter(
-                        Membre.id_liste == liste.id,
-                        Membre.role == "Créateur",
-                        Membre.statut == "Actif",
-                    )
-                    .scalar()
-                )
-                ensure_resource_group(
+                _ensure_resource_discussion_for_user(
                     db,
                     resource_type="liste",
                     resource_id=liste.id,
                     name=liste.nom,
-                    creator_id=creator_id,
-                    members=[user_id],
+                    creator_id=None,
+                    user_id=user_id,
+                    ensured=ensured,
                 )
 
 
 def require_group_member(db: Session, group_id: str, user_id: str) -> GroupeMembers:
+    group = get_group_or_404(db, group_id)
+    resource_type, resource_id, _ = _parse_group_name(group.name)
     membership = (
         db.query(GroupeMembers)
         .filter(GroupeMembers.id_groupe == group_id, GroupeMembers.member == user_id)
         .first()
     )
+    if resource_type and resource_id:
+        if not _user_can_access_resource_group(db, user_id, resource_type, resource_id):
+            raise HTTPException(status_code=403, detail="Accès refusé à ce groupe.")
+        if membership:
+            return membership
+        membership = add_group_member(db, group_id, user_id)
+        if membership:
+            return membership
+
     if not membership:
         raise HTTPException(status_code=403, detail="Accès refusé à ce groupe.")
     return membership
@@ -539,6 +878,9 @@ def remove_group_member(db: Session, group_id: str, user_id: str) -> None:
 
 def get_group_members(db: Session, group_id: str, current_user_id: str) -> list[dict]:
     require_group_member(db, group_id, current_user_id)
+    group = get_group_or_404(db, group_id)
+    _sync_resource_group_access_members(db, group)
+    resource_type, resource_id, _ = _parse_group_name(group.name)
     rows = (
         db.query(GroupeMembers, Utilisateur)
         .outerjoin(Utilisateur, Utilisateur.id == GroupeMembers.member)
@@ -546,13 +888,15 @@ def get_group_members(db: Session, group_id: str, current_user_id: str) -> list[
         .order_by(GroupeMembers.member.asc())
         .all()
     )
-    group = get_group_or_404(db, group_id)
     return [
         {
             **_display_user(user),
             "role": "Administrateur" if user and is_group_admin(db, group, user.id) else "Membre",
         }
         for _membership, user in rows
+        if not resource_type
+        or not resource_id
+        or (user and _user_can_access_resource_group(db, user.id, resource_type, resource_id))
     ]
 
 
@@ -565,6 +909,7 @@ def create_group_message(
 ) -> Message:
     group = get_group_or_404(db, group_id)
     require_group_member(db, group_id, sender_id)
+    _sync_resource_group_access_members(db, group)
     room = get_or_create_group_room(db, group_id)
     message = Message(
         sender=sender_id,
@@ -581,10 +926,16 @@ def create_group_message(
     db.add(message)
     db.flush()
 
+    resource_type, resource_id, _ = _parse_group_name(group.name)
     member_ids = [
         row.member
         for row in db.query(GroupeMembers).filter(GroupeMembers.id_groupe == group_id).all()
         if row.member != sender_id
+        and (
+            not resource_type
+            or not resource_id
+            or _user_can_access_resource_group(db, row.member, resource_type, resource_id)
+        )
     ]
     for member_id in member_ids:
         db.add(NotificationMessagerie(id_utilisateur=member_id, id_groupe=group.id, type="group_message"))
@@ -739,19 +1090,8 @@ def is_group_admin(db: Session, group: Groupe, user_id: str) -> bool:
     if group.creator == user_id:
         return True
 
-    parts = group.name.split(":", 2)
-    if len(parts) != 3 or parts[0] not in RESOURCE_TYPES:
+    resource_type, resource_id, _ = _parse_group_name(group.name)
+    if not resource_type or not resource_id:
         return False
 
-    resource_type, resource_id = parts[0], parts[1]
-    filters = [Membre.id_utilisateur == user_id, Membre.statut == "Actif", Membre.role.in_(MANAGER_ROLES)]
-    if resource_type == "workspace":
-        workspace = db.query(Workspace).filter(Workspace.id == resource_id).first()
-        return bool(workspace and workspace.id_utilisateur == user_id) or bool(
-            db.query(Membre.id).filter(and_(*filters), Membre.id_workspace == resource_id).first()
-        )
-    if resource_type == "espace":
-        return bool(db.query(Membre.id).filter(and_(*filters), Membre.id_espace == resource_id).first())
-    if resource_type == "liste":
-        return bool(db.query(Membre.id).filter(and_(*filters), Membre.id_liste == resource_id).first())
-    return False
+    return _user_can_manage_resource_group(db, user_id, resource_type, resource_id)

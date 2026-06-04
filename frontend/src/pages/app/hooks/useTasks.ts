@@ -3,7 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
 import type { TacheFilters } from '../../../services/tache.service';
 import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
-import type { Task, Member } from '../../../types';
+import type { Task } from '../../../types';
+
+type NewTaskInput = Omit<Task, 'id' | 'createdAt' | 'progression'>;
 
 function transformTask(apiTask: any): Task {
   return {
@@ -81,7 +83,7 @@ export function useTasks(listId: string | undefined) {
     loadTasks();
   }, [loadTasks]);
 
-  const addTask = async (newTask: Omit<Task, 'id' | 'createdAt' | 'checklists' | 'progression'>) => {
+  const addTask = async (newTask: NewTaskInput) => {
     if (!listId) return null;
 
     try {
@@ -94,6 +96,21 @@ export function useTasks(listId: string | undefined) {
         date_fin_prevue: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
       };
       const created = await tacheService.create(listId, apiTask);
+      const taskChecklists = (newTask.checklists || [])
+        .map(checklist => ({
+          texte: checklist.texte?.trim(),
+          is_checked: !!checklist.is_checked,
+        }))
+        .filter(checklist => !!checklist.texte);
+
+      for (const checklist of taskChecklists) {
+        await tacheService.createChecklistInTache(created.id, checklist);
+      }
+
+      if (taskChecklists.length > 0) {
+        await tacheService.updateTaskStatusFromChecklists(created.id);
+      }
+
       await loadTasks();
       return created;
     } catch (err) {

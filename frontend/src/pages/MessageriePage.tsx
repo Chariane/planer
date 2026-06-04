@@ -35,6 +35,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import { useAuth } from '../contexts/AuthContext';
+import { sanitizeApiErrorMessage } from '../services/api';
 import { authService } from '../services/auth.service';
 import type { PublicUserProfile } from '../services/auth.service';
 import {
@@ -115,7 +116,7 @@ const avatarSrc = (member?: Pick<MessagerieMember, 'photo_base64'> | null) =>
   member?.photo_base64 ? `data:image/jpeg;base64,${member.photo_base64}` : null;
 
 const getErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
+  sanitizeApiErrorMessage(error, fallback);
 
 const MAX_CHAT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 

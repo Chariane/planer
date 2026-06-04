@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import { sanitizeApiErrorMessage } from '../services/api';
 
 const emptyProfileForm = {
   username: '',
@@ -36,7 +37,7 @@ const toDateInputValue = (value?: string | null) => {
 };
 
 const getErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
+  sanitizeApiErrorMessage(error, fallback);
 
 export default function ProfilePage() {
   const {

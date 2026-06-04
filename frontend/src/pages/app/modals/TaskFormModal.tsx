@@ -4,6 +4,7 @@ import { CheckCircle, Circle, Edit, Loader2, Plus, Trash, X } from 'lucide-react
 import Modal from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import type { Task, Member } from '../../../types';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 
 const statusOptions = [
   { value: 'en attente', label: 'En attente' },
@@ -45,6 +46,7 @@ interface TaskFormModalProps {
   onDeleteChecklist: (checklistId: string) => Promise<void>;
   onSubmit: (data: any) => Promise<void>;
   limitedOperational?: boolean;
+  submitError?: string | null;
 }
 
 export default function TaskFormModal({
@@ -60,9 +62,11 @@ export default function TaskFormModal({
   onDeleteChecklist,
   onSubmit,
   limitedOperational = false,
+  submitError = null,
 }: TaskFormModalProps) {
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const canEditTaskFields = !limitedOperational;
+  const canManageChecklists = !limitedOperational;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -75,6 +79,10 @@ export default function TaskFormModal({
   const [isAddingChecklist, setIsAddingChecklist] = useState(false);
   const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
   const [editingChecklistText, setEditingChecklistText] = useState('');
+  const [draftChecklists, setDraftChecklists] = useState<TaskChecklist[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const visibleChecklists = editingTask ? checklists : draftChecklists;
 
   useEffect(() => {
     if (editingTask) {
@@ -97,6 +105,9 @@ export default function TaskFormModal({
     setNewChecklistText('');
     setIsAddingChecklist(false);
     setEditingChecklistId(null);
+    setEditingChecklistText('');
+    setDraftChecklists([]);
+    setActionError(null);
   }, [editingTask, isOpen]);
 
   const handleSubmit = async () => {
@@ -110,24 +121,81 @@ export default function TaskFormModal({
       status,
       priority,
       assignees: assigneeMembers,
-      checklists,
+      checklists: visibleChecklists,
     });
   };
 
   const handleAddChecklist = async () => {
+    if (!canManageChecklists) return;
     if (!newChecklistText.trim()) return;
+    setActionError(null);
     try {
-      await onAddChecklist(newChecklistText);
+      if (editingTask) {
+        await onAddChecklist(newChecklistText);
+      } else {
+        setDraftChecklists(prev => [
+          ...prev,
+          {
+            id: `draft-${Date.now()}-${prev.length}`,
+            texte: newChecklistText.trim(),
+            is_checked: false,
+          },
+        ]);
+      }
       setNewChecklistText('');
       setIsAddingChecklist(false);
     } catch (err: any) {
-      alert(err?.message || 'Erreur lors de l’ajout de la checklist');
+      setActionError(sanitizeApiErrorMessage(err, 'Erreur lors de l’ajout de la checklist'));
     }
+  };
+
+  const handleToggleChecklist = async (checklist: TaskChecklist) => {
+    if (!canManageChecklists) return;
+    if (editingTask) {
+      await onToggleChecklist(checklist.id, checklist.is_checked);
+      return;
+    }
+    setDraftChecklists(prev => prev.map(item => (
+      item.id === checklist.id ? { ...item, is_checked: !item.is_checked } : item
+    )));
+  };
+
+  const handleUpdateChecklistText = async (checklistId: string) => {
+    if (!canManageChecklists) return;
+    const trimmedText = editingChecklistText.trim();
+    if (!trimmedText) return;
+    setActionError(null);
+
+    if (editingTask) {
+      await onUpdateChecklistText(checklistId, trimmedText);
+    } else {
+      setDraftChecklists(prev => prev.map(item => (
+        item.id === checklistId ? { ...item, texte: trimmedText } : item
+      )));
+    }
+    setEditingChecklistId(null);
+    setEditingChecklistText('');
+  };
+
+  const handleDeleteChecklist = async (checklistId: string) => {
+    if (!canManageChecklists) return;
+    setActionError(null);
+    if (editingTask) {
+      await onDeleteChecklist(checklistId);
+      return;
+    }
+    setDraftChecklists(prev => prev.filter(item => item.id !== checklistId));
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={editingTask ? "Modifier la tâche" : "Nouvelle tâche"} size="lg">
       <div className="space-y-5 max-h-[70vh] overflow-y-auto px-1">
+        {(submitError || actionError) && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {submitError || actionError}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Titre <span className="text-red-500">*</span>
@@ -251,21 +319,21 @@ export default function TaskFormModal({
 
         <div className="border-t border-gray-100 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <label className="text-sm font-medium text-gray-700">Checklist</label>
+            <label className="text-sm font-medium text-gray-700">Sous-tâches / checklist</label>
             <span className="text-xs text-gray-400">
-              {checklists.filter(c => c.is_checked).length}/{checklists.length} complétés
+              {visibleChecklists.filter(c => c.is_checked).length}/{visibleChecklists.length} complétés
             </span>
           </div>
 
           <div className="space-y-2">
-            {checklists.map((checklist) => (
+            {visibleChecklists.map((checklist) => (
               <div key={checklist.id} className="flex items-center gap-2 group">
                 <button
-                  onClick={() => onToggleChecklist(checklist.id, checklist.is_checked)}
-                  disabled={checklistLoading === checklist.id}
+                  onClick={() => handleToggleChecklist(checklist)}
+                  disabled={!canManageChecklists || (!!editingTask && checklistLoading === checklist.id)}
                   className="flex-shrink-0"
                 >
-                  {checklistLoading === checklist.id ? (
+                  {editingTask && checklistLoading === checklist.id ? (
                     <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
                   ) : checklist.is_checked ? (
                     <CheckCircle className="h-4 w-4 text-emerald-500" />
@@ -279,10 +347,7 @@ export default function TaskFormModal({
                     type="text"
                     value={editingChecklistText}
                     onChange={(e) => setEditingChecklistText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && onUpdateChecklistText(checklist.id, editingChecklistText).then(() => {
-                      setEditingChecklistId(null);
-                      setEditingChecklistText('');
-                    }).catch((err: any) => alert(err?.message || 'Erreur lors de la modification de la checklist'))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateChecklistText(checklist.id).catch((err: any) => setActionError(sanitizeApiErrorMessage(err, 'Erreur lors de la modification de la checklist')))}
                     className="flex-1 text-sm border rounded px-2 py-1 focus:ring-1 focus:ring-secondary"
                     autoFocus
                   />
@@ -292,6 +357,7 @@ export default function TaskFormModal({
                   </span>
                 )}
 
+                {canManageChecklists && (
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                   {editingChecklistId !== checklist.id && (
                     <button
@@ -306,14 +372,11 @@ export default function TaskFormModal({
                   )}
                   {editingChecklistId === checklist.id && (
                     <button
-                      onClick={() => onUpdateChecklistText(checklist.id, editingChecklistText).then(() => {
-                        setEditingChecklistId(null);
-                        setEditingChecklistText('');
-                      }).catch((err: any) => alert(err?.message || 'Erreur lors de la modification de la checklist'))}
-                      disabled={checklistLoading === `edit-${checklist.id}`}
+                      onClick={() => handleUpdateChecklistText(checklist.id).catch((err: any) => setActionError(sanitizeApiErrorMessage(err, 'Erreur lors de la modification de la checklist')))}
+                      disabled={!!editingTask && checklistLoading === `edit-${checklist.id}`}
                       className="p-1 text-green-500 hover:text-green-600"
                     >
-                      {checklistLoading === `edit-${checklist.id}` ? (
+                      {editingTask && checklistLoading === `edit-${checklist.id}` ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -323,21 +386,22 @@ export default function TaskFormModal({
                     </button>
                   )}
                   <button
-                    onClick={() => onDeleteChecklist(checklist.id)}
-                    disabled={checklistLoading === `delete-${checklist.id}`}
+                    onClick={() => handleDeleteChecklist(checklist.id).catch((err: any) => setActionError(sanitizeApiErrorMessage(err, 'Erreur lors de la suppression de la checklist')))}
+                    disabled={!!editingTask && checklistLoading === `delete-${checklist.id}`}
                     className="p-1 text-gray-400 hover:text-red-500"
                   >
-                    {checklistLoading === `delete-${checklist.id}` ? (
+                    {editingTask && checklistLoading === `delete-${checklist.id}` ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <Trash className="h-3 w-3" />
                     )}
                   </button>
                 </div>
+                )}
               </div>
             ))}
 
-            {isAddingChecklist ? (
+            {canManageChecklists && isAddingChecklist ? (
               <div className="flex items-center gap-2 mt-2">
                 <Circle className="h-4 w-4 text-gray-300" />
                 <input
@@ -349,17 +413,21 @@ export default function TaskFormModal({
                   className="flex-1 text-sm border-b border-gray-200 focus:border-secondary outline-none py-1"
                   autoFocus
                 />
-                <button onClick={handleAddChecklist} disabled={checklistLoading === 'add'} className="text-secondary text-xs hover:underline">
-                  {checklistLoading === 'add' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
+                <button onClick={handleAddChecklist} disabled={!!editingTask && checklistLoading === 'add'} className="text-secondary text-xs hover:underline">
+                  {editingTask && checklistLoading === 'add' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Ajouter'}
                 </button>
                 <button onClick={() => { setIsAddingChecklist(false); setNewChecklistText(''); }} className="text-gray-400 text-xs">
                   <X className="h-3 w-3" />
                 </button>
               </div>
-            ) : (
+            ) : canManageChecklists ? (
               <button onClick={() => setIsAddingChecklist(true)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-secondary transition mt-2">
-                <Plus className="h-3 w-3" /> Ajouter un élément à la checklist
+                <Plus className="h-3 w-3" /> Ajouter une sous-tâche
               </button>
+            ) : (
+              <p className="text-xs text-gray-400 mt-2">
+                Seuls les responsables de la liste peuvent gérer les sous-tâches.
+              </p>
             )}
           </div>
         </div>

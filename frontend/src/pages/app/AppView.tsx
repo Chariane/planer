@@ -11,7 +11,8 @@ export default function AppView() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => (
     typeof window === 'undefined' ? true : window.innerWidth >= 1024
   ));
-  const [isCanevasOpen, setIsCanevasOpen] = useState(false);
+  const [isDesktopCanevasOpen, setIsDesktopCanevasOpen] = useState(true);
+  const [isMobileCanevasOpen, setIsMobileCanevasOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full w-full bg-theme-page transition-colors duration-200">
@@ -37,9 +38,9 @@ export default function AppView() {
         </div>
 
         {/* Colonne droite — uniquement visible sur une liste/projet */}
-        {listId && (
+        {listId && isDesktopCanevasOpen && (
           <div className="hidden xl:block w-[320px] flex-shrink-0 border-l border-theme-border-subtle bg-theme-surface overflow-y-auto transition-colors duration-200">
-            <RightCanevas />
+            <RightCanevas onClose={() => setIsDesktopCanevasOpen(false)} />
           </div>
         )}
 
@@ -47,7 +48,7 @@ export default function AppView() {
           <>
             <button
               type="button"
-              onClick={() => setIsCanevasOpen(true)}
+              onClick={() => setIsMobileCanevasOpen(true)}
               className="fixed bottom-5 right-5 z-20 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-white shadow-xl shadow-secondary/25 xl:hidden"
               aria-label="Ouvrir le canevas"
               title="Ouvrir le canevas"
@@ -55,24 +56,36 @@ export default function AppView() {
               <PanelRightOpen className="h-5 w-5" />
             </button>
 
-            {isCanevasOpen && (
+            {!isDesktopCanevasOpen && (
+              <button
+                type="button"
+                onClick={() => setIsDesktopCanevasOpen(true)}
+                className="fixed bottom-5 right-5 z-20 hidden h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-white shadow-xl shadow-secondary/25 xl:inline-flex"
+                aria-label="Ouvrir le canevas"
+                title="Ouvrir le canevas"
+              >
+                <PanelRightOpen className="h-5 w-5" />
+              </button>
+            )}
+
+            {isMobileCanevasOpen && (
               <div className="fixed inset-0 z-40 xl:hidden">
                 <button
                   type="button"
                   aria-label="Fermer le canevas"
-                  onClick={() => setIsCanevasOpen(false)}
+                  onClick={() => setIsMobileCanevasOpen(false)}
                   className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
                 />
                 <div className="absolute right-0 top-0 h-full w-[min(92vw,390px)] border-l border-theme-border-subtle bg-theme-surface shadow-2xl">
                   <button
                     type="button"
-                    onClick={() => setIsCanevasOpen(false)}
+                    onClick={() => setIsMobileCanevasOpen(false)}
                     className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-theme-border-subtle bg-theme-surface-hover text-theme-muted hover:text-theme-main"
                     aria-label="Fermer"
                   >
                     <X className="h-4 w-4" />
                   </button>
-                  <RightCanevas />
+                  <RightCanevas onClose={() => setIsMobileCanevasOpen(false)} />
                 </div>
               </div>
             )}

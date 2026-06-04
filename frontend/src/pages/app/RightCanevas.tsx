@@ -26,7 +26,11 @@ interface TaskChecklistOption {
   isChecked: boolean;
 }
 
-export default function RightCanevas() {
+interface RightCanevasProps {
+  onClose?: () => void;
+}
+
+export default function RightCanevas({ onClose }: RightCanevasProps) {
   const { pathname } = useLocation();
   const { id: flatRouteId, listId: legacyListId, workspaceId: legacyWorkspaceId } = useParams();
   const { listId: activeListId, workspaceId: activeWorkspaceId } = useActiveResource();
@@ -73,6 +77,14 @@ export default function RightCanevas() {
     message: '',
     onConfirm: async () => { },
   });
+
+  const closeCanevas = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+    setIsOpen(false);
+  };
 
   // 🔧 Récupérer les permissions avec héritage descendant
   useEffect(() => {
@@ -455,6 +467,7 @@ export default function RightCanevas() {
   };
 
   if (!isOpen) {
+    if (onClose) return null;
     return (
       <button
         onClick={() => setIsOpen(true)}
@@ -486,7 +499,7 @@ export default function RightCanevas() {
               {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
             </h2>
           </div>
-          <button onClick={() => setIsOpen(false)} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
+          <button onClick={closeCanevas} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -584,7 +597,7 @@ export default function RightCanevas() {
               {actionLoading === 'delete-canevas' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </button>
           )}
-          <button onClick={() => setIsOpen(false)} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
+          <button onClick={closeCanevas} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>
         </div>

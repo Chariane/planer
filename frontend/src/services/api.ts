@@ -1,4 +1,28 @@
 // frontend/src/services/api.ts
+export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
+  const rawMessage = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : fallback;
+
+  if (!rawMessage || rawMessage === '[object Object]') return fallback;
+
+  const withoutLocalUrls = rawMessage
+    .replace(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?[^\s)]*/gi, 'le serveur')
+    .replace(/(?:localhost|127\.0\.0\.1)(?::\d+)?/gi, 'le serveur');
+
+  if (/failed to fetch|networkerror|load failed/i.test(withoutLocalUrls)) {
+    return 'Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez.';
+  }
+
+  if (/aborted|timeout/i.test(withoutLocalUrls)) {
+    return 'La requête a pris trop de temps. Réessayez dans un instant.';
+  }
+
+  return withoutLocalUrls;
+}
+
 export async function apiFetch(baseUrl: string, endpoint: string, options?: RequestInit) {
   const token = localStorage.getItem('access_token');
   const method = (options?.method || 'GET').toUpperCase();
@@ -28,9 +52,13 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     response = await fetchWithTimeout();
   } catch (error) {
     if (method === 'GET') {
-      response = await fetchWithTimeout();
+      try {
+        response = await fetchWithTimeout();
+      } catch (retryError) {
+        throw new Error(sanitizeApiErrorMessage(retryError));
+      }
     } else {
-      throw error;
+      throw new Error(sanitizeApiErrorMessage(error));
     }
   }
 
@@ -75,7 +103,7 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
       } else {
         errorDetail = JSON.stringify(data);
       }
-      throw new Error(errorDetail);
+      throw new Error(sanitizeApiErrorMessage(errorDetail));
     }
 
     return data;
@@ -84,6 +112,6 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     if (response.ok) {
       return text;
     }
-    throw parseError;
+    throw new Error(sanitizeApiErrorMessage(parseError));
   }
 }

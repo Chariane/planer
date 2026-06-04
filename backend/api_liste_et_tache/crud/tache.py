@@ -55,12 +55,13 @@ def get_taches_for_liste(
             checked = len([c for c in t.checklists if c.is_checked])
             t.progression = round((checked / total) * 100, 2)
             
-            # Transition automatique basée sur les checklists (moins agressive)
-            next_status = t.statut
+            # Le statut suit l'avancement réel des checklists.
             if checked >= total:
                 next_status = "terminé"
-            elif checked > 0 and t.statut == "en attente":
+            elif checked > 0:
                 next_status = "en cours"
+            else:
+                next_status = "en attente"
                 
             if t.statut != next_status:
                 t.statut = next_status
@@ -338,12 +339,12 @@ def update_tache_status_based_on_checklists(db: Session, tache_id: str):
     if not tache:
         return
     
-    next_status = tache.statut
     if checked_count >= total and total > 0:
         next_status = "terminé"
     elif checked_count > 0:
         next_status = "en cours"
-    # Note: On ne force pas "en attente" si checked_count == 0 pour laisser le choix manuel
+    else:
+        next_status = "en attente"
 
     if tache.statut != next_status:
         tache.statut = next_status
