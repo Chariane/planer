@@ -33,6 +33,14 @@ def get_section_period_type(titre: str) -> str:
 
 def parse_section_date(titre: str) -> datetime:
     import re
+
+    def safe_datetime(year: int, month: int, day: int) -> Optional[datetime]:
+        try:
+            return datetime(year, month, day)
+        except ValueError:
+            return None
+
+    titre_normalized = (titre or '').lower()
     months = {
         'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4, 'mai': 5, 'juin': 6,
         'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12,
@@ -42,17 +50,28 @@ def parse_section_date(titre: str) -> datetime:
     }
     
     for month_name, month_num in months.items():
-        if month_name in titre.lower():
+        if month_name in titre_normalized:
             year_match = re.search(r'20\d{2}', titre)
             year = int(year_match.group()) if year_match else datetime.now().year
             return datetime(year, month_num, 1)
     
-    date_match = re.search(r'(\d{2})/(\d{2})/(\d{2,4})', titre)
+    iso_date_match = re.search(r'\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b', titre)
+    if iso_date_match:
+        year = int(iso_date_match.group(1))
+        month = int(iso_date_match.group(2))
+        day = int(iso_date_match.group(3))
+        parsed = safe_datetime(year, month, day)
+        if parsed:
+            return parsed
+
+    date_match = re.search(r'\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b', titre)
     if date_match:
         day, month, year = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
         if year < 100:
             year += 2000
-        return datetime(year, month, day)
+        parsed = safe_datetime(year, month, day)
+        if parsed:
+            return parsed
     
     return datetime.now()
 
