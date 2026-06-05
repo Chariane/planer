@@ -15,6 +15,7 @@ from backend.api_messagerie.sync import (
     remove_resource_member,
     sync_resource_member,
 )
+from backend.core.plan_limits import require_plan_capacity
 
 
 # ============================================================================
@@ -61,6 +62,7 @@ def get_all_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Wor
 
 def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -> Workspace:
     """Crée un nouveau workspace et ajoute le créateur comme membre actif."""
+    require_plan_capacity(db, user_id, "workspaces")
     workspace_data = workspace_in.model_dump(exclude={"id_utilisateur"}, exclude_none=True)
     workspace = Workspace(
         **workspace_data,

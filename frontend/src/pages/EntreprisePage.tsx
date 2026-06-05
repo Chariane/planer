@@ -3,7 +3,7 @@ import { Building2, CheckCircle, CreditCard, Loader2, ShieldCheck, Sparkles } fr
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { entrepriseService, type EntrepriseOverview, type EntrepriseProfilePayload } from '../services/entreprise.service';
-import { planService, type SubscriptionPlan } from '../services/plan.service';
+import { planService, type PlanUsageOverview, type SubscriptionPlan } from '../services/plan.service';
 import { sanitizeApiErrorMessage } from '../services/api';
 
 const emptyForm: EntrepriseProfilePayload = {
@@ -29,6 +29,7 @@ const formatMoney = (value: string | number | undefined, devise = 'XOF') => {
 export default function EntreprisePage() {
   const [overview, setOverview] = useState<EntrepriseOverview | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [usageOverview, setUsageOverview] = useState<PlanUsageOverview | null>(null);
   const [form, setForm] = useState<EntrepriseProfilePayload>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,12 +46,14 @@ export default function EntreprisePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [overviewData, plansData] = await Promise.all([
+      const [overviewData, plansData, usageData] = await Promise.all([
         entrepriseService.getOverview(),
         planService.getPlans(),
+        planService.getMyUsage(),
       ]);
       setOverview(overviewData);
       setPlans(plansData);
+      setUsageOverview(usageData);
       if (overviewData.entreprise) {
         setForm({
           ...emptyForm,
@@ -223,6 +226,39 @@ export default function EntreprisePage() {
         </GlassCard>
 
         <div className="space-y-6">
+          {usageOverview && (
+            <GlassCard className="p-6 sm:p-8">
+              <div className="mb-5 flex items-center gap-3">
+                <Sparkles className="h-5 w-5 text-secondary" />
+                <h2 className="text-xl font-black uppercase tracking-tight text-theme-main">Usage du plan</h2>
+              </div>
+              <div className="mb-4 rounded-2xl border border-theme-border-subtle bg-theme-surface/60 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Plan actuel</p>
+                <p className="mt-1 text-lg font-black text-theme-main">{usageOverview.plan.nom}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Workspaces', 'workspaces'],
+                  ['Espaces', 'espaces'],
+                  ['Projets', 'projets'],
+                  ['Membres', 'membres'],
+                ].map(([label, key]) => {
+                  const limit = usageOverview.plan.limits[key as keyof typeof usageOverview.plan.limits];
+                  const current = usageOverview.usage[key as keyof typeof usageOverview.usage];
+                  return (
+                    <div key={key} className="rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">{label}</p>
+                      <p className="mt-1 text-xl font-black text-theme-main">
+                        {current}
+                        <span className="text-sm text-theme-muted"> / {limit ?? 'illimite'}</span>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassCard>
+          )}
+
           <GlassCard className="p-6 sm:p-8">
             <div className="mb-5 flex items-center gap-3">
               <CreditCard className="h-5 w-5 text-secondary" />
