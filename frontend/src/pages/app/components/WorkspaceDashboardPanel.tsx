@@ -325,7 +325,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                           className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
                         >
                           {ROLE_MANAGEMENT_OPTIONS.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
-                          <option value="Invité" className="bg-theme-page text-theme-main">Invité</option>
                         </select>
                       </div>
                     ) : (

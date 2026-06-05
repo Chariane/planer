@@ -94,17 +94,13 @@ def get_espace_count_for_owner(db: Session, user_id: str) -> int:
 
 
 def can_create_workspace(db: Session, user_id: str) -> bool:
-    """Vérifie si l'utilisateur peut créer un workspace (limite: 1 pour non-premium)."""
-    if user_has_premium_access(db, user_id):
-        return True
-    return get_workspace_count_for_owner(db, user_id) < 1
+    """Autorise la création de workspace sans appliquer de quota d'abonnement."""
+    return True
 
 
 def can_create_espace(db: Session, user_id: str) -> bool:
-    """Vérifie si l'utilisateur peut créer un espace (limite: 1 pour non-premium)."""
-    if user_has_premium_access(db, user_id):
-        return True
-    return get_espace_count_for_owner(db, user_id) < 1
+    """Autorise la création d'espace sans appliquer de quota d'abonnement."""
+    return True
 
 
 # ============================================================================

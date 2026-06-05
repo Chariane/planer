@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'sm' | 'md' | 'lg' }) {
@@ -10,7 +11,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
   const sizes = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl' };
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <>
@@ -34,4 +35,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return modalContent;
+
+  return createPortal(modalContent, document.body);
 }

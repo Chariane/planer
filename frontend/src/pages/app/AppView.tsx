@@ -5,6 +5,7 @@ import CenterContent from './CenterContent';
 import RightCanevas from './RightCanevas';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { PanelRightOpen, X } from 'lucide-react';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 export default function AppView() {
   const { listId } = useActiveResource();
@@ -29,18 +30,24 @@ export default function AppView() {
 
         {/* Colonne gauche */}
         <div className={`fixed left-0 top-[64px] z-30 h-[calc(100dvh-64px)] w-[min(86vw,300px)] flex-shrink-0 border-r border-theme-border-subtle bg-theme-surface overflow-y-auto shadow-2xl transition-all duration-300 lg:static lg:z-auto lg:h-auto lg:shadow-none ${isSidebarOpen ? 'translate-x-0 lg:w-[220px]' : '-translate-x-full lg:translate-x-0 lg:w-0 lg:opacity-0'}`}>
-          <LeftSidebar />
+          <ErrorBoundary label="la navigation des ressources">
+            <LeftSidebar />
+          </ErrorBoundary>
         </div>
 
         {/* Colonne centrale */}
         <div className="flex-1 min-w-0 overflow-y-auto bg-theme-page transition-colors duration-200">
-          <CenterContent />
+          <ErrorBoundary label="le contenu du workspace">
+            <CenterContent />
+          </ErrorBoundary>
         </div>
 
         {/* Colonne droite — uniquement visible sur une liste/projet */}
         {listId && isDesktopCanevasOpen && (
           <div className="hidden xl:block w-[320px] flex-shrink-0 border-l border-theme-border-subtle bg-theme-surface overflow-y-auto transition-colors duration-200">
-            <RightCanevas onClose={() => setIsDesktopCanevasOpen(false)} />
+            <ErrorBoundary label="le canevas">
+              <RightCanevas onClose={() => setIsDesktopCanevasOpen(false)} />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -85,7 +92,9 @@ export default function AppView() {
                   >
                     <X className="h-4 w-4" />
                   </button>
-                  <RightCanevas onClose={() => setIsMobileCanevasOpen(false)} />
+                  <ErrorBoundary label="le canevas">
+                    <RightCanevas onClose={() => setIsMobileCanevasOpen(false)} />
+                  </ErrorBoundary>
                 </div>
               </div>
             )}

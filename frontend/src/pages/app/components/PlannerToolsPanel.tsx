@@ -128,6 +128,12 @@ export default function PlannerToolsPanel({
 
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
+  useEffect(() => {
+    if (!listeId && activeTool !== 'files') {
+      setActiveTool('files');
+    }
+  }, [listeId, activeTool]);
+
   const closeConfirm = () => {
     if (loading) return;
     setIsConfirmOpen(false);

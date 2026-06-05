@@ -5,6 +5,7 @@ import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
 import { listeService } from '../services/liste.service';
 import { tacheService } from '../services/tache.service';
+import { useAuth } from './AuthContext';
 import type {
   JoinedResource,
   Member,
@@ -90,6 +91,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { user, isLoading: authLoading } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [ownedWorkspaces, setOwnedWorkspaces] = useState<Workspace[]>([]);
   const [joinedWorkspaces, setJoinedWorkspaces] = useState<Workspace[]>([]);
@@ -394,10 +396,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleChecklistItem = (_listId: string, _periodId: string, _itemId: string) => { };
   const addMember = (_workspaceId: string, _member: Member) => { };
 
-  // Chargement initial
+  // Charger ou vider la navigation selon l'utilisateur connecté.
   useEffect(() => {
+    const store = useNavigationStore.getState();
+    if (authLoading) {
+      store.setLoading(true);
+      return;
+    }
+
+    if (!user?.id) {
+      store.loadNavigation({
+        ownedWorkspaces: [],
+        joinedWorkspaces: [],
+        joinedEspaces: [],
+        joinedListes: [],
+        joinedTaches: [],
+      });
+      store.setLoading(false);
+      setOwnedWorkspaces([]);
+      setJoinedWorkspaces([]);
+      setWorkspaces([]);
+      setJoinedEspaces(EMPTY_JOINED_ITEMS);
+      setJoinedListes(EMPTY_JOINED_ITEMS);
+      setJoinedTaches(EMPTY_JOINED_ITEMS);
+      return;
+    }
+
     refreshAccessOverview();
-  }, []);
+  }, [authLoading, user?.id]);
 
   return (
     <AppContext.Provider

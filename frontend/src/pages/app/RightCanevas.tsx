@@ -16,6 +16,7 @@ import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import ConfirmModal from '../../components/ui/ConfirmModal';
+import { sanitizeApiErrorMessage } from '../../services/api';
 
 type AddChecklistMode = 'manual' | 'task';
 
@@ -65,6 +66,13 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   // États de chargement pour actions
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const showActionError = (error: unknown, fallback: string) => {
+    setActionError(sanitizeApiErrorMessage(error, fallback));
+  };
+
+  const clearActionError = () => setActionError(null);
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -251,6 +259,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   const addSection = async () => {
     if (!newSectionTitle.trim() || !canevas || !canModify) return;
+    clearActionError();
     setActionLoading('add-section');
     try {
       await sectionService.create(canevas.id, { titre: newSectionTitle });
@@ -259,7 +268,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       setIsAddingSection(false);
     } catch (err) {
       console.error('Erreur ajout section:', err);
-      alert('Erreur lors de l\'ajout de la section');
+      showActionError(err, 'Impossible d’ajouter cette section. Vérifiez son nom puis réessayez.');
     } finally {
       setActionLoading(null);
     }
@@ -267,6 +276,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   const updateSection = async (sectionId: string) => {
     if (!editingSectionTitle.trim() || !canModify) return;
+    clearActionError();
     setActionLoading(`section-${sectionId}`);
     try {
       await sectionService.update(sectionId, { titre: editingSectionTitle });
@@ -275,7 +285,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       setEditingSectionTitle('');
     } catch (err) {
       console.error('Erreur modification section:', err);
-      alert('Erreur lors de la modification de la section');
+      showActionError(err, 'Impossible de modifier cette section. Vérifiez son nom puis réessayez.');
     } finally {
       setActionLoading(null);
     }
@@ -305,6 +315,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   const addChecklist = async (sectionId: string) => {
     if (!newChecklistText.trim() || !canModify) return;
+    clearActionError();
     setActionLoading(`add-checklist-${sectionId}`);
     try {
       await checklistService.createInSection(sectionId, { texte: newChecklistText, is_checked: false });
@@ -313,7 +324,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       setAddingChecklistToSection(null);
     } catch (err) {
       console.error('Erreur ajout checklist:', err);
-      alert('Erreur lors de l\'ajout de l\'élément');
+      showActionError(err, 'Impossible d’ajouter cette checklist. Vérifiez son nom puis réessayez.');
     } finally {
       setActionLoading(null);
     }
@@ -372,6 +383,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   const linkTaskChecklistToSection = async (sectionId: string) => {
     if (!selectedTaskChecklistId || !canModify) return;
+    clearActionError();
     setActionLoading(`link-checklist-${sectionId}`);
     try {
       await checklistService.update(selectedTaskChecklistId, { id_section: sectionId });
@@ -379,7 +391,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       cancelAddChecklist();
     } catch (err) {
       console.error('Erreur ajout checklist de tâche dans la section:', err);
-      alert('Erreur lors de l\'ajout de la checklist de tâche');
+      showActionError(err, 'Impossible de lier cette checklist à la section. Vérifiez qu’elle n’existe pas déjà dans cette section.');
     } finally {
       setActionLoading(null);
     }
@@ -401,6 +413,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
   const updateChecklist = async (checklist: EnhancedChecklist) => {
     if (!editingChecklistText.trim() || !canModify) return;
+    clearActionError();
     setActionLoading(`update-${checklist.id}`);
     try {
       await checklistService.update(checklist.id, { texte: editingChecklistText });
@@ -409,7 +422,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       setEditingChecklistText('');
     } catch (err) {
       console.error('Erreur modification checklist:', err);
-      alert('Erreur lors de la modification de l\'élément');
+      showActionError(err, 'Impossible de modifier cette checklist. Vérifiez son nom puis réessayez.');
     } finally {
       setActionLoading(null);
     }
@@ -604,6 +617,14 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
+        {actionError && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm font-semibold text-red-500 dark:text-red-300">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="rounded-lg p-1 text-red-500/70 hover:bg-red-500/10 hover:text-red-500" title="Fermer">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-8 w-8 text-secondary animate-spin mb-2" />

@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import ResourceType, commit_or_raise, validate_role_hierarchy
 from ..core.security import create_access_token, decode_invitation_token
@@ -14,7 +14,6 @@ from ..schemas import (
 )
 from datetime import timedelta
 from backend.api_messagerie.sync import (
-    delete_resource_group,
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,
@@ -173,10 +172,34 @@ def _ensure_unique_espace_sibling_name(
     if exclude_id:
         query = query.filter(Espace.id != exclude_id)
     if query.first():
+        scope = "cet espace" if id_espace_parent else "ce workspace"
         raise HTTPException(
             status_code=409,
-            detail="Un espace portant ce nom existe deja dans ce parent.",
+            detail=f"Un espace portant ce nom existe déjà directement dans {scope}. Choisissez un autre nom.",
         )
+
+
+def _delete_resource_group_safely(db: Session, *, resource_type: str, resource_id: str) -> None:
+    prefix = f"{resource_type}:{resource_id}:%"
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM messagerie.groupe
+            WHERE name LIKE :prefix
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        ),
+        {"prefix": prefix},
+    ).first()
+    if not row:
+        return
+
+    group_id = row[0]
+    db.execute(text("DELETE FROM messagerie.message WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe_members WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id})
 
 
 def get_workspace_espaces_tree(db: Session, workspace_id: str, user_id: Optional[str] = None) -> List[dict]:
@@ -392,7 +415,7 @@ def delete_espace(db: Session, espace_id: str) -> bool:
     # Supprimer les membres de tous les espaces concernés
     if all_espace_ids:
         for target_id in all_espace_ids:
-            delete_resource_group(db, resource_type="espace", resource_id=target_id)
+            _delete_resource_group_safely(db, resource_type="espace", resource_id=target_id)
         db.query(Membre).filter(Membre.id_espace.in_(all_espace_ids)).delete(synchronize_session=False)
 
     # Supprimer les sous-espaces descendants (du plus profond au plus haut)

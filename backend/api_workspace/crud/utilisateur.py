@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, joinedload
 from ..core.function import commit_or_raise, Role, Status
 from ..models import (
@@ -11,7 +11,6 @@ from ..models import (
 from ..core.security import create_access_token, decode_invitation_token
 from ..schemas import WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate, WorkspaceMemberInvite
 from backend.api_messagerie.sync import (
-    delete_resource_group,
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,
@@ -21,6 +20,29 @@ from backend.api_messagerie.sync import (
 # ============================================================================
 # WORKSPACE - CRUD DE BASE
 # ============================================================================
+
+
+def _delete_resource_group_safely(db: Session, *, resource_type: str, resource_id: str) -> None:
+    prefix = f"{resource_type}:{resource_id}:%"
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM messagerie.groupe
+            WHERE name LIKE :prefix
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        ),
+        {"prefix": prefix},
+    ).first()
+    if not row:
+        return
+
+    group_id = row[0]
+    db.execute(text("DELETE FROM messagerie.message WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe_members WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id})
 
 def get_workspace_by_id(db: Session, workspace_id: str) -> Optional[Workspace]:
     """Récupère un workspace par son ID avec ses membres."""
@@ -155,14 +177,14 @@ def delete_workspace(db: Session, workspace_id: str) -> bool:
 
     if dependency_ids["espace_ids"]:
         for espace_id in dependency_ids["espace_ids"]:
-            delete_resource_group(db, resource_type="espace", resource_id=espace_id)
+            _delete_resource_group_safely(db, resource_type="espace", resource_id=espace_id)
         db.query(Espace).filter(Espace.id.in_(dependency_ids["espace_ids"])).delete(
             synchronize_session=False
         )
 
     for liste_id in dependency_ids["liste_ids"]:
-        delete_resource_group(db, resource_type="liste", resource_id=liste_id)
-    delete_resource_group(db, resource_type="workspace", resource_id=workspace_id)
+        _delete_resource_group_safely(db, resource_type="liste", resource_id=liste_id)
+    _delete_resource_group_safely(db, resource_type="workspace", resource_id=workspace_id)
     db.delete(workspace)
     commit_or_raise(
         db,

@@ -22,7 +22,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     joinedEspaces: [],
     joinedListes: [],
     joinedTaches: [],
-    loading: false,
+    loading: true,
 
     setLoading: (loading) => set({ loading }),
 

@@ -1,6 +1,6 @@
 # backend/api_liste_et_tache/crud/liste.py
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, text
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -20,7 +20,6 @@ from ..core.security import create_access_token, decode_invitation_token
 from ..models import Liste, Membre, Canevas, Section, Tache, Checklist, Utilisateur
 from ..schemas import WorkspaceMemberInvite
 from backend.api_messagerie.sync import (
-    delete_resource_group,
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,
@@ -63,9 +62,10 @@ def _ensure_unique_liste_sibling_name(
     if exclude_id:
         query = query.filter(Liste.id != exclude_id)
     if query.first():
+        scope = "cet espace" if id_espace else "ce workspace"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une liste portant ce nom existe deja dans ce parent.",
+            detail=f"Un projet portant ce nom existe déjà directement dans {scope}. Choisissez un autre nom.",
         )
 
 
@@ -75,6 +75,29 @@ LISTE_ALLOWED_ROLES = {
     LISTE_MEMBER_ROLE,
     LISTE_GUEST_ROLE,
 }
+
+
+def _delete_resource_group_safely(db: Session, *, resource_type: str, resource_id: str) -> None:
+    prefix = f"{resource_type}:{resource_id}:%"
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM messagerie.groupe
+            WHERE name LIKE :prefix
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        ),
+        {"prefix": prefix},
+    ).first()
+    if not row:
+        return
+
+    group_id = row[0]
+    db.execute(text("DELETE FROM messagerie.message WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe_members WHERE id_groupe = :group_id"), {"group_id": group_id})
+    db.execute(text("DELETE FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id})
 
 
 def create_liste(
@@ -239,7 +262,7 @@ def delete_liste(db: Session, liste_id: str) -> bool:
         db.delete(canevas)
     
     # 7. Supprimer la liste
-    delete_resource_group(db, resource_type="liste", resource_id=liste_id)
+    _delete_resource_group_safely(db, resource_type="liste", resource_id=liste_id)
     db.delete(liste)
     
     try:

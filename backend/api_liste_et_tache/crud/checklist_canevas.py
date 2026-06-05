@@ -49,6 +49,41 @@ def delete_canevas(db: Session, canevas_id: str) -> bool:
         return True
     return False
 
+
+
+def _normalize_sibling_name(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _ensure_unique_section_sibling_name(
+    db: Session,
+    *,
+    titre: str,
+    id_canevas: Optional[str],
+    exclude_id: Optional[str] = None,
+) -> None:
+    if not id_canevas:
+        return
+    normalized_title = _normalize_sibling_name(titre)
+    if not normalized_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le nom de la section est obligatoire.",
+        )
+
+    query = db.query(Section).filter(
+        Section.id_canevas == id_canevas,
+        func.lower(func.trim(Section.titre)) == normalized_title,
+    )
+    if exclude_id:
+        query = query.filter(Section.id != exclude_id)
+
+    if query.first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une section portant ce nom existe déjà dans ce canevas. Choisissez un autre nom.",
+        )
+
 # --- SECTION CRUD ---
 
 def get_section_by_id(db: Session, section_id: str) -> Optional[Section]:
@@ -58,7 +93,8 @@ def get_sections_for_canevas(db: Session, canevas_id: str) -> List[Section]:
     return db.query(Section).filter(Section.id_canevas == canevas_id).all()
 
 def create_section(db: Session, titre: str, id_canevas: Optional[str] = None) -> Section:
-    section = Section(titre=titre, id_canevas=id_canevas)
+    _ensure_unique_section_sibling_name(db, titre=titre, id_canevas=id_canevas)
+    section = Section(titre=titre.strip(), id_canevas=id_canevas)
     db.add(section)
     try:
         db.commit()
@@ -75,9 +111,19 @@ def update_section(db: Session, section_id: str, **kwargs) -> Optional[Section]:
     section = get_section_by_id(db, section_id)
     if not section:
         return None
+    target_titre = kwargs.get("titre", section.titre)
+    target_canevas_id = kwargs.get("id_canevas", section.id_canevas)
+    if "titre" in kwargs or "id_canevas" in kwargs:
+        _ensure_unique_section_sibling_name(
+            db,
+            titre=target_titre,
+            id_canevas=target_canevas_id,
+            exclude_id=section.id,
+        )
+
     for key, value in kwargs.items():
         if hasattr(section, key) and value is not None:
-            setattr(section, key, value)
+            setattr(section, key, value.strip() if key == "titre" and isinstance(value, str) else value)
     section.updated_at = datetime.now()
     db.commit()
     db.refresh(section)
@@ -132,7 +178,7 @@ def _ensure_unique_checklist_sibling_name(
     if found_parent:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Une checklist portant ce nom existe deja dans {found_parent}.",
+            detail=f"Une checklist portant ce nom existe déjà dans {found_parent}. Choisissez un autre nom.",
         )
 
 def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:

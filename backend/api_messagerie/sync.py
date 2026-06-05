@@ -153,10 +153,6 @@ def delete_resource_group(db: Session, *, resource_type: str, resource_id: str) 
     if not group_id:
         return
     db.execute(
-        text("DELETE FROM messagerie.notification_messagerie WHERE id_groupe = :group_id"),
-        {"group_id": group_id},
-    )
-    db.execute(
         text("DELETE FROM messagerie.message WHERE id_groupe = :group_id"),
         {"group_id": group_id},
     )

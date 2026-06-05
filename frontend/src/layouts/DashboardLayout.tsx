@@ -5,6 +5,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
 import MobileSidebar from '../components/layout/MobileSidebar';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 export default function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,7 +40,9 @@ export default function DashboardLayout() {
       >
         <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} isCompact={isCompact} />
         <main className="h-[calc(100dvh-64px)] overflow-hidden">
-          <Outlet />
+          <ErrorBoundary label="la page active">
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 
