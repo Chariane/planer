@@ -20,6 +20,7 @@ import ProfilePage from './pages/ProfilePage';
 import UserProfilePage from './pages/UserProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
 import MessageriePage from './pages/MessageriePage';
+import EntreprisePage from './pages/EntreprisePage';
 import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
@@ -60,6 +61,7 @@ function App() {
               <Route path="/users/:userId" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/messagerie" element={<MessageriePage />} />
+              <Route path="/entreprise" element={<EntreprisePage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

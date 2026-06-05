@@ -103,7 +103,7 @@ export default function CenterContent() {
   const [isAssignListModalOpen, setIsAssignListModalOpen] = useState(false);
 
   // Hooks
-  const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask } = useTasks(listId);
+  const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask, addChecklistToTask, toggleTaskChecklist, deleteTaskChecklist } = useTasks(listId);
   const { checklists, loading: checklistLoading, addChecklist, toggleChecklist, updateChecklistText, deleteChecklist } = useTaskChecklists(
     editingTask?.id,
     () => {
@@ -613,6 +613,9 @@ export default function CenterContent() {
               onDeleteTask={canCreateContent ? deleteTask : () => { }}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
               onUpdateTaskStatus={updateTaskStatus}
+              onAddChecklist={addChecklistToTask}
+              onToggleChecklist={toggleTaskChecklist}
+              onDeleteChecklist={deleteTaskChecklist}
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}

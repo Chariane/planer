@@ -446,6 +446,35 @@ class PlanAbonnementOut(PlanAbonnementBase):
 class PlanAbonnementDelete(BaseModel):
     id: str
 
+
+class SubscriptionPlanLimitsOut(BaseModel):
+    workspaces: Optional[int] = None
+    espaces: Optional[int] = None
+    projets: Optional[int] = None
+    membres: Optional[int] = None
+    stockage_mo: Optional[int] = None
+    historique_jours: Optional[int] = None
+
+
+class SubscriptionPlanBillingOut(BaseModel):
+    montant: Decimal = Field(default=0, ge=0)
+    devise: str = Field(default="XOF", max_length=3)
+    duree_jours: int = Field(default=30, gt=0)
+
+
+class SubscriptionPlanCatalogOut(BaseModel):
+    code: str
+    nom: str
+    audience: str
+    description: str
+    price_label: str
+    highlight: bool = False
+    billing: SubscriptionPlanBillingOut
+    limits: SubscriptionPlanLimitsOut
+    features: List[str]
+    restrictions: List[str] = []
+
+
 # Abonnement Entreprise
 class AbonnementEntrepriseBase(BaseModel):
     id_entreprise: str
@@ -502,6 +531,36 @@ class PaiementAbonnementOut(PaiementAbonnementBase):
 
 class PaiementAbonnementDelete(BaseModel):
     id: str
+
+class SubscriptionStartRequest(BaseModel):
+    plan_code: str = Field(..., min_length=1, max_length=40)
+    auto_renouvellement: bool = Field(default=False)
+
+    @field_validator("plan_code")
+    @classmethod
+    def normalize_plan_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class SubscriptionPaymentConfirmRequest(BaseModel):
+    mode_paiement: Optional[str] = Field(None, max_length=30)
+    reference_transaction: Optional[str] = Field(None, max_length=100)
+
+
+class SubscriptionStartResponse(BaseModel):
+    entreprise: EntrepriseOut
+    abonnement: AbonnementEntrepriseOut
+    paiement: PaiementAbonnementOut
+    plan: PlanAbonnementOut
+
+
+class EntrepriseSubscriptionOverviewOut(BaseModel):
+    entreprise: Optional[EntrepriseOut] = None
+    active_subscription: Optional[AbonnementEntrepriseOut] = None
+    pending_subscription: Optional[AbonnementEntrepriseOut] = None
+    active_plan: Optional[PlanAbonnementOut] = None
+    pending_plan: Optional[PlanAbonnementOut] = None
+    latest_payment: Optional[PaiementAbonnementOut] = None
 
 # Workspace
 class WorkspaceBase(BaseModel):

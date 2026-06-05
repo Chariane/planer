@@ -1,11 +1,46 @@
 // frontend/src/pages/RegisterPage.tsx
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Lock, UserPlus, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { User, Mail, Lock, UserPlus, Eye, EyeOff, ShieldCheck, Building2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
+
+type EnterpriseForm = {
+  nom: string;
+  statut_juridique: string;
+  telephone: string;
+  adresse: string;
+  numero_ifu: string;
+  numero_rccm: string;
+  nom_responsable_entreprise: string;
+  prenoms_responsable_entreprise: string;
+  telephone_responsable_entreprise: string;
+  site_web: string;
+  description: string;
+};
+
+const initialEnterpriseForm: EnterpriseForm = {
+  nom: '',
+  statut_juridique: '',
+  telephone: '',
+  adresse: '',
+  numero_ifu: '',
+  numero_rccm: '',
+  nom_responsable_entreprise: '',
+  prenoms_responsable_entreprise: '',
+  telephone_responsable_entreprise: '',
+  site_web: '',
+  description: '',
+};
+
+const compactEnterprisePayload = (data: EnterpriseForm) =>
+  Object.fromEntries(
+    Object.entries(data)
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value)
+  );
 
 export default function RegisterPage() {
   const { register, isLoading } = useAuth();
@@ -13,6 +48,8 @@ export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ username: '', email: '', password: '' });
+  const [enterpriseForm, setEnterpriseForm] = useState<EnterpriseForm>(initialEnterpriseForm);
+  const [accountType, setAccountType] = useState<'personal' | 'enterprise'>('personal');
   const [error, setError] = useState('');
   const [loadingInvitation, setLoadingInvitation] = useState(false);
 
@@ -59,12 +96,20 @@ export default function RegisterPage() {
       return;
     }
 
+    if (accountType === 'enterprise' && !enterpriseForm.nom.trim()) {
+      setError("Le nom de l'entreprise est obligatoire pour créer un compte entreprise.");
+      return;
+    }
+
     try {
+      const entreprise = accountType === 'enterprise' ? compactEnterprisePayload(enterpriseForm) : undefined;
       const registerData = {
         username,
         email,
         password: form.password,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
+        is_entreprise: accountType === 'enterprise',
+        ...(entreprise ? { entreprise } : {}),
       };
 
       await register(registerData);
@@ -110,12 +155,175 @@ export default function RegisterPage() {
         </AnimatePresence>
       </div>
 
+      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setAccountType('personal')}
+          className={`rounded-2xl border p-4 text-left transition-all ${accountType === 'personal' ? 'border-secondary bg-secondary/10 text-secondary' : 'border-theme-border-subtle/30 bg-theme-surface/20 text-theme-muted hover:border-secondary/30'}`}
+        >
+          <User className="mb-3 h-5 w-5" />
+          <span className="block text-[10px] font-black uppercase tracking-widest">Compte personnel</span>
+          <span className="mt-1 block text-xs font-medium opacity-70">Pour demarrer seul ou avec une petite equipe.</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setAccountType('enterprise')}
+          className={`rounded-2xl border p-4 text-left transition-all ${accountType === 'enterprise' ? 'border-secondary bg-secondary/10 text-secondary' : 'border-theme-border-subtle/30 bg-theme-surface/20 text-theme-muted hover:border-secondary/30'}`}
+        >
+          <Building2 className="mb-3 h-5 w-5" />
+          <span className="block text-[10px] font-black uppercase tracking-widest">Compte entreprise</span>
+          <span className="mt-1 block text-xs font-medium opacity-70">Pour creer une organisation et gerer un abonnement.</span>
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-xl text-xs font-bold leading-relaxed">
             {error}
           </motion.div>
         )}
+
+
+        <AnimatePresence>
+          {accountType === 'enterprise' && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="rounded-3xl border border-secondary/20 bg-secondary/5 p-5 space-y-4"
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-secondary">Informations entreprise</p>
+                <p className="mt-1 text-xs font-medium text-theme-muted opacity-70">
+                  Le nom est obligatoire. Les autres informations pourront etre completees plus tard.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom de l'entreprise</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.nom}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, nom: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Ex: K-Services SARL"
+                    required={accountType === 'enterprise'}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Statut juridique</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.statut_juridique}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, statut_juridique: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="SARL, SA, ONG..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Telephone</label>
+                  <input
+                    type="tel"
+                    value={enterpriseForm.telephone}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, telephone: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="+229..."
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Adresse</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.adresse}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, adresse: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Ville, quartier, adresse"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Numero IFU</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.numero_ifu}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, numero_ifu: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Optionnel"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Numero RCCM</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.numero_rccm}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, numero_rccm: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Optionnel"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom du responsable</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.nom_responsable_entreprise}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, nom_responsable_entreprise: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Optionnel"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Prenoms du responsable</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.prenoms_responsable_entreprise}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, prenoms_responsable_entreprise: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Optionnel"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Telephone responsable</label>
+                  <input
+                    type="tel"
+                    value={enterpriseForm.telephone_responsable_entreprise}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, telephone_responsable_entreprise: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Optionnel"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Site web</label>
+                  <input
+                    type="url"
+                    value={enterpriseForm.site_web}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, site_web: e.target.value })}
+                    className="w-full bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Description</label>
+                  <textarea
+                    value={enterpriseForm.description}
+                    onChange={e => setEnterpriseForm({ ...enterpriseForm, description: e.target.value })}
+                    className="min-h-24 w-full resize-none bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl px-4 py-3 text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all"
+                    placeholder="Activite, contexte, equipe..."
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom d'utilisateur</label>

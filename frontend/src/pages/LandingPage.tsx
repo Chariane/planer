@@ -1,12 +1,13 @@
 import { motion, useInView, easeOut } from 'framer-motion';
 import { useRef, useState, useEffect } from 'react';
-import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X, ChevronDown, Hash } from 'lucide-react';
+import { ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock, FileText, Play, Menu, X, ChevronDown, Hash, Briefcase, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
 import KhcLogo from '../components/ui/KhcLogo';
 import { GlassCard } from '../components/ui/GlassCard';
+import { planService, type SubscriptionPlan } from '../services/plan.service';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 60, scale: 0.9 },
@@ -22,6 +23,7 @@ export default function LandingPage() {
   const featuresRef = useRef(null);
   const demoRef = useRef(null);
   const stepsRef = useRef(null);
+  const pricingRef = useRef(null);
   const isFeaturesInView = useInView(featuresRef, { once: true, margin: "-100px" });
   const isDemoInView = useInView(demoRef, { once: true, margin: "-100px" });
   const isStepsInView = useInView(stepsRef, { once: true, margin: "-100px" });
@@ -29,6 +31,7 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>(fallbackPlans);
 
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -51,6 +54,22 @@ export default function LandingPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+    planService.getPlans()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setPlans(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setPlans(fallbackPlans);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     navigate('/');
@@ -61,6 +80,9 @@ export default function LandingPage() {
   };
 
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const formatLimit = (value?: number | null, label = '') => (
+    value === null || value === undefined ? `Illimite${label ? ` ${label}` : ''}` : `${value}${label ? ` ${label}` : ''}`
+  );
 
   return (
     <div className="min-h-screen bg-theme-page text-theme-main overflow-x-hidden selection:bg-secondary/30">
@@ -86,6 +108,7 @@ export default function LandingPage() {
             <a href="#features" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Fonctionnalités</a>
             <a href="#demo" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Démo</a>
             <a href="#how-it-works" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Guide</a>
+            <a href="#plans" className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors">Plans</a>
 
             {/* Theme Toggle */}
             <button
@@ -151,6 +174,7 @@ export default function LandingPage() {
                 <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Fonctionnalités</a>
                 <a href="#demo" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Démo</a>
                 <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Guide</a>
+                <a href="#plans" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-secondary">Plans</a>
                 {user ? (
                   <>
                     <button onClick={() => { handleDashboard(); setIsMenuOpen(false); }} className="text-left py-2 px-4 rounded-xl hover:bg-theme-surface-hover text-theme-main font-bold">Tableau de bord</button>
@@ -305,6 +329,98 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Pricing section */}
+      <section id="plans" ref={pricingRef} className="py-32 bg-theme-surface/20">
+        <div className="container mx-auto px-6">
+          <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} className="text-center mb-20">
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Des plans clairs</h2>
+            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">
+              Commencez simplement, puis passez a une organisation plus structuree quand votre equipe grandit.
+            </p>
+          </motion.div>
+
+          <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {plans.map((plan) => {
+              const isFreePlan = (plan.billing?.montant ?? null) === 0 || plan.price_label === '0 XOF';
+              return (
+                <motion.div
+                  key={plan.code}
+                  variants={fadeInUp}
+                  className={`relative flex h-full flex-col rounded-[2rem] border p-8 shadow-theme-sm transition-all duration-500 ${
+                  plan.highlight
+                    ? 'border-secondary/50 bg-secondary/10 shadow-secondary/10'
+                    : 'border-theme-border-subtle bg-theme-surface/60'
+                  }`}
+                >
+                {plan.highlight && (
+                  <span className="absolute right-6 top-6 rounded-full bg-secondary px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+                    Recommande
+                  </span>
+                )}
+
+                <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl border border-theme-border-subtle bg-theme-surface-hover text-secondary">
+                  {plan.code === 'ENTREPRISE' ? <ShieldCheck className="h-7 w-7" /> : <Briefcase className="h-7 w-7" />}
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-black uppercase tracking-tight text-theme-main">{plan.nom}</h3>
+                  <p className="mt-3 min-h-[3.5rem] text-sm font-medium leading-relaxed text-theme-muted opacity-80">{plan.audience}</p>
+                  <div className="mt-6 flex items-end gap-2">
+                    <span className="text-3xl font-black text-theme-main">{plan.price_label}</span>
+                    {!isFreePlan && (
+                      <span className="pb-1 text-xs font-bold uppercase tracking-widest text-theme-muted">mensuel</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="my-8 h-px bg-theme-border-subtle" />
+
+                <div className="grid grid-cols-2 gap-3 text-xs font-bold text-theme-muted">
+                  <div className="rounded-2xl bg-theme-surface-hover p-3">
+                    <span className="block text-theme-main">{formatLimit(plan.limits.workspaces)}</span>
+                    workspaces
+                  </div>
+                  <div className="rounded-2xl bg-theme-surface-hover p-3">
+                    <span className="block text-theme-main">{formatLimit(plan.limits.membres)}</span>
+                    membres
+                  </div>
+                  <div className="rounded-2xl bg-theme-surface-hover p-3">
+                    <span className="block text-theme-main">{formatLimit(plan.limits.projets)}</span>
+                    projets
+                  </div>
+                  <div className="rounded-2xl bg-theme-surface-hover p-3">
+                    <span className="block text-theme-main">{formatLimit(plan.limits.stockage_mo, 'Mo')}</span>
+                    stockage
+                  </div>
+                </div>
+
+                <ul className="mt-8 flex-1 space-y-4">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-3 text-sm font-medium leading-relaxed text-theme-muted">
+                      <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-secondary" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  to={user ? '/dashboard' : '/register'}
+                  className={`mt-8 inline-flex items-center justify-center rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-widest transition-all ${
+                    plan.highlight
+                      ? 'bg-secondary text-white shadow-lg shadow-secondary/20 hover:bg-orange-600'
+                      : 'border border-theme-border-subtle text-theme-main hover:border-secondary/40 hover:text-secondary'
+                  }`}
+                >
+                  {plan.code === 'ENTREPRISE' ? 'Preparer mon entreprise' : 'Choisir ce plan'}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
+      </section>
+
       {/* Call to Action */}
       <section className="py-32">
         <div className="container mx-auto px-6">
@@ -405,4 +521,91 @@ const steps = [
   { title: "Créez votre workspace", description: "Un espace de travail partagé pour votre équipe, avec vos propres règles." },
   { title: "Ajoutez des projets et tâches", description: "Structurez votre travail avec des listes, des checklists et des échéances." },
   { title: "Collaborez et suivez", description: "Attribuez des tâches, discutez, et suivez l'avancement en temps réel." }
+];
+
+const fallbackPlans: SubscriptionPlan[] = [
+  {
+    code: 'ESSENTIEL',
+    nom: 'Essentiel',
+    audience: 'Pour un utilisateur ou une petite equipe qui structure son travail.',
+    description: 'Le socle gratuit pour demarrer avec K-Planner sans complexite.',
+    price_label: '0 XOF',
+    highlight: false,
+    billing: { montant: 0, devise: 'XOF', duree_jours: 30 },
+    limits: {
+      workspaces: 1,
+      espaces: 5,
+      projets: 10,
+      membres: 5,
+      stockage_mo: 250,
+      historique_jours: 30,
+    },
+    features: [
+      'Workspace personnel cree automatiquement',
+      'Gestion des espaces, projets, taches et checklists',
+      "Canevas de projet et suivi d'avancement",
+      'Messagerie de groupe basique',
+      'Notifications essentielles',
+    ],
+    restrictions: [
+      'Quotas limites pour les membres et fichiers',
+      "Pas de supervision avancee d'organisation",
+    ],
+  },
+  {
+    code: 'PROFESSIONNEL',
+    nom: 'Professionnel',
+    audience: 'Pour une equipe structuree qui gere plusieurs projets actifs.',
+    description: 'Plus de capacite, de collaboration et de suivi pour travailler en equipe.',
+    price_label: '5 000 XOF',
+    highlight: true,
+    billing: { montant: 5000, devise: 'XOF', duree_jours: 30 },
+    limits: {
+      workspaces: 5,
+      espaces: null,
+      projets: null,
+      membres: 50,
+      stockage_mo: 5120,
+      historique_jours: 365,
+    },
+    features: [
+      'Plusieurs workspaces',
+      'Espaces et sous-espaces etendus',
+      'Rapports de travail',
+      'Fichiers plus volumineux',
+      'Notifications avancees',
+      'Appels audio et video',
+      'Historique plus long',
+    ],
+    restrictions: ['Facturation et supervision limitees'],
+  },
+  {
+    code: 'ENTREPRISE',
+    nom: 'Entreprise',
+    audience: 'Pour une organisation qui veut centraliser ses equipes et ses controles.',
+    description: 'Le plan complet pour piloter une organisation avec supervision et gouvernance.',
+    price_label: '10 000 XOF',
+    highlight: false,
+    billing: { montant: 10000, devise: 'XOF', duree_jours: 30 },
+    limits: {
+      workspaces: null,
+      espaces: null,
+      projets: null,
+      membres: null,
+      stockage_mo: null,
+      historique_jours: null,
+    },
+    features: [
+      'Workspaces, espaces et projets a quotas eleves',
+      'Rapports de travail avances',
+      'Absences et conges',
+      'Facturation centralisee',
+      'Supervision des membres',
+      'Securite renforcee',
+      'Support prioritaire',
+      "Branding et logo de l'entreprise",
+      'Analyse de performance',
+    ],
+    restrictions: [],
+  },
 ];

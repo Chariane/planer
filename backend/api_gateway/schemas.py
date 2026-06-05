@@ -65,6 +65,31 @@ class UtilisateurBase(BaseModel):
             raise ValueError("Numéro de téléphone invalide (7 à 20 chiffres, avec ou sans '+').")
         return v
 
+
+class EntrepriseRegistrationPayload(BaseModel):
+    nom: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    telephone: Optional[str] = Field(None, max_length=20)
+    statut_juridique: Optional[str] = Field(None, max_length=255)
+    adresse: Optional[str] = Field(None, max_length=255)
+    numero_ifu: Optional[str] = Field(None, max_length=13)
+    numero_rccm: Optional[str] = Field(None, max_length=50)
+    date_creation_entreprise: Optional[date] = None
+    nom_responsable_entreprise: Optional[str] = Field(None, max_length=50)
+    prenoms_responsable_entreprise: Optional[str] = Field(None, max_length=255)
+    telephone_responsable_entreprise: Optional[str] = Field(None, max_length=20)
+    site_web: Optional[str] = Field(None, max_length=255)
+
+    @model_validator(mode='before')
+    @classmethod
+    def clean_entreprise_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for key, value in list(data.items()):
+                if isinstance(value, str):
+                    cleaned = value.strip()
+                    data[key] = cleaned or None
+        return data
+
 class UtilisateurCreate(UtilisateurBase):
     password: str
     is_active: Optional[bool] = True
@@ -74,6 +99,7 @@ class UtilisateurCreate(UtilisateurBase):
     is_livreur: Optional[bool] = False
     is_entreprise: Optional[bool] = False
     invitation_token: Optional[str] = None
+    entreprise: Optional[EntrepriseRegistrationPayload] = None
 
     @field_validator("password")
     @classmethod

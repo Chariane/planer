@@ -1,7 +1,7 @@
 // frontend/src/components/layout/Sidebar.tsx
 import { useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2, Globe } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Plus, LogOut, Crown, Users, ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2, Globe, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { useNavigationStore } from '../../store/useNavigationStore';
@@ -106,6 +106,9 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
           <Link to="/workspaces" className={`p-2.5 rounded-xl transition-all ${location.pathname === '/workspaces' ? 'bg-secondary text-white shadow-lg shadow-secondary/20' : 'text-white/40 hover:text-white hover:bg-white/5'}`} title="Workspaces">
             <Briefcase size={20} />
           </Link>
+          <Link to="/entreprise" className={`p-2.5 rounded-xl transition-all ${location.pathname === '/entreprise' ? 'bg-secondary text-white shadow-lg shadow-secondary/20' : 'text-white/40 hover:text-white hover:bg-white/5'}`} title="Entreprise">
+            <Building2 size={20} />
+          </Link>
         </nav>
       </div>
     );
@@ -150,6 +153,17 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             <LayoutDashboard size={isCompact ? 18 : 20} className="flex-shrink-0" />
             <span className={`${isCompact ? 'text-[8px] font-black uppercase mt-1' : 'text-sm'} truncate`}>
               {isCompact ? 'Dash' : 'Tableau de bord'}
+            </span>
+          </motion.div>
+        </Link>
+        <Link to="/entreprise" className="block w-full">
+          <motion.div whileHover={{ x: 4 }} className={`flex ${isCompact ? 'flex-col items-center justify-center p-2.5' : 'items-center px-4 py-3'} gap-3 rounded-xl transition-all ${location.pathname === '/entreprise'
+            ? 'bg-secondary text-white shadow-xl shadow-secondary/20 font-bold'
+            : 'text-white/40 hover:bg-white/5 hover:text-white'
+            }`}>
+            <Building2 size={isCompact ? 18 : 20} className="flex-shrink-0" />
+            <span className={`${isCompact ? 'text-[8px] font-black uppercase mt-1' : 'text-sm'} truncate`}>
+              {isCompact ? 'Biz' : 'Entreprise'}
             </span>
           </motion.div>
         </Link>

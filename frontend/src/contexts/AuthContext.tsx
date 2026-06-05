@@ -19,6 +19,7 @@ interface User {
   ville?: string;
   is_2fa_enabled?: boolean;
   is_utilisateur_verifie?: boolean;
+  is_entreprise?: boolean;
 }
 
 interface TwoFASetupPayload {

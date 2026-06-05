@@ -1,6 +1,6 @@
 // frontend/src/pages/app/views/ListView.tsx
 import { useState } from 'react';
-import { ChevronDown, Edit, Trash, UserPlus, CheckCircle, Circle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Plus, Trash, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -43,6 +43,9 @@ interface ListViewProps {
   onDeleteTask: (taskId: string) => void;
   onAssignTask: (task: Task) => void;
   onUpdateTaskStatus?: (taskId: string, status: string) => Promise<void>;
+  onAddChecklist?: (taskId: string, texte: string) => Promise<void>;
+  onToggleChecklist?: (taskId: string, checklistId: string, currentChecked: boolean) => Promise<void>;
+  onDeleteChecklist?: (taskId: string, checklistId: string) => Promise<void>;
   getTaskProgress: (task: Task) => number;
   readOnly?: boolean;
   canEditTask?: (task: Task) => boolean;
@@ -193,13 +196,17 @@ function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: {
 export default function ListView({
   tasks,
   searchTerm,
-  onEditTask,
   onDeleteTask,
   onAssignTask,
   onUpdateTaskStatus,
+  onAddChecklist,
+  onToggleChecklist,
+  onDeleteChecklist,
   getTaskProgress,
   readOnly = false,
   canEditTask,
+  canDeleteTask,
+  canAssignTask,
 }: ListViewProps) {
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
@@ -209,6 +216,10 @@ export default function ListView({
   });
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [addingChecklistTaskId, setAddingChecklistTaskId] = useState<string | null>(null);
+  const [newChecklistText, setNewChecklistText] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const toggleStatus = (status: string) => {
     setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
@@ -217,6 +228,52 @@ export default function ListView({
   const openTaskDetail = (task: Task) => {
     setSelectedTaskForDetail(task);
     setIsDetailModalOpen(true);
+  };
+
+  const toggleTaskOpen = (taskId: string) => {
+    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
+  const startAddingChecklist = (taskId: string) => {
+    setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    setAddingChecklistTaskId(taskId);
+    setNewChecklistText('');
+  };
+
+  const handleAddChecklist = async (taskId: string) => {
+    if (!onAddChecklist || !newChecklistText.trim()) return;
+    setActionLoading(`add-checklist-${taskId}`);
+    try {
+      await onAddChecklist(taskId, newChecklistText);
+      setNewChecklistText('');
+      setAddingChecklistTaskId(null);
+      setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleChecklist = async (taskId: string, checklistId: string, currentChecked: boolean) => {
+    if (!onToggleChecklist) return;
+    setActionLoading(`toggle-checklist-${checklistId}`);
+    try {
+      await onToggleChecklist(taskId, checklistId, currentChecked);
+      setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteChecklist = async (taskId: string, checklistId: string) => {
+    if (!onDeleteChecklist) return;
+    if (!confirm('Supprimer cette checklist ?')) return;
+    setActionLoading(`delete-checklist-${checklistId}`);
+    try {
+      await onDeleteChecklist(taskId, checklistId);
+      setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const filteredTasks = tasks.filter(task =>
@@ -261,95 +318,213 @@ export default function ListView({
                     Aucune tâche {status}
                   </div>
                 ) : (
-                  statusTasks.map((task, idx) => (
-                    <motion.div
-                      key={task.id}
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{ delay: idx * 0.03 }}
-                    >
-                      <GlassCard
-                        className="group flex flex-wrap items-center gap-4 p-4 hover:border-secondary/30 hover:bg-theme-surface-hover transition-all cursor-pointer border-theme-border-subtle/50 shadow-theme-sm hover:shadow-theme-md"
-                        onClick={() => openTaskDetail(task)}
-                      >
-                        {/* Checkbox Icon - Now a Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onUpdateTaskStatus) {
-                              const newStatus = task.status === 'terminé' ? 'en attente' : 'terminé';
-                              onUpdateTaskStatus(task.id, newStatus);
-                            }
-                          }}
-                          className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20'}`}
-                        >
-                          {task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
-                        </button>
+                  statusTasks.map((task, idx) => {
+                    const taskChecklists = task.checklists || [];
+                    const isTaskExpanded = !!expandedTasks[task.id];
+                    const canManageTask = canEditTask ? canEditTask(task) : !readOnly;
+                    const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
+                    const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
+                    const checklistSummary = taskChecklists.length > 0
+                      ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
+                      : '0';
 
-                        {/* Title & Info */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`text-sm font-bold tracking-tight mb-1 group-hover:text-theme-main transition-colors ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
-                            {task.title}
-                          </h4>
-                          <div className="flex items-center gap-3">
-                            <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
-                              {priorityLabels[task.priority]}
-                            </span>
-                            {task.dueDate && (
-                              <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
-                                {task.dueDate}
+                    return (
+                      <motion.div
+                        key={task.id}
+                        initial={{ x: -20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ delay: idx * 0.03 }}
+                        className="space-y-2"
+                      >
+                        <GlassCard
+                          className="group flex flex-wrap items-center gap-3 p-4 hover:border-secondary/30 hover:bg-theme-surface-hover transition-all cursor-pointer border-theme-border-subtle/50 shadow-theme-sm hover:shadow-theme-md"
+                          onClick={() => openTaskDetail(task)}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onUpdateTaskStatus && task.status !== 'terminé') {
+                                onUpdateTaskStatus(task.id, 'terminé');
+                              }
+                            }}
+                            className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20'}`}
+                            title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
+                          >
+                            {task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
+                          </button>
+
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskOpen(task.id);
+                            }}
+                            className="h-10 w-10 flex-shrink-0 rounded-xl bg-theme-surface-hover text-theme-muted hover:bg-theme-surface hover:text-theme-main transition-all flex items-center justify-center border border-theme-border-subtle/40"
+                            title={isTaskExpanded ? 'Fermer la tâche' : 'Ouvrir la tâche'}
+                          >
+                            {isTaskExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                          </button>
+
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`text-sm font-bold tracking-tight mb-1 group-hover:text-theme-main transition-colors ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
+                              {task.title}
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
+                                {priorityLabels[task.priority]}
                               </span>
+                              <span className="text-[10px] font-black text-theme-muted opacity-50 uppercase tracking-tighter">
+                                Checklists {checklistSummary}
+                              </span>
+                              {task.dueDate && (
+                                <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
+                                  {task.dueDate}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center -space-x-2">
+                            {task.assignees.slice(0, 3).map((a, i) => (
+                              <div key={i} className="h-7 w-7 rounded-lg bg-theme-surface border-2 border-theme-border-subtle flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
+                                {a.name.charAt(0).toUpperCase()}
+                              </div>
+                            ))}
+                            {task.assignees.length > 3 && (
+                              <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">
+                                +{task.assignees.length - 3}
+                              </div>
                             )}
                           </div>
-                        </div>
 
-                        {/* Assignees Avatars */}
-                        <div className="flex items-center -space-x-2">
-                          {task.assignees.slice(0, 3).map((a, i) => (
-                            <div key={i} className="h-7 w-7 rounded-lg bg-theme-surface border-2 border-theme-border-subtle flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
-                              {a.name.charAt(0).toUpperCase()}
-                            </div>
-                          ))}
-                          {task.assignees.length > 3 && (
-                            <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">
-                              +{task.assignees.length - 3}
-                            </div>
-                          )}
-                        </div>
+                          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                            {canAssignCurrentTask && (
+                              <button
+                                onClick={() => onAssignTask(task)}
+                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
+                                title="Assigner"
+                              >
+                                <UserPlus size={16} />
+                              </button>
+                            )}
+                            {canDeleteCurrentTask && (
+                              <button
+                                onClick={() => onDeleteTask(task.id)}
+                                className="p-2 rounded-lg text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-all"
+                                title="Supprimer"
+                              >
+                                <Trash size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </GlassCard>
 
-                        {/* Actions */}
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          {!readOnly && (
-                            <button
-                              onClick={() => onAssignTask(task)}
-                              className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
-                              title="Assigner"
+                        <AnimatePresence>
+                          {isTaskExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0, y: -6 }}
+                              animate={{ height: 'auto', opacity: 1, y: 0 }}
+                              exit={{ height: 0, opacity: 0, y: -6 }}
+                              className="overflow-hidden"
                             >
-                              <UserPlus size={16} />
-                            </button>
+                              <div className="ml-0 sm:ml-28 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la tâche</p>
+                                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Cochez les points terminés ou supprimez ceux qui ne sont plus utiles.</p>
+                                  </div>
+                                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
+                                    {checklistSummary}
+                                  </span>
+                                </div>
+
+                                {taskChecklists.length === 0 && addingChecklistTaskId !== task.id && (
+                                  <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+                                    Aucune checklist pour cette tâche.
+                                  </div>
+                                )}
+
+                                {taskChecklists.map((checklist) => (
+                                  <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
+                                    <button
+                                      onClick={() => canManageTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                                      disabled={!canManageTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                                      className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                                      title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
+                                    >
+                                      {actionLoading === `toggle-checklist-${checklist.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : checklist.is_checked ? (
+                                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                      ) : (
+                                        <Circle className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                    <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
+                                      {checklist.texte}
+                                    </span>
+                                    {canManageTask && onDeleteChecklist && (
+                                      <button
+                                        onClick={() => handleDeleteChecklist(task.id, checklist.id)}
+                                        disabled={actionLoading === `delete-checklist-${checklist.id}`}
+                                        className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
+                                        title="Supprimer la checklist"
+                                      >
+                                        {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+
+                                {canManageTask && onAddChecklist && (
+                                  <div className="pt-1">
+                                    {addingChecklistTaskId === task.id ? (
+                                      <div className="flex flex-col gap-2 sm:flex-row">
+                                        <input
+                                          value={newChecklistText}
+                                          onChange={(e) => setNewChecklistText(e.target.value)}
+                                          onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist(task.id)}
+                                          placeholder="Nouvelle checklist..."
+                                          className="min-w-0 flex-1 rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none transition-all focus:ring-2 focus:ring-secondary/20"
+                                          autoFocus
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleAddChecklist(task.id)}
+                                            disabled={!newChecklistText.trim() || actionLoading === `add-checklist-${task.id}`}
+                                          >
+                                            {actionLoading === `add-checklist-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ajouter'}
+                                          </Button>
+                                          <button
+                                            onClick={() => {
+                                              setAddingChecklistTaskId(null);
+                                              setNewChecklistText('');
+                                            }}
+                                            className="rounded-xl border border-theme-border-subtle px-3 py-2 text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover transition-all"
+                                            title="Annuler"
+                                          >
+                                            <X size={16} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => startAddingChecklist(task.id)}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-theme-border-subtle px-3 py-2 text-xs font-black uppercase tracking-widest text-theme-muted hover:border-secondary/40 hover:text-secondary transition-all"
+                                      >
+                                        <Plus size={14} /> Ajouter une checklist
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
                           )}
-                          {(canEditTask ? canEditTask(task) : !readOnly) && (
-                            <button
-                              onClick={() => onEditTask(task)}
-                              className="p-2 rounded-lg text-theme-muted hover:bg-blue-500/10 hover:text-blue-500 transition-all"
-                              title="Modifier"
-                            >
-                              <Edit size={16} />
-                            </button>
-                          )}
-                          {!readOnly && (
-                            <button
-                              onClick={() => onDeleteTask(task.id)}
-                              className="p-2 rounded-lg text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-all"
-                              title="Supprimer"
-                            >
-                              <Trash size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </GlassCard>
-                    </motion.div>
-                  ))
+                        </AnimatePresence>
+                      </motion.div>
+                    );
+                  })
                 )}
               </motion.div>
             )}

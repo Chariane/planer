@@ -1,13 +1,43 @@
 from typing import Optional, List
+import logging
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from ..models import Espace, Liste, Membre, Motdepasseoublie, Utilisateur, Workspace
+from ..models import Espace, Liste, Membre, Motdepasseoublie, PlanerEntreprise, Utilisateur, Workspace
 from ..core.function import commit_or_raise
 from ..core.security import SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from backend.api_messagerie.sync import ensure_resource_group, sync_resource_member
+
+
+ENTREPRISE_REGISTRATION_FIELDS = {
+    "nom",
+    "description",
+    "statut_juridique",
+    "adresse",
+    "telephone",
+    "numero_ifu",
+    "numero_rccm",
+    "nom_responsable_entreprise",
+    "prenoms_responsable_entreprise",
+    "telephone_responsable_entreprise",
+    "site_web",
+    "date_creation_entreprise",
+}
+
+
+def _clean_optional_entreprise_payload(payload: dict | None) -> dict:
+    if not payload:
+        return {}
+    cleaned: dict = {}
+    for key in ENTREPRISE_REGISTRATION_FIELDS:
+        value = payload.get(key)
+        if isinstance(value, str):
+            value = value.strip() or None
+        if value is not None:
+            cleaned[key] = value
+    return cleaned
 
 
 def _build_default_workspace_name(user_data: dict) -> str:
@@ -22,6 +52,13 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
     Cree un utilisateur avec son workspace personnel par defaut et gere les invitations (JWT).
     Garantit l'integrite des donnees et la securite des invitations.
     """
+    entreprise_payload = _clean_optional_entreprise_payload(user_data.pop("entreprise", None))
+    wants_entreprise = bool(user_data.get("is_entreprise")) or bool(entreprise_payload)
+    if wants_entreprise and not entreprise_payload.get("nom"):
+        raise HTTPException(status_code=400, detail="Le nom de l'entreprise est obligatoire pour creer un compte entreprise.")
+    if entreprise_payload:
+        user_data["is_entreprise"] = True
+
     email = user_data.get("email", "").strip().lower()
     username = user_data.get("username", "").strip()
 
@@ -56,6 +93,12 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
         new_user = Utilisateur(**user_data)
         db.add(new_user)
         db.flush() # Pour obtenir l'ID de l'utilisateur
+
+        if entreprise_payload:
+            db.add(PlanerEntreprise(
+                **entreprise_payload,
+                id_utilisateur=new_user.id,
+            ))
 
         # 4. Creation du workspace par defaut (Contrainte 9)
         default_workspace = Workspace(
@@ -189,7 +232,6 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
     except IntegrityError as exc:
         db.rollback()
         # On log l'erreur pour le debug (Contrainte 10)
-        import logging
         logging.error(f"Erreur d'integrite lors de l'inscription de {email}: {str(exc)}")
         raise HTTPException(
             status_code=409,

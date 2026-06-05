@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import sys
-from pathlib import Path 
+from pathlib import Path
 
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[2]
@@ -9,11 +9,15 @@ if __package__ in {None, ""}:
         sys.path.insert(0, str(project_root))
 
     from backend.api_workspace.routes.admin import router as admin_router
+    from backend.api_workspace.routes.abonnement import router as abonnement_router
     from backend.api_workspace.routes.entreprise import router as entreprise_router
+    from backend.api_workspace.routes.plans import router as plans_router
     from backend.api_workspace.routes.utilisateur import router as utilisateur_router
 else:
     from .routes.admin import router as admin_router
+    from .routes.abonnement import router as abonnement_router
     from .routes.entreprise import router as entreprise_router
+    from .routes.plans import router as plans_router
     from .routes.utilisateur import router as utilisateur_router
 
 
@@ -35,6 +39,8 @@ app.add_middleware(
 app.include_router(utilisateur_router)
 app.include_router(entreprise_router)
 app.include_router(admin_router)
+app.include_router(abonnement_router)
+app.include_router(plans_router)
 
 @app.get("/")
 def root():
