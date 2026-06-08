@@ -22,6 +22,7 @@ WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
 WORKSPACE_DESCENDANT_READ_ROLES = {
     WORKSPACE_OWNER_ROLE,
     WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_MEMBER_ROLE,
     WORKSPACE_GUEST_ROLE,
 }
 
@@ -42,6 +43,7 @@ ESPACE_ADMIN_MANAGEABLE_ROLES = {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}
 ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_OWNER_ROLE,
     ESPACE_ADMIN_ROLE,
+    ESPACE_MEMBER_ROLE,
     ESPACE_GUEST_ROLE,
 }
 
@@ -180,8 +182,10 @@ def validate_role_hierarchy(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Role redondant ou inferieur refuse : l'utilisateur dispose deja du role "
-                f"'{inherited_role}' herite depuis ce {source_type} ({source_id})."
+                f"Invitation non nécessaire : cette personne possède déjà le rôle "
+                f"'{inherited_role}' hérité depuis un {source_type} parent. "
+                f"Vous ne pouvez pas lui attribuer le rôle '{new_role}' sur cette ressource enfant, "
+                "car ce rôle est inférieur ou équivalent à son rôle parent."
             ),
         )
 
@@ -585,12 +589,20 @@ def _validate_espace_member_management_permissions(
             detail="Seul le créateur peut modifier ce membre.",
         )
 
-    # REGLE 2 : Un Admin ne peut pas promouvoir quelqu'un à un rôle supérieur (Admin ou Créateur)
-    if actor_role == ESPACE_ADMIN_ROLE and new_role and new_role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
-        raise HTTPException(
-            status_code=403,
-            detail="En tant qu'administrateur, vous ne pouvez pas promouvoir un membre à ce rôle.",
+    # REGLE 2 : Un Admin direct ne peut pas promouvoir quelqu'un administrateur
+    # sur sa ressource directe. Par héritage, il peut déléguer Admin dans les descendants.
+    if actor_role == ESPACE_ADMIN_ROLE and new_role:
+        is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace.id
+        allowed_new_roles = (
+            {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
+            if is_descendant_delegation
+            else {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
         )
+        if new_role not in allowed_new_roles:
+            raise HTTPException(
+                status_code=403,
+                detail="En tant qu'administrateur, vous ne pouvez pas promouvoir un membre à ce rôle.",
+            )
 
     # REGLE 3 : Seul un manager (Admin/Créateur) peut accéder à cette fonction
     if actor_role not in ESPACE_MANAGEMENT_ROLES:
@@ -613,17 +625,17 @@ def _validate_espace_invitation_permissions(
 
     is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace_id
     manageable_roles = (
-        {ESPACE_GUEST_ROLE, ESPACE_ADMIN_ROLE}
+        {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
         if is_descendant_delegation
-        else {ESPACE_GUEST_ROLE}
+        else {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
     )
 
     if invited_role not in manageable_roles:
         raise HTTPException(
             status_code=403,
             detail=(
-                "Un administrateur ne peut inviter que des invites sur sa ressource directe, "
-                "et des invites ou administrateurs dans ses descendants."
+                "Un administrateur ne peut inviter que des invites ou membres sur sa ressource directe, "
+                "et des invites, membres ou administrateurs dans ses descendants."
             ),
         )
 

@@ -31,10 +31,11 @@ WORKSPACE_READ_ROLES = {
 }
 WORKSPACE_MANAGEMENT_ROLES = {WORKSPACE_OWNER_ROLE, WORKSPACE_ADMIN_ROLE}
 
-# 🔧 CORRECTION: Les invités workspace peuvent lire le contenu descendant
+# Les invités et membres workspace peuvent lire le contenu descendant.
 WORKSPACE_DESCENDANT_READ_ROLES = {
     WORKSPACE_OWNER_ROLE,
     WORKSPACE_ADMIN_ROLE,
+    WORKSPACE_MEMBER_ROLE,
     WORKSPACE_GUEST_ROLE,  # ✅ L'invité workspace peut lire
 }
 WORKSPACE_DESCENDANT_MANAGEMENT_ROLES = {
@@ -56,10 +57,11 @@ ESPACE_READ_ROLES = {
 }
 ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
 
-# 🔧 CORRECTION: Les invités espace peuvent lire le contenu descendant
+# Les invités et membres espace peuvent lire le contenu descendant.
 ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_OWNER_ROLE,
     ESPACE_ADMIN_ROLE,
+    ESPACE_MEMBER_ROLE,
     ESPACE_GUEST_ROLE,  # ✅ L'invité espace peut lire
 }
 ESPACE_DESCENDANT_MANAGEMENT_ROLES = {
@@ -376,8 +378,10 @@ def validate_role_hierarchy(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Role redondant ou inferieur refuse : l'utilisateur dispose deja du role "
-                f"'{inherited_role}' herite depuis ce {source_type} ({source_id})."
+                f"Invitation non nécessaire : cette personne possède déjà le rôle "
+                f"'{inherited_role}' hérité depuis un {source_type} parent. "
+                f"Vous ne pouvez pas lui attribuer le rôle '{new_role}' sur cette ressource enfant, "
+                "car ce rôle est inférieur ou équivalent à son rôle parent."
             ),
         )
 
@@ -655,11 +659,8 @@ def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
 
     # 1. Rôle direct sur la liste
     liste_member = _get_liste_member_record(db, liste_id, current_user_id)
-    if liste_member:
-        if liste_member.role == LISTE_MEMBER_ROLE:
-            return liste_member  # Membre peut lire
-        if liste_member.role in LISTE_MANAGEMENT_ROLES:
-            return liste_member  # Créateur/Admin peuvent lire
+    if liste_member and liste_member.statut == "Actif" and liste_member.role in LISTE_READ_ROLES:
+        return liste_member
 
     # 2. Héritage depuis l'espace parent (lecture)
     if liste.id_espace:
@@ -686,6 +687,54 @@ def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
 
 # 🔧 Alias pour compatibilité (utilisé dans routes/utilisateur.py)
 _require_list_access = _require_list_read_access
+
+
+def _member_has_assigned_task_in_list(db: Session, *, liste_id: str, user_id: str) -> bool:
+    return (
+        db.query(Membre.id)
+        .join(Tache, Membre.id_tache == Tache.id)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+            Membre.id_tache.isnot(None),
+            Tache.id_liste == liste_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def _require_list_operational_contribution_access(db: Session, liste_id: str, current_user_id: str):
+    """
+    Autorise une action contributive sur une liste :
+    - Créateur/Admin directs ou hérités : autorisés ;
+    - Membre direct : autorisé seulement s'il a au moins une tâche assignée ;
+    - Invité direct ou hérité : lecture seule.
+    """
+    direct_member = _get_liste_member_record(db, liste_id, current_user_id)
+    if direct_member and direct_member.statut == "Actif":
+        if direct_member.role in LISTE_MANAGEMENT_ROLES:
+            return direct_member
+        if direct_member.role == LISTE_MEMBER_ROLE:
+            if _member_has_assigned_task_in_list(db, liste_id=liste_id, user_id=current_user_id):
+                return direct_member
+            raise HTTPException(
+                status_code=403,
+                detail="Un membre de liste doit avoir au moins une tache assignee pour effectuer cette action.",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Un invite de liste dispose uniquement d'un acces en lecture.",
+        )
+
+    try:
+        actor_member, _, _, _ = _get_list_management_grant(db, liste_id, current_user_id)
+        return actor_member
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Seuls les gestionnaires ou les membres avec au moins une tache assignee peuvent effectuer cette action.",
+        ) from exc
 
 
 def _require_list_admin_access(db: Session, liste_id: str, current_user_id: str):
@@ -1211,9 +1260,9 @@ def _require_attachment_target_write_access(
     if target_type == ResourceType.ESPACE:
         return _require_espace_management_access(db, target_id, current_user_id)
     if target_type == ResourceType.LISTE:
-        return _require_list_access(db, target_id, current_user_id)
+        return _require_list_management_access(db, target_id, current_user_id)
     if target_type == ResourceType.TACHE:
-        return _require_task_management_access(db, target_id, current_user_id)
+        return _require_assigned_task_operational_access(db, target_id, current_user_id)
     if target_type == ResourceType.CANEVAS:
         return _require_canevas_access(db, target_id, current_user_id)
     if target_type == ResourceType.SECTION:
@@ -1269,7 +1318,14 @@ def _require_file_management_access(db: Session, file_id: str, current_user_id: 
     target_type, target_id = _extract_file_target(fichier)
     if not target_type or not target_id:
         raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
-    _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
+
+    owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
+    if owner_user_id == current_user_id:
+        return fichier
+    if fichier.membres and fichier.membres.id_utilisateur == current_user_id:
+        return fichier
+
+    _require_attachment_target_management_access(db, target_type, target_id, current_user_id)
     return fichier
 
 

@@ -23,6 +23,7 @@ from ..schemas import MessageCreate
 
 RESOURCE_TYPES = {"workspace", "espace", "liste"}
 MANAGER_ROLES = {"Créateur", "Administrateur"}
+ROLE_RANKS = {"Invité": 1, "Membre": 2, "Administrateur": 3, "Créateur": 4}
 MESSAGE_EDIT_WINDOW = timedelta(minutes=30)
 LEGACY_ATTACHMENT_META_PREFIX = "__kp_attachment__:"
 
@@ -138,13 +139,16 @@ def delete_message(db: Session, *, message_id: str, user_id: str) -> Message:
     return message
 
 
-def serialize_group(db: Session, group: Groupe) -> dict:
+def serialize_group(db: Session, group: Groupe, current_user_id: Optional[str] = None) -> dict:
     member_count = (
         db.query(GroupeMembers)
         .filter(GroupeMembers.id_groupe == group.id)
         .count()
     )
     resource_type, resource_id, display_name = _parse_group_name(group.name)
+    can_write = True
+    if current_user_id and resource_type and resource_id:
+        can_write = _user_can_write_resource_group(db, current_user_id, resource_type, resource_id)
     return {
         "id": group.id,
         "name": display_name,
@@ -154,6 +158,7 @@ def serialize_group(db: Session, group: Groupe) -> dict:
         "creator": group.creator,
         "member_count": member_count,
         "created_at": group.created_at,
+        "can_write": can_write,
     }
 
 
@@ -252,6 +257,21 @@ def _has_direct_active_membership(db: Session, user_id: str, **resource_filter: 
     return bool(db.query(Membre.id).filter(and_(*filters)).first())
 
 
+def _highest_role(roles: Iterable[Optional[str]]) -> Optional[str]:
+    valid_roles = [role for role in roles if role in ROLE_RANKS]
+    if not valid_roles:
+        return None
+    return max(valid_roles, key=lambda role: ROLE_RANKS[role])
+
+
+def _get_direct_active_role(db: Session, user_id: str, **resource_filter: str) -> Optional[str]:
+    filters = [Membre.id_utilisateur == user_id, Membre.statut == "Actif"]
+    for field_name, value in resource_filter.items():
+        filters.append(getattr(Membre, field_name) == value)
+    roles = [role for (role,) in db.query(Membre.role).filter(and_(*filters)).all()]
+    return _highest_role(roles)
+
+
 def _has_direct_manager_membership(db: Session, user_id: str, **resource_filter: str) -> bool:
     filters = [
         Membre.id_utilisateur == user_id,
@@ -341,6 +361,55 @@ def _user_can_manage_liste(db: Session, user_id: str, liste_id: str) -> bool:
     return False
 
 
+def _user_effective_workspace_role(db: Session, user_id: str, workspace_id: str) -> Optional[str]:
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        return None
+    if workspace.id_utilisateur == user_id:
+        return "Créateur"
+    return _get_direct_active_role(db, user_id, id_workspace=workspace_id)
+
+
+def _user_effective_espace_role(db: Session, user_id: str, espace_id: str) -> Optional[str]:
+    espace = db.query(Espace).filter(Espace.id == espace_id).first()
+    visited: set[str] = set()
+    roles: list[Optional[str]] = []
+
+    while espace and espace.id not in visited:
+        visited.add(espace.id)
+        roles.append(_get_direct_active_role(db, user_id, id_espace=espace.id))
+        if espace.id_workspace:
+            roles.append(_user_effective_workspace_role(db, user_id, espace.id_workspace))
+        if not espace.id_espace_parent:
+            break
+        espace = db.query(Espace).filter(Espace.id == espace.id_espace_parent).first()
+
+    return _highest_role(roles)
+
+
+def _user_effective_liste_role(db: Session, user_id: str, liste_id: str) -> Optional[str]:
+    liste = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not liste:
+        return None
+
+    roles: list[Optional[str]] = [_get_direct_active_role(db, user_id, id_liste=liste_id)]
+    if liste.id_workspace:
+        roles.append(_user_effective_workspace_role(db, user_id, liste.id_workspace))
+    if liste.id_espace:
+        roles.append(_user_effective_espace_role(db, user_id, liste.id_espace))
+    return _highest_role(roles)
+
+
+def _user_effective_resource_role(db: Session, user_id: str, resource_type: str, resource_id: str) -> Optional[str]:
+    if resource_type == "workspace":
+        return _user_effective_workspace_role(db, user_id, resource_id)
+    if resource_type == "espace":
+        return _user_effective_espace_role(db, user_id, resource_id)
+    if resource_type == "liste":
+        return _user_effective_liste_role(db, user_id, resource_id)
+    return None
+
+
 def _user_can_access_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
     if resource_type == "workspace":
         return _user_can_access_workspace(db, user_id, resource_id)
@@ -349,6 +418,11 @@ def _user_can_access_resource_group(db: Session, user_id: str, resource_type: st
     if resource_type == "liste":
         return _user_can_access_liste(db, user_id, resource_id)
     return False
+
+
+def _user_can_write_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
+    role = _user_effective_resource_role(db, user_id, resource_type, resource_id)
+    return bool(role and role != "Invité")
 
 
 def _user_can_manage_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
@@ -763,7 +837,7 @@ def list_user_groups(db: Session, user_id: str) -> list[dict]:
         seen_resources.add(key)
         unique_groups.append(group)
 
-    return [serialize_group(db, group) for group in unique_groups]
+    return [serialize_group(db, group, current_user_id=user_id) for group in unique_groups]
 
 
 def ensure_user_resource_groups(db: Session, user_id: str) -> None:
@@ -822,6 +896,19 @@ def require_group_member(db: Session, group_id: str, user_id: str) -> GroupeMemb
     if not membership:
         raise HTTPException(status_code=403, detail="Accès refusé à ce groupe.")
     return membership
+
+
+def ensure_group_write_access(db: Session, group_id: str, user_id: str) -> Groupe:
+    group = get_group_or_404(db, group_id)
+    require_group_member(db, group_id, user_id)
+
+    resource_type, resource_id, _ = _parse_group_name(group.name)
+    if resource_type and resource_id and not _user_can_write_resource_group(db, user_id, resource_type, resource_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Vous êtes invité sur cette ressource : vous pouvez lire cette discussion, mais vous ne pouvez pas y envoyer de messages.",
+        )
+    return group
 
 
 def get_group_or_404(db: Session, group_id: str) -> Groupe:
@@ -907,8 +994,7 @@ def create_group_message(
     sender_id: str,
     payload: MessageCreate,
 ) -> Message:
-    group = get_group_or_404(db, group_id)
-    require_group_member(db, group_id, sender_id)
+    group = ensure_group_write_access(db, group_id, sender_id)
     _sync_resource_group_access_members(db, group)
     room = get_or_create_group_room(db, group_id)
     message = Message(

@@ -4,6 +4,7 @@ import { UserPlus, Mail, Users, CheckCircle, Loader2 } from 'lucide-react';
 import { listeService } from '../../services/liste.service';
 import { espaceService } from '../../services/espace.service';
 import { workspaceService } from '../../services/workspace.service';
+import { sanitizeApiErrorMessage } from '../../services/api';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { getRoleLabel } from '../../lib/roleHierarchy';
@@ -27,10 +28,10 @@ interface Member {
 }
 
 // Rôles disponibles pour l'ajout à une liste (sans Créateur)
-const AVAILABLE_ROLES = ['Membre', 'Administrateur'];
+const AVAILABLE_ROLES = ['Invité', 'Membre', 'Administrateur'];
 const LIST_ADMIN_AVAILABLE_ROLES = ['Membre'];
 
-type TabType = 'invited' | 'external';
+type TabType = 'parent' | 'external';
 
 export default function AssignListMemberModal({
   listeId,
@@ -41,8 +42,8 @@ export default function AssignListMemberModal({
   onSuccess,
 }: AssignListMemberModalProps) {
   const { role: directListRole } = useResourceRole(listeId, 'liste');
-  const [activeTab, setActiveTab] = useState<TabType>('invited');
-  const [invitedMembers, setInvitedMembers] = useState<Member[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('parent');
+  const [parentMembers, setParentMembers] = useState<Member[]>([]);
   const [listMembers, setListMembers] = useState<Member[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<string>('Membre');
@@ -64,24 +65,23 @@ export default function AssignListMemberModal({
     }
   }, [availableRoles, selectedRole, inviteRole]);
 
-  // Charger les membres invités (rôle "Invité") depuis l'espace ou le workspace parent
+  // Charger les membres du workspace/espace parent disponibles pour la liste.
   useEffect(() => {
     if (!isOpen) return;
 
-    const loadInvitedMembers = async () => {
+    const loadParentMembers = async () => {
       setLoading(true);
       setError(null);
       try {
-        let spaceMembers: any[] = [];
+        let resourceMembers: any[] = [];
         
         if (espaceId) {
-          spaceMembers = await espaceService.getMembers(espaceId);
+          resourceMembers = await espaceService.getMembers(espaceId);
         } else if (workspaceId) {
-          spaceMembers = await workspaceService.getMembers(workspaceId);
+          resourceMembers = await workspaceService.getMembers(workspaceId);
         }
 
-        // Filtrer uniquement les utilisateurs avec le rôle "Invité"
-        const filteredMembers = spaceMembers.filter((m: any) => m.role === 'Invité');
+        const filteredMembers = resourceMembers.filter((m: any) => m.role === 'Membre');
         
         const formattedMembers: Member[] = filteredMembers.map((m: any) => ({
           id: m.id_utilisateur || m.id,
@@ -89,16 +89,16 @@ export default function AssignListMemberModal({
           email: getMemberEmail(m),
           role: m.role,
         }));
-        setInvitedMembers(formattedMembers);
+        setParentMembers(formattedMembers);
       } catch (err) {
-        console.warn('Membres invités parent non accessibles:', err);
-        setInvitedMembers([]);
+        console.warn('Membres parent non accessibles:', err);
+        setParentMembers([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadInvitedMembers();
+    loadParentMembers();
   }, [isOpen, espaceId, workspaceId]);
 
   // Charger les membres déjà dans la liste
@@ -146,7 +146,7 @@ export default function AssignListMemberModal({
       const roleToAssign = availableRoles.includes(selectedRole) ? selectedRole : 'Membre';
       await listeService.assignMember(listeId, selectedMemberId, roleToAssign);
       
-      const newMember = invitedMembers.find(m => m.id === selectedMemberId);
+      const newMember = parentMembers.find(m => m.id === selectedMemberId);
       if (newMember) {
         setListMembers(prev => [...prev, { ...newMember, role: roleToAssign }]);
       }
@@ -159,11 +159,7 @@ export default function AssignListMemberModal({
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Erreur ajout membre:', err);
-      if (err.message?.includes('redondant')) {
-        setError('Ce membre a déjà un rôle parent qui couvre cette liste');
-      } else {
-        setError(err.message || 'Erreur lors de l\'ajout du membre');
-      }
+      setError(sanitizeApiErrorMessage(err, 'Erreur lors de l\'ajout du membre'));
     } finally {
       setLoading(false);
     }
@@ -196,22 +192,20 @@ export default function AssignListMemberModal({
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Erreur invitation:', err);
-      if (err.message?.includes('déjà')) {
-        setError('Cet utilisateur existe déjà. Utilisez l\'onglet "Membres invités" pour l\'ajouter.');
-      } else if (err.message?.includes('redondant')) {
-        setError('Cette personne a déjà un rôle parent qui couvre cette liste');
+      if (err.message?.includes('déjà') && !err.message?.includes('rôle')) {
+        setError('Cet utilisateur existe déjà. Utilisez l\'onglet "Membres du workspace/espace" pour l\'ajouter.');
       } else {
-        setError(err.message || 'Erreur lors de l\'envoi de l\'invitation');
+        setError(sanitizeApiErrorMessage(err, 'Erreur lors de l\'envoi de l\'invitation'));
       }
     } finally {
       setInviting(false);
     }
   };
 
-  const availableInvitedMembers = invitedMembers.filter(m => !isMemberInList(m.id));
+  const availableParentMembers = parentMembers.filter(m => !isMemberInList(m.id));
 
   const handleClose = () => {
-    setActiveTab('invited');
+    setActiveTab('parent');
     setSelectedMemberId('');
     setSelectedRole('Membre');
     setInviteEmail('');
@@ -238,15 +232,15 @@ export default function AssignListMemberModal({
 
         <div className="flex border-b border-gray-200">
           <button
-            onClick={() => setActiveTab('invited')}
+            onClick={() => setActiveTab('parent')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
-              activeTab === 'invited'
+              activeTab === 'parent'
                 ? 'border-b-2 border-secondary text-secondary'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             <Users className="h-4 w-4" />
-            Membres invités
+            Membres du workspace/espace
           </button>
           <button
             onClick={() => setActiveTab('external')}
@@ -275,23 +269,23 @@ export default function AssignListMemberModal({
           </div>
         )}
 
-        {activeTab === 'invited' && (
+        {activeTab === 'parent' && (
           <div className="space-y-4">
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 text-secondary animate-spin" />
               </div>
-            ) : availableInvitedMembers.length === 0 ? (
+            ) : availableParentMembers.length === 0 ? (
               <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-lg">
                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Aucun membre invité disponible</p>
+                <p className="text-sm">Aucun membre parent disponible</p>
                 <p className="text-xs mt-1">Vous pouvez ajouter une personne avec l'onglet invitation externe</p>
               </div>
             ) : (
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Membres invités disponibles
+                    Membres disponibles du workspace/espace parent
                   </label>
                   <select
                     value={selectedMemberId}
@@ -299,14 +293,14 @@ export default function AssignListMemberModal({
                     className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
                   >
                     <option value="">Sélectionner un membre...</option>
-                    {availableInvitedMembers.map(member => (
+                    {availableParentMembers.map(member => (
                       <option key={member.id} value={member.id}>
                         {member.name} ({member.email})
                       </option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    Ces personnes ont le rôle "Invité" dans l'espace/workspace parent
+                    Ces personnes ont le rôle "Membre" dans l'espace ou workspace parent.
                   </p>
                 </div>
 
@@ -326,7 +320,7 @@ export default function AssignListMemberModal({
                   <p className="text-xs text-gray-400 mt-1">
                     {isDirectListAdmin
                       ? 'En tant qu’administrateur direct de cette liste, vous pouvez uniquement attribuer le rôle Membre.'
-                      : 'Le rôle que le membre aura dans cette liste'}
+                      : 'Invité consulte seulement la liste. Membre peut contribuer s’il a une tâche assignée.'}
                   </p>
                 </div>
 
@@ -377,7 +371,7 @@ export default function AssignListMemberModal({
               <p className="text-xs text-gray-400 mt-1">
                 {isDirectListAdmin
                   ? 'En tant qu’administrateur direct de cette liste, vous pouvez uniquement attribuer le rôle Membre.'
-                  : 'Le rôle que la personne aura dans cette liste après acceptation'}
+                  : 'Invité consulte seulement la liste. Membre peut contribuer s’il a une tâche assignée.'}
               </p>
             </div>
 

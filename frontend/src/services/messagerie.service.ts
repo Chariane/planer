@@ -35,6 +35,7 @@ export interface MessagerieGroup {
   resource_id?: string | null;
   creator: string;
   member_count: number;
+  can_write?: boolean;
   created_at?: string | null;
 }
 

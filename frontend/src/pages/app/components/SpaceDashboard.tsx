@@ -7,6 +7,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { useNavigationStore } from '../../../store/useNavigationStore';
@@ -20,7 +21,9 @@ interface SpaceDashboardProps {
   onMemberInvited?: () => void;
 }
 
-const ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Administrateur'];
+const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+const ADMIN_DIRECT_ROLE_OPTIONS = ['Invité', 'Membre'];
+const ADMIN_INHERITED_ROLE_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -108,19 +111,33 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || effectiveSpaceRole === ROLES.CREATOR
     || isWorkspaceAdmin
     || isWorkspaceCreator;
-  const canManageMemberRoles = isEspaceCreator || isWorkspaceCreator;
+  const canManageMemberRoles = canInviteMembers;
 
-  const getAvailableRoles = () => {
-    if (isWorkspaceCreator || isWorkspaceAdmin || effectiveSpaceRole === ROLES.CREATOR) {
-      return ['Invité', 'Administrateur'];
+  const getRoleManagementOptions = () => {
+    if (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
-    if (effectiveSpaceRole === ROLES.ADMIN) {
-      if (isDirectSpaceAdmin) return ['Invité'];
-      return ['Invité', 'Administrateur'];
+    if (isWorkspaceAdmin || effectiveSpaceRole === ROLES.ADMIN) {
+      return isDirectSpaceAdmin ? ADMIN_DIRECT_ROLE_OPTIONS : ADMIN_INHERITED_ROLE_OPTIONS;
     }
     return [];
   };
 
+  const getAvailableRoles = () => {
+    if (isWorkspaceCreator || isWorkspaceAdmin || effectiveSpaceRole === ROLES.CREATOR) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    if (effectiveSpaceRole === ROLES.ADMIN) {
+      if (isDirectSpaceAdmin) return ADMIN_DIRECT_ROLE_OPTIONS;
+      return ADMIN_INHERITED_ROLE_OPTIONS;
+    }
+    return [];
+  };
+
+  const roleManagementOptions = useMemo(
+    () => getRoleManagementOptions(),
+    [isWorkspaceCreator, isWorkspaceAdmin, effectiveSpaceRole, isDirectSpaceAdmin],
+  );
   const availableRoles = useMemo(() => getAvailableRoles(), [isWorkspaceCreator, isWorkspaceAdmin, effectiveSpaceRole, isDirectSpaceAdmin]);
 
   useEffect(() => {
@@ -148,7 +165,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         .map((space: any) => {
           const role = getDirectSpaceRole(space.id);
           const isCurrentSpace = space.id === spaceId;
-          const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+          const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER || role === ROLES.GUEST;
           return isCurrentSpace || isInheritedRole ? role : null;
         });
 
@@ -209,13 +226,13 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       await loadData();
       onMemberInvited?.();
     } catch (err: any) {
-      const msg = err?.message || '';
-      showMessage(msg.includes('refuse') ? 'Membre déjà présent via parent' : (msg || "Erreur d'invitation"), 'error');
+      showMessage(sanitizeApiErrorMessage(err, "Erreur d'invitation"), 'error');
     }
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
     if (!canManageMemberRoles || member.role === ROLES.CREATOR || nextRole === member.role) return;
+    if (!roleManagementOptions.includes(nextRole)) return;
     setUpdatingMemberId(member.id);
     try {
       await espaceService.updateMemberRole(spaceId, member.id, nextRole);
@@ -352,17 +369,16 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                         <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
                       </div>
                     </Link>
-                    {canManageMemberRoles && member.role !== ROLES.CREATOR ? (
+                    {canManageMemberRoles && member.role !== ROLES.CREATOR && roleManagementOptions.includes(member.role) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
                         <select
-                          value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : ROLES.GUEST}
+                          value={member.role}
                           onChange={e => handleMemberRoleChange(member, e.target.value)}
                           disabled={updatingMemberId === member.id}
                           className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-theme-surface-hover"
                         >
-                          {ROLE_MANAGEMENT_OPTIONS.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
-                          {!ROLE_MANAGEMENT_OPTIONS.includes(member.role) && <option value={ROLES.GUEST} className="bg-theme-page text-theme-main">Invité</option>}
+                          {roleManagementOptions.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
                         </select>
                       </div>
                     ) : (

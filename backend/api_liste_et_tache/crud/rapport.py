@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session, joinedload
 from ..core.function import (
     _get_member_or_404,
     _get_member_scope_liste_id,
+    _member_has_assigned_task_in_list,
     _require_member_management_access,
-    _require_member_self_or_management_access,
+    _require_member_read_access,
     _require_member_workflow_read_access,
     _require_report_owner_or_management_access,
     _require_report_read_access,
@@ -56,8 +57,25 @@ def create_report(
     id_membre: str,
 ) -> Rapport:
     membre = _get_member_or_404(db, id_membre)
-    _get_member_scope_liste_id(db, membre)
-    _require_member_self_or_management_access(db, id_membre, current_user_id)
+    liste_id = _get_member_scope_liste_id(db, membre)
+
+    if membre.id_utilisateur != current_user_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez creer un rapport que pour vous-meme.")
+
+    _require_member_read_access(db, id_membre, current_user_id)
+
+    if membre.role == "Invité":
+        raise HTTPException(status_code=403, detail="Un invite de liste ne peut pas creer de rapport.")
+
+    if membre.role == "Membre" and not _member_has_assigned_task_in_list(
+        db,
+        liste_id=liste_id,
+        user_id=current_user_id,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Un membre de liste doit avoir au moins une tache assignee pour creer un rapport.",
+        )
 
     rapport = Rapport(
         titre=titre,

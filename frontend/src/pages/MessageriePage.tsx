@@ -428,6 +428,7 @@ export default function MessageriePage() {
   const desiredPrivateUserId = searchParams.get('private_user_id');
   const privateUserId = selectedPrivateUserId;
   const isPrivateMode = Boolean(privateUserId);
+  const canWriteActiveThread = isPrivateMode || activeGroup?.can_write !== false;
   const privateMember = profileAsMember(privateProfile);
   const threadTitle = isPrivateMode
     ? (privateProfile ? displayProfile(privateProfile) : 'Discussion privée')
@@ -913,6 +914,10 @@ export default function MessageriePage() {
   }, [attachMediaStreams, callStatus]);
 
   const sendPayload = async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
+    if (!privateUserId && activeGroup?.can_write === false) {
+      throw new Error("Vous êtes invité sur cette ressource : cette discussion est en lecture seule.");
+    }
+
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(payload));
       return;
@@ -930,6 +935,10 @@ export default function MessageriePage() {
 
   const handleFileSelect = async (file?: File) => {
     if (!file) return;
+    if (!canWriteActiveThread) {
+      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
+      return;
+    }
     if (file.size > MAX_CHAT_ATTACHMENT_SIZE) {
       setError('Le fichier est trop volumineux pour la discussion. Taille maximale : 8 Mo.');
       return;
@@ -953,6 +962,10 @@ export default function MessageriePage() {
   };
 
   const startRecording = async () => {
+    if (!canWriteActiveThread) {
+      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError("L'enregistrement vocal n'est pas disponible dans ce navigateur.");
       return;
@@ -1042,6 +1055,10 @@ export default function MessageriePage() {
 
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canWriteActiveThread) {
+      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
+      return;
+    }
     if ((!activeGroupId && !privateUserId) || (!draft.trim() && !pendingAttachment) || sending) return;
 
     const text = draft.trim();
@@ -1332,7 +1349,14 @@ export default function MessageriePage() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-center justify-between gap-2">
                                   <p className="min-w-0 flex-1 truncate font-black">{group.name}</p>
-                                  <UnreadBadge count={unreadCount} selected={selected} />
+                                  <div className="flex shrink-0 items-center gap-1.5">
+                                    {group.can_write === false && (
+                                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${selected ? 'bg-white/15 text-white/80' : 'bg-amber-500/10 text-amber-600'}`}>
+                                        Lecture seule
+                                      </span>
+                                    )}
+                                    <UnreadBadge count={unreadCount} selected={selected} />
+                                  </div>
                                 </div>
                                 <p className={`text-xs mt-1 flex items-center gap-1 ${selected ? 'text-white/70' : 'text-theme-muted'}`}>
                                   <Users size={13} />
@@ -1405,18 +1429,18 @@ export default function MessageriePage() {
                         <button
                           type="button"
                           onClick={() => startCall('audio')}
-                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={callStatus !== 'idle' || !canWriteActiveThread || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
+                          title={!canWriteActiveThread ? 'Discussion en lecture seule' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
                         >
                           <Phone size={17} />
                         </button>
                         <button
                           type="button"
                           onClick={() => startCall('video')}
-                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={callStatus !== 'idle' || !canWriteActiveThread || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
+                          title={!canWriteActiveThread ? 'Discussion en lecture seule' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
                         >
                           <Video size={18} />
                         </button>
@@ -1564,76 +1588,90 @@ export default function MessageriePage() {
                   )}
                 </div>
 
-                <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={event => handleFileSelect(event.target.files?.[0])}
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                  />
-                  {pendingAttachment && (
-                    <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
-                      <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                        {pendingAttachment.kind === 'audio' ? <Mic size={18} />
-                          : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
-                            : pendingAttachment.kind === 'video' ? <Video size={18} />
-                              : <FileText size={18} />}
+                {canWriteActiveThread ? (
+                  <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={event => handleFileSelect(event.target.files?.[0])}
+                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                    />
+                    {pendingAttachment && (
+                      <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
+                        <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                          {pendingAttachment.kind === 'audio' ? <Mic size={18} />
+                            : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
+                              : pendingAttachment.kind === 'video' ? <Video size={18} />
+                                : <FileText size={18} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
+                          <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPendingAttachment(null)}
+                          className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
+                          title="Retirer la pièce jointe"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
-                        <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
-                      </div>
+                    )}
+                    <div className="flex items-end gap-3">
                       <button
                         type="button"
-                        onClick={() => setPendingAttachment(null)}
-                        className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
-                        title="Retirer la pièce jointe"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={sending || isRecording}
+                        className="h-12 w-12 shrink-0 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
+                        title="Joindre un fichier"
                       >
-                        <X size={16} />
+                        <Paperclip size={18} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={sending}
+                        className={`h-12 w-12 shrink-0 rounded-2xl border transition flex items-center justify-center disabled:opacity-50 ${
+                          isRecording
+                            ? 'border-red-500/30 bg-red-500/10 text-red-500 animate-pulse'
+                            : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
+                        }`}
+                        title={isRecording ? "Arrêter l'enregistrement" : 'Enregistrer un message vocal'}
+                      >
+                        {isRecording ? <Square size={16} /> : <Mic size={18} />}
+                      </button>
+                      <textarea
+                        value={draft}
+                        onChange={event => setDraft(event.target.value)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            sendMessage(event);
+                          }
+                        }}
+                        placeholder="Écrire un message..."
+                        className="min-h-[48px] max-h-32 flex-1 resize-none rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
+                      />
+                      <Button type="submit" loading={sending} disabled={(!draft.trim() && !pendingAttachment) || sending || isRecording} className="h-12 w-12 !p-0 rounded-2xl">
+                        <Send size={18} />
+                      </Button>
                     </div>
-                  )}
-                  <div className="flex items-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={sending || isRecording}
-                      className="h-12 w-12 shrink-0 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
-                      title="Joindre un fichier"
-                    >
-                      <Paperclip size={18} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      disabled={sending}
-                      className={`h-12 w-12 shrink-0 rounded-2xl border transition flex items-center justify-center disabled:opacity-50 ${
-                        isRecording
-                          ? 'border-red-500/30 bg-red-500/10 text-red-500 animate-pulse'
-                          : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
-                      }`}
-                      title={isRecording ? "Arrêter l'enregistrement" : 'Enregistrer un message vocal'}
-                    >
-                      {isRecording ? <Square size={16} /> : <Mic size={18} />}
-                    </button>
-                    <textarea
-                      value={draft}
-                      onChange={event => setDraft(event.target.value)}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
-                          event.preventDefault();
-                          sendMessage(event);
-                        }
-                      }}
-                      placeholder="Écrire un message..."
-                      className="min-h-[48px] max-h-32 flex-1 resize-none rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
-                    />
-                    <Button type="submit" loading={sending} disabled={(!draft.trim() && !pendingAttachment) || sending || isRecording} className="h-12 w-12 !p-0 rounded-2xl">
-                      <Send size={18} />
-                    </Button>
+                  </form>
+                ) : (
+                  <div className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
+                    <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-700 dark:text-amber-300">
+                      <Shield className="mt-0.5 h-5 w-5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-black">Discussion en lecture seule</p>
+                        <p className="mt-1 text-xs font-semibold leading-relaxed">
+                          Votre rôle d'invité vous permet de suivre les échanges de cette ressource, sans envoyer de messages ni de fichiers.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </form>
+                )}
               </>
             ) : (
               <div className="h-full min-h-[520px] flex flex-col items-center justify-center text-center text-theme-muted p-10">

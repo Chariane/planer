@@ -10,7 +10,6 @@ from ..core.function import (
     _extract_file_target,
     _get_direct_target_membership,
     _get_fichier_or_404,
-    _is_resource_within_scope,
     _require_attachment_target_read_access,
     _require_attachment_target_write_access,
     _require_attachment_target_management_access,
@@ -145,13 +144,7 @@ def list_accessible_files(
             continue
 
         if scope_type and scope_id:
-            if not _is_resource_within_scope(
-                db,
-                target_type=target_type,
-                target_id=target_id,
-                scope_type=scope_type,
-                scope_id=scope_id,
-            ):
+            if target_type != scope_type or target_id != scope_id:
                 continue
 
         try:

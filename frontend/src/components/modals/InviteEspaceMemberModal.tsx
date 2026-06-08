@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { espaceService } from '../../services/espace.service';
+import { sanitizeApiErrorMessage } from '../../services/api';
 import {
   ROLES,
   getRoleLabel,
@@ -81,17 +82,18 @@ export default function InviteEspaceMemberModal({
 
     } catch (err: any) {
       console.error('❌ Erreur invitation espace:', err);
+      const message = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
 
       if (err.status === 409) {
-        setError(`❌ ${err.detail || 'Cette personne a déjà un rôle parent qui couvre cet espace'}`);
+        setError(`❌ ${message}`);
       } else if (err.status === 400) {
-        setError(err.detail || '❌ Email invalide');
+        setError(`❌ ${message || 'Email invalide'}`);
       } else if (err.status === 404) {
         setError('❌ L\'espace n\'existe plus ou accès refusé');
       } else if (err.status === 403) {
         setError('❌ Vous n\'avez pas la permission d\'inviter des membres');
       } else {
-        setError(err.detail || '❌ Erreur lors de l\'invitation');
+        setError(`❌ ${message}`);
       }
     } finally {
       setLoading(false);

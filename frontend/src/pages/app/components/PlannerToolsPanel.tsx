@@ -117,7 +117,7 @@ export default function PlannerToolsPanel({
 
   const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
-  const canAddFiles = !isGuest && (!listeId || !isDirectSimpleMember || hasAssignedTask || isManager);
+  const canAddFiles = !isGuest && (listeId ? isManager : true);
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
 

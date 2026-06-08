@@ -7,6 +7,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
 import { listeService } from '../../../services/liste.service';
 import { tacheService } from '../../../services/tache.service';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
@@ -69,11 +70,11 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator;
   
   const getAvailableRoles = () => {
+    if (isListeCreator || isWorkspaceCreator || isWorkspaceAdmin) {
+      return ['Invité', 'Membre', 'Administrateur'];
+    }
     if (isListeAdmin) {
       return ['Membre'];
-    }
-    if (isListeCreator || isWorkspaceCreator || isWorkspaceAdmin) {
-      return ['Invité', 'Administrateur'];
     }
     return [];
   };
@@ -156,13 +157,11 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       await loadData();
       onMemberInvited?.();
     } catch (err: any) {
-      const msg = err?.message || '';
-      if (msg.includes('refuse') || msg.includes('redondant')) {
-        showMessage('Cette personne a déjà un rôle parent qui couvre cette liste', 'error');
-      } else if (msg.includes('403')) {
+      const msg = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
+      if (msg.includes('403')) {
         showMessage('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cette liste.', 'error');
       } else {
-        showMessage(msg || 'Erreur lors de l\'invitation', 'error');
+        showMessage(msg, 'error');
       }
     }
   };
@@ -377,7 +376,8 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
                 ))}
               </select>
               <p className="text-xs text-gray-400 mt-1">
-                💡 <strong>Invitant</strong> : accès en lecture seule<br />
+                💡 <strong>Invité</strong> : accès en lecture seule<br />
+                💡 <strong>Membre</strong> : peut contribuer s'il a une tâche assignée<br />
                 💡 <strong>Administrateur</strong> : peut gérer la liste et ses membres
               </p>
               <p className="text-xs text-gray-400 mt-1">

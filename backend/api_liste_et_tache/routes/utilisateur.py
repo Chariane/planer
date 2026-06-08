@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
+from urllib.parse import quote
 from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
 import shutil
 import os
@@ -1410,11 +1411,16 @@ def accept_liste_invitation_from_email(
         )
     except HTTPException as e:
         if e.status_code == 409:
+            if isinstance(e.detail, str) and "Invitation non nécessaire" in e.detail:
+                return RedirectResponse(
+                    url=f"{front_base_url}/invitation/error?reason={quote(e.detail)}",
+                    status_code=302
+                )
             return RedirectResponse(
                 url=f"{front_base_url}/invitation/accept?token={token}&status=already_member&type=liste",
                 status_code=302
             )
         return RedirectResponse(
-            url=f"{front_base_url}/invitation/error?reason={e.detail}",
+            url=f"{front_base_url}/invitation/error?reason={quote(str(e.detail))}",
             status_code=302
         )

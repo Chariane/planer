@@ -9,8 +9,12 @@ export default function InvitationError() {
   const reason = searchParams.get('reason');
 
   let message = "Le lien d'invitation est invalide ou a expiré.";
+  let title = 'Lien invalide';
   if (reason === 'invalid_token') {
     message = "Le lien d'invitation est invalide ou a expiré.";
+  } else if (reason) {
+    message = reason;
+    title = 'Invitation impossible';
   }
 
   return (
@@ -19,7 +23,7 @@ export default function InvitationError() {
         <div className="h-20 w-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 mx-auto mb-8 shadow-xl shadow-red-500/10">
           <div className="text-4xl">❌</div>
         </div>
-        <h2 className="text-xl font-black text-red-500 uppercase tracking-tight mb-4">Lien invalide</h2>
+        <h2 className="text-xl font-black text-red-500 uppercase tracking-tight mb-4">{title}</h2>
         <p className="text-theme-muted text-sm font-medium mb-8 leading-relaxed">
           {message}.<br />
           Demandez à l'administrateur de vous renvoyer une nouvelle invitation.

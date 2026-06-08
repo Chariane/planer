@@ -8,6 +8,7 @@ import Modal from '../../../components/ui/Modal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
 import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,7 +18,8 @@ interface WorkspaceDashboardPanelProps {
   workspaceId: string;
 }
 
-const ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Administrateur'];
+const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+const ADMIN_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre'];
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -86,8 +88,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
+  const canManageMemberRoles = isAdmin || isCreator;
+  const roleManagementOptions = useMemo(
+    () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
+    [isCreator],
+  );
   const availableInvitationRoles = useMemo(
-    () => (isCreator ? ['Invité', 'Administrateur'] : ['Invité']),
+    () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
     [isCreator],
   );
 
@@ -162,13 +169,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       setInviteEmail('');
       await loadData();
     } catch (err: any) {
-      const msg = err?.message || '';
-      showMessage(msg.includes('refuse') ? 'Membre déjà présent via parent' : (msg || "Erreur d'invitation"), 'error');
+      showMessage(sanitizeApiErrorMessage(err, "Erreur d'invitation"), 'error');
     }
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
-    if (!isCreator || member.role === 'Créateur' || nextRole === member.role) return;
+    if (!canManageMemberRoles || member.role === 'Créateur' || nextRole === member.role) return;
+    if (!roleManagementOptions.includes(nextRole)) return;
     setUpdatingMemberId(member.id);
     try {
       await workspaceService.updateMemberRole(workspaceId, member.id, nextRole);
@@ -315,16 +322,16 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                       </div>
                     </Link>
 
-                    {isCreator && member.role !== 'Créateur' ? (
+                    {canManageMemberRoles && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
                         <select
-                          value={ROLE_MANAGEMENT_OPTIONS.includes(member.role) ? member.role : 'Invité'}
+                          value={member.role}
                           onChange={e => handleMemberRoleChange(member, e.target.value)}
                           disabled={updatingMemberId === member.id}
                           className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
                         >
-                          {ROLE_MANAGEMENT_OPTIONS.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
+                          {roleManagementOptions.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
                         </select>
                       </div>
                     ) : (
@@ -410,6 +417,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                 <Info size={16} className="text-primary mt-0.5" />
                 <p className="text-[10px] text-theme-muted font-bold leading-relaxed uppercase tracking-tight">
                   <strong className="text-theme-main">Invité</strong>: Accès aux éléments assignés.<br />
+                  <strong className="text-theme-main">Membre</strong>: Collaborateur interne en lecture descendante.<br />
                   <strong className="text-theme-main">Admin</strong>: Contrôle total sur les espaces et membres.
                 </p>
               </div>

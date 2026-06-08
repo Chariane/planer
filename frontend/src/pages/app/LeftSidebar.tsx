@@ -308,9 +308,7 @@ export default function LeftSidebar() {
     const workspace = workspaces.find(ws => ws.id === workspaceId);
     const path = findSpacePath(workspace?.espaces || [], targetSpaceId);
     const inheritedRoles: Array<string | null> = [
-      isWorkspaceCreator ? ROLES.CREATOR : null,
-      isWorkspaceAdmin ? ROLES.ADMIN : null,
-      isWorkspaceGuest ? ROLES.GUEST : null,
+      workspaceRole,
       getDirectSpaceRole(targetSpaceId),
     ];
 
@@ -319,7 +317,7 @@ export default function LeftSidebar() {
     for (let index = path.length - 1; index >= 0; index -= 1) {
       const role = getDirectSpaceRole(path[index].id);
       const isTargetSpace = index === path.length - 1;
-      const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+      const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER || role === ROLES.GUEST;
       if (isTargetSpace || isInheritedRole) {
         inheritedRoles.push(role);
       }

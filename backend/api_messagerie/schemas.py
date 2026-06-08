@@ -1018,6 +1018,7 @@ class GroupOut(BaseModel):
     resource_id: Optional[str] = None
     creator: str
     member_count: int = 0
+    can_write: bool = True
     created_at: Optional[datetime] = None
 
 
