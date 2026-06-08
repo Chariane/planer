@@ -305,11 +305,14 @@ def get_member(
 
 
 def get_members_of_workspace(db: Session, workspace_id: str) -> List[Membre]:
-    """Liste tous les membres d'un workspace."""
+    """Liste les membres actifs d'un workspace."""
     return (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
-        .filter(Membre.id_workspace == workspace_id)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.statut == Status.ACTIVE,
+        )
         .order_by(Membre.created_at.asc())
         .all()
     )

@@ -96,6 +96,7 @@ export default function CenterContent() {
   });
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [parentTaskForCreation, setParentTaskForCreation] = useState<Task | null>(null);
   const [isTaskModalLimited, setIsTaskModalLimited] = useState(false);
   const [taskModalError, setTaskModalError] = useState<string | null>(null);
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
@@ -176,6 +177,9 @@ export default function CenterContent() {
   }, [spaceId, isGuest]);
 
   const getTaskProgress = (task: Task): number => {
+    if (typeof task.progression === 'number') {
+      return Math.round(task.progression);
+    }
     const taskChecklists = task.checklists || [];
     if (taskChecklists.length === 0) return 0;
     const checked = taskChecklists.filter(c => c.is_checked).length;
@@ -305,18 +309,42 @@ export default function CenterContent() {
   const openCreateTask = () => {
     if (!canCreateContent) return;
     setEditingTask(null);
+    setParentTaskForCreation(null);
+    setIsTaskModalLimited(false);
+    setTaskModalError(null);
+    setIsTaskModalOpen(true);
+  };
+
+  const openCreateSubtask = (parentTask: Task) => {
+    if (!canCreateContent) return;
+    setEditingTask(null);
+    setParentTaskForCreation(parentTask);
     setIsTaskModalLimited(false);
     setTaskModalError(null);
     setIsTaskModalOpen(true);
   };
 
   const canOperateAssignedTask = (task: Task): boolean => {
-    return !!user?.id && task.assignees.some(assignee => assignee.id === user.id);
+    if (!user?.id) return false;
+    if (task.assignees.some(assignee => assignee.id === user.id)) return true;
+
+    let parentId = task.parentTaskId || null;
+    const visited = new Set<string>();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parentTask = tasks.find(item => item.id === parentId);
+      if (!parentTask) return false;
+      if (parentTask.assignees.some(assignee => assignee.id === user.id)) return true;
+      parentId = parentTask.parentTaskId || null;
+    }
+
+    return false;
   };
 
   const openEditTask = (task: Task) => {
     if (!canCreateContent && !canOperateAssignedTask(task)) return;
     setEditingTask(task);
+    setParentTaskForCreation(null);
     setIsTaskModalLimited(!canCreateContent && canOperateAssignedTask(task));
     setTaskModalError(null);
     setIsTaskModalOpen(true);
@@ -337,10 +365,11 @@ export default function CenterContent() {
       if (editingTask) {
         await updateTask({ ...editingTask, ...formData });
       } else {
-        await addTask({ ...formData, listId: listId! });
+        await addTask({ ...formData, listId: listId!, parentTaskId: parentTaskForCreation?.id || null });
       }
       setIsTaskModalOpen(false);
       setEditingTask(null);
+      setParentTaskForCreation(null);
       setIsTaskModalLimited(false);
     } catch (err: any) {
       const message = sanitizeApiErrorMessage(err, 'Erreur lors de l’enregistrement de la tâche');
@@ -616,6 +645,7 @@ export default function CenterContent() {
               onAddChecklist={addChecklistToTask}
               onToggleChecklist={toggleTaskChecklist}
               onDeleteChecklist={deleteTaskChecklist}
+              onCreateSubtask={openCreateSubtask}
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
@@ -656,8 +686,9 @@ export default function CenterContent() {
         <>
           <TaskFormModal
             isOpen={isTaskModalOpen}
-            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); setIsTaskModalLimited(false); setTaskModalError(null); }}
+            onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); setParentTaskForCreation(null); setIsTaskModalLimited(false); setTaskModalError(null); }}
             editingTask={editingTask}
+            parentTask={parentTaskForCreation}
             members={members}
             checklists={checklists}
             checklistLoading={checklistLoading}

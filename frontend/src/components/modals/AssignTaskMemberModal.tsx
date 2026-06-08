@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { tacheService } from '../../services/tache.service';
 import { listeService } from '../../services/liste.service';
+import { espaceService } from '../../services/espace.service';
+import { workspaceService } from '../../services/workspace.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
@@ -19,6 +21,7 @@ interface Member {
   name: string;
   email: string;
   role: string;
+  source?: string;
 }
 
 export default function AssignTaskMemberModal({
@@ -34,7 +37,7 @@ export default function AssignTaskMemberModal({
   const [loading, setLoading] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
 
-  // Charger les membres disponibles directement depuis la liste.
+  // Charger les membres disponibles depuis la liste et ses parents.
   useEffect(() => {
     if (!isOpen || !listeId) return;
 
@@ -42,16 +45,59 @@ export default function AssignTaskMemberModal({
       setLoading(true);
       setMemberError(null);
       try {
+        const byUser = new Map<string, Member>();
+        const addCandidates = (items: any[], source: string) => {
+          items
+            .filter((m: any) => m.role === 'Membre')
+            .forEach((m: any) => {
+              const id = m.id_utilisateur || m.id;
+              if (!id || byUser.has(id)) return;
+              byUser.set(id, {
+                id,
+                name: getMemberDisplayName(m),
+                email: getMemberEmail(m),
+                role: m.role,
+                source,
+              });
+            });
+        };
+
         const listMembers = await listeService.getMembers(listeId);
-        const formattedMembers: Member[] = listMembers
-          .filter((m: any) => m.role === 'Membre')
-          .map((m: any) => ({
-            id: m.id_utilisateur || m.id,
-            name: getMemberDisplayName(m),
-            email: getMemberEmail(m),
-            role: m.role,
-          }));
-        setMembers(formattedMembers);
+        addCandidates(listMembers, 'Liste');
+
+        const liste = await listeService.getById(listeId);
+        let resolvedWorkspaceId = liste.id_workspace || '';
+
+        if (liste.id_espace) {
+          try {
+            const hierarchy = await espaceService.getHierarchy(liste.id_espace);
+            const spaces = Array.isArray(hierarchy) ? hierarchy : [];
+            for (const space of spaces) {
+              if (!resolvedWorkspaceId && space.id_workspace) {
+                resolvedWorkspaceId = space.id_workspace;
+              }
+              try {
+                const spaceMembers = await espaceService.getMembers(space.id);
+                addCandidates(spaceMembers, `Espace: ${space.nom || 'parent'}`);
+              } catch {
+                // Certains profils n'ont pas le droit de lister tous les parents.
+              }
+            }
+          } catch {
+            // La liste reste assignable via ses membres directs.
+          }
+        }
+
+        if (resolvedWorkspaceId) {
+          try {
+            const workspaceMembers = await workspaceService.getMembers(resolvedWorkspaceId);
+            addCandidates(workspaceMembers, 'Workspace');
+          } catch {
+            // La liste reste assignable via ses membres directs.
+          }
+        }
+
+        setMembers(Array.from(byUser.values()));
       } catch (err) {
         console.error('Erreur chargement membres:', err);
         setMemberError('Impossible de charger les membres');
@@ -139,6 +185,7 @@ export default function AssignTaskMemberModal({
                   <div>
                     <span className="text-sm font-medium">{member.name}</span>
                     <span className="text-xs text-gray-500 ml-2">({member.role})</span>
+                    {member.source && <span className="text-xs text-gray-400 ml-2">{member.source}</span>}
                   </div>
                   <Button
                     variant="outline"
@@ -169,7 +216,7 @@ export default function AssignTaskMemberModal({
                 <option value="">Sélectionner un membre...</option>
                 {availableMembers.map(member => (
                   <option key={member.id} value={member.id}>
-                    {member.name} ({member.role})
+                    {member.name} ({member.source || member.role})
                   </option>
                 ))}
               </select>
@@ -182,7 +229,7 @@ export default function AssignTaskMemberModal({
 
         {availableMembers.length === 0 && assignedMembers.length === 0 && !loading && (
           <div className="text-center text-gray-400 py-4">
-            Aucun membre avec le rôle Membre disponible. Ajoutez d'abord des membres à la liste.
+            Aucun membre avec le rôle Membre disponible dans la liste, les espaces parents ou le workspace parent.
           </div>
         )}
 

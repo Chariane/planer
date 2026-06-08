@@ -72,6 +72,7 @@ export interface Task {
   order?: number;
   assignees: Member[];
   listId: string;
+  parentTaskId?: string | null;
   createdAt: Date;
   subTasks?: ChecklistItem[];
   checklists?: TaskChecklist[];

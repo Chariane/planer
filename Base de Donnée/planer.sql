@@ -160,6 +160,7 @@ CREATE TABLE planer.tache (
     priorite VARCHAR(50) DEFAULT 'Normale',
     ordre_affichage SMALLINT DEFAULT 0,
     id_liste VARCHAR(12) REFERENCES planer.liste(id) ON DELETE SET NULL,
+    id_tache_parent VARCHAR(12) REFERENCES planer.tache(id) ON DELETE CASCADE,
     CONSTRAINT tache_id_liste_fkey FOREIGN KEY (id_liste) REFERENCES planer.liste(id) ON DELETE SET NULL
 );
 
@@ -435,6 +436,7 @@ CREATE INDEX IF NOT EXISTS idx_espace_workspace ON planer.espace (id_workspace);
 CREATE INDEX IF NOT EXISTS idx_liste_espace ON planer.liste (id_espace);
 CREATE INDEX IF NOT EXISTS idx_liste_workspace ON planer.liste (id_workspace);
 CREATE INDEX IF NOT EXISTS idx_tache_liste ON planer.tache (id_liste);
+CREATE INDEX IF NOT EXISTS idx_tache_parent ON planer.tache (id_tache_parent);
 CREATE INDEX IF NOT EXISTS idx_tache_statut ON planer.tache (statut);
 CREATE INDEX IF NOT EXISTS idx_tache_priorite ON planer.tache (priorite);
 CREATE INDEX IF NOT EXISTS idx_tache_date_fin_prevue ON planer.tache (date_fin_prevue);

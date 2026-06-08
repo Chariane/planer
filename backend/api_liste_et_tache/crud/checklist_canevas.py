@@ -237,14 +237,15 @@ def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Check
         if hasattr(checklist, key) and value is not None:
             setattr(checklist, key, value)
     checklist.updated_at = datetime.now()
-    
-    # Vérifier si la checklist appartient à une tâche et mettre à jour le statut
+
+    db.commit()
+    db.refresh(checklist)
+
     if checklist.id_tache:
         from ..crud.tache import update_tache_status_based_on_checklists
         update_tache_status_based_on_checklists(db, checklist.id_tache)
-    
-    db.commit()
-    db.refresh(checklist)
+        db.refresh(checklist)
+
     return checklist
 
 def delete_checklist(db: Session, checklist_id: str) -> bool:

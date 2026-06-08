@@ -47,6 +47,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
   const [isReadOnly, setIsReadOnly] = useState(true);
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [userRoleDisplay, setUserRoleDisplay] = useState<string | null>(null);
+  const [showReadOnlyNotice, setShowReadOnlyNotice] = useState(true);
 
   // États pour l'édition
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
@@ -517,19 +518,33 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-          <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 mb-4">
-            <p className="text-sm text-primary font-bold">
-              👁️ Vous êtes en mode <span className="uppercase tracking-widest text-[10px]">lecture seule</span>.
-            </p>
-            <p className="text-[11px] text-primary/80 mt-1 font-medium italic">
-              {userRoleDisplay === 'Invité' && "Vous êtes invité dans cette liste, espace ou workspace."}
-              {userRoleDisplay?.includes('hérité') && `Vous avez le rôle "${userRoleDisplay}" mais les permissions d'écriture ne sont pas disponibles.`}
-              {!userRoleDisplay && "Vous n'avez pas les droits de modification."}
-            </p>
-            <p className="text-[10px] text-primary/60 mt-2 font-bold uppercase tracking-widest">
-              Seuls les Créateurs et Administrateurs peuvent modifier le canevas.
-            </p>
-          </div>
+          {showReadOnlyNotice && (
+            <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 mb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-primary font-bold">
+                    Vous êtes en mode <span className="uppercase tracking-widest text-[10px]">lecture seule</span>.
+                  </p>
+                  <p className="text-[11px] text-primary/80 mt-1 font-medium italic">
+                    {userRoleDisplay === 'Invité' && "Vous êtes invité dans cette liste, espace ou workspace."}
+                    {userRoleDisplay?.includes('hérité') && `Vous avez le rôle "${userRoleDisplay}" mais les permissions d'écriture ne sont pas disponibles.`}
+                    {!userRoleDisplay && "Vous n'avez pas les droits de modification."}
+                  </p>
+                  <p className="text-[10px] text-primary/60 mt-2 font-bold uppercase tracking-widest">
+                    Seuls les Créateurs et Administrateurs peuvent modifier le canevas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReadOnlyNotice(false)}
+                  className="shrink-0 rounded-xl p-1.5 text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors"
+                  title="Masquer ce message"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="h-6 w-6 text-secondary animate-spin" />
@@ -557,10 +572,10 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                   {section.checklists.map((checklist) => (
                     <div key={checklist.id} className="flex items-center gap-2">
                       {checklist.source === 'task' && (
-                        <span className="text-xs text-blue-400 w-4" title={`Tâche: ${checklist.task_title}`}>📋</span>
+                        <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
                       )}
                       {checklist.source === 'manual' && (
-                        <span className="text-xs text-gray-400 w-4" title="Checklist manuelle">✏️</span>
+                        <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
                       )}
                       {checklist.is_checked ? (
                         <CheckCircle className="h-4 w-4 text-emerald-500" />
@@ -720,10 +735,10 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                       {section.checklists.map((checklist) => (
                         <div key={checklist.id} className="flex items-center gap-2 group">
                           {checklist.source === 'task' && (
-                            <span className="text-xs text-blue-400 w-4" title={`Tâche: ${checklist.task_title}`}>📋</span>
+                            <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
                           )}
                           {checklist.source === 'manual' && (
-                            <span className="text-xs text-gray-400 w-4" title="Checklist manuelle">✏️</span>
+                            <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
                           )}
 
                           <button

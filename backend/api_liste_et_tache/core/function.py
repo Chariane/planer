@@ -860,7 +860,7 @@ def _get_tache_or_404(db: Session, tache_id: str) -> Tache:
 
 
 def _get_active_task_assignment(db: Session, tache_id: str, current_user_id: str) -> Membre | None:
-    return (
+    direct_assignment = (
         db.query(Membre)
         .filter(
             Membre.id_tache == tache_id,
@@ -869,6 +869,31 @@ def _get_active_task_assignment(db: Session, tache_id: str, current_user_id: str
         )
         .first()
     )
+    if direct_assignment:
+        return direct_assignment
+
+    current_tache = db.query(Tache).filter(Tache.id == tache_id).first()
+    parent_id = current_tache.id_tache_parent if current_tache else None
+    visited: set[str] = set()
+
+    while parent_id and parent_id not in visited:
+        visited.add(parent_id)
+        parent_assignment = (
+            db.query(Membre)
+            .filter(
+                Membre.id_tache == parent_id,
+                Membre.id_utilisateur == current_user_id,
+                Membre.statut == "Actif",
+            )
+            .first()
+        )
+        if parent_assignment:
+            return parent_assignment
+
+        parent_tache = db.query(Tache).filter(Tache.id == parent_id).first()
+        parent_id = parent_tache.id_tache_parent if parent_tache else None
+
+    return None
 
 
 def _require_task_access(db: Session, tache_id: str, current_user_id: str):

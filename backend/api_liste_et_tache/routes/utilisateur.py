@@ -576,7 +576,7 @@ def create_checklist_for_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_task_management_access(db, tache_id, current_user.id)
+    _require_assigned_task_operational_access(db, tache_id, current_user.id)
     return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_tache=tache_id)
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
@@ -594,7 +594,7 @@ def update_task_status_from_checklists_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_task_management_access(db, tache_id, current_user.id)
+    _require_assigned_task_operational_access(db, tache_id, current_user.id)
     from ..crud.tache import update_tache_status_based_on_checklists
     update_tache_status_based_on_checklists(db, tache_id)
     return {"message": "Statut mis à jour avec succès"}
@@ -659,7 +659,17 @@ def update_checklist_endpoint(
         raise HTTPException(404, "Checklist non trouvee")
     updates = checklist_in.model_dump(exclude_unset=True)
     if chk.id_tache:
-        _require_task_management_access(db, chk.id_tache, current_user.id)
+        try:
+            _require_task_management_access(db, chk.id_tache, current_user.id)
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            if set(updates) - {"is_checked"}:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un membre assigne peut uniquement modifier le statut d'une checklist.",
+                ) from exc
+            _require_assigned_task_operational_access(db, chk.id_tache, current_user.id)
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)

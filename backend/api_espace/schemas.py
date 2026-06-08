@@ -650,6 +650,7 @@ class TacheBase(BaseModel):
 
 class TacheCreate(TacheBase):
     id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
 
 class TacheUpdate(BaseModel):
     titre: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -660,6 +661,7 @@ class TacheUpdate(BaseModel):
     priorite: Optional[str] = None
     ordre_affichage: Optional[int] = Field(None, ge=0)
     id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
 
     @field_validator("statut")
     @classmethod
@@ -682,6 +684,7 @@ class TacheOut(TacheBase):
     statut_date: Optional[datetime] = None
     created_at: datetime
     id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TacheDelete(BaseModel):

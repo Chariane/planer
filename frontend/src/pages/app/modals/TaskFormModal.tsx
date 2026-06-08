@@ -47,6 +47,7 @@ interface TaskFormModalProps {
   onSubmit: (data: any) => Promise<void>;
   limitedOperational?: boolean;
   submitError?: string | null;
+  parentTask?: Task | null;
 }
 
 export default function TaskFormModal({
@@ -63,6 +64,7 @@ export default function TaskFormModal({
   onSubmit,
   limitedOperational = false,
   submitError = null,
+  parentTask = null,
 }: TaskFormModalProps) {
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const canEditTaskFields = !limitedOperational;
@@ -83,6 +85,7 @@ export default function TaskFormModal({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const visibleChecklists = editingTask ? checklists : draftChecklists;
+  const parentDueDate = parentTask?.dueDate || '';
 
   useEffect(() => {
     if (editingTask) {
@@ -112,6 +115,10 @@ export default function TaskFormModal({
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
+    if (parentDueDate && dueDate && dueDate > parentDueDate) {
+      setActionError(`La date de fin d'une sous-tâche ne peut pas dépasser celle de sa tâche parent (${parentDueDate}).`);
+      return;
+    }
     const assigneeMembers = members.filter(m => assignedMemberIds.includes(m.id));
     await onSubmit({
       title,
@@ -188,7 +195,12 @@ export default function TaskFormModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={editingTask ? "Modifier la tâche" : "Nouvelle tâche"} size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingTask ? "Modifier la tâche" : parentTask ? `Nouvelle sous-tâche de ${parentTask.title}` : "Nouvelle tâche"}
+      size="lg"
+    >
       <div className="space-y-5 max-h-[70vh] overflow-y-auto px-1">
         {(submitError || actionError) && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -240,9 +252,15 @@ export default function TaskFormModal({
               type="date"
               value={dueDate}
               onChange={e => setDueDate(e.target.value)}
+              max={parentDueDate || undefined}
               disabled={!canEditTaskFields}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
             />
+            {parentDueDate && (
+              <p className="mt-1 text-xs text-gray-400">
+                La sous-tâche doit se terminer au plus tard le {parentDueDate}.
+              </p>
+            )}
           </div>
         </div>
 
@@ -422,11 +440,11 @@ export default function TaskFormModal({
               </div>
             ) : canManageChecklists ? (
               <button onClick={() => setIsAddingChecklist(true)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-secondary transition mt-2">
-                <Plus className="h-3 w-3" /> Ajouter une sous-tâche
+                <Plus className="h-3 w-3" /> Ajouter un point de contrôle
               </button>
             ) : (
               <p className="text-xs text-gray-400 mt-2">
-                Seuls les responsables de la liste peuvent gérer les sous-tâches.
+                Seuls les responsables de la liste peuvent gérer les points de contrôle.
               </p>
             )}
           </div>

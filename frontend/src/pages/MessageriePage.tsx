@@ -11,6 +11,8 @@ import {
   MessageCircle,
   MessageSquareText,
   Mic,
+  PanelRightClose,
+  PanelRightOpen,
   Paperclip,
   Phone,
   PhoneOff,
@@ -55,6 +57,14 @@ const formatDateTime = (value?: string | null) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const formatDuration = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  if (minutes === 0) return `${remainingSeconds} s`;
+  return `${minutes} min ${String(remainingSeconds).padStart(2, '0')} s`;
 };
 
 const formatLastSeen = (value?: string | null) => {
@@ -117,6 +127,16 @@ const avatarSrc = (member?: Pick<MessagerieMember, 'photo_base64'> | null) =>
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   sanitizeApiErrorMessage(error, fallback);
+
+const normalizeSearch = (value?: string | null) =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+const searchableText = (...values: Array<string | number | null | undefined>) =>
+  normalizeSearch(values.filter(value => value !== null && value !== undefined).join(' '));
 
 const MAX_CHAT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 
@@ -402,11 +422,15 @@ export default function MessageriePage() {
   const [draft, setDraft] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [messageActionLoading, setMessageActionLoading] = useState<string | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<MessageItem | null>(null);
+  const [participantsOpen, setParticipantsOpen] = useState(true);
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [callKind, setCallKind] = useState<CallKind>('audio');
+  const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
   const [incomingCall, setIncomingCall] = useState<CallSignalPayload | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -416,10 +440,16 @@ export default function MessageriePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
   const peerRefs = useRef<Record<string, RTCPeerConnection>>({});
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const callSignalHandlerRef = useRef<(payload: CallSignalPayload) => void>(() => undefined);
+  const callStartedAtRef = useRef<number | null>(null);
+  const callTimerRef = useRef<number | null>(null);
+  const callInitiatedByMeRef = useRef(false);
+  const callWasActiveRef = useRef(false);
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; stream: MediaStream }>>([]);
 
   const activeGroup = groups.find(group => group.id === activeGroupId) || null;
@@ -428,7 +458,6 @@ export default function MessageriePage() {
   const desiredPrivateUserId = searchParams.get('private_user_id');
   const privateUserId = selectedPrivateUserId;
   const isPrivateMode = Boolean(privateUserId);
-  const canWriteActiveThread = isPrivateMode || activeGroup?.can_write !== false;
   const privateMember = profileAsMember(privateProfile);
   const threadTitle = isPrivateMode
     ? (privateProfile ? displayProfile(privateProfile) : 'Discussion privée')
@@ -640,27 +669,53 @@ export default function MessageriePage() {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recordingStartedAtRef.current = null;
+    if (callTimerRef.current) {
+      window.clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
     Object.values(peerRefs.current).forEach(peer => peer.close());
     peerRefs.current = {};
     localStreamRef.current?.getTracks().forEach(track => track.stop());
   }, []);
 
   const filteredGroups = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeSearch(query);
     if (!needle) return groups;
-    return groups.filter(group =>
-      group.name.toLowerCase().includes(needle)
-      || resourceLabel(group).toLowerCase().includes(needle)
-    );
+    return groups.filter(group => {
+      const typeLabel = resourceLabel(group);
+      const section = groupSections.find(item => item.key === sectionKeyFor(group))?.title || '';
+      return searchableText(
+        group.name,
+        group.raw_name,
+        group.resource_type,
+        group.resource_id,
+        typeLabel,
+        section,
+        group.member_count,
+        group.resource_type === 'liste' ? 'liste projet projets' : null,
+        group.resource_type === 'workspace' ? 'workspace workspaces environnement' : null,
+        group.resource_type === 'espace' ? 'espace espaces sous-espace' : null,
+      ).includes(needle);
+    });
   }, [groups, query]);
 
   const filteredPrivateConversations = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeSearch(query);
     if (!needle) return privateConversations;
-    return privateConversations.filter(conversation =>
-      displayMember(conversation.user).toLowerCase().includes(needle)
-      || (conversation.user.email || '').toLowerCase().includes(needle)
-    );
+    return privateConversations.filter(conversation => searchableText(
+      displayMember(conversation.user),
+      conversation.user.username,
+      conversation.user.email,
+      conversation.user.id,
+      conversationPreview(conversation.last_message),
+      presenceLabel(conversation.is_online, conversation.last_seen),
+      'discussion privee prive privé message',
+    ).includes(needle));
   }, [privateConversations, query]);
 
   const visiblePrivateConversations = useMemo(() => {
@@ -729,6 +784,23 @@ export default function MessageriePage() {
       socket.addEventListener('open', handleOpen, { once: true });
     });
 
+  const sendPayload = useCallback(async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(payload));
+      return;
+    }
+
+    if (privateUserId) {
+      const sent = await messagerieService.sendPrivateMessage(privateUserId, payload);
+      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+      return;
+    }
+
+    if (!activeGroupId) return;
+    const sent = await messagerieService.sendGroupMessage(activeGroupId, payload);
+    setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+  }, [activeGroupId, privateUserId]);
+
   const sendCallSignal = useCallback((payload: CallSignalPayload) => {
     if ((!privateUserId && !activeGroupId) || socketRef.current?.readyState !== WebSocket.OPEN) {
       setError("La connexion temps réel n'est pas prête pour lancer l'appel.");
@@ -738,6 +810,45 @@ export default function MessageriePage() {
     return true;
   }, [activeGroupId, privateUserId, user?.id]);
 
+  const stopCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      window.clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  }, []);
+
+  const startCallTimer = useCallback(() => {
+    if (!callStartedAtRef.current) {
+      callStartedAtRef.current = Date.now();
+    }
+    callWasActiveRef.current = true;
+    stopCallTimer();
+    setCallElapsedSeconds(Math.floor((Date.now() - callStartedAtRef.current) / 1000));
+    callTimerRef.current = window.setInterval(() => {
+      if (!callStartedAtRef.current) return;
+      setCallElapsedSeconds(Math.floor((Date.now() - callStartedAtRef.current) / 1000));
+    }, 1000);
+  }, [stopCallTimer]);
+
+  const resetCallTracking = useCallback(() => {
+    stopCallTimer();
+    callStartedAtRef.current = null;
+    callInitiatedByMeRef.current = false;
+    callWasActiveRef.current = false;
+    setCallElapsedSeconds(0);
+  }, [stopCallTimer]);
+
+  const postCallHistory = useCallback((statusLabel: 'terminé' | 'manqué' | 'refusé', durationSeconds = 0) => {
+    const kindLabel = callKind === 'video' ? 'vidéo' : 'audio';
+    const durationText = statusLabel === 'terminé' ? ` • durée ${formatDuration(durationSeconds)}` : '';
+    void sendPayload({
+      type: 'text',
+      message: `📞 Appel ${kindLabel} ${statusLabel}${durationText}`,
+    }).catch(err => {
+      console.error("Impossible d'ajouter l'historique d'appel", err);
+    });
+  }, [callKind, sendPayload]);
+
   const attachMediaStreams = useCallback(() => {
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = localStreamRef.current;
@@ -745,9 +856,21 @@ export default function MessageriePage() {
   }, []);
 
   const stopCall = useCallback((notify = true) => {
+    const wasActive = callWasActiveRef.current;
+    const durationSeconds = callStartedAtRef.current
+      ? Math.floor((Date.now() - callStartedAtRef.current) / 1000)
+      : 0;
+    if (notify) {
+      if (wasActive) {
+        postCallHistory('terminé', durationSeconds);
+      } else if (callInitiatedByMeRef.current && callStatus === 'outgoing') {
+        postCallHistory('manqué');
+      }
+    }
     if (notify && callStatus !== 'idle') {
       sendCallSignal({ type: 'call_end' });
     }
+    stopCallTimer();
     Object.values(peerRefs.current).forEach(peer => peer.close());
     peerRefs.current = {};
     localStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -756,7 +879,8 @@ export default function MessageriePage() {
     setIncomingCall(null);
     setCallStatus('idle');
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
-  }, [callStatus, sendCallSignal]);
+    resetCallTracking();
+  }, [callStatus, postCallHistory, resetCallTracking, sendCallSignal, stopCallTimer]);
 
   const createPeerConnection = useCallback((peerId: string) => {
     peerRefs.current[peerId]?.close();
@@ -811,6 +935,10 @@ export default function MessageriePage() {
     try {
       setCallKind(kind);
       setCallStatus('outgoing');
+      callInitiatedByMeRef.current = true;
+      callWasActiveRef.current = false;
+      callStartedAtRef.current = null;
+      setCallElapsedSeconds(0);
       setError(null);
       const socketReady = await waitForRealtimeSocket();
       if (!socketReady) {
@@ -840,7 +968,10 @@ export default function MessageriePage() {
     const kind = incomingCall.call_type || 'audio';
     try {
       setCallKind(kind);
-      setCallStatus('active');
+      callInitiatedByMeRef.current = false;
+      callWasActiveRef.current = false;
+      callStartedAtRef.current = null;
+      setCallElapsedSeconds(0);
       const stream = await getCallMedia(kind);
       const peer = createPeerConnection(incomingCall.from);
       stream.getTracks().forEach(track => peer.addTrack(track, stream));
@@ -849,6 +980,8 @@ export default function MessageriePage() {
       await peer.setLocalDescription(answer);
       sendCallSignal({ type: 'call_answer', call_type: kind, answer, to: incomingCall.from });
       setIncomingCall(null);
+      setCallStatus('active');
+      startCallTimer();
     } catch (err: unknown) {
       stopCall(false);
       setError(getErrorMessage(err, "Impossible d'accepter l'appel."));
@@ -857,8 +990,10 @@ export default function MessageriePage() {
 
   const rejectCall = () => {
     sendCallSignal({ type: 'call_reject', to: incomingCall?.from });
+    postCallHistory('refusé');
     setIncomingCall(null);
     setCallStatus('idle');
+    resetCallTracking();
   };
 
   async function handleCallSignal(payload: CallSignalPayload) {
@@ -876,6 +1011,10 @@ export default function MessageriePage() {
           return;
         }
         setCallKind(payload.call_type || 'audio');
+        callInitiatedByMeRef.current = false;
+        callWasActiveRef.current = false;
+        callStartedAtRef.current = null;
+        setCallElapsedSeconds(0);
         setIncomingCall(payload);
         setCallStatus('incoming');
         return;
@@ -884,6 +1023,7 @@ export default function MessageriePage() {
       if (payload.type === 'call_answer' && payload.answer && payload.from && peerRefs.current[payload.from]) {
         await peerRefs.current[payload.from].setRemoteDescription(new RTCSessionDescription(payload.answer));
         setCallStatus('active');
+        startCallTimer();
         return;
       }
 
@@ -913,32 +1053,8 @@ export default function MessageriePage() {
     attachMediaStreams();
   }, [attachMediaStreams, callStatus]);
 
-  const sendPayload = async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
-    if (!privateUserId && activeGroup?.can_write === false) {
-      throw new Error("Vous êtes invité sur cette ressource : cette discussion est en lecture seule.");
-    }
-
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(payload));
-      return;
-    }
-
-    if (privateUserId) {
-      const sent = await messagerieService.sendPrivateMessage(privateUserId, payload);
-      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
-      return;
-    }
-
-    const sent = await messagerieService.sendGroupMessage(activeGroupId!, payload);
-    setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
-  };
-
   const handleFileSelect = async (file?: File) => {
     if (!file) return;
-    if (!canWriteActiveThread) {
-      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
-      return;
-    }
     if (file.size > MAX_CHAT_ATTACHMENT_SIZE) {
       setError('Le fichier est trop volumineux pour la discussion. Taille maximale : 8 Mo.');
       return;
@@ -962,10 +1078,6 @@ export default function MessageriePage() {
   };
 
   const startRecording = async () => {
-    if (!canWriteActiveThread) {
-      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
-      return;
-    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError("L'enregistrement vocal n'est pas disponible dans ce navigateur.");
       return;
@@ -980,6 +1092,10 @@ export default function MessageriePage() {
       };
       recorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
+        const durationSeconds = recordingStartedAtRef.current
+          ? Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000))
+          : recordingSeconds;
+        recordingStartedAtRef.current = null;
         const mimeType = recorder.mimeType || 'audio/webm';
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         if (blob.size > MAX_CHAT_ATTACHMENT_SIZE) {
@@ -990,13 +1106,21 @@ export default function MessageriePage() {
         const parsed = splitDataUrl(dataUrl);
         setPendingAttachment({
           kind: 'audio',
-          name: `Message vocal ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.webm`,
+          name: `Message vocal ${formatDuration(durationSeconds)}.webm`,
           mimeType: parsed.mimeType || mimeType,
           base64: parsed.base64,
         });
       };
       mediaRecorderRef.current = recorder;
       recorder.start();
+      recordingStartedAtRef.current = Date.now();
+      setRecordingSeconds(0);
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(seconds => seconds + 1);
+      }, 1000);
       setIsRecording(true);
       setError(null);
     } catch (err: unknown) {
@@ -1007,6 +1131,10 @@ export default function MessageriePage() {
   const stopRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
+    }
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
     setIsRecording(false);
   };
@@ -1038,14 +1166,19 @@ export default function MessageriePage() {
     }
   };
 
-  const removeMessage = async (message: MessageItem) => {
-    if (!confirm('Supprimer ce message ?')) return;
-    setMessageActionLoading(`delete-${message.id}`);
+  const removeMessage = (message: MessageItem) => {
+    setMessageToDelete(message);
+  };
+
+  const confirmRemoveMessage = async () => {
+    if (!messageToDelete) return;
+    setMessageActionLoading(`delete-${messageToDelete.id}`);
     setError(null);
     try {
-      await messagerieService.deleteMessage(message.id);
-      setMessages(prev => prev.filter(item => item.id !== message.id));
-      if (editingMessageId === message.id) cancelEditingMessage();
+      await messagerieService.deleteMessage(messageToDelete.id);
+      setMessages(prev => prev.filter(item => item.id !== messageToDelete.id));
+      if (editingMessageId === messageToDelete.id) cancelEditingMessage();
+      setMessageToDelete(null);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Impossible de supprimer ce message.'));
     } finally {
@@ -1055,10 +1188,6 @@ export default function MessageriePage() {
 
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canWriteActiveThread) {
-      setError("Cette discussion est en lecture seule pour votre rôle d'invité.");
-      return;
-    }
     if ((!activeGroupId && !privateUserId) || (!draft.trim() && !pendingAttachment) || sending) return;
 
     const text = draft.trim();
@@ -1115,6 +1244,64 @@ export default function MessageriePage() {
           </motion.div>
         )}
 
+        <AnimatePresence>
+          {messageToDelete && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm"
+              role="dialog"
+              aria-modal="true"
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 18, scale: 0.96 }}
+                className="w-full max-w-md rounded-3xl border border-theme-subtle bg-theme-surface p-5 shadow-2xl"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="h-11 w-11 shrink-0 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center">
+                    <Trash2 size={20} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-lg font-black text-theme-main">Supprimer ce message ?</h3>
+                    <p className="mt-1 text-sm font-medium text-theme-muted">
+                      Cette action retirera le message de la conversation. Elle ne pourra pas être annulée.
+                    </p>
+                    <div className="mt-4 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2 text-sm text-theme-muted">
+                      {messageToDelete.audio ? 'Message vocal'
+                        : messageToDelete.image ? 'Image'
+                          : messageToDelete.video ? 'Vidéo'
+                            : messageToDelete.file ? 'Fichier'
+                              : cleanMessageText(messageToDelete.message) || 'Message sans texte'}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMessageToDelete(null)}
+                    disabled={messageActionLoading === `delete-${messageToDelete.id}`}
+                    className="h-10 rounded-2xl border border-theme-subtle px-4 text-sm font-black text-theme-muted hover:bg-theme-surface-hover transition disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmRemoveMessage}
+                    disabled={messageActionLoading === `delete-${messageToDelete.id}`}
+                    className="h-10 rounded-2xl bg-red-500 px-4 text-sm font-black text-white hover:bg-red-600 transition disabled:opacity-60 flex items-center gap-2"
+                  >
+                    {messageActionLoading === `delete-${messageToDelete.id}` && <Loader2 size={16} className="animate-spin" />}
+                    Supprimer
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {callStatus !== 'idle' && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -1137,6 +1324,11 @@ export default function MessageriePage() {
                     </p>
                     <p className="text-xs font-semibold text-theme-muted">
                       {isPrivateMode ? displayProfile(privateProfile) : activeGroup?.name}
+                      {callStatus === 'active' && (
+                        <span className="ml-2 font-black text-secondary tabular-nums">
+                          {formatDuration(callElapsedSeconds)}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1213,7 +1405,11 @@ export default function MessageriePage() {
           </motion.div>
         )}
 
-        <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)_300px] gap-4 sm:gap-5 xl:overflow-hidden">
+        <div className={`min-h-0 flex-1 grid grid-cols-1 ${
+          !isPrivateMode && participantsOpen
+            ? 'xl:grid-cols-[340px_minmax(0,1fr)_300px]'
+            : 'xl:grid-cols-[340px_minmax(0,1fr)]'
+        } gap-4 sm:gap-5 xl:overflow-hidden`}>
           <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[380px] sm:h-[440px] xl:h-full" hover={false}>
             <div className="p-4 border-b border-theme-subtle">
               <div className="flex items-center justify-between gap-3 mb-4">
@@ -1350,11 +1546,6 @@ export default function MessageriePage() {
                                 <div className="flex min-w-0 items-center justify-between gap-2">
                                   <p className="min-w-0 flex-1 truncate font-black">{group.name}</p>
                                   <div className="flex shrink-0 items-center gap-1.5">
-                                    {group.can_write === false && (
-                                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${selected ? 'bg-white/15 text-white/80' : 'bg-amber-500/10 text-amber-600'}`}>
-                                        Lecture seule
-                                      </span>
-                                    )}
                                     <UnreadBadge count={unreadCount} selected={selected} />
                                   </div>
                                 </div>
@@ -1429,22 +1620,37 @@ export default function MessageriePage() {
                         <button
                           type="button"
                           onClick={() => startCall('audio')}
-                          disabled={callStatus !== 'idle' || !canWriteActiveThread || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={!canWriteActiveThread ? 'Discussion en lecture seule' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
+                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
                         >
                           <Phone size={17} />
                         </button>
                         <button
                           type="button"
                           onClick={() => startCall('video')}
-                          disabled={callStatus !== 'idle' || !canWriteActiveThread || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={!canWriteActiveThread ? 'Discussion en lecture seule' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
+                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
                         >
                           <Video size={18} />
                         </button>
                       </>
+                    )}
+                    {!isPrivateMode && activeGroup && (
+                      <button
+                        type="button"
+                        onClick={() => setParticipantsOpen(open => !open)}
+                        className={`h-10 rounded-2xl border px-3 transition flex items-center gap-2 text-xs font-black ${
+                          participantsOpen
+                            ? 'border-secondary/25 bg-secondary/10 text-secondary hover:bg-secondary/15'
+                            : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
+                        }`}
+                        title={participantsOpen ? 'Fermer les participants' : 'Afficher les participants'}
+                      >
+                        {participantsOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+                        <span className="hidden sm:inline">{participantsOpen ? 'Masquer' : 'Participants'}</span>
+                      </button>
                     )}
                     <div className="hidden sm:flex items-center gap-2 text-xs text-theme-muted font-bold">
                       <MessageSquareText size={16} />
@@ -1588,90 +1794,87 @@ export default function MessageriePage() {
                   )}
                 </div>
 
-                {canWriteActiveThread ? (
-                  <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="hidden"
-                      onChange={event => handleFileSelect(event.target.files?.[0])}
-                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={event => handleFileSelect(event.target.files?.[0])}
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                  />
+                  {pendingAttachment && (
+                    <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
+                      <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                        {pendingAttachment.kind === 'audio' ? <Mic size={18} />
+                          : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
+                            : pendingAttachment.kind === 'video' ? <Video size={18} />
+                              : <FileText size={18} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
+                        <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingAttachment(null)}
+                        className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
+                        title="Retirer la pièce jointe"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+                  {isRecording && (
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-500">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 animate-pulse" />
+                        <span className="truncate text-sm font-black">Enregistrement vocal en cours</span>
+                      </div>
+                      <span className="shrink-0 rounded-xl bg-red-500/10 px-2.5 py-1 text-xs font-black tabular-nums">
+                        {formatDuration(recordingSeconds)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending || isRecording}
+                      className="h-12 w-12 shrink-0 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
+                      title="Joindre un fichier"
+                    >
+                      <Paperclip size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      disabled={sending}
+                      className={`h-12 w-12 shrink-0 rounded-2xl border transition flex items-center justify-center disabled:opacity-50 ${
+                        isRecording
+                          ? 'border-red-500/30 bg-red-500/10 text-red-500 animate-pulse'
+                          : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
+                      }`}
+                      title={isRecording ? "Arrêter l'enregistrement" : 'Enregistrer un message vocal'}
+                    >
+                      {isRecording ? <Square size={16} /> : <Mic size={18} />}
+                    </button>
+                    <textarea
+                      value={draft}
+                      onChange={event => setDraft(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          sendMessage(event);
+                        }
+                      }}
+                      placeholder="Écrire un message..."
+                      className="min-h-[48px] max-h-32 flex-1 resize-none rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
                     />
-                    {pendingAttachment && (
-                      <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
-                        <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                          {pendingAttachment.kind === 'audio' ? <Mic size={18} />
-                            : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
-                              : pendingAttachment.kind === 'video' ? <Video size={18} />
-                                : <FileText size={18} />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
-                          <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setPendingAttachment(null)}
-                          className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
-                          title="Retirer la pièce jointe"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex items-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={sending || isRecording}
-                        className="h-12 w-12 shrink-0 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
-                        title="Joindre un fichier"
-                      >
-                        <Paperclip size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={isRecording ? stopRecording : startRecording}
-                        disabled={sending}
-                        className={`h-12 w-12 shrink-0 rounded-2xl border transition flex items-center justify-center disabled:opacity-50 ${
-                          isRecording
-                            ? 'border-red-500/30 bg-red-500/10 text-red-500 animate-pulse'
-                            : 'border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10'
-                        }`}
-                        title={isRecording ? "Arrêter l'enregistrement" : 'Enregistrer un message vocal'}
-                      >
-                        {isRecording ? <Square size={16} /> : <Mic size={18} />}
-                      </button>
-                      <textarea
-                        value={draft}
-                        onChange={event => setDraft(event.target.value)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' && !event.shiftKey) {
-                            event.preventDefault();
-                            sendMessage(event);
-                          }
-                        }}
-                        placeholder="Écrire un message..."
-                        className="min-h-[48px] max-h-32 flex-1 resize-none rounded-2xl border border-theme-subtle bg-theme-surface-hover px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
-                      />
-                      <Button type="submit" loading={sending} disabled={(!draft.trim() && !pendingAttachment) || sending || isRecording} className="h-12 w-12 !p-0 rounded-2xl">
-                        <Send size={18} />
-                      </Button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
-                    <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-700 dark:text-amber-300">
-                      <Shield className="mt-0.5 h-5 w-5 shrink-0" />
-                      <div>
-                        <p className="text-sm font-black">Discussion en lecture seule</p>
-                        <p className="mt-1 text-xs font-semibold leading-relaxed">
-                          Votre rôle d'invité vous permet de suivre les échanges de cette ressource, sans envoyer de messages ni de fichiers.
-                        </p>
-                      </div>
-                    </div>
+                    <Button type="submit" loading={sending} disabled={(!draft.trim() && !pendingAttachment) || sending || isRecording} className="h-12 w-12 !p-0 rounded-2xl">
+                      <Send size={18} />
+                    </Button>
                   </div>
-                )}
+                </form>
               </>
             ) : (
               <div className="h-full min-h-[520px] flex flex-col items-center justify-center text-center text-theme-muted p-10">
@@ -1682,42 +1885,70 @@ export default function MessageriePage() {
             )}
           </GlassCard>
 
-          {!isPrivateMode && (
-          <GlassCard className="!p-0 overflow-hidden flex flex-col min-h-[320px] xl:min-h-[420px]" hover={false}>
-            <div className="p-4 border-b border-theme-subtle">
-              <p className="text-[10px] uppercase tracking-[0.22em] font-black text-theme-muted">Participants</p>
-              <p className="text-xl font-black text-theme-main mt-1">{members.length}</p>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {activeGroup && members.length === 0 && loadingThread ? (
-                <div className="h-full flex items-center justify-center text-theme-muted">
-                  <Loader2 className="animate-spin text-secondary" />
+          {!isPrivateMode && participantsOpen && (
+            <GlassCard className="!p-0 overflow-hidden flex flex-col min-h-[320px] xl:min-h-[420px]" hover={false}>
+              <div className="p-4 border-b border-theme-subtle">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.22em] font-black text-theme-muted">Participants</p>
+                  <p className="text-xl font-black text-theme-main mt-1">{members.length}</p>
                 </div>
-              ) : members.length === 0 ? (
-                <div className="h-full min-h-[260px] flex items-center justify-center text-center text-theme-muted px-6">
-                  <p className="text-sm">Aucun participant chargé.</p>
-                </div>
-              ) : (
-                members.map(member => (
-                  <Link key={member.id} to={`/users/${member.id}`} className="block p-3 rounded-2xl border border-theme-subtle bg-theme-surface hover:bg-theme-surface-hover transition">
-                    <div className="flex items-center gap-3">
-                      <UserAvatar member={member} label={displayMember(member)} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-black text-sm text-theme-main truncate">{displayMember(member)}</p>
-                        <p className="text-xs text-theme-muted truncate">{member.email || 'Email non renseigné'}</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {activeGroup && members.length === 0 && loadingThread ? (
+                  <div className="h-full flex items-center justify-center text-theme-muted">
+                    <Loader2 className="animate-spin text-secondary" />
+                  </div>
+                ) : members.length === 0 ? (
+                  <div className="h-full min-h-[260px] flex items-center justify-center text-center text-theme-muted px-6">
+                    <p className="text-sm">Aucun participant chargé.</p>
+                  </div>
+                ) : (
+                  members.map(member => {
+                    const isMe = member.id === user?.id;
+                    const participantLabel = isMe ? 'Vous' : displayMember(member);
+                    return (
+                      <div
+                        key={member.id}
+                        className="flex min-w-0 items-center gap-2 rounded-2xl border border-theme-subtle bg-theme-surface px-2.5 py-2 hover:bg-theme-surface-hover transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isMe) return;
+                            setSelectedPrivateUserId(member.id);
+                            setActiveGroupId(null);
+                          }}
+                          disabled={isMe}
+                          className="h-9 w-9 shrink-0 rounded-xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:text-theme-muted"
+                          title={isMe ? 'Vous êtes ce participant' : `Discuter avec ${participantLabel}`}
+                        >
+                          <MessageCircle size={16} />
+                        </button>
+                        <Link
+                          to={isMe ? '/profile' : `/users/${member.id}`}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-xl -m-1 p-1 transition hover:text-secondary"
+                          title={isMe ? 'Voir mon profil' : 'Voir le profil'}
+                        >
+                          <UserAvatar member={member} label={participantLabel} className="h-9 w-9 shrink-0 rounded-xl text-xs" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="min-w-0 truncate text-sm font-black text-theme-main">{participantLabel}</p>
+                              <span className={`shrink-0 inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${member.role === 'Administrateur'
+                                ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                : 'bg-sky-500/10 text-sky-500 border-sky-500/20'}`}>
+                                {member.role === 'Administrateur' ? <Crown size={10} /> : <Shield size={10} />}
+                                {member.role}
+                              </span>
+                            </div>
+                            <p className="truncate text-[11px] text-theme-muted">{member.email || 'Email non renseigné'}</p>
+                          </div>
+                        </Link>
                       </div>
-                    </div>
-                    <div className={`mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${member.role === 'Administrateur'
-                      ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                      : 'bg-sky-500/10 text-sky-500 border-sky-500/20'}`}>
-                      {member.role === 'Administrateur' ? <Crown size={12} /> : <Shield size={12} />}
-                      {member.role}
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </GlassCard>
+                    );
+                  })
+                )}
+              </div>
+            </GlassCard>
           )}
         </div>
       </div>

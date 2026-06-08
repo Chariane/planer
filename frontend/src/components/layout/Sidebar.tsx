@@ -270,7 +270,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 <div className="flex items-center">
                   {espacesOpen ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
                   <FolderOpen className="h-3 w-3 mr-1" />
-                  {!isCompact && "Sous-Espaces"}
+                  {!isCompact && "Espaces rejoints"}
                 </div>
               </button>
             </div>
@@ -309,7 +309,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 <div className="flex items-center">
                   {listesOpen ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
                   <ListTodo className="h-3 w-3 mr-1" />
-                  {!isCompact && "Projets"}
+                  {!isCompact && "Projets rejoints"}
                 </div>
               </button>
             </div>

@@ -48,6 +48,7 @@ interface ListViewProps {
   onAddChecklist?: (taskId: string, texte: string) => Promise<void>;
   onToggleChecklist?: (taskId: string, checklistId: string, currentChecked: boolean) => Promise<void>;
   onDeleteChecklist?: (taskId: string, checklistId: string) => Promise<void>;
+  onCreateSubtask?: (parentTask: Task) => void;
   getTaskProgress: (task: Task) => number;
   readOnly?: boolean;
   canEditTask?: (task: Task) => boolean;
@@ -397,6 +398,7 @@ export default function ListView({
   onAddChecklist,
   onToggleChecklist,
   onDeleteChecklist,
+  onCreateSubtask,
   getTaskProgress,
   readOnly = false,
   canEditTask,
@@ -478,10 +480,267 @@ export default function ListView({
     task.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const groupedTasks = Object.keys(statusLabels).reduce((acc, status) => {
-    acc[status] = filteredTasks.filter(t => t.status === status);
+  const tasksByParent = filteredTasks.reduce((acc, task) => {
+    const parentId = task.parentTaskId || null;
+    if (parentId) {
+      acc[parentId] = [...(acc[parentId] || []), task];
+    }
     return acc;
   }, {} as Record<string, Task[]>);
+
+  const topLevelTasks = filteredTasks.filter(task => !task.parentTaskId);
+
+  const groupedTasks = Object.keys(statusLabels).reduce((acc, status) => {
+    acc[status] = topLevelTasks.filter(t => t.status === status);
+    return acc;
+  }, {} as Record<string, Task[]>);
+
+  const renderSubtaskTree = (task: Task, depth = 1) => {
+    const taskChecklists = task.checklists || [];
+    const childTasks = tasksByParent[task.id] || [];
+    const isTaskExpanded = !!expandedTasks[task.id];
+    const canManageTask = canEditTask ? canEditTask(task) : !readOnly;
+    const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
+    const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
+    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canManageTask;
+    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canManageTask;
+    const checklistSummary = taskChecklists.length > 0
+      ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
+      : '0';
+    const progress = getTaskProgress(task);
+
+    return (
+      <div key={task.id} className="space-y-2">
+        <GlassCard
+          className="group flex flex-wrap items-center gap-3 border-theme-border-subtle/40 bg-theme-surface/50 p-3 transition-all hover:border-secondary/25 hover:bg-theme-surface-hover"
+          onClick={() => openTaskDetail(task)}
+        >
+          <div className="hidden h-8 w-1 rounded-full bg-secondary/40 sm:block" />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canManageTask && onUpdateTaskStatus && task.status !== 'terminé') {
+                onUpdateTaskStatus(task.id, 'terminé');
+              }
+            }}
+            disabled={!canManageTask || !onUpdateTaskStatus || task.status === 'terminé'}
+            className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
+            title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
+          >
+            {task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleTaskOpen(task.id);
+            }}
+            className="h-9 w-9 flex-shrink-0 rounded-xl border border-theme-border-subtle/40 bg-theme-surface-hover text-theme-muted transition-all hover:bg-theme-surface hover:text-theme-main"
+            title={isTaskExpanded ? 'Fermer la sous-tâche' : 'Ouvrir la sous-tâche'}
+          >
+            {isTaskExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
+                Niveau {depth}
+              </span>
+              <h4 className={`text-sm font-black tracking-tight ${task.status === 'terminé' ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
+                {task.title}
+              </h4>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
+                {priorityLabels[task.priority]}
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                Checklists {checklistSummary}
+              </span>
+              {childTasks.length > 0 && (
+                <span className="text-[10px] font-black uppercase tracking-tighter text-secondary">
+                  {childTasks.length} sous-tâche{childTasks.length > 1 ? 's' : ''}
+                </span>
+              )}
+              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                {progress}%
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center -space-x-2">
+            {task.assignees.slice(0, 3).map((a, i) => (
+              <div key={i} className="h-7 w-7 rounded-lg border-2 border-theme-border-subtle bg-theme-surface flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
+                {a.name.charAt(0).toUpperCase()}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            {canAttachCurrentTaskFiles && (
+              <button
+                onClick={() => setExpandedTasks(prev => ({ ...prev, [task.id]: true }))}
+                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                title="Fichiers de la sous-tâche"
+              >
+                <Paperclip size={15} />
+              </button>
+            )}
+            {canAssignCurrentTask && (
+              <button
+                onClick={() => onAssignTask(task)}
+                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                title="Assigner la sous-tâche"
+              >
+                <UserPlus size={15} />
+              </button>
+            )}
+            {canDeleteCurrentTask && (
+              <button
+                onClick={() => onDeleteTask(task.id)}
+                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
+                title="Supprimer la sous-tâche"
+              >
+                <Trash size={15} />
+              </button>
+            )}
+          </div>
+        </GlassCard>
+
+        <AnimatePresence>
+          {isTaskExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, y: -6 }}
+              animate={{ height: 'auto', opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -6 }}
+              className="overflow-hidden"
+            >
+              <div className="ml-4 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-4 space-y-3 sm:ml-10">
+                {(childTasks.length > 0 || (canManageTask && onCreateSubtask)) && (
+                  <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Sous-tâches</p>
+                        <p className="text-[11px] font-medium text-theme-muted opacity-60">Même structure, mêmes responsabilités, avec un niveau hiérarchique supplémentaire.</p>
+                      </div>
+                      {canManageTask && onCreateSubtask && (
+                        <Button size="sm" variant="outline" onClick={() => onCreateSubtask(task)} className="w-full sm:w-auto">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Sous-tâche
+                        </Button>
+                      )}
+                    </div>
+                    {childTasks.length > 0 ? (
+                      <div className="space-y-2">
+                        {childTasks.map(childTask => renderSubtaskTree(childTask, depth + 1))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+                        Aucune sous-tâche pour le moment.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la sous-tâche</p>
+                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Points de contrôle propres à cette sous-tâche.</p>
+                  </div>
+                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
+                    {checklistSummary}
+                  </span>
+                </div>
+
+                {taskChecklists.length === 0 && addingChecklistTaskId !== task.id && (
+                  <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+                    Aucune checklist pour cette sous-tâche.
+                  </div>
+                )}
+
+                {taskChecklists.map((checklist) => (
+                  <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
+                    <button
+                      onClick={() => canManageTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                      disabled={!canManageTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                      className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
+                    >
+                      {actionLoading === `toggle-checklist-${checklist.id}` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : checklist.is_checked ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Circle className="h-4 w-4" />
+                      )}
+                    </button>
+                    <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
+                      {checklist.texte}
+                    </span>
+                    {canManageTask && onDeleteChecklist && (
+                      <button
+                        onClick={() => handleDeleteChecklist(task.id, checklist.id)}
+                        disabled={actionLoading === `delete-checklist-${checklist.id}`}
+                        className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
+                        title="Supprimer la checklist"
+                      >
+                        {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {canManageTask && onAddChecklist && (
+                  <div className="pt-1">
+                    {addingChecklistTaskId === task.id ? (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          value={newChecklistText}
+                          onChange={(e) => setNewChecklistText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist(task.id)}
+                          placeholder="Nouvelle checklist..."
+                          className="min-w-0 flex-1 rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none transition-all focus:ring-2 focus:ring-secondary/20"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleAddChecklist(task.id)} disabled={!newChecklistText.trim() || actionLoading === `add-checklist-${task.id}`}>
+                            {actionLoading === `add-checklist-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ajouter'}
+                          </Button>
+                          <button
+                            onClick={() => {
+                              setAddingChecklistTaskId(null);
+                              setNewChecklistText('');
+                            }}
+                            className="rounded-xl border border-theme-border-subtle px-3 py-2 text-theme-muted transition-all hover:bg-theme-surface-hover hover:text-theme-main"
+                            title="Annuler"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startAddingChecklist(task.id)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-theme-border-subtle px-3 py-2 text-xs font-black uppercase tracking-widest text-theme-muted transition-all hover:border-secondary/40 hover:text-secondary"
+                      >
+                        <Plus size={14} /> Ajouter une checklist
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <TaskFilesSection
+                  task={task}
+                  canAttach={canAttachCurrentTaskFiles}
+                  canManage={canManageCurrentTaskFiles}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -523,6 +782,7 @@ export default function ListView({
                     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
                     const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canManageTask;
                     const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canManageTask;
+                    const childTasks = tasksByParent[task.id] || [];
                     const checklistSummary = taskChecklists.length > 0
                       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
                       : '0';
@@ -575,6 +835,11 @@ export default function ListView({
                               <span className="text-[10px] font-black text-theme-muted opacity-50 uppercase tracking-tighter">
                                 Checklists {checklistSummary}
                               </span>
+                              {childTasks.length > 0 && (
+                                <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">
+                                  {childTasks.length} sous-tâche{childTasks.length > 1 ? 's' : ''}
+                                </span>
+                              )}
                               {task.dueDate && (
                                 <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
                                   {task.dueDate}
@@ -638,6 +903,40 @@ export default function ListView({
                               className="overflow-hidden"
                             >
                               <div className="ml-0 sm:ml-28 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-4 space-y-3">
+                                {(childTasks.length > 0 || (canManageTask && onCreateSubtask)) && (
+                                  <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                      <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Sous-tâches réelles</p>
+                                        <p className="text-[11px] font-medium text-theme-muted opacity-60">
+                                          Travail détaillé avec statut, échéance et progression propres.
+                                        </p>
+                                      </div>
+                                      {canManageTask && onCreateSubtask && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => onCreateSubtask(task)}
+                                          className="w-full sm:w-auto"
+                                        >
+                                          <Plus className="mr-2 h-4 w-4" />
+                                          Sous-tâche
+                                        </Button>
+                                      )}
+                                    </div>
+
+                                    {childTasks.length === 0 ? (
+                                      <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+                                        Aucune sous-tâche pour le moment.
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {childTasks.map(childTask => renderSubtaskTree(childTask, 1))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la tâche</p>

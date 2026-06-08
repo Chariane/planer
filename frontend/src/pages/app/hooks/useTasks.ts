@@ -19,6 +19,7 @@ function transformTask(apiTask: any): Task {
     order: apiTask.ordre_affichage,
     assignees: [],
     listId: apiTask.id_liste,
+    parentTaskId: apiTask.id_tache_parent || null,
     createdAt: new Date(apiTask.created_at),
     subTasks: [],
     checklists: (apiTask.checklists || []).map((c: any) => ({
@@ -94,6 +95,7 @@ export function useTasks(listId: string | undefined) {
         priorite: newTask.priority,
         date_debut: newTask.startDate ? new Date(newTask.startDate).toISOString() : undefined,
         date_fin_prevue: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
+        id_tache_parent: newTask.parentTaskId || null,
       };
       const created = await tacheService.create(listId, apiTask);
       const taskChecklists = (newTask.checklists || [])
@@ -134,6 +136,7 @@ export function useTasks(listId: string | undefined) {
         date_fin_prevue: updatedTask.dueDate && !isNaN(new Date(updatedTask.dueDate).getTime())
           ? new Date(updatedTask.dueDate).toISOString()
           : undefined,
+        id_tache_parent: updatedTask.parentTaskId || null,
       };
       await tacheService.update(updatedTask.id, apiTask);
       await loadTasks();
@@ -148,14 +151,26 @@ export function useTasks(listId: string | undefined) {
 
     try {
       if (status === 'terminé') {
-        const checklists = await tacheService.getChecklistsByTache(taskId);
-        const checklistItems = Array.isArray(checklists) ? checklists : [];
-        await Promise.all(
-          checklistItems
-            .filter((checklist: any) => !checklist.is_checked)
-            .map((checklist: any) => tacheService.updateChecklist(checklist.id, { is_checked: true }))
-        );
-        await tacheService.updateTaskStatusFromChecklists(taskId);
+        const collectDescendantIds = (parentId: string): string[] => {
+          const directChildren = tasks.filter(task => task.parentTaskId === parentId);
+          return directChildren.flatMap(child => [child.id, ...collectDescendantIds(child.id)]);
+        };
+
+        const taskIdsToComplete = [taskId, ...collectDescendantIds(taskId)];
+
+        for (const currentTaskId of taskIdsToComplete) {
+          const checklists = await tacheService.getChecklistsByTache(currentTaskId);
+          const checklistItems = Array.isArray(checklists) ? checklists : [];
+          await Promise.all(
+            checklistItems
+              .filter((checklist: any) => !checklist.is_checked)
+              .map((checklist: any) => tacheService.updateChecklist(checklist.id, { is_checked: true }))
+          );
+        }
+
+        for (const currentTaskId of [...taskIdsToComplete].reverse()) {
+          await tacheService.update(currentTaskId, { statut: 'terminé' });
+        }
       } else {
         await tacheService.update(taskId, { statut: status });
       }

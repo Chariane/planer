@@ -448,7 +448,10 @@ def get_espace_members(db: Session, espace_id: str) -> List[Membre]:
     return (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
-        .filter(Membre.id_espace == espace_id)
+        .filter(
+            Membre.id_espace == espace_id,
+            Membre.statut == "Actif",
+        )
         .order_by(Membre.created_at.asc())
         .all()
     )

@@ -25,11 +25,14 @@ interface Member {
   name: string;
   email: string;
   role: string;
+  id_liste?: string | null;
+  id_tache?: string | null;
 }
 
 // Rôles disponibles pour l'ajout à une liste (sans Créateur)
 const AVAILABLE_ROLES = ['Invité', 'Membre', 'Administrateur'];
 const LIST_ADMIN_AVAILABLE_ROLES = ['Membre'];
+const PARENT_MEMBER_AVAILABLE_ROLES = ['Administrateur'];
 
 type TabType = 'parent' | 'external';
 
@@ -55,15 +58,16 @@ export default function AssignListMemberModal({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const isDirectListAdmin = directListRole === 'Administrateur';
   const availableRoles = isDirectListAdmin ? LIST_ADMIN_AVAILABLE_ROLES : AVAILABLE_ROLES;
+  const parentAvailableRoles = isDirectListAdmin ? LIST_ADMIN_AVAILABLE_ROLES : PARENT_MEMBER_AVAILABLE_ROLES;
 
   useEffect(() => {
-    if (!availableRoles.includes(selectedRole)) {
-      setSelectedRole('Membre');
+    if (!parentAvailableRoles.includes(selectedRole)) {
+      setSelectedRole(parentAvailableRoles[0]);
     }
     if (!availableRoles.includes(inviteRole)) {
       setInviteRole('Membre');
     }
-  }, [availableRoles, selectedRole, inviteRole]);
+  }, [availableRoles, parentAvailableRoles, selectedRole, inviteRole]);
 
   // Charger les membres du workspace/espace parent disponibles pour la liste.
   useEffect(() => {
@@ -73,23 +77,67 @@ export default function AssignListMemberModal({
       setLoading(true);
       setError(null);
       try {
-        let resourceMembers: any[] = [];
-        
-        if (espaceId) {
-          resourceMembers = await espaceService.getMembers(espaceId);
-        } else if (workspaceId) {
-          resourceMembers = await workspaceService.getMembers(workspaceId);
+        const byUser = new Map<string, Member>();
+        const addMembers = (items: any[]) => {
+          items
+            .filter((m: any) => m.role === 'Membre')
+            .forEach((m: any) => {
+              const id = m.id_utilisateur || m.id;
+              if (!id || byUser.has(id)) return;
+              byUser.set(id, {
+                id,
+                name: getMemberDisplayName(m),
+                email: getMemberEmail(m),
+                role: m.role,
+              });
+            });
+        };
+
+        let resolvedWorkspaceId = workspaceId || '';
+        let resolvedEspaceId = espaceId || '';
+
+        if (!resolvedWorkspaceId || !resolvedEspaceId) {
+          try {
+            const liste = await listeService.getById(listeId);
+            resolvedWorkspaceId = resolvedWorkspaceId || liste.id_workspace || '';
+            resolvedEspaceId = resolvedEspaceId || liste.id_espace || '';
+          } catch {
+            // Les props suffisent souvent, on continue avec ce qui est disponible.
+          }
         }
 
-        const filteredMembers = resourceMembers.filter((m: any) => m.role === 'Membre');
-        
-        const formattedMembers: Member[] = filteredMembers.map((m: any) => ({
-          id: m.id_utilisateur || m.id,
-          name: getMemberDisplayName(m),
-          email: getMemberEmail(m),
-          role: m.role,
-        }));
-        setParentMembers(formattedMembers);
+        if (resolvedEspaceId) {
+          try {
+            const hierarchy = await espaceService.getHierarchy(resolvedEspaceId);
+            const spaces = Array.isArray(hierarchy) ? hierarchy : [];
+            for (const space of spaces) {
+              if (!resolvedWorkspaceId && space.id_workspace) {
+                resolvedWorkspaceId = space.id_workspace;
+              }
+              try {
+                addMembers(await espaceService.getMembers(space.id));
+              } catch {
+                // Un parent non listable ne doit pas bloquer les autres candidats.
+              }
+            }
+          } catch {
+            try {
+              addMembers(await espaceService.getMembers(resolvedEspaceId));
+            } catch {
+              // On tentera au moins le workspace.
+            }
+          }
+        }
+
+        if (resolvedWorkspaceId) {
+          try {
+            addMembers(await workspaceService.getMembers(resolvedWorkspaceId));
+          } catch {
+            // Aucun candidat workspace accessible.
+          }
+        }
+
+        setParentMembers(Array.from(byUser.values()));
       } catch (err) {
         console.warn('Membres parent non accessibles:', err);
         setParentMembers([]);
@@ -108,12 +156,16 @@ export default function AssignListMemberModal({
     const loadListMembers = async () => {
       try {
         const members = await listeService.getMembers(listeId);
-        const formatted = members.map((m: any) => ({
-          id: m.id_utilisateur || m.id,
-          name: getMemberDisplayName(m),
-          email: getMemberEmail(m),
-          role: m.role || 'Membre',
-        }));
+        const formatted = members
+          .filter((m: any) => m.id_liste === listeId)
+          .map((m: any) => ({
+            id: m.id_utilisateur || m.id,
+            name: getMemberDisplayName(m),
+            email: getMemberEmail(m),
+            role: m.role || 'Membre',
+            id_liste: m.id_liste || null,
+            id_tache: m.id_tache || null,
+          }));
         setListMembers(formatted);
       } catch (err) {
         console.error('Erreur chargement membres de la liste:', err);
@@ -124,7 +176,7 @@ export default function AssignListMemberModal({
   }, [isOpen, listeId]);
 
   const isMemberInList = (memberId: string) => {
-    return listMembers.some(m => m.id === memberId);
+    return listMembers.some(m => m.id === memberId && m.id_liste === listeId);
   };
 
   const handleAddInvitedMember = async () => {
@@ -143,17 +195,17 @@ export default function AssignListMemberModal({
     setSuccessMessage(null);
 
     try {
-      const roleToAssign = availableRoles.includes(selectedRole) ? selectedRole : 'Membre';
+      const roleToAssign = parentAvailableRoles.includes(selectedRole) ? selectedRole : parentAvailableRoles[0];
       await listeService.assignMember(listeId, selectedMemberId, roleToAssign);
       
       const newMember = parentMembers.find(m => m.id === selectedMemberId);
       if (newMember) {
-        setListMembers(prev => [...prev, { ...newMember, role: roleToAssign }]);
+        setListMembers(prev => [...prev, { ...newMember, role: roleToAssign, id_liste: listeId, id_tache: null }]);
       }
       
       setSuccessMessage(`Membre ajouté avec le rôle ${getRoleLabel(roleToAssign)}`);
       setSelectedMemberId('');
-      setSelectedRole('Membre');
+      setSelectedRole(parentAvailableRoles[0]);
       
       setTimeout(() => setSuccessMessage(null), 3000);
       if (onSuccess) onSuccess();
@@ -203,11 +255,12 @@ export default function AssignListMemberModal({
   };
 
   const availableParentMembers = parentMembers.filter(m => !isMemberInList(m.id));
+  const directListMembers = listMembers.filter(member => member.id_liste === listeId);
 
   const handleClose = () => {
     setActiveTab('parent');
     setSelectedMemberId('');
-    setSelectedRole('Membre');
+    setSelectedRole(parentAvailableRoles[0]);
     setInviteEmail('');
     setInviteRole('Membre');
     setError(null);
@@ -313,14 +366,14 @@ export default function AssignListMemberModal({
                     onChange={(e) => setSelectedRole(e.target.value)}
                     className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
                   >
-                    {availableRoles.map(role => (
+                    {parentAvailableRoles.map(role => (
                       <option key={role} value={role}>{getRoleLabel(role)}</option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
                     {isDirectListAdmin
                       ? 'En tant qu’administrateur direct de cette liste, vous pouvez uniquement attribuer le rôle Membre.'
-                      : 'Invité consulte seulement la liste. Membre peut contribuer s’il a une tâche assignée.'}
+                      : 'Les membres parent sont ajoutés comme administrateurs de liste.'}
                   </p>
                 </div>
 
@@ -386,13 +439,13 @@ export default function AssignListMemberModal({
           </div>
         )}
 
-        {listMembers.length > 0 && (
+        {directListMembers.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Membres déjà dans la liste ({listMembers.length})
+              Membres déjà dans la liste ({directListMembers.length})
             </label>
             <div className="space-y-1 max-h-40 overflow-y-auto">
-              {listMembers.map(member => (
+              {directListMembers.map(member => (
                 <div key={member.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                   <div>
                     <span className="text-sm font-medium">{member.name}</span>

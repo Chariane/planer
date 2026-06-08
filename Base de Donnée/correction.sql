@@ -53,3 +53,22 @@ WHERE (id_liste IS NOT NULL);
 -- Unicité Tâche : Pour les membres invités spécifiquement à une tâche
 CREATE UNIQUE INDEX idx_membre_tache_unique ON planer.membre (id_utilisateur, id_tache)
 WHERE (id_tache IS NOT NULL);
+
+-- ============================================================
+-- 3. AJOUT DES SOUS-TÂCHES RÉELLES
+-- ============================================================
+-- Les checklists restent des points de contrôle.
+-- Les sous-tâches sont maintenant des tâches complètes rattachées à une tâche parent.
+ALTER TABLE planer.tache
+ADD COLUMN IF NOT EXISTS id_tache_parent VARCHAR(12);
+
+ALTER TABLE planer.tache
+DROP CONSTRAINT IF EXISTS tache_id_tache_parent_fkey;
+
+ALTER TABLE planer.tache
+ADD CONSTRAINT tache_id_tache_parent_fkey
+FOREIGN KEY (id_tache_parent)
+REFERENCES planer.tache(id)
+ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_tache_parent ON planer.tache (id_tache_parent);

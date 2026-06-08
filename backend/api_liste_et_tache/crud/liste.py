@@ -429,21 +429,25 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
 
 
 def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
-    """Recupere tous les membres assignés directement à une liste OU à ses tâches."""
-    # 1. Membres directs de la liste
+    """Recupere les membres actifs directement liés à une liste OU à ses tâches."""
     direct_query = (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
-        .filter(Membre.id_liste == liste_id)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.statut == "Actif",
+        )
     )
     direct_members = direct_query.all()
 
-    # 2. Membres des tâches de cette liste
     task_members_query = (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
         .join(Tache, Membre.id_tache == Tache.id)
-        .filter(Tache.id_liste == liste_id)
+        .filter(
+            Tache.id_liste == liste_id,
+            Membre.statut == "Actif",
+        )
     )
     task_members = task_members_query.all()
 

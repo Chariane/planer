@@ -146,9 +146,6 @@ def serialize_group(db: Session, group: Groupe, current_user_id: Optional[str] =
         .count()
     )
     resource_type, resource_id, display_name = _parse_group_name(group.name)
-    can_write = True
-    if current_user_id and resource_type and resource_id:
-        can_write = _user_can_write_resource_group(db, current_user_id, resource_type, resource_id)
     return {
         "id": group.id,
         "name": display_name,
@@ -158,7 +155,7 @@ def serialize_group(db: Session, group: Groupe, current_user_id: Optional[str] =
         "creator": group.creator,
         "member_count": member_count,
         "created_at": group.created_at,
-        "can_write": can_write,
+        "can_write": True,
     }
 
 
@@ -421,8 +418,7 @@ def _user_can_access_resource_group(db: Session, user_id: str, resource_type: st
 
 
 def _user_can_write_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
-    role = _user_effective_resource_role(db, user_id, resource_type, resource_id)
-    return bool(role and role != "Invité")
+    return _user_can_access_resource_group(db, user_id, resource_type, resource_id)
 
 
 def _user_can_manage_resource_group(db: Session, user_id: str, resource_type: str, resource_id: str) -> bool:
@@ -901,13 +897,6 @@ def require_group_member(db: Session, group_id: str, user_id: str) -> GroupeMemb
 def ensure_group_write_access(db: Session, group_id: str, user_id: str) -> Groupe:
     group = get_group_or_404(db, group_id)
     require_group_member(db, group_id, user_id)
-
-    resource_type, resource_id, _ = _parse_group_name(group.name)
-    if resource_type and resource_id and not _user_can_write_resource_group(db, user_id, resource_type, resource_id):
-        raise HTTPException(
-            status_code=403,
-            detail="Vous êtes invité sur cette ressource : vous pouvez lire cette discussion, mais vous ne pouvez pas y envoyer de messages.",
-        )
     return group
 
 

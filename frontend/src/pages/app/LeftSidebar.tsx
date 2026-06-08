@@ -1,7 +1,7 @@
 // frontend/src/pages/app/LeftSidebar.tsx
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -85,9 +85,10 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 };
 
 export default function LeftSidebar() {
+  const location = useLocation();
   const { workspaceId, spaceId, listId } = useActiveResource();
   const {
-    workspaces, joinedEspaces, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
+    workspaces, joinedWorkspaces, joinedEspaces, joinedListes, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
     updateWorkspace, deleteWorkspace,
     addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
@@ -111,6 +112,7 @@ export default function LeftSidebar() {
 
   // États pour les notifications toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showGuestNotice, setShowGuestNotice] = useState(true);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -251,7 +253,29 @@ export default function LeftSidebar() {
   }, []);
 
   const hasWorkspaceAccess = !!workspaceId;
-  const currentWorkspace = workspaces.find(w => w.id === workspaceId);
+  const activeEntryType: 'workspace' | 'space' | 'list' | 'task' | 'unknown' = location.pathname.startsWith('/liste/')
+    ? 'list'
+    : location.pathname.startsWith('/espace/')
+      ? 'space'
+      : location.pathname.startsWith('/tache/')
+        ? 'task'
+        : location.pathname.startsWith('/workspace/')
+          ? (listId ? 'list' : spaceId ? 'space' : 'workspace')
+          : 'unknown';
+
+  const directJoinedSpace = spaceId ? joinedEspaces.find(espace => espace.id === spaceId || espace.id_espace === spaceId) : null;
+  const directJoinedList = listId ? joinedListes.find(list => list.id === listId || list.id_liste === listId) : null;
+  const fallbackWorkspaceName = directJoinedSpace?.workspace_nom || directJoinedList?.workspace_nom || joinedWorkspaces.find(w => w.id === workspaceId)?.nom || 'Workspace';
+  const currentWorkspace = workspaces.find(w => w.id === workspaceId)
+    || joinedWorkspaces.find(w => w.id === workspaceId)
+    || (workspaceId ? {
+      id: workspaceId,
+      nom: fallbackWorkspaceName,
+      description: null,
+      membres: [],
+      espaces: [],
+      current_user_role: null,
+    } : undefined);
   const canManageCurrentWorkspace = isWorkspaceCreator || currentWorkspace?.current_user_role === ROLES.CREATOR;
 
   // Fonction pour récupérer tous les espaces d'un arbre (récursif)
@@ -367,6 +391,69 @@ export default function LeftSidebar() {
     && !isAdminForSpace
     && !isCreatorForSpace;
 
+  const workspaceSpaces = workspaces.find(w => w.id === workspaceId)?.espaces || [];
+  const selectedSpacePath = spaceId && spaceId !== 'list'
+    ? findSpacePath(workspaceSpaces, spaceId)
+    : null;
+  const selectedSpaceNode = selectedSpacePath?.[selectedSpacePath.length - 1]
+    || (directJoinedSpace ? {
+      id: directJoinedSpace.id_espace || directJoinedSpace.id,
+      nom: directJoinedSpace.nom,
+      description: '',
+      sous_espaces: [],
+      listes: [],
+      id_workspace: directJoinedSpace.workspace_id || directJoinedSpace.id_workspace || workspaceId,
+      id_espace_parent: null,
+    } : null);
+  const selectedListFromWorkspace = listId
+    ? workspaceLists.find(list => list.id === listId)
+    : null;
+  const selectedListFromSpaces = listId
+    ? Object.values(listsBySpace).flat().find(list => list.id === listId)
+    : null;
+  const selectedListContext = selectedListFromWorkspace
+    || selectedListFromSpaces
+    || (directJoinedList ? {
+      id: directJoinedList.id_liste || directJoinedList.id,
+      nom: directJoinedList.nom,
+      description: '',
+      id_espace: directJoinedList.id_espace || null,
+      id_workspace: directJoinedList.workspace_id || directJoinedList.id_workspace || workspaceId,
+    } : null);
+  const selectedListSpaceId = selectedListContext?.id_espace || directJoinedList?.id_espace || null;
+  const selectedListSpacePath = selectedListSpaceId
+    ? findSpacePath(workspaceSpaces, selectedListSpaceId)
+    : null;
+  const selectedListSpaceNode = selectedListSpacePath?.[selectedListSpacePath.length - 1]
+    || (selectedListSpaceId && directJoinedSpace?.id === selectedListSpaceId ? selectedSpaceNode : null);
+  const visibleSpaceRoots = activeEntryType === 'space' && selectedSpaceNode
+    ? [selectedSpaceNode]
+    : activeEntryType === 'list' && selectedListSpaceNode
+      ? [selectedListSpaceNode]
+      : workspaceSpaces;
+  const showWorkspaceLevelLists = activeEntryType === 'workspace'
+    || (activeEntryType === 'list' && !selectedListSpaceId);
+  const showProjectOnlyFallback = activeEntryType === 'list' && selectedListContext && !selectedListSpaceNode && !showWorkspaceLevelLists;
+  const navigationTitle = activeEntryType === 'space'
+    ? 'Espace actif'
+    : activeEntryType === 'list'
+      ? 'Projet actif'
+      : 'Espaces et listes';
+
+  useEffect(() => {
+    const idsToOpen = new Set<string>();
+    selectedSpacePath?.forEach(space => idsToOpen.add(space.id));
+    selectedListSpacePath?.forEach(space => idsToOpen.add(space.id));
+    if (idsToOpen.size === 0) return;
+    setOpenSpaces(prev => {
+      const next = { ...prev };
+      idsToOpen.forEach(id => {
+        next[id] = true;
+      });
+      return next;
+    });
+  }, [spaceId, listId, workspaceId, workspaces]);
+
   useEffect(() => {
     if (workspaceId) {
       loadWorkspaceLocalResources(workspaceId);
@@ -384,8 +471,7 @@ export default function LeftSidebar() {
     if (!hasWorkspaceAccess) return;
 
     const loadAllLists = async () => {
-      const workspaceData = workspaces.find(w => w.id === workspaceId);
-      const allSpaces = getAllSpacesFromTree(workspaceData?.espaces || []);
+      const allSpaces = getAllSpacesFromTree(workspaceSpaces);
       for (const space of allSpaces) {
         if (!listsBySpace[space.id] && !loadingLists[space.id]) {
           setLoadingLists(prev => ({ ...prev, [space.id]: true }));
@@ -402,7 +488,7 @@ export default function LeftSidebar() {
     };
 
     loadAllLists();
-  }, [hasWorkspaceAccess, workspaces, workspaceId]);
+  }, [hasWorkspaceAccess, workspaceSpaces, workspaceId]);
 
   const loadWorkspaceLists = async () => {
     if (!workspaceId) return;
@@ -1043,25 +1129,39 @@ export default function LeftSidebar() {
             </div>
           </Link>
         )}
-        <div className="bg-secondary/5 border border-secondary/20 rounded-lg p-4">
-          <p className="text-sm text-theme-main">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
-          </p>
-          <p className="text-xs text-theme-muted mt-1">
-            Vous pouvez consulter le contenu mais ne pouvez pas créer, modifier ou supprimer des ressources.
-          </p>
-          <p className="text-xs text-secondary/70 mt-2 font-bold uppercase tracking-widest text-[10px]">
-            Contactez un administrateur pour obtenir plus de droits.
-          </p>
-        </div>
+        {showGuestNotice && (
+          <div className="bg-secondary/5 border border-secondary/20 rounded-lg p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-theme-main">
+                  Vous êtes en mode <strong>lecture seule</strong> dans cet espace.
+                </p>
+                <p className="text-xs text-theme-muted mt-1">
+                  Vous pouvez consulter le contenu mais ne pouvez pas créer, modifier ou supprimer des ressources.
+                </p>
+                <p className="text-xs text-secondary/70 mt-2 font-bold uppercase tracking-widest text-[10px]">
+                  Contactez un administrateur pour obtenir plus de droits.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuestNotice(false)}
+                className="shrink-0 rounded-lg p-1 text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-colors"
+                title="Masquer ce message"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         {/* Affichage des espaces en lecture seule */}
         {hasWorkspaceAccess && (
           <div className="mt-4">
-            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">Espaces</h3>
-            {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">{navigationTitle}</h3>
+            {renderTree(visibleSpaceRoots)}
           </div>
         )}
-        {hasWorkspaceAccess && (
+        {hasWorkspaceAccess && showWorkspaceLevelLists && (
           <div className="mt-6">
             <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">Projets (workspace)</h3>
             <div className="space-y-0.5">
@@ -1087,6 +1187,19 @@ export default function LeftSidebar() {
                 <div className="text-[10px] text-theme-muted/30 pl-2 uppercase font-bold tracking-widest">Aucun projet</div>
               )}
             </div>
+          </div>
+        )}
+        {showProjectOnlyFallback && selectedListContext && (
+          <div className="mt-6">
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">Projet actif</h3>
+            <Link
+              to={`/liste/${selectedListContext.id}`}
+              onClick={handleLinkClick}
+              className="flex items-center gap-2 rounded-xl border border-secondary/20 bg-secondary/5 px-3 py-2 text-sm font-bold text-secondary"
+            >
+              <ListTodo className="h-4 w-4" />
+              <span className="truncate">{selectedListContext.nom}</span>
+            </Link>
           </div>
         )}
       </div>
@@ -1126,7 +1239,7 @@ export default function LeftSidebar() {
         <div className="flex items-center justify-between mb-2.5 relative">
           <h3 className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] pl-1 opacity-80 flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-            Espaces et listes
+            {navigationTitle}
           </h3>
           {canManageSpaceListe && (
             <div className="relative" ref={createMenuRef}>
@@ -1157,11 +1270,11 @@ export default function LeftSidebar() {
             </div>
           )}
         </div>
-        {renderTree(workspaces.find(w => w.id === workspaceId)?.espaces || [])}
+        {renderTree(visibleSpaceRoots)}
       </div>
 
       {/* Section Projets du workspace (listes sans espace) */}
-      {hasWorkspaceAccess && (
+      {hasWorkspaceAccess && showWorkspaceLevelLists && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
             <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest pl-1">Projets (workspace)</h3>
@@ -1217,6 +1330,27 @@ export default function LeftSidebar() {
               <div className="text-[10px] text-theme-muted/30 pl-2 uppercase font-bold tracking-widest">Aucun projet</div>
             )}
           </div>
+        </div>
+      )}
+
+      {showProjectOnlyFallback && selectedListContext && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest pl-1">Projet actif</h3>
+          </div>
+          <Link
+            to={`/liste/${selectedListContext.id}`}
+            onClick={handleLinkClick}
+            className="group flex items-center gap-2 rounded-xl border border-secondary/20 bg-secondary/5 px-3 py-2 text-xs font-bold text-secondary transition-colors hover:bg-secondary/10"
+          >
+            <ListTodo className="h-3.5 w-3.5" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate">{selectedListContext.nom}</p>
+              {selectedListContext.workspace_nom && (
+                <p className="truncate text-[9px] uppercase tracking-widest text-secondary/60">{selectedListContext.workspace_nom}</p>
+              )}
+            </div>
+          </Link>
         </div>
       )}
 
@@ -1465,16 +1599,16 @@ export default function LeftSidebar() {
             <p className="text-[11px] text-theme-muted mt-2 leading-relaxed opacity-80">
               {isCreatorForSpace || isWorkspaceCreator ? (
                 <>
-                  💡 <strong>Administrateur</strong> : peut gérer l'espace et ses membres<br />
-                  💡 <strong>Invitant</strong> : accès en lecture seule
+                  <strong>Administrateur</strong> : peut gérer l'espace et ses membres<br />
+                  <strong>Invité</strong> : accès en lecture seule
                 </>
               ) : isAdminForSpace || isWorkspaceAdmin ? (
                 <>
-                  💡 En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                  En tant qu'administrateur, vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>.
                 </>
               ) : (
                 <>
-                  💡 Vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>
+                  Vous pouvez inviter des <strong>Membres</strong> ou des <strong>Invités</strong>.
                 </>
               )}
             </p>

@@ -39,7 +39,7 @@ export default function DashboardLayout() {
         style={{ paddingLeft: `calc(${sidebarWidth}px + 0.375rem)` }}
       >
         <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} isCompact={isCompact} />
-        <main className="h-[calc(100dvh-64px)] overflow-hidden">
+        <main className="h-[calc(100dvh-64px)] min-h-0 overflow-y-auto overflow-x-hidden">
           <ErrorBoundary label="la page active">
             <Outlet />
           </ErrorBoundary>

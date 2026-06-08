@@ -1687,6 +1687,7 @@ class Tache(Base):
         Index('idx_tache_statut', 'statut'),
         Index('idx_tache_priorite', 'priorite'),
         Index('idx_tache_date_fin_prevue', 'date_fin_prevue'),
+        Index('idx_tache_parent', 'id_tache_parent'),
         {'schema': 'planer'}
     )
 
@@ -1701,9 +1702,12 @@ class Tache(Base):
     priorite: Mapped[Optional[str]] = mapped_column(String(50))
     ordre_affichage: Mapped[Optional[int]] = mapped_column(SmallInteger)
     id_liste: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.liste.id', ondelete='SET NULL'))
+    id_tache_parent: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.tache.id', ondelete='CASCADE'))
     
     # Relations
     liste: Mapped[Optional['Liste']] = relationship('Liste', back_populates='taches')
+    parent: Mapped[Optional['Tache']] = relationship('Tache', remote_side=[id], back_populates='sous_taches')
+    sous_taches: Mapped[List['Tache']] = relationship('Tache', back_populates='parent')
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='tache')
     checklists: Mapped[List['Checklist']] = relationship('Checklist', back_populates='tache')
 
