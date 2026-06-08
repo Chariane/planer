@@ -8,7 +8,7 @@ from ..core.database import SessionLocal
 from ..core.security import ALGORITHM, SECRET_KEY
 from ..models import Utilisateur
 from ..schemas import MessageCreate
-from .logique import create_group_message, create_private_message, serialize_message
+from .logique import create_group_message, create_private_message, ensure_group_write_access, serialize_message
 from .manager import manager
 from .presence import record_user_disconnect
 
@@ -108,6 +108,7 @@ async def group_chat(websocket: WebSocket, group_id: str):
             try:
                 data = json.loads(raw)
                 if isinstance(data, dict) and str(data.get("type", "")).startswith("call_"):
+                    ensure_group_write_access(db, group_id, user.id)
                     data["from"] = user.id
                     data["id_groupe"] = group_id
                     await manager.broadcast_group_message(db, group_id, data)

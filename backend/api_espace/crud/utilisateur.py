@@ -18,6 +18,7 @@ from backend.api_messagerie.sync import (
     remove_resource_member,
     sync_resource_member,
 )
+from backend.core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:
@@ -306,6 +307,9 @@ def get_espaces_where_admin(db: Session, user_id: str) -> List[Espace]:
 
 
 def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) -> Espace:
+    owner_id = resolve_workspace_owner_id(db, workspace_id=espace_in.id_workspace)
+    if owner_id:
+        require_plan_capacity(db, owner_id, "espaces")
     _ensure_unique_espace_sibling_name(
         db,
         nom=espace_in.nom,

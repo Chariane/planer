@@ -23,7 +23,7 @@ class Role:
     ADMIN_MANAGEABLE_ROLES = {MEMBER, GUEST}
     CONTENT_CREATION_ROLES = {CREATOR, ADMIN, MEMBER}
     DIRECT_ACCESS_ROLES = ALL
-    DESCENDANT_INHERITED_ROLES = {CREATOR, ADMIN, GUEST}
+    DESCENDANT_INHERITED_ROLES = {CREATOR, ADMIN, MEMBER, GUEST}
     HIERARCHY = {
         GUEST: 1,
         MEMBER: 2,
@@ -339,8 +339,10 @@ def validate_role_hierarchy(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Role redondant ou inferieur refuse : l'utilisateur dispose deja du role "
-                f"'{inherited_role}' herite depuis ce {source_type} ({source_id})."
+                f"Invitation non nécessaire : cette personne possède déjà le rôle "
+                f"'{inherited_role}' hérité depuis un {source_type} parent. "
+                f"Vous ne pouvez pas lui attribuer le rôle '{new_role}' sur cette ressource enfant, "
+                "car ce rôle est inférieur ou équivalent à son rôle parent."
             ),
         )
 
@@ -453,10 +455,10 @@ def _validate_member_management_permissions(
 
 def _validate_invitation_permissions(actor_role: str, invited_role: str):
     """Valide que l'acteur peut inviter avec le rôle spécifié."""
-    if actor_role == Role.ADMIN and invited_role != Role.GUEST:
+    if actor_role == Role.ADMIN and invited_role not in {Role.GUEST, Role.MEMBER}:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut inviter que des invites dans le workspace.",
+            detail="Un administrateur ne peut inviter que des invites ou membres dans le workspace.",
         )
 
 

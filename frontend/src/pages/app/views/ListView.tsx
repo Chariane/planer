@@ -1,10 +1,12 @@
 // frontend/src/pages/app/views/ListView.tsx
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Plus, Trash, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
+import { useAuth } from '../../../contexts/AuthContext';
+import { plannerToolsService } from '../../../services/plannerTools.service';
 import type { Task } from '../../../types';
 
 const statusLabels: Record<string, string> = {
@@ -51,14 +53,201 @@ interface ListViewProps {
   canEditTask?: (task: Task) => boolean;
   canDeleteTask?: (task: Task) => boolean;
   canAssignTask?: (task: Task) => boolean;
+  canAttachTaskFiles?: (task: Task) => boolean;
+  canManageTaskFiles?: (task: Task) => boolean;
+}
+
+type TaskFile = {
+  id: string;
+  nom: string;
+  url_fichier?: string;
+  type_fichier?: string;
+  meta_donnees?: Record<string, any>;
+};
+
+const getShortFileType = (file: File): string => {
+  const extension = file.name.split('.').pop()?.trim().toLowerCase();
+  const mimeSubtype = file.type.split('/')[1]?.split(';')[0]?.trim().toLowerCase();
+  return (extension || mimeSubtype || 'fichier').slice(0, 20);
+};
+
+function TaskFilesSection({
+  task,
+  canAttach,
+  canManage,
+}: {
+  task: Task;
+  canAttach: boolean;
+  canManage: boolean;
+}) {
+  const { user } = useAuth();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<TaskFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadFiles = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await plannerToolsService.listFiles({
+        target_type: 'tache',
+        target_id: task.id,
+        limit: 50,
+      });
+      setFiles(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err?.message || 'Impossible de charger les fichiers de cette tâche.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFiles();
+  }, [task.id]);
+
+  const handleUpload = async (file: File | null) => {
+    if (!file || !canAttach) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const uploaded = await plannerToolsService.uploadFile(file);
+      await plannerToolsService.createFile({
+        nom: uploaded?.filename || file.name,
+        url_fichier: uploaded?.url,
+        type_fichier: getShortFileType(file),
+        meta_donnees: {
+          mime_type: uploaded?.content_type || file.type || null,
+        },
+        target_type: 'tache',
+        target_id: task.id,
+      });
+      await loadFiles();
+    } catch (err: any) {
+      setError(err?.message || 'Impossible de rattacher ce fichier à la tâche.');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const handleDelete = async (file: TaskFile) => {
+    const ownerId = file.meta_donnees?.owner_user_id;
+    if (!canManage && ownerId !== user?.id) return;
+    if (!confirm('Supprimer ce fichier de la tâche ?')) return;
+    setError(null);
+    try {
+      await plannerToolsService.deleteFile(file.id);
+      setFiles(prev => prev.filter(item => item.id !== file.id));
+    } catch (err: any) {
+      setError(err?.message || 'Impossible de supprimer ce fichier.');
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Paperclip className="h-4 w-4 text-secondary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Fichiers de la tâche</p>
+          </div>
+          <p className="mt-1 text-[11px] font-medium text-theme-muted opacity-60">
+            Pièces jointes spécifiques à cette tâche.
+          </p>
+        </div>
+        {canAttach && (
+          <div>
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              onChange={(event) => handleUpload(event.target.files?.[0] || null)}
+              disabled={uploading}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+              className="w-full sm:w-auto"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              Joindre
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-500">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-5 text-theme-muted">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : files.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+          Aucun fichier rattaché à cette tâche.
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {files.map(file => {
+            const ownerId = file.meta_donnees?.owner_user_id;
+            const canDelete = canManage || ownerId === user?.id;
+            return (
+              <div key={file.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  {file.url_fichier ? (
+                    <a
+                      href={file.url_fichier}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate text-sm font-bold text-theme-main hover:text-secondary"
+                    >
+                      {file.nom}
+                    </a>
+                  ) : (
+                    <p className="truncate text-sm font-bold text-theme-main">{file.nom}</p>
+                  )}
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-theme-muted opacity-50">
+                    {file.type_fichier || 'fichier'}
+                  </p>
+                </div>
+                {canDelete && (
+                  <button
+                    onClick={() => handleDelete(file)}
+                    className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
+                    title="Supprimer le fichier"
+                  >
+                    <Trash size={15} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Composant de détail d'une tâche
-function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: {
+function TaskDetailModal({ task, isOpen, onClose, getTaskProgress, canAttachFiles, canManageFiles }: {
   task: Task | null;
   isOpen: boolean;
   onClose: () => void;
   getTaskProgress: (task: Task) => number;
+  canAttachFiles: boolean;
+  canManageFiles: boolean;
 }) {
   if (!task) return null;
 
@@ -185,6 +374,12 @@ function TaskDetailModal({ task, isOpen, onClose, getTaskProgress }: {
           </div>
         )}
 
+        <TaskFilesSection
+          task={task}
+          canAttach={canAttachFiles}
+          canManage={canManageFiles}
+        />
+
         <div className="flex justify-end pt-4 pb-2">
           <Button variant="outline" className="px-8 rounded-xl font-bold uppercase tracking-widest text-[10px]" onClick={onClose}>Fermer</Button>
         </div>
@@ -207,6 +402,8 @@ export default function ListView({
   canEditTask,
   canDeleteTask,
   canAssignTask,
+  canAttachTaskFiles,
+  canManageTaskFiles,
 }: ListViewProps) {
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
@@ -324,6 +521,8 @@ export default function ListView({
                     const canManageTask = canEditTask ? canEditTask(task) : !readOnly;
                     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
                     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
+                    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canManageTask;
+                    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canManageTask;
                     const checklistSummary = taskChecklists.length > 0
                       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
                       : '0';
@@ -398,6 +597,17 @@ export default function ListView({
                           </div>
 
                           <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                            {canAttachCurrentTaskFiles && (
+                              <button
+                                onClick={() => {
+                                  setExpandedTasks(prev => ({ ...prev, [task.id]: true }));
+                                }}
+                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
+                                title="Fichiers de la tâche"
+                              >
+                                <Paperclip size={16} />
+                              </button>
+                            )}
                             {canAssignCurrentTask && (
                               <button
                                 onClick={() => onAssignTask(task)}
@@ -518,6 +728,12 @@ export default function ListView({
                                     )}
                                   </div>
                                 )}
+
+                                <TaskFilesSection
+                                  task={task}
+                                  canAttach={canAttachCurrentTaskFiles}
+                                  canManage={canManageCurrentTaskFiles}
+                                />
                               </div>
                             </motion.div>
                           )}
@@ -537,6 +753,8 @@ export default function ListView({
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         getTaskProgress={getTaskProgress}
+        canAttachFiles={selectedTaskForDetail ? (canAttachTaskFiles ? canAttachTaskFiles(selectedTaskForDetail) : !readOnly) : false}
+        canManageFiles={selectedTaskForDetail ? (canManageTaskFiles ? canManageTaskFiles(selectedTaskForDetail) : !readOnly) : false}
       />
     </div>
   );

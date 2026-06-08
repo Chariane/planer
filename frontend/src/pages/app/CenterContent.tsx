@@ -141,7 +141,7 @@ export default function CenterContent() {
       const roleCandidates = (Array.isArray(hierarchy) ? hierarchy : []).map((space: any) => {
         const role = joinedEspaces.find(espace => espace.id === space.id)?.role || null;
         const isCurrentListSpace = space.id === currentListEspaceId;
-        const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.GUEST;
+        const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER || role === ROLES.GUEST;
         return isCurrentListSpace || isInheritedRole ? role : null;
       });
 
@@ -621,6 +621,8 @@ export default function CenterContent() {
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
               canDeleteTask={() => canCreateContent}
               canAssignTask={() => canCreateContent}
+              canAttachTaskFiles={(task) => canCreateContent || canOperateAssignedTask(task)}
+              canManageTaskFiles={() => canCreateContent}
             />
           )}
 

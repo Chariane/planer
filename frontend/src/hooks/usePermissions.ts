@@ -35,7 +35,7 @@ export function usePermissions({
     // Permissions spécifiques aux listes
     if (resourceType === 'liste') {
       return {
-        canRead: isCreator || isAdmin || isMember,  // Membre peut lire
+        canRead: isCreator || isAdmin || isMember || isGuest,
         canCreateContent: isCreator || isAdmin,     // Seul Créateur/Admin peuvent créer des tâches
         canManageMembers: isCreator || isAdmin,
         canInviteMembers: isCreator || isAdmin,

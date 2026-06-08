@@ -366,6 +366,14 @@ def accept_espace_invitation_from_email(
         return RedirectResponse(url=accepted_redirect_url, status_code=302)
     except HTTPException as e:
         if e.status_code == 409:
+            if isinstance(e.detail, str) and "Invitation non nécessaire" in e.detail:
+                return render_invitation_html_page(
+                    title="Invitation non nécessaire",
+                    icon="⚠️",
+                    message=e.detail,
+                    sub_message="Aucune action supplémentaire n'est requise pour accéder à cette ressource.",
+                    color="#f0ad4e",
+                )
             return RedirectResponse(url=already_member_redirect_url, status_code=302)
         return render_invitation_html_page(
             title="Erreur",

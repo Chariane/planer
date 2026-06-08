@@ -24,6 +24,7 @@ from backend.api_messagerie.sync import (
     remove_resource_member,
     sync_resource_member,
 )
+from backend.core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
 
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -108,6 +109,9 @@ def create_liste(
     id_workspace: str = None,
     creator_user_id: str | None = None,
 ) -> Liste:
+    owner_id = resolve_workspace_owner_id(db, workspace_id=id_workspace, espace_id=id_espace)
+    if owner_id:
+        require_plan_capacity(db, owner_id, "projets")
     _ensure_unique_liste_sibling_name(
         db,
         nom=nom,

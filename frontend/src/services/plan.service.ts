@@ -30,7 +30,22 @@ export interface SubscriptionPlan {
   restrictions: string[];
 }
 
+export interface PlanUsageOverview {
+  plan: {
+    code: string;
+    nom: string;
+    limits: SubscriptionPlanLimits;
+  };
+  usage: {
+    workspaces: number;
+    espaces: number;
+    projets: number;
+    membres: number;
+  };
+}
+
 export const planService = {
   getPlans: () => apiFetch(WORKSPACE_BASE_URL, '/plans') as Promise<SubscriptionPlan[]>,
   getPlan: (code: string) => apiFetch(WORKSPACE_BASE_URL, `/plans/${code}`) as Promise<SubscriptionPlan>,
+  getMyUsage: () => apiFetch(WORKSPACE_BASE_URL, '/plans/me/usage') as Promise<PlanUsageOverview>,
 };

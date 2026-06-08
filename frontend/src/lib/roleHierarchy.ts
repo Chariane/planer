@@ -26,12 +26,14 @@ export const ROLE_RANKS: Record<RoleType, number> = {
 export const INHERITED_ROLES = new Set<RoleType>([
   ROLES.CREATOR,
   ROLES.ADMIN,
+  ROLES.MEMBER,
   ROLES.GUEST,
 ]);
 
-// Rôles disponibles pour l'invitation (limités à Invité et Administrateur)
+// Rôles disponibles pour l'invitation (sans Créateur)
 export const INVITABLE_ROLES: RoleType[] = [
   ROLES.GUEST,
+  ROLES.MEMBER,
   ROLES.ADMIN,
 ];
 
