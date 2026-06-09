@@ -1,10 +1,10 @@
 // frontend/src/pages/app/views/KanbanView.tsx
 import { useState } from 'react';
-import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
+import { DndContext, closestCenter, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GripVertical, Calendar, AlertCircle } from 'lucide-react';
+import { GripVertical, Calendar, AlertCircle, CheckCircle, GitBranch, ListChecks } from 'lucide-react';
 import type { Task } from '../../../types';
 
 const priorityLabels: Record<string, string> = {
@@ -30,23 +30,67 @@ const columns = [
 
 interface KanbanCardProps {
   task: Task;
+  depth?: number;
+  childCount?: number;
+  parentTitle?: string | null;
   isOverlay?: boolean;
 }
 
-function KanbanCard({ task, isOverlay = false }: KanbanCardProps) {
+function getChecklistProgress(task: Task) {
+  const checklists = task.checklists || [];
+  if (checklists.length === 0) return null;
+  const done = checklists.filter(item => item.is_checked).length;
+  return {
+    done,
+    total: checklists.length,
+    percent: Math.round((done / checklists.length) * 100),
+  };
+}
+
+function isOverdue(task: Task) {
+  if (!task.dueDate || task.status === 'terminé') return false;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  return due.getTime() < Date.now();
+}
+
+function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOverlay = false }: KanbanCardProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const checklistProgress = getChecklistProgress(task);
+  const overdue = isOverdue(task);
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: task.id,
+    disabled: isOverlay,
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
 
   return (
     <motion.div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4, boxShadow: 'var(--shadow-lg)', borderColor: 'var(--secondary)' }}
-      className={`group relative rounded-2xl bg-theme-surface p-4 shadow-theme-sm border border-theme-border-subtle cursor-grab active:cursor-grabbing transition-all duration-300 ${isDragging ? 'opacity-40 scale-95' : ''
+      className={`group relative rounded-2xl bg-theme-surface p-4 shadow-theme-sm border border-theme-border-subtle cursor-grab active:cursor-grabbing transition-all duration-300 ${depth > 0 ? 'ml-4 border-l-4 border-l-secondary/30' : ''
+        } ${overdue ? 'border-red-500/30 bg-red-500/[0.03]' : ''} ${isDragging ? 'opacity-40 scale-95' : ''
         } ${isOverlay ? 'shadow-theme-lg ring-2 ring-secondary opacity-100' : ''}`}
       onMouseDown={() => setIsDragging(true)}
       onMouseUp={() => setIsDragging(false)}
     >
       <div className="flex flex-col gap-4">
+        {(parentTitle || depth > 0) && (
+          <div className="flex min-w-0 items-center gap-2 text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">
+            <GitBranch size={12} className="text-secondary" />
+            <span className="truncate">
+              {parentTitle ? `Sous-tâche de ${parentTitle}` : `Sous-tâche niveau ${depth}`}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-start justify-between gap-3">
           <p className={`text-sm font-bold tracking-tight line-clamp-2 leading-snug transition-colors group-hover:text-theme-main ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
             {task.title}
@@ -66,7 +110,43 @@ function KanbanCard({ task, isOverlay = false }: KanbanCardProps) {
               {new Date(task.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
             </div>
           )}
+
+          {childCount > 0 && (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
+              <GitBranch size={12} />
+              {childCount} sous-tâche{childCount > 1 ? 's' : ''}
+            </div>
+          )}
+
+          {checklistProgress && (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+              <ListChecks size={12} />
+              {checklistProgress.done}/{checklistProgress.total}
+            </div>
+          )}
+
+          {overdue && (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-500">
+              <AlertCircle size={12} />
+              En retard
+            </div>
+          )}
         </div>
+
+        {checklistProgress && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-theme-muted">
+              <span>Avancement</span>
+              <span>{checklistProgress.percent}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
+              <div
+                className={`h-full rounded-full ${checklistProgress.percent === 100 ? 'bg-emerald-500' : 'bg-secondary'}`}
+                style={{ width: `${checklistProgress.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mt-1 pt-4 border-t border-theme-border-subtle/30">
           <div className="flex items-center -space-x-2">
@@ -88,7 +168,12 @@ function KanbanCard({ task, isOverlay = false }: KanbanCardProps) {
             )}
           </div>
 
-          {task.status === 'en cours' && (
+          {task.status === 'terminé' ? (
+            <div className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-500">
+              <CheckCircle size={12} />
+              Fait
+            </div>
+          ) : task.status === 'en cours' && (
             <div className="h-1.5 w-16 bg-theme-surface-hover rounded-full overflow-hidden border border-theme-border-subtle/30 shadow-inner">
               <motion.div
                 animate={{ x: [-30, 70] }}
@@ -108,11 +193,24 @@ interface KanbanColumnProps {
   tasks: Task[];
   status: string;
   color: string;
+  tasksByParent: Record<string, Task[]>;
+  tasksById: Record<string, Task>;
+  getDepth: (task: Task) => number;
 }
 
-function KanbanColumn({ title, tasks, color }: KanbanColumnProps) {
+function KanbanColumn({ title, tasks, status, color, tasksByParent, tasksById, getDepth }: KanbanColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const completedChecklistCount = tasks.reduce((sum, task) => {
+    const progress = getChecklistProgress(task);
+    return sum + (progress?.done || 0);
+  }, 0);
+  const totalChecklistCount = tasks.reduce((sum, task) => sum + (task.checklists?.length || 0), 0);
+
   return (
-    <div className="w-80 flex-shrink-0 rounded-2xl bg-theme-surface/30 p-4 border border-theme-border-subtle/30 transition-all duration-300">
+    <div
+      ref={setNodeRef}
+      className={`w-80 flex-shrink-0 rounded-2xl bg-theme-surface/30 p-4 border transition-all duration-300 ${isOver ? 'border-secondary bg-secondary/5 shadow-theme-md' : 'border-theme-border-subtle/30'}`}
+    >
       <div className="flex justify-between items-center mb-6 px-1">
         <div className="flex items-center gap-3">
           <div className="h-2 w-2 rounded-full shadow-[0_0_10px_currentcolor] shrink-0" style={{ backgroundColor: color, color: color }} />
@@ -123,10 +221,29 @@ function KanbanColumn({ title, tasks, color }: KanbanColumnProps) {
         </span>
       </div>
 
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
+          <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Checklists</p>
+          <p className="text-sm font-black text-theme-main">{completedChecklistCount}/{totalChecklistCount}</p>
+        </div>
+        <div className="rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
+          <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Sous-tâches</p>
+          <p className="text-sm font-black text-theme-main">{tasks.filter(task => task.parentTaskId).length}</p>
+        </div>
+      </div>
+
       <div className="min-h-[600px] space-y-4">
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           <AnimatePresence mode="popLayout">
-            {tasks.map(task => <KanbanCard key={task.id} task={task} />)}
+            {tasks.map(task => (
+              <KanbanCard
+                key={task.id}
+                task={task}
+                depth={getDepth(task)}
+                childCount={(tasksByParent[task.id] || []).length}
+                parentTitle={task.parentTaskId ? tasksById[task.parentTaskId]?.title || null : null}
+              />
+            ))}
           </AnimatePresence>
         </SortableContext>
 
@@ -155,7 +272,37 @@ interface KanbanViewProps {
 export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const getTasksByStatus = (status: string) => tasks.filter(t => t.status === status);
+  const tasksById = tasks.reduce((acc, task) => {
+    acc[task.id] = task;
+    return acc;
+  }, {} as Record<string, Task>);
+
+  const tasksByParent = tasks.reduce((acc, task) => {
+    const parentId = task.parentTaskId || null;
+    if (parentId) acc[parentId] = [...(acc[parentId] || []), task];
+    return acc;
+  }, {} as Record<string, Task[]>);
+
+  const getDepth = (task: Task) => {
+    let depth = 0;
+    let parentId = task.parentTaskId || null;
+    const visited = new Set<string>();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      depth += 1;
+      parentId = tasksById[parentId]?.parentTaskId || null;
+    }
+    return depth;
+  };
+
+  const getTasksByStatus = (status: string) =>
+    tasks
+      .filter(t => t.status === status)
+      .sort((a, b) => {
+        const depthDiff = getDepth(a) - getDepth(b);
+        if (depthDiff !== 0) return depthDiff;
+        return (a.dueDate || '').localeCompare(b.dueDate || '') || a.title.localeCompare(b.title);
+      });
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -165,8 +312,12 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
     const { active, over } = event;
     if (!over) return;
     const task = tasks.find(t => t.id === active.id);
-    const newStatus = over.id as Task['status'];
-    if (task && task.status !== newStatus) {
+    const overId = over.id as string;
+    const columnIds = columns.map(col => col.id);
+    const newStatus = (columnIds.includes(overId)
+      ? overId
+      : tasks.find(t => t.id === overId)?.status) as Task['status'] | undefined;
+    if (task && newStatus && task.status !== newStatus) {
       onUpdateTask({ ...task, status: newStatus });
     }
     setActiveId(null);
@@ -184,6 +335,9 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
               tasks={getTasksByStatus(col.id)}
               status={col.id}
               color={col.color}
+              tasksByParent={tasksByParent}
+              tasksById={tasksById}
+              getDepth={getDepth}
             />
           </div>
         ))}
@@ -191,7 +345,13 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
       <DragOverlay>
         {activeTask && (
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1.05, opacity: 1 }}>
-            <KanbanCard task={activeTask} isOverlay />
+            <KanbanCard
+              task={activeTask}
+              depth={getDepth(activeTask)}
+              childCount={(tasksByParent[activeTask.id] || []).length}
+              parentTitle={activeTask.parentTaskId ? tasksById[activeTask.parentTaskId]?.title || null : null}
+              isOverlay
+            />
           </motion.div>
         )}
       </DragOverlay>

@@ -316,7 +316,7 @@ export default function CenterContent() {
   };
 
   const openCreateSubtask = (parentTask: Task) => {
-    if (!canCreateContent) return;
+    if (!canCreateContent && !canOperateAssignedTask(parentTask)) return;
     setEditingTask(null);
     setParentTaskForCreation(parentTask);
     setIsTaskModalLimited(false);
@@ -373,7 +373,8 @@ export default function CenterContent() {
         return;
       }
 
-      if (!canCreateContent) return;
+      const canCreateSubtaskForParent = !!parentTaskForCreation && canOperateAssignedTask(parentTaskForCreation);
+      if (!canCreateContent && !canCreateSubtaskForParent) return;
       if (editingTask) {
         await updateTask({ ...editingTask, ...formData });
       } else {
@@ -665,7 +666,7 @@ export default function CenterContent() {
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
-              canDeleteTask={() => canCreateContent}
+              canDeleteTask={(task) => canCreateContent || task.creatorId === user?.id}
               canAssignTask={() => canCreateContent}
               canAttachTaskFiles={(task) => canCreateContent || canOperateAssignedTask(task)}
               canManageTaskFiles={() => canCreateContent}
@@ -698,7 +699,7 @@ export default function CenterContent() {
       </AnimatePresence>
 
       {/* Modales */}
-      {(isAdmin || isCreator || isTaskModalLimited) && (
+      {(isAdmin || isCreator || isTaskModalLimited || parentTaskForCreation) && (
         <>
           <TaskFormModal
             isOpen={isTaskModalOpen}

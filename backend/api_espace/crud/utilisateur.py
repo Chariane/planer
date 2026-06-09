@@ -18,7 +18,7 @@ from backend.api_messagerie.sync import (
     remove_resource_member,
     sync_resource_member,
 )
-from backend.core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
+from ..core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
 
 
 def get_espace_by_id(db: Session, espace_id: str) -> Optional[Espace]:

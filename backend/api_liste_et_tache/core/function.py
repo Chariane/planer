@@ -931,8 +931,10 @@ def _require_task_management_access(db: Session, tache_id: str, current_user_id:
 def _require_assigned_task_operational_access(db: Session, tache_id: str, current_user_id: str):
     """
     Donne un accès opérationnel limité à la tâche :
-    - Créateur/Admin de la liste ou parent : accès opérationnel accepté
-    - Membre directement assigné à la tâche : peut agir sur son statut et ses checklists
+    - Créateur/Admin de la liste ou parent : accès opérationnel accepté ;
+    - Membre assigné à la tâche ou à une tâche parente : peut suivre l'exécution
+      de toute la branche, créer des sous-tâches/checklists, cocher les checklists
+      et joindre des fichiers, sans obtenir les droits de suppression ni d'assignation.
     """
     tache = _get_tache_or_404(db, tache_id)
 

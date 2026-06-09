@@ -1703,6 +1703,7 @@ class Tache(Base):
     ordre_affichage: Mapped[Optional[int]] = mapped_column(SmallInteger)
     id_liste: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.liste.id', ondelete='SET NULL'))
     id_tache_parent: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.tache.id', ondelete='CASCADE'))
+    id_createur: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     
     # Relations
     liste: Mapped[Optional['Liste']] = relationship('Liste', back_populates='taches')
@@ -1768,6 +1769,7 @@ class Checklist(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     id_section: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.section.id', ondelete='SET NULL'))
     id_tache: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.tache.id', ondelete='SET NULL'))
+    id_createur: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     
     # Relations
     section: Mapped[Optional['Section']] = relationship('Section', back_populates='checklists')

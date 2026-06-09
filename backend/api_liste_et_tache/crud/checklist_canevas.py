@@ -187,7 +187,14 @@ def _ensure_unique_checklist_sibling_name(
             detail=detail,
         )
 
-def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:
+def create_checklist(
+    db: Session,
+    texte: str,
+    is_checked: bool = False,
+    id_section: Optional[str] = None,
+    id_tache: Optional[str] = None,
+    id_createur: Optional[str] = None,
+) -> Checklist:
     _ensure_unique_checklist_sibling_name(
         db,
         texte=texte,
@@ -200,6 +207,7 @@ def create_checklist(db: Session, texte: str, is_checked: bool = False, id_secti
         is_checked=is_checked, 
         id_section=id_section, 
         id_tache=id_tache,
+        id_createur=id_createur,
         created_at=now,
         updated_at=now
     )

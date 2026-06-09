@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from contextlib import asynccontextmanager
 import sys
 import os
@@ -14,16 +15,25 @@ if __package__ in {None, ""}:
     from backend.api_liste_et_tache.routes.utilisateur import router as utilisateur_router
     from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
     from backend.api_liste_et_tache.routes.dashboard import router as dashboard_router
+    from backend.api_liste_et_tache.core.database import engine
     from backend.api_liste_et_tache.core.deadline_scheduler import deadline_reminder_scheduler
 else:
     from .routes.utilisateur import router as utilisateur_router
     from .routes.entreprise import router as entreprise_router
     from .routes.dashboard import router as dashboard_router
+    from .core.database import engine
     from .core.deadline_scheduler import deadline_reminder_scheduler
+
+
+def ensure_task_creator_columns() -> None:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE planer.tache ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
+        conn.execute(text("ALTER TABLE planer.checklist ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_task_creator_columns()
     deadline_reminder_scheduler.start()
     try:
         yield

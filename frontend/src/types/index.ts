@@ -23,6 +23,7 @@ export interface ApiChecklist {
   updated_at: string | null;
   id_section: string | null;
   id_tache: string | null;
+  id_createur?: string | null;
 }
 
 // Type simplifié pour les checklists dans les tâches (UI)
@@ -30,6 +31,7 @@ export interface TaskChecklist {
   id: string;
   texte: string;
   is_checked: boolean;
+  creatorId?: string | null;
 }
 
 // Types pour les sections (API)
@@ -73,6 +75,7 @@ export interface Task {
   assignees: Member[];
   listId: string;
   parentTaskId?: string | null;
+  creatorId?: string | null;
   createdAt: Date;
   subTasks?: ChecklistItem[];
   checklists?: TaskChecklist[];

@@ -280,6 +280,7 @@ def create_tache(
     ordre_affichage: Optional[int] = 0,
     id_liste: Optional[str] = None,
     id_tache_parent: Optional[str] = None,
+    id_createur: Optional[str] = None,
 ) -> Tache:
     id_liste, parent = _resolve_parent_scope(db, id_tache_parent=id_tache_parent, id_liste=id_liste)
     _ensure_subtask_due_date_within_parent(
@@ -305,6 +306,7 @@ def create_tache(
         ordre_affichage=ordre_affichage,
         id_liste=id_liste,
         id_tache_parent=id_tache_parent,
+        id_createur=id_createur,
     )
     db.add(tache)
     try:

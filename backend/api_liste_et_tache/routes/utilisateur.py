@@ -6,6 +6,7 @@ import shutil
 import os
 from pathlib import Path
 from fastapi.responses import RedirectResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ..core.emails import send_liste_invitation_email
 from ..core.database import get_db
@@ -138,9 +139,42 @@ from ..schemas import (
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
     WorkspaceMemberInvite,
 )
-from ..models import Liste, Utilisateur
+from ..models import Checklist, Liste, Tache, Utilisateur
 
 router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
+
+
+def _task_branch_is_owned_by_user(db: Session, tache_id: str, user_id: str) -> bool:
+    pending = [tache_id]
+    branch_ids: list[str] = []
+    visited: set[str] = set()
+
+    while pending:
+        current_id = pending.pop()
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+        current = db.query(Tache).filter(Tache.id == current_id).first()
+        if not current or current.id_createur != user_id:
+            return False
+        branch_ids.append(current.id)
+        pending.extend(
+            child_id
+            for (child_id,) in db.query(Tache.id).filter(Tache.id_tache_parent == current_id).all()
+        )
+
+    if not branch_ids:
+        return False
+
+    foreign_checklist = (
+        db.query(Checklist.id)
+        .filter(
+            Checklist.id_tache.in_(branch_ids),
+            or_(Checklist.id_createur.is_(None), Checklist.id_createur != user_id),
+        )
+        .first()
+    )
+    return foreign_checklist is None
 
 
 def _can_read_liste_silently(db: Session, liste_id: str, user_id: str) -> bool:
@@ -320,8 +354,19 @@ def create_tache_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
-    _require_list_admin_access(db, liste_id, current_user.id)
-    return create_tache(db, **tache_in.model_dump(exclude={"id_liste"}), id_liste=liste_id)
+    payload = tache_in.model_dump(exclude={"id_liste"})
+    parent_task_id = payload.get("id_tache_parent")
+    if parent_task_id:
+        parent_task = _get_tache_or_404(db, parent_task_id)
+        if parent_task.id_liste != liste_id:
+            raise HTTPException(
+                status_code=400,
+                detail="La sous-tâche doit appartenir au même projet que sa tâche parente.",
+            )
+        _require_assigned_task_operational_access(db, parent_task_id, current_user.id)
+    else:
+        _require_list_admin_access(db, liste_id, current_user.id)
+    return create_tache(db, **payload, id_liste=liste_id, id_createur=current_user.id)
 
 @router.get("/{liste_id}/list_taches", response_model=List[TacheFullOut])
 def get_taches_endpoint(
@@ -395,7 +440,20 @@ def delete_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
-    _require_list_admin_access(db, tache.id_liste, current_user.id)
+    try:
+        _require_list_admin_access(db, tache.id_liste, current_user.id)
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        if tache.id_createur != current_user.id or not _task_branch_is_owned_by_user(db, tache_id, current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Seuls les gestionnaires peuvent supprimer cette tâche. "
+                    "Un membre assigné peut uniquement supprimer une sous-tâche qu'il a créée "
+                    "et dont tout le contenu lui appartient."
+                ),
+            ) from exc
     delete_tache(db, tache_id)
     return None
 
@@ -577,7 +635,13 @@ def create_checklist_for_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     _require_assigned_task_operational_access(db, tache_id, current_user.id)
-    return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_tache=tache_id)
+    return create_checklist(
+        db,
+        texte=checklist_in.texte,
+        is_checked=checklist_in.is_checked,
+        id_tache=tache_id,
+        id_createur=current_user.id,
+    )
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
 def get_checklists_for_tache_v2_endpoint(
@@ -613,7 +677,13 @@ def create_checklist_for_section_endpoint(
     if not canevas:
         raise HTTPException(status_code=404, detail="Canevas non trouve")
     _require_list_admin_access(db, canevas.id_liste, current_user.id)
-    return create_checklist(db, texte=checklist_in.texte, is_checked=checklist_in.is_checked, id_section=section_id)
+    return create_checklist(
+        db,
+        texte=checklist_in.texte,
+        is_checked=checklist_in.is_checked,
+        id_section=section_id,
+        id_createur=current_user.id,
+    )
 
 @router.get("/sections/{section_id}/checklists", response_model=List[ChecklistOut])
 def get_checklists_for_section_v2_endpoint(
@@ -686,7 +756,16 @@ def delete_checklist_endpoint(
     if not chk:
         raise HTTPException(404, "Checklist non trouvee")
     if chk.id_tache:
-        _require_task_management_access(db, chk.id_tache, current_user.id)
+        try:
+            _require_task_management_access(db, chk.id_tache, current_user.id)
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            if chk.id_createur != current_user.id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Seuls les gestionnaires ou l'auteur de cette checklist peuvent la supprimer.",
+                ) from exc
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)

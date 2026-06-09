@@ -1,6 +1,6 @@
 // frontend/src/pages/app/views/ListView.tsx
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -78,10 +78,12 @@ function TaskFilesSection({
   task,
   canAttach,
   canManage,
+  showReadOnlyNotice = true,
 }: {
   task: Task;
   canAttach: boolean;
   canManage: boolean;
+  showReadOnlyNotice?: boolean;
 }) {
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -185,7 +187,7 @@ function TaskFilesSection({
         )}
       </div>
 
-      {!canAttach && (
+      {!canAttach && showReadOnlyNotice && (
         <div className="rounded-xl border border-theme-border-subtle/60 bg-theme-surface-hover/30 px-3 py-2 text-[11px] font-semibold text-theme-muted">
           Lecture seule. Seuls les membres assignés à cette tâche et les gestionnaires de la liste peuvent y joindre des fichiers.
         </div>
@@ -267,18 +269,18 @@ function TaskDetailModal({
   isOpen,
   onClose,
   onOpenTask,
+  onBack,
+  canGoBack,
   getTaskProgress,
-  canAttachFiles,
-  canManageFiles,
 }: {
   task: Task | null;
   tasks: Task[];
   isOpen: boolean;
   onClose: () => void;
   onOpenTask: (task: Task) => void;
+  onBack: () => void;
+  canGoBack: boolean;
   getTaskProgress: (task: Task) => number;
-  canAttachFiles: boolean;
-  canManageFiles: boolean;
 }) {
   if (!task) return null;
 
@@ -289,6 +291,18 @@ function TaskDetailModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Détails de la tâche`} size="lg">
       <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
+        {canGoBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover px-3 py-2 text-xs font-black uppercase tracking-widest text-theme-muted transition-all hover:border-secondary/30 hover:bg-secondary/10 hover:text-secondary"
+            title="Revenir à la tâche précédente"
+          >
+            <ArrowLeft size={15} />
+            Retour
+          </button>
+        )}
+
         {/* Titre */}
         <div className="space-y-1">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Titre de la mission</label>
@@ -436,7 +450,7 @@ function TaskDetailModal({
                           ? 'bg-emerald-500/10 text-emerald-500'
                           : 'bg-secondary/10 text-secondary'
                       }`}>
-                        {childTask.status === 'terminé' ? <CheckCircle size={18} /> : <ChevronRight size={18} />}
+                        {childTask.status === 'terminé' ? <CheckCircle size={18} /> : <FileText size={17} />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-black ${
@@ -468,8 +482,9 @@ function TaskDetailModal({
 
         <TaskFilesSection
           task={task}
-          canAttach={canAttachFiles}
-          canManage={canManageFiles}
+          canAttach={false}
+          canManage={false}
+          showReadOnlyNotice={false}
         />
 
         <div className="flex justify-end pt-4 pb-2">
@@ -498,6 +513,7 @@ export default function ListView({
   canAttachTaskFiles,
   canManageTaskFiles,
 }: ListViewProps) {
+  const { user } = useAuth();
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
     'en cours': true,
@@ -505,6 +521,7 @@ export default function ListView({
     bloqué: false,
   });
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
+  const [detailTaskHistory, setDetailTaskHistory] = useState<Task[]>([]);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [addingChecklistTaskId, setAddingChecklistTaskId] = useState<string | null>(null);
@@ -517,8 +534,27 @@ export default function ListView({
   };
 
   const openTaskDetail = (task: Task) => {
+    setDetailTaskHistory([]);
     setSelectedTaskForDetail(task);
     setIsDetailModalOpen(true);
+  };
+
+  const openNestedTaskDetail = (task: Task) => {
+    setDetailTaskHistory(prev => selectedTaskForDetail ? [...prev, selectedTaskForDetail] : prev);
+    setSelectedTaskForDetail(task);
+    setIsDetailModalOpen(true);
+  };
+
+  const goBackInTaskDetail = () => {
+    const previousTask = detailTaskHistory[detailTaskHistory.length - 1];
+    if (!previousTask) return;
+    setSelectedTaskForDetail(previousTask);
+    setDetailTaskHistory(prev => prev.slice(0, -1));
+  };
+
+  const closeTaskDetail = () => {
+    setIsDetailModalOpen(false);
+    setDetailTaskHistory([]);
   };
 
   const toggleTaskOpen = (taskId: string) => {
@@ -611,11 +647,11 @@ export default function ListView({
     const taskChecklists = task.checklists || [];
     const childTasks = tasksByParent[task.id] || [];
     const isTaskExpanded = !!expandedTasks[task.id];
-    const canManageTask = canEditTask ? canEditTask(task) : !readOnly;
+    const canOperateTask = canEditTask ? canEditTask(task) : !readOnly;
     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
-    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canManageTask;
-    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canManageTask;
+    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
+    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canDeleteCurrentTask;
     const checklistSummary = taskChecklists.length > 0
       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
       : '0';
@@ -631,11 +667,11 @@ export default function ListView({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (canManageTask && onUpdateTaskStatus && task.status !== 'terminé') {
+              if (canOperateTask && onUpdateTaskStatus && task.status !== 'terminé') {
                 onUpdateTaskStatus(task.id, 'terminé');
               }
             }}
-            disabled={!canManageTask || !onUpdateTaskStatus || task.status === 'terminé'}
+            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé'}
             className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
             title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
           >
@@ -728,14 +764,14 @@ export default function ListView({
               className="overflow-hidden"
             >
               <div className="ml-4 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-4 space-y-3 sm:ml-10">
-                {(childTasks.length > 0 || (canManageTask && onCreateSubtask)) && (
+                {(childTasks.length > 0 || (canOperateTask && onCreateSubtask)) && (
                   <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Sous-tâches</p>
                         <p className="text-[11px] font-medium text-theme-muted opacity-60">Même structure, mêmes responsabilités, avec un niveau hiérarchique supplémentaire.</p>
                       </div>
-                      {canManageTask && onCreateSubtask && (
+                      {canOperateTask && onCreateSubtask && (
                         <Button size="sm" variant="outline" onClick={() => onCreateSubtask(task)} className="w-full sm:w-auto">
                           <Plus className="mr-2 h-4 w-4" />
                           Sous-tâche
@@ -773,8 +809,8 @@ export default function ListView({
                 {taskChecklists.map((checklist) => (
                   <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
                     <button
-                      onClick={() => canManageTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                      disabled={!canManageTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                      onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                      disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
                       className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                       title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
                     >
@@ -789,7 +825,7 @@ export default function ListView({
                     <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
                       {checklist.texte}
                     </span>
-                    {canManageTask && onDeleteChecklist && (
+                    {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
                       <button
                         onClick={() => handleDeleteChecklist(task.id, checklist.id)}
                         disabled={actionLoading === `delete-checklist-${checklist.id}`}
@@ -802,7 +838,7 @@ export default function ListView({
                   </div>
                 ))}
 
-                {canManageTask && onAddChecklist && (
+                {canOperateTask && onAddChecklist && (
                   <div className="pt-1">
                     {addingChecklistTaskId === task.id ? (
                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -902,11 +938,11 @@ export default function ListView({
                   statusTasks.map((task, idx) => {
                     const taskChecklists = task.checklists || [];
                     const isTaskExpanded = !!expandedTasks[task.id];
-                    const canManageTask = canEditTask ? canEditTask(task) : !readOnly;
+                    const canOperateTask = canEditTask ? canEditTask(task) : !readOnly;
                     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
                     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
-                    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canManageTask;
-                    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canManageTask;
+                    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
+                    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canDeleteCurrentTask;
                     const childTasks = tasksByParent[task.id] || [];
                     const checklistSummary = taskChecklists.length > 0
                       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
@@ -927,11 +963,11 @@ export default function ListView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (canManageTask && onUpdateTaskStatus && task.status !== 'terminé') {
+                              if (canOperateTask && onUpdateTaskStatus && task.status !== 'terminé') {
                                 onUpdateTaskStatus(task.id, 'terminé');
                               }
                             }}
-                            disabled={!canManageTask || !onUpdateTaskStatus || task.status === 'terminé'}
+                            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé'}
                             className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
                             title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
                           >
@@ -1029,7 +1065,7 @@ export default function ListView({
                               className="overflow-hidden"
                             >
                               <div className="ml-0 sm:ml-28 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-4 space-y-3">
-                                {(childTasks.length > 0 || (canManageTask && onCreateSubtask)) && (
+                                {(childTasks.length > 0 || (canOperateTask && onCreateSubtask)) && (
                                   <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                       <div>
@@ -1038,7 +1074,7 @@ export default function ListView({
                                           Travail détaillé avec statut, échéance et progression propres.
                                         </p>
                                       </div>
-                                      {canManageTask && onCreateSubtask && (
+                                      {canOperateTask && onCreateSubtask && (
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -1066,7 +1102,7 @@ export default function ListView({
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la tâche</p>
-                                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Cochez les points terminés ou supprimez ceux qui ne sont plus utiles.</p>
+                                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Suivez les points terminés. La suppression reste réservée aux gestionnaires.</p>
                                   </div>
                                   <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
                                     {checklistSummary}
@@ -1082,8 +1118,8 @@ export default function ListView({
                                 {taskChecklists.map((checklist) => (
                                   <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
                                     <button
-                                      onClick={() => canManageTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                                      disabled={!canManageTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                                      onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                                      disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
                                       className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                                       title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
                                     >
@@ -1098,7 +1134,7 @@ export default function ListView({
                                     <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
                                       {checklist.texte}
                                     </span>
-                                    {canManageTask && onDeleteChecklist && (
+                                    {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
                                       <button
                                         onClick={() => handleDeleteChecklist(task.id, checklist.id)}
                                         disabled={actionLoading === `delete-checklist-${checklist.id}`}
@@ -1111,7 +1147,7 @@ export default function ListView({
                                   </div>
                                 ))}
 
-                                {canManageTask && onAddChecklist && (
+                                {canOperateTask && onAddChecklist && (
                                   <div className="pt-1">
                                     {addingChecklistTaskId === task.id ? (
                                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -1177,11 +1213,11 @@ export default function ListView({
         task={selectedTaskForDetail}
         tasks={tasks}
         isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        onOpenTask={openTaskDetail}
+        onClose={closeTaskDetail}
+        onOpenTask={openNestedTaskDetail}
+        onBack={goBackInTaskDetail}
+        canGoBack={detailTaskHistory.length > 0}
         getTaskProgress={getTaskProgress}
-        canAttachFiles={selectedTaskForDetail ? (canAttachTaskFiles ? canAttachTaskFiles(selectedTaskForDetail) : !readOnly) : false}
-        canManageFiles={selectedTaskForDetail ? (canManageTaskFiles ? canManageTaskFiles(selectedTaskForDetail) : !readOnly) : false}
       />
     </div>
   );

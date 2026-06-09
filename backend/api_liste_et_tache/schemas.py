@@ -685,6 +685,7 @@ class TacheOut(TacheBase):
     created_at: datetime
     id_liste: Optional[str] = None
     id_tache_parent: Optional[str] = None
+    id_createur: Optional[str] = None
     progression: float = 0.0
     model_config = ConfigDict(from_attributes=True)
 
@@ -1044,6 +1045,7 @@ class ChecklistOut(ChecklistBase):
     updated_at: Optional[datetime] = None
     id_section: Optional[str] = None
     id_tache: Optional[str] = None
+    id_createur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class ChecklistDelete(BaseModel):

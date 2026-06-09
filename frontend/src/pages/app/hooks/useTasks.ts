@@ -20,12 +20,14 @@ function transformTask(apiTask: any): Task {
     assignees: [],
     listId: apiTask.id_liste,
     parentTaskId: apiTask.id_tache_parent || null,
+    creatorId: apiTask.id_createur || null,
     createdAt: new Date(apiTask.created_at),
     subTasks: [],
     checklists: (apiTask.checklists || []).map((c: any) => ({
       id: c.id,
       texte: c.texte,
       is_checked: c.is_checked,
+      creatorId: c.id_createur || null,
     })),
     progression: apiTask.progression || 0,
   };
