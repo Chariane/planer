@@ -146,6 +146,8 @@ def serialize_group(db: Session, group: Groupe, current_user_id: Optional[str] =
         .count()
     )
     resource_type, resource_id, display_name = _parse_group_name(group.name)
+    can_manage = bool(current_user_id and is_group_admin(db, group, current_user_id))
+    is_closed = bool(getattr(group, "is_closed", False))
     return {
         "id": group.id,
         "name": display_name,
@@ -155,7 +157,9 @@ def serialize_group(db: Session, group: Groupe, current_user_id: Optional[str] =
         "creator": group.creator,
         "member_count": member_count,
         "created_at": group.created_at,
-        "can_write": True,
+        "is_closed": is_closed,
+        "can_manage": can_manage,
+        "can_write": (not is_closed) or can_manage,
     }
 
 
@@ -897,6 +901,22 @@ def require_group_member(db: Session, group_id: str, user_id: str) -> GroupeMemb
 def ensure_group_write_access(db: Session, group_id: str, user_id: str) -> Groupe:
     group = get_group_or_404(db, group_id)
     require_group_member(db, group_id, user_id)
+    if bool(getattr(group, "is_closed", False)) and not is_group_admin(db, group, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Cette discussion est fermée par les administrateurs. Vous pouvez la lire, mais vous ne pouvez pas écrire ni lancer d'appel.",
+        )
+    return group
+
+
+def set_group_closed(db: Session, *, group_id: str, user_id: str, is_closed: bool) -> Groupe:
+    group = get_group_or_404(db, group_id)
+    require_group_member(db, group_id, user_id)
+    if not is_group_admin(db, group, user_id):
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs du groupe peuvent ouvrir ou fermer cette discussion.")
+    group.is_closed = is_closed
+    db.commit()
+    db.refresh(group)
     return group
 
 

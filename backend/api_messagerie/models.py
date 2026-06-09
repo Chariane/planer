@@ -642,6 +642,7 @@ class Groupe(Base):
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
     name: Mapped[str] = mapped_column(String(255))
     creator: Mapped[str] = mapped_column(String(255))
+    is_closed: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
 import type { TacheFilters } from '../../../services/tache.service';
-import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName } from '../../../utils/memberDisplay';
 import type { Task } from '../../../types';
 
 type NewTaskInput = Omit<Task, 'id' | 'createdAt' | 'progression'>;
@@ -62,7 +62,7 @@ export function useTasks(listId: string | undefined) {
             const assignees = taskMembers.map((m: any) => ({
               id: m.id_utilisateur || m.id,
               name: getMemberDisplayName(m),
-              email: getMemberEmail(m),
+              email: getMemberContactLabel(m),
               role: m.role || 'Membre',
             }));
             return { ...task, assignees };

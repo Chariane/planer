@@ -75,9 +75,9 @@ interface AppContextType {
   addTask: (listId: string, task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
   updateTask: (task: Task) => Promise<void>;
   deleteTask: (listId: string, taskId: string) => Promise<void>;
-  inviteMember: (workspaceId: string, email: string, role: string) => Promise<void>;
+  inviteMember: (workspaceId: string, identifier: string, role: string) => Promise<void>;
   removeMember: (workspaceId: string, memberId: string) => Promise<void>;
-  inviteMemberToEspace: (espaceId: string, email: string, role: string) => Promise<void>;
+  inviteMemberToEspace: (espaceId: string, identifier: string, role: string) => Promise<void>;
   getEspaceMembers: (espaceId: string) => Promise<any[]>;
   updateEspaceMemberRole: (espaceId: string, userId: string, role: string) => Promise<void>;
   removeEspaceMember: (espaceId: string, userId: string) => Promise<void>;
@@ -364,8 +364,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Gestion des membres (workspace)
-  const inviteMember = async (workspaceId: string, email: string, role: string) => {
-    await workspaceService.inviteMember(workspaceId, { email, role });
+  const inviteMember = async (workspaceId: string, identifier: string, role: string) => {
+    await workspaceService.inviteMember(workspaceId, identifier, role);
     await refreshAccessOverview();
   };
 
@@ -375,8 +375,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Gestion des membres d'espace
-  const inviteMemberToEspace = async (espaceId: string, email: string, role: string) => {
-    await espaceService.inviteMember(espaceId, email, role);
+  const inviteMemberToEspace = async (espaceId: string, identifier: string, role: string) => {
+    await espaceService.inviteMember(espaceId, identifier, role);
   };
 
   const getEspaceMembers = async (espaceId: string) => {

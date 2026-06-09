@@ -35,6 +35,8 @@ export interface MessagerieGroup {
   resource_id?: string | null;
   creator: string;
   member_count: number;
+  is_closed?: boolean;
+  can_manage?: boolean;
   can_write?: boolean;
   created_at?: string | null;
 }
@@ -85,6 +87,12 @@ export const messagerieService = {
 
   getGroupMessages: (groupId: string) =>
     apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/messages`) as Promise<{ messages: MessageItem[] }>,
+
+  updateGroupClosedState: (groupId: string, isClosed: boolean) =>
+    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/closed`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_closed: isClosed }),
+    }) as Promise<MessagerieGroup>,
 
   sendGroupMessage: (groupId: string, payload: MessagePayload) =>
     apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/messages`, {

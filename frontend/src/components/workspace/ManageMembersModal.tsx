@@ -6,7 +6,8 @@ import { Button } from '../ui/Button';
 import ConfirmModal from '../ui/ConfirmModal';
 import { espaceService } from '../../services/espace.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
+import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 
 interface Member {
   id: string;
@@ -30,6 +31,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Membre');
   const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [confirmData, setConfirmData] = useState<{ userId: string; onConfirm: () => Promise<void> } | null>(null);
@@ -45,7 +47,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
         id: m.id,
         user_id: m.id_utilisateur || m.id,
         username: getMemberDisplayName(m),
-        email: getMemberEmail(m),
+        email: getMemberContactLabel(m),
         role: m.role,
         statut: m.statut,
       }));
@@ -67,14 +69,19 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
 
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !canManageMembers) return;
+    if (!isValidInviteIdentifier(inviteEmail)) {
+      setInviteError("Entrez une adresse email ou un username valide, sans espace.");
+      return;
+    }
     setInviting(true);
+    setInviteError('');
     try {
       await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
       setInviteEmail('');
       await loadMembers();
     } catch (error) {
       console.error("Erreur invitation", error);
-      alert("Impossible d'inviter ce membre");
+      setInviteError("Impossible d'inviter ce membre.");
     } finally {
       setInviting(false);
     }
@@ -114,10 +121,13 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
           <h4 className="font-medium text-gray-700 mb-2">Inviter un membre</h4>
           <div className="flex gap-2">
             <input
-              type="email"
-              placeholder="Email du membre"
+              type="text"
+              placeholder="Email ou username"
               value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              onChange={(e) => {
+                setInviteEmail(e.target.value);
+                setInviteError('');
+              }}
               className="flex-1 p-2 border rounded-lg"
               disabled={!canManageMembers}
             />
@@ -137,6 +147,9 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
           </div>
           {!canManageMembers && (
             <p className="text-sm text-gray-500 mt-2">Vous n'avez pas les permissions pour gérer les membres.</p>
+          )}
+          {inviteError && (
+            <p className="text-sm text-red-600 font-medium mt-2">{inviteError}</p>
           )}
         </div>
 

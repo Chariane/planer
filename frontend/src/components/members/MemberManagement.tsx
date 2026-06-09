@@ -9,10 +9,12 @@ import ConfirmModal from '../../components/ui/ConfirmModal';
 import { workspaceService } from '../../services/workspace.service';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
+import { sanitizeApiErrorMessage } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { getRoleLabel, ROLES } from '../../lib/roleHierarchy';
-import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../utils/memberDisplay';
+import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../utils/memberDisplay';
+import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../types';
 
@@ -42,6 +44,18 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const toneClass = type === 'success'
+    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
+    : type === 'error'
+      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
+      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
+  const iconShellClass = type === 'info'
+    ? 'bg-amber-500/15 border border-amber-500/20'
+    : 'bg-white/20 border border-white/10';
+  const closeClass = type === 'info'
+    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
+    : 'hover:bg-white/20';
+
   return (
     <AnimatePresence>
       <motion.div
@@ -50,13 +64,12 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
         exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
         className="fixed bottom-6 right-6 z-[100]"
       >
-        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg text-white min-w-[300px] glass border border-white/10 ${type === 'success' ? 'bg-emerald-500/90' : type === 'error' ? 'bg-red-500/90' : 'bg-primary/90'
-          }`}>
-          <div className="p-1.5 rounded-full bg-white/20">
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg min-w-[300px] border ${toneClass}`}>
+          <div className={`p-1.5 rounded-full ${iconShellClass}`}>
             {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
           </div>
           <span className="text-sm font-bold flex-1 tracking-tight">{message}</span>
-          <button onClick={onClose} className="p-1 rounded-xl hover:bg-white/20 transition-colors">
+          <button onClick={onClose} className={`p-1 rounded-xl transition-colors ${closeClass}`}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -80,8 +93,15 @@ export default function MemberManagement({
   const [inviteRole, setInviteRole] = useState('Invité');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [confirmData, setConfirmData] = useState<{ userId: string; onConfirm: () => Promise<void> } | null>(null);
+  const [confirmData, setConfirmData] = useState<{
+    userId: string;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+  const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -96,9 +116,11 @@ export default function MemberManagement({
 
   const isDirectListAdmin = !!listeId && directListRole === ADMIN_ROLE;
   const canChangeMemberRoles = canManageMembers && !isDirectListAdmin;
+  const canRemoveMembers = canManageMembers;
 
   const loadMembers = async () => {
     setLoading(true);
+    setRoleActionNotice(null);
     try {
       let data;
       if (listeId) data = await listeService.getMembers(listeId);
@@ -113,7 +135,7 @@ export default function MemberManagement({
       setMembers(data.map((m: any) => ({
         id: m.id_utilisateur || m.utilisateur?.id || m.id,
         name: getMemberDisplayName(m),
-        email: getMemberEmail(m),
+        email: getMemberContactLabel(m),
         role: m.role,
         photo_base64: getMemberPhotoBase64(m),
       })));
@@ -131,10 +153,14 @@ export default function MemberManagement({
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
+    if (!isValidInviteIdentifier(inviteEmail)) {
+      showMessage("Entrez une adresse email ou un username valide, sans espace.", 'error');
+      return;
+    }
     try {
       if (listeId) await listeService.inviteMember(listeId, inviteEmail, inviteRole);
       else if (espaceId) await espaceService.inviteMember(espaceId, inviteEmail, inviteRole);
-      else if (workspaceId) await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
+      else if (workspaceId) await workspaceService.inviteMember(workspaceId, inviteEmail, inviteRole);
 
       await loadMembers();
       onMemberAdded?.();
@@ -155,6 +181,9 @@ export default function MemberManagement({
 
     setConfirmData({
       userId,
+      title: 'Retirer de cette ressource',
+      message: `Voulez-vous retirer ${targetMember?.name || 'ce membre'} de cette ressource ? Si cette personne possède un rôle hérité depuis un parent, elle gardera cet accès hérité.`,
+      confirmText: 'Retirer',
       onConfirm: async () => {
         try {
           if (listeId) await listeService.unassignMember(listeId, userId);
@@ -163,7 +192,7 @@ export default function MemberManagement({
           await loadMembers();
           showMessage('Membre retiré avec succès', 'success');
         } catch (err) {
-          showMessage('Erreur lors de la suppression', 'error');
+          showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
         }
       }
     });
@@ -172,6 +201,8 @@ export default function MemberManagement({
 
   const handleChangeRole = async (userId: string, newRole: string) => {
     setUpdatingMemberId(userId);
+    setRoleActionNotice(null);
+    const targetMember = members.find(m => m.id === userId);
     try {
       if (listeId) await listeService.assignMember(listeId, userId, newRole);
       else if (espaceId) await espaceService.updateMemberRole(espaceId, userId, newRole);
@@ -179,7 +210,15 @@ export default function MemberManagement({
       await loadMembers();
       showMessage(`Rôle mis à jour`, 'success');
     } catch (err: any) {
-      showMessage(err.message || 'Erreur modification rôle', 'error');
+      const message = sanitizeApiErrorMessage(err, 'Erreur modification rôle');
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
+        const friendlyMessage = `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`;
+        setRoleActionNotice(friendlyMessage);
+        showMessage(friendlyMessage, 'info');
+      } else {
+        showMessage(message, 'error');
+      }
     } finally {
       setUpdatingMemberId(null);
     }
@@ -218,6 +257,23 @@ export default function MemberManagement({
           </Button>
         )}
       </div>
+
+      {roleActionNotice && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-4 py-3 text-sm flex items-start justify-between gap-3 shadow-theme-sm">
+          <div className="flex items-start gap-3">
+            <Info className="h-4 w-4 text-amber-600 dark:text-amber-300 mt-0.5 shrink-0" />
+            <p className="leading-relaxed font-medium">{roleActionNotice}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRoleActionNotice(null)}
+            className="rounded-lg p-1 text-amber-700 hover:bg-amber-200/70 dark:text-amber-200 dark:hover:bg-amber-400/10 transition-colors"
+            title="Masquer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {filteredMembers.length === 0 ? (
         <GlassCard className="py-20 border-dashed flex flex-col items-center justify-center opacity-40">
@@ -262,9 +318,10 @@ export default function MemberManagement({
                     </div>
                   </Link>
 
-                  <div className="flex items-center gap-2">
-                    {member.role !== ROLES.CREATOR && canChangeMemberRoles && (
-                      <div className="flex items-center gap-2">
+                  {member.role !== ROLES.CREATOR && (
+                    <div className="flex items-center gap-2">
+                      {canChangeMemberRoles && (
+                        <>
                         {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
                         <select
                           value={member.role}
@@ -274,16 +331,20 @@ export default function MemberManagement({
                         >
                           {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
                         </select>
+                        </>
+                      )}
+                      {canRemoveMembers && (
                         <button
                           onClick={() => handleRemoveMember(member.id)}
-                          className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                          title="Retirer le membre"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                          title="Retirer de cette ressource"
                         >
                           <Trash2 className="h-4 w-4" />
+                          <span className="hidden xl:inline">Retirer</span>
                         </button>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </GlassCard>
               </motion.div>
             ))}
@@ -294,17 +355,18 @@ export default function MemberManagement({
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Nouvelle Collaboration" size="md">
         <div className="space-y-6 py-2">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Contact Email</label>
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Email ou username</label>
             <div className="relative group">
               <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted group-focus-within:text-secondary transition-colors" />
               <input
-                type="email"
-                placeholder="collaborateur@kplanner.io"
+                type="text"
+                placeholder="collaborateur@kplanner.io ou username"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
                 className="w-full bg-theme-surface/50 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-theme-main placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/50 transition-all outline-none font-medium"
               />
             </div>
+            <p className="text-xs text-theme-muted ml-1">Si la personne a déjà un compte, son username suffit.</p>
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Attribution du Rôle</label>
@@ -327,9 +389,9 @@ export default function MemberManagement({
         isOpen={isConfirmOpen}
         onClose={() => setIsConfirmOpen(false)}
         onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
-        title="Retirer le membre"
-        message="Voulez-vous vraiment retirer ce membre de cette ressource ? Cette action peut être annulée en ré-invitant le membre plus tard."
-        confirmText="Confirmer le Retrait"
+        title={confirmData?.title || 'Retirer le membre'}
+        message={confirmData?.message || 'Voulez-vous vraiment retirer ce membre de cette ressource ?'}
+        confirmText={confirmData?.confirmText || 'Retirer'}
       />
     </div>
   );

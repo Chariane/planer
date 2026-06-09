@@ -5,6 +5,7 @@ import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { espaceService } from '../../services/espace.service';
 import { sanitizeApiErrorMessage } from '../../services/api';
+import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 import {
   ROLES,
   getRoleLabel,
@@ -15,7 +16,7 @@ interface InviteEspaceMemberModalProps {
   espaceId: string;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (email: string, role: string) => void;
+  onSuccess?: (identifier: string, role: string) => void;
   
   // Role actuel de l'utilisateur dans cet espace (pour validation hiérarchique)
   userCurrentRole?: string | null;
@@ -32,7 +33,6 @@ export default function InviteEspaceMemberModal({
   isOpen,
   onClose,
   onSuccess,
-  userCurrentRole,
   title = 'Inviter un membre',
 }: InviteEspaceMemberModalProps) {
   const [email, setEmail] = useState('');
@@ -59,7 +59,12 @@ export default function InviteEspaceMemberModal({
     e.preventDefault();
 
     if (!email.trim()) {
-      setError('Email requis');
+      setError('Email ou username requis');
+      return;
+    }
+
+    if (!isValidInviteIdentifier(email)) {
+      setError("L'email ou le username ne doit pas contenir d'espaces.");
       return;
     }
 
@@ -69,7 +74,7 @@ export default function InviteEspaceMemberModal({
     try {
       await espaceService.inviteMember(espaceId, email, selectedRole);
       
-      setSuccessMessage(`✅ Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`);
+      setSuccessMessage(`Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`);
       
       if (onSuccess) {
         onSuccess(email, selectedRole);
@@ -85,15 +90,15 @@ export default function InviteEspaceMemberModal({
       const message = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
 
       if (err.status === 409) {
-        setError(`❌ ${message}`);
+        setError(message);
       } else if (err.status === 400) {
-        setError(`❌ ${message || 'Email invalide'}`);
+        setError(message || 'Email ou username invalide');
       } else if (err.status === 404) {
-        setError('❌ L\'espace n\'existe plus ou accès refusé');
+        setError('L\'espace n\'existe plus ou accès refusé');
       } else if (err.status === 403) {
-        setError('❌ Vous n\'avez pas la permission d\'inviter des membres');
+        setError('Vous n\'avez pas la permission d\'inviter des membres');
       } else {
-        setError(`❌ ${message}`);
+        setError(message);
       }
     } finally {
       setLoading(false);
@@ -104,14 +109,13 @@ export default function InviteEspaceMemberModal({
     <Modal isOpen={isOpen} onClose={handleClose} title={title}>
       <form onSubmit={handleSubmit} className="space-y-5">
         
-        {/* Email Input */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email du membre
+            Email ou username
           </label>
           <input
-            type="email"
-            placeholder="john.doe@example.com"
+            type="text"
+            placeholder="john.doe@example.com ou username"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);

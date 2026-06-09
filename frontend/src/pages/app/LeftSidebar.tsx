@@ -6,7 +6,7 @@ import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash,
-  FileText, Calendar, Plus, Edit, Trash2, ListTodo, Settings, X, MoreHorizontal,
+  FileText, Plus, Edit, Trash2, ListTodo, Settings, X, MoreHorizontal,
   CheckCircle2, AlertTriangle, Info
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
@@ -88,7 +88,7 @@ export default function LeftSidebar() {
   const location = useLocation();
   const { workspaceId, spaceId, listId } = useActiveResource();
   const {
-    workspaces, joinedWorkspaces, joinedEspaces, joinedListes, loadWorkspaceLocalResources, loadEspacesTree, addEspace, updateEspace, deleteEspace,
+    workspaces, joinedWorkspaces, joinedEspaces, joinedListes, loadEspacesTree, addEspace, updateEspace, deleteEspace,
     updateWorkspace, deleteWorkspace,
     addListe, updateListe, deleteListe, inviteMemberToEspace
   } = useApp();
@@ -116,6 +116,13 @@ export default function LeftSidebar() {
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
+  };
+
+  const scrollToFilesPanel = () => {
+    document.getElementById('resource-files-panel')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   };
 
   // État pour la modale de confirmation
@@ -434,6 +441,8 @@ export default function LeftSidebar() {
   const showWorkspaceLevelLists = activeEntryType === 'workspace'
     || (activeEntryType === 'list' && !selectedListSpaceId);
   const showProjectOnlyFallback = activeEntryType === 'list' && selectedListContext && !selectedListSpaceNode && !showWorkspaceLevelLists;
+  const showTreeNavigation = !showProjectOnlyFallback;
+  const showFilesShortcut = hasWorkspaceAccess && activeEntryType !== 'list';
   const navigationTitle = activeEntryType === 'space'
     ? 'Espace actif'
     : activeEntryType === 'list'
@@ -455,40 +464,10 @@ export default function LeftSidebar() {
   }, [spaceId, listId, workspaceId, workspaces]);
 
   useEffect(() => {
-    if (workspaceId) {
-      loadWorkspaceLocalResources(workspaceId);
-    }
-  }, [workspaceId]);
-
-  useEffect(() => {
     if (workspaceId && hasWorkspaceAccess) {
       loadEspacesTree(workspaceId).catch(() => { });
     }
   }, [workspaceId, hasWorkspaceAccess, loadEspacesTree]);
-
-  // Charger les listes pour tous les espaces au démarrage
-  useEffect(() => {
-    if (!hasWorkspaceAccess) return;
-
-    const loadAllLists = async () => {
-      const allSpaces = getAllSpacesFromTree(workspaceSpaces);
-      for (const space of allSpaces) {
-        if (!listsBySpace[space.id] && !loadingLists[space.id]) {
-          setLoadingLists(prev => ({ ...prev, [space.id]: true }));
-          try {
-            const lists = await listeService.getByEspace(space.id);
-            setListsBySpace(prev => ({ ...prev, [space.id]: lists }));
-          } catch (error) {
-            console.error(`Erreur chargement listes pour espace ${space.id}`, error);
-          } finally {
-            setLoadingLists(prev => ({ ...prev, [space.id]: false }));
-          }
-        }
-      }
-    };
-
-    loadAllLists();
-  }, [hasWorkspaceAccess, workspaceSpaces, workspaceId]);
 
   const loadWorkspaceLists = async () => {
     if (!workspaceId) return;
@@ -504,10 +483,10 @@ export default function LeftSidebar() {
   };
 
   useEffect(() => {
-    if (workspaceId && hasWorkspaceAccess) {
+    if (workspaceId && hasWorkspaceAccess && showWorkspaceLevelLists) {
       loadWorkspaceLists();
     }
-  }, [workspaceId, hasWorkspaceAccess]);
+  }, [workspaceId, hasWorkspaceAccess, showWorkspaceLevelLists]);
 
   useEffect(() => {
     if (!hasWorkspaceAccess || !workspaces.length) return;
@@ -830,7 +809,7 @@ export default function LeftSidebar() {
       setInviteEmail('');
     } catch (error) {
       console.error('Erreur invitation', error);
-      showMessage('Erreur lors de l\'invitation', 'error');
+      showMessage(sanitizeApiErrorMessage(error, 'Erreur lors de l\'invitation'), 'error');
     }
   };
 
@@ -1154,8 +1133,20 @@ export default function LeftSidebar() {
             </div>
           </div>
         )}
+        {showFilesShortcut && (
+          <div className="mt-4">
+            <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Ressources</h3>
+            <button
+              type="button"
+              onClick={scrollToFilesPanel}
+              className="w-full flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors"
+            >
+              <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
+            </button>
+          </div>
+        )}
         {/* Affichage des espaces en lecture seule */}
-        {hasWorkspaceAccess && (
+        {hasWorkspaceAccess && showTreeNavigation && (
           <div className="mt-4">
             <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-2 opacity-50">{navigationTitle}</h3>
             {renderTree(visibleSpaceRoots)}
@@ -1235,6 +1226,7 @@ export default function LeftSidebar() {
         </Link>
       )}
 
+      {showTreeNavigation && (
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2.5 relative">
           <h3 className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] pl-1 opacity-80 flex items-center gap-2">
@@ -1272,6 +1264,7 @@ export default function LeftSidebar() {
         </div>
         {renderTree(visibleSpaceRoots)}
       </div>
+      )}
 
       {/* Section Projets du workspace (listes sans espace) */}
       {hasWorkspaceAccess && showWorkspaceLevelLists && (
@@ -1354,20 +1347,18 @@ export default function LeftSidebar() {
         </div>
       )}
 
-      {/* Gestion - visible pour Admin et Créateur */}
-      {(isAdminForSpace || isCreatorForSpace) && (
+      {/* Ressources rapides */}
+      {showFilesShortcut && (
         <div className="mb-4">
-          <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Gestion</h3>
+          <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Ressources</h3>
           <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
+            <button
+              type="button"
+              onClick={scrollToFilesPanel}
+              className="w-full flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors"
+            >
               <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
-              <FileText className="h-3.5 w-3.5 text-primary" /> Rapports
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors">
-              <Calendar className="h-3.5 w-3.5 text-primary" /> Absences / Congés
-            </div>
+            </button>
           </div>
         </div>
       )}
@@ -1573,11 +1564,11 @@ export default function LeftSidebar() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-theme-main mb-1.5">
-              Email du membre
+              Email ou username
             </label>
             <input
-              type="email"
-              placeholder="exemple@email.com"
+              type="text"
+              placeholder="exemple@email.com ou username"
               value={inviteEmail}
               onChange={e => setInviteEmail(e.target.value)}
               className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all"

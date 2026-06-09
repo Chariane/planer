@@ -6,7 +6,7 @@ import { espaceService } from '../../services/espace.service';
 import { workspaceService } from '../../services/workspace.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
 
 interface AssignTaskMemberModalProps {
   tacheId: string;
@@ -55,7 +55,7 @@ export default function AssignTaskMemberModal({
               byUser.set(id, {
                 id,
                 name: getMemberDisplayName(m),
-                email: getMemberEmail(m),
+                email: getMemberContactLabel(m),
                 role: m.role,
                 source,
               });
@@ -119,7 +119,7 @@ export default function AssignTaskMemberModal({
         const formatted = taskMembers.map((m: any) => ({
           id: m.id_utilisateur || m.id,
           name: getMemberDisplayName(m),
-          email: getMemberEmail(m),
+          email: getMemberContactLabel(m),
           role: m.role || 'Membre',
         }));
         setAssignedMembers(formatted);

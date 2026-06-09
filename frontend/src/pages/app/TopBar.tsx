@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, ChevronRight, ChevronsLeft, AlignLeft } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { useApp } from '../../contexts/AppContext';
 import { espaceService } from '../../services/espace.service';
@@ -45,13 +45,29 @@ const findSpacePathInTree = (
 };
 
 function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: ReactNode; isSidebarOpen?: boolean; toggleSidebar?: () => void }) {
+  const navigate = useNavigate();
+  const canGoBack = typeof window !== 'undefined' && window.history.length > 1;
+
   return (
     <div className="bg-theme-surface border-b border-theme-border-subtle px-2 py-2 sm:px-4 flex items-center justify-between gap-2 shadow-sm transition-colors duration-200">
       <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-        <button className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          disabled={!canGoBack}
+          className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-theme-muted transition-colors"
+          title="Retour"
+          aria-label="Retour"
+        >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <button className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors">
+        <button
+          type="button"
+          onClick={() => navigate(1)}
+          className="hidden sm:inline-flex p-1 rounded hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors"
+          title="Suivant"
+          aria-label="Suivant"
+        >
           <ArrowRight className="h-5 w-5" />
         </button>
         {children}

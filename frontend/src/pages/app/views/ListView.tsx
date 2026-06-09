@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
+import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { plannerToolsService } from '../../../services/plannerTools.service';
 import type { Task } from '../../../types';
@@ -87,6 +88,7 @@ function TaskFilesSection({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<TaskFile | null>(null);
 
   const loadFiles = async () => {
     setLoading(true);
@@ -137,11 +139,11 @@ function TaskFilesSection({
   const handleDelete = async (file: TaskFile) => {
     const ownerId = file.meta_donnees?.owner_user_id;
     if (!canManage && ownerId !== user?.id) return;
-    if (!confirm('Supprimer ce fichier de la tâche ?')) return;
     setError(null);
     try {
       await plannerToolsService.deleteFile(file.id);
       setFiles(prev => prev.filter(item => item.id !== file.id));
+      setFileToDelete(null);
     } catch (err: any) {
       setError(err?.message || 'Impossible de supprimer ce fichier.');
     }
@@ -181,6 +183,12 @@ function TaskFilesSection({
           </div>
         )}
       </div>
+
+      {!canAttach && (
+        <div className="rounded-xl border border-theme-border-subtle/60 bg-theme-surface-hover/30 px-3 py-2 text-[11px] font-semibold text-theme-muted">
+          Lecture seule. Seuls les membres assignés à cette tâche et les gestionnaires de la liste peuvent y joindre des fichiers.
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-500">
@@ -225,7 +233,7 @@ function TaskFilesSection({
                 </div>
                 {canDelete && (
                   <button
-                    onClick={() => handleDelete(file)}
+                    onClick={() => setFileToDelete(file)}
                     className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
                     title="Supprimer le fichier"
                   >
@@ -237,15 +245,36 @@ function TaskFilesSection({
           })}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!fileToDelete}
+        onClose={() => setFileToDelete(null)}
+        onConfirm={() => fileToDelete ? handleDelete(fileToDelete) : Promise.resolve()}
+        title="Supprimer le fichier"
+        message={`Voulez-vous retirer définitivement "${fileToDelete?.nom || 'ce fichier'}" de cette tâche ?`}
+        confirmText="Supprimer"
+        confirmVariant="danger"
+      />
     </div>
   );
 }
 
 // Composant de détail d'une tâche
-function TaskDetailModal({ task, isOpen, onClose, getTaskProgress, canAttachFiles, canManageFiles }: {
+function TaskDetailModal({
+  task,
+  tasks,
+  isOpen,
+  onClose,
+  onOpenTask,
+  getTaskProgress,
+  canAttachFiles,
+  canManageFiles,
+}: {
   task: Task | null;
+  tasks: Task[];
   isOpen: boolean;
   onClose: () => void;
+  onOpenTask: (task: Task) => void;
   getTaskProgress: (task: Task) => number;
   canAttachFiles: boolean;
   canManageFiles: boolean;
@@ -254,6 +283,7 @@ function TaskDetailModal({ task, isOpen, onClose, getTaskProgress, canAttachFile
 
   const progress = getTaskProgress(task);
   const taskChecklists = task.checklists || [];
+  const childTasks = tasks.filter(item => item.parentTaskId === task.id);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Détails de la tâche`} size="lg">
@@ -374,6 +404,66 @@ function TaskDetailModal({ task, isOpen, onClose, getTaskProgress, canAttachFile
             </div>
           </div>
         )}
+
+        {/* Sous-tâches */}
+        <div className="pt-4 border-t border-theme-border-subtle/30 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest opacity-60">Sous-tâches</label>
+            <span className="text-[10px] font-black text-theme-muted opacity-40">
+              {childTasks.length}
+            </span>
+          </div>
+
+          {childTasks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
+              Aucune sous-tâche pour cette tâche.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {childTasks.map(childTask => {
+                const childProgress = getTaskProgress(childTask);
+                return (
+                  <button
+                    key={childTask.id}
+                    type="button"
+                    onClick={() => onOpenTask(childTask)}
+                    className="w-full rounded-2xl border border-theme-border-subtle/40 bg-theme-surface/40 p-3 text-left transition-all hover:border-secondary/30 hover:bg-theme-surface-hover"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${
+                        childTask.status === 'terminé'
+                          ? 'bg-emerald-500/10 text-emerald-500'
+                          : 'bg-secondary/10 text-secondary'
+                      }`}>
+                        {childTask.status === 'terminé' ? <CheckCircle size={18} /> : <ChevronRight size={18} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`truncate text-sm font-black ${
+                          childTask.status === 'terminé'
+                            ? 'line-through text-theme-muted opacity-60'
+                            : 'text-theme-main'
+                        }`}>
+                          {childTask.title}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-lg px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${priorityColors[childTask.priority]}`}>
+                            {priorityLabels[childTask.priority]}
+                          </span>
+                          <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                            {statusLabels[childTask.status] || childTask.status}
+                          </span>
+                          <span className="text-[10px] font-black uppercase tracking-tighter text-secondary">
+                            {childProgress}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <TaskFilesSection
           task={task}
@@ -802,11 +892,12 @@ export default function ListView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (onUpdateTaskStatus && task.status !== 'terminé') {
+                              if (canManageTask && onUpdateTaskStatus && task.status !== 'terminé') {
                                 onUpdateTaskStatus(task.id, 'terminé');
                               }
                             }}
-                            className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20'}`}
+                            disabled={!canManageTask || !onUpdateTaskStatus || task.status === 'terminé'}
+                            className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
                             title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
                           >
                             {task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
@@ -1049,8 +1140,10 @@ export default function ListView({
 
       <TaskDetailModal
         task={selectedTaskForDetail}
+        tasks={tasks}
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
+        onOpenTask={openTaskDetail}
         getTaskProgress={getTaskProgress}
         canAttachFiles={selectedTaskForDetail ? (canAttachTaskFiles ? canAttachTaskFiles(selectedTaskForDetail) : !readOnly) : false}
         canManageFiles={selectedTaskForDetail ? (canManageTaskFiles ? canManageTaskFiles(selectedTaskForDetail) : !readOnly) : false}

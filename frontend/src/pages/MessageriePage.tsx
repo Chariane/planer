@@ -8,6 +8,7 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
+  Lock,
   MessageCircle,
   MessageSquareText,
   Mic,
@@ -23,6 +24,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Unlock,
   Users,
   Video,
   Wifi,
@@ -427,6 +429,7 @@ export default function MessageriePage() {
   const [editingDraft, setEditingDraft] = useState('');
   const [messageActionLoading, setMessageActionLoading] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<MessageItem | null>(null);
+  const [groupStateLoading, setGroupStateLoading] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(true);
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [callKind, setCallKind] = useState<CallKind>('audio');
@@ -458,6 +461,11 @@ export default function MessageriePage() {
   const desiredPrivateUserId = searchParams.get('private_user_id');
   const privateUserId = selectedPrivateUserId;
   const isPrivateMode = Boolean(privateUserId);
+  const currentMember = members.find(member => member.id === user?.id);
+  const canManageActiveGroup = Boolean(activeGroup?.can_manage || currentMember?.role === 'Administrateur');
+  const canWriteActiveGroup = isPrivateMode || Boolean(activeGroup && (activeGroup.can_write !== false || canManageActiveGroup));
+  const activeGroupIsReadOnly = Boolean(activeGroup && !isPrivateMode && !canWriteActiveGroup);
+  const callsAllowed = isPrivateMode || Boolean(activeGroup && canWriteActiveGroup);
   const privateMember = profileAsMember(privateProfile);
   const threadTitle = isPrivateMode
     ? (privateProfile ? displayProfile(privateProfile) : 'Discussion privée')
@@ -544,7 +552,7 @@ export default function MessageriePage() {
     try {
       const [profileData, presenceData, messagesResponse] = await Promise.all([
         authService.getUserProfile(otherUserId),
-        messagerieService.getPresence(otherUserId).catch(() => ({ is_online: false })),
+        messagerieService.getPresence(otherUserId).catch(() => ({ is_online: false, last_seen: null })),
         messagerieService.getPrivateMessages(otherUserId),
       ]);
       setPrivateProfile(profileData);
@@ -602,7 +610,34 @@ export default function MessageriePage() {
     socket.onerror = () => setIsRealtime(false);
     socket.onmessage = event => {
       try {
-        const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        const payload = JSON.parse(event.data) as Partial<MessageItem> & {
+          event?: string;
+          updated_message?: MessageItem;
+          message_id?: string;
+          group?: Partial<MessagerieGroup> & { id: string };
+          error?: string;
+        };
+        if (payload.error) {
+          setError(getErrorMessage(payload.error, 'Action impossible dans cette discussion.'));
+          return;
+        }
+        if (payload.event === 'group_state_updated' && payload.group?.id) {
+          setGroups(prev => prev.map(group => {
+            if (group.id !== payload.group!.id) return group;
+            const isClosed = Boolean(payload.group!.is_closed);
+            const canManage = Boolean(group.can_manage);
+            return {
+              ...group,
+              is_closed: isClosed,
+              can_write: !isClosed || canManage,
+            };
+          }));
+          if (payload.group.id === activeGroupId && payload.group.is_closed) {
+            setPendingAttachment(null);
+            setDraft('');
+          }
+          return;
+        }
         if (typeof payload.type === 'string' && payload.type.startsWith('call_')) {
           callSignalHandlerRef.current(payload as CallSignalPayload);
           return;
@@ -616,7 +651,8 @@ export default function MessageriePage() {
           return;
         }
         if (!payload.id || payload.id_groupe !== activeGroupId) return;
-        setMessages(prev => prev.some(item => item.id === payload.id) ? prev : [...prev, payload]);
+        const nextMessage = payload as MessageItem;
+        setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
       } catch {
         setIsRealtime(false);
       }
@@ -652,7 +688,8 @@ export default function MessageriePage() {
           return;
         }
         if (!payload.id) return;
-        setMessages(prev => prev.some(item => item.id === payload.id) ? prev : [...prev, payload]);
+        const nextMessage = payload as MessageItem;
+        setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
       } catch {
         setIsRealtime(false);
       }
@@ -785,6 +822,9 @@ export default function MessageriePage() {
     });
 
   const sendPayload = useCallback(async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
+    if (!privateUserId && activeGroupIsReadOnly) {
+      throw new Error("Cette discussion est fermée. Vous avez uniquement le droit de lecture.");
+    }
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(payload));
       return;
@@ -799,16 +839,20 @@ export default function MessageriePage() {
     if (!activeGroupId) return;
     const sent = await messagerieService.sendGroupMessage(activeGroupId, payload);
     setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
-  }, [activeGroupId, privateUserId]);
+  }, [activeGroupId, activeGroupIsReadOnly, privateUserId]);
 
   const sendCallSignal = useCallback((payload: CallSignalPayload) => {
+    if (!privateUserId && activeGroupIsReadOnly) {
+      setError("Cette discussion est fermée. Vous ne pouvez pas lancer d'appel dans ce groupe.");
+      return false;
+    }
     if ((!privateUserId && !activeGroupId) || socketRef.current?.readyState !== WebSocket.OPEN) {
       setError("La connexion temps réel n'est pas prête pour lancer l'appel.");
       return false;
     }
     socketRef.current.send(JSON.stringify({ ...payload, from: user?.id }));
     return true;
-  }, [activeGroupId, privateUserId, user?.id]);
+  }, [activeGroupId, activeGroupIsReadOnly, privateUserId, user?.id]);
 
   const stopCallTimer = useCallback(() => {
     if (callTimerRef.current) {
@@ -922,6 +966,10 @@ export default function MessageriePage() {
   };
 
   const startCall = async (kind: CallKind) => {
+    if (!callsAllowed) {
+      setError("Cette discussion est en lecture seule. Les appels sont réservés aux personnes autorisées à écrire.");
+      return;
+    }
     const recipients = privateUserId
       ? [privateUserId]
       : members.filter(member => member.id !== user?.id).map(member => member.id);
@@ -1055,6 +1103,10 @@ export default function MessageriePage() {
 
   const handleFileSelect = async (file?: File) => {
     if (!file) return;
+    if (activeGroupIsReadOnly) {
+      setError("Cette discussion est fermée. Vous ne pouvez pas joindre de fichier dans ce groupe.");
+      return;
+    }
     if (file.size > MAX_CHAT_ATTACHMENT_SIZE) {
       setError('Le fichier est trop volumineux pour la discussion. Taille maximale : 8 Mo.');
       return;
@@ -1078,6 +1130,10 @@ export default function MessageriePage() {
   };
 
   const startRecording = async () => {
+    if (activeGroupIsReadOnly) {
+      setError("Cette discussion est fermée. Vous ne pouvez pas envoyer de message vocal dans ce groupe.");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError("L'enregistrement vocal n'est pas disponible dans ce navigateur.");
       return;
@@ -1139,6 +1195,18 @@ export default function MessageriePage() {
     setIsRecording(false);
   };
 
+  useEffect(() => {
+    if (!activeGroupIsReadOnly) return;
+    setPendingAttachment(null);
+    setDraft('');
+    if (isRecording) {
+      stopRecording();
+    }
+    if (callStatus !== 'idle') {
+      stopCall(false);
+    }
+  }, [activeGroupIsReadOnly, callStatus, isRecording, stopCall]);
+
   const startEditingMessage = (message: MessageItem) => {
     setEditingMessageId(message.id);
     setEditingDraft(editableMessageText(message));
@@ -1189,6 +1257,10 @@ export default function MessageriePage() {
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     if ((!activeGroupId && !privateUserId) || (!draft.trim() && !pendingAttachment) || sending) return;
+    if (activeGroupIsReadOnly) {
+      setError("Cette discussion est fermée. Vous pouvez lire les messages, mais vous ne pouvez pas écrire.");
+      return;
+    }
 
     const text = draft.trim();
     setDraft('');
@@ -1213,6 +1285,36 @@ export default function MessageriePage() {
       setError(getErrorMessage(err, "Impossible d'envoyer ce message."));
     } finally {
       setSending(false);
+    }
+  };
+
+  const toggleGroupClosedState = async () => {
+    if (!activeGroup || !canManageActiveGroup || groupStateLoading) return;
+    const nextClosedState = !activeGroup.is_closed;
+    setGroupStateLoading(true);
+    setError(null);
+    try {
+      const updatedGroup = await messagerieService.updateGroupClosedState(activeGroup.id, nextClosedState);
+      setGroups(prev => prev.map(group => {
+        if (group.id !== activeGroup.id) return group;
+        const isClosed = Boolean(updatedGroup.is_closed);
+        const canManage = Boolean(updatedGroup.can_manage ?? group.can_manage);
+        return {
+          ...group,
+          ...updatedGroup,
+          is_closed: isClosed,
+          can_manage: canManage,
+          can_write: !isClosed || canManage,
+        };
+      }));
+      if (nextClosedState) {
+        setPendingAttachment(null);
+        setDraft('');
+      }
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Impossible de modifier l'état de cette discussion."));
+    } finally {
+      setGroupStateLoading(false);
     }
   };
 
@@ -1554,6 +1656,13 @@ export default function MessageriePage() {
                                   {group.member_count} membre{group.member_count > 1 ? 's' : ''}
                                   <span className="opacity-60">•</span>
                                   <span className="truncate">{resourceLabel(group)}</span>
+                                  {group.is_closed && (
+                                    <>
+                                      <span className="opacity-60">•</span>
+                                      <Lock size={12} />
+                                      <span>Lecture seule</span>
+                                    </>
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -1615,23 +1724,55 @@ export default function MessageriePage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {!isPrivateMode && activeGroup && (
+                      canManageActiveGroup ? (
+                        <button
+                          type="button"
+                          onClick={toggleGroupClosedState}
+                          disabled={groupStateLoading}
+                          className={`h-10 rounded-2xl border px-3 transition flex items-center gap-2 text-xs font-black ${
+                            activeGroup.is_closed
+                              ? 'border-amber-500/25 bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
+                              : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15'
+                          } disabled:opacity-60`}
+                          title={activeGroup.is_closed ? 'Ouvrir la discussion aux membres' : 'Fermer la discussion en lecture seule'}
+                        >
+                          {groupStateLoading ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : activeGroup.is_closed ? (
+                            <Lock size={16} />
+                          ) : (
+                            <Unlock size={16} />
+                          )}
+                          <span className="hidden sm:inline">{activeGroup.is_closed ? 'Fermée' : 'Ouverte'}</span>
+                        </button>
+                      ) : activeGroup.is_closed ? (
+                        <div
+                          className="h-10 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 text-xs font-black text-amber-500 flex items-center gap-2"
+                          title="Les administrateurs ont fermé cette discussion."
+                        >
+                          <Lock size={16} />
+                          <span className="hidden sm:inline">Lecture seule</span>
+                        </div>
+                      ) : null
+                    )}
                     {(isPrivateMode || activeGroup) && (
                       <>
                         <button
                           type="button"
                           onClick={() => startCall('audio')}
-                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={!callsAllowed || callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
+                          title={!callsAllowed ? 'Discussion en lecture seule : appel indisponible' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel audio'}
                         >
                           <Phone size={17} />
                         </button>
                         <button
                           type="button"
                           onClick={() => startCall('video')}
-                          disabled={callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
+                          disabled={!callsAllowed || callStatus !== 'idle' || (isPrivateMode && !privateProfile) || (!isPrivateMode && members.length <= 1)}
                           className="h-10 w-10 rounded-2xl border border-theme-subtle bg-theme-surface-hover text-theme-muted hover:text-secondary hover:bg-secondary/10 transition flex items-center justify-center disabled:opacity-50"
-                          title={isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
+                          title={!callsAllowed ? 'Discussion en lecture seule : appel indisponible' : isPrivateMode && !privateProfile ? 'Chargement du profil...' : !isRealtime ? 'Connexion temps réel en cours, le clic préparera l’appel...' : 'Appel vidéo'}
                         >
                           <Video size={18} />
                         </button>
@@ -1794,6 +1935,21 @@ export default function MessageriePage() {
                   )}
                 </div>
 
+                {activeGroupIsReadOnly ? (
+                  <div className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
+                    <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-600 dark:text-amber-400 flex items-start gap-3">
+                      <div className="mt-0.5 h-9 w-9 shrink-0 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                        <Lock size={17} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black">Discussion fermée par les administrateurs</p>
+                        <p className="mt-1 text-xs font-semibold leading-relaxed text-amber-700/80 dark:text-amber-300/80">
+                          Vous pouvez lire les messages de ce groupe, mais l'écriture, les pièces jointes, les messages vocaux et les appels sont désactivés.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <form onSubmit={sendMessage} className="p-3 sm:p-4 border-t border-theme-subtle bg-theme-surface/95">
                   <input
                     ref={fileInputRef}
@@ -1875,6 +2031,7 @@ export default function MessageriePage() {
                     </Button>
                   </div>
                 </form>
+                )}
               </>
             ) : (
               <div className="h-full min-h-[520px] flex flex-col items-center justify-center text-center text-theme-muted p-10">

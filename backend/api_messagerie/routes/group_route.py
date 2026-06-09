@@ -5,6 +5,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..schemas import (
     GroupCreate,
+    GroupClosedUpdate,
     MessageCreate,
     MessageUpdate,
     ResourceGroupEnsure,
@@ -27,6 +28,7 @@ from .logique import (
     remove_resource_member,
     serialize_group,
     serialize_message,
+    set_group_closed,
     sync_resource_member,
     update_message_content,
 )
@@ -48,7 +50,7 @@ def create_manual_group(
         creator_id=current_user.id,
         members=payload.members,
     )
-    return serialize_group(db, group)
+    return serialize_group(db, group, current_user_id=current_user.id)
 
 
 @router.get("/groups")
@@ -74,6 +76,34 @@ def group_members(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     return {"members": get_group_members(db, group_id, current_user.id)}
+
+
+@router.patch("/groups/{group_id}/closed")
+async def update_group_closed_state(
+    group_id: str,
+    payload: GroupClosedUpdate,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    group = set_group_closed(
+        db,
+        group_id=group_id,
+        user_id=current_user.id,
+        is_closed=payload.is_closed,
+    )
+    group_payload = serialize_group(db, group, current_user_id=current_user.id)
+    await manager.broadcast_group_message(
+        db,
+        group_id,
+        {
+            "event": "group_state_updated",
+            "group": {
+                "id": group.id,
+                "is_closed": bool(group.is_closed),
+            },
+        },
+    )
+    return group_payload
 
 
 @router.post("/groups/{group_id}/members/{user_id}")

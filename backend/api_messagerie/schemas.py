@@ -1021,8 +1021,14 @@ class GroupOut(BaseModel):
     resource_id: Optional[str] = None
     creator: str
     member_count: int = 0
+    is_closed: bool = False
+    can_manage: bool = False
     can_write: bool = True
     created_at: Optional[datetime] = None
+
+
+class GroupClosedUpdate(BaseModel):
+    is_closed: bool
 
 
 class GroupMemberOut(BaseModel):

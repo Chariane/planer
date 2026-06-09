@@ -39,6 +39,24 @@ export const getMemberEmail = (member: any): string => {
   );
 };
 
+export const getMemberUsername = (member: any): string => {
+  const username = pickText(
+    member?.utilisateur?.username,
+    member?.user?.username,
+    member?.username,
+  );
+
+  return username ? `@${username.replace(/^@+/, '')}` : '';
+};
+
+export const getMemberContactLabel = (member: any): string => {
+  const email = getMemberEmail(member);
+  const username = getMemberUsername(member);
+
+  if (email && username) return `${email} · ${username}`;
+  return email || username;
+};
+
 export const getMemberPhotoBase64 = (member: any): string | null => {
   const photo = member?.utilisateur?.photo_base64 || member?.user?.photo_base64 || member?.photo_base64;
   return typeof photo === 'string' && photo.trim() ? photo : null;

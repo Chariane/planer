@@ -112,6 +112,9 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     if (response.ok) {
       return text;
     }
-    throw new Error(sanitizeApiErrorMessage(parseError));
+    const fallbackMessage = text && text.trim() && !/^internal server error$/i.test(text.trim())
+      ? text
+      : `Erreur HTTP ${response.status}: ${response.statusText || 'réponse invalide du serveur'}`;
+    throw new Error(sanitizeApiErrorMessage(fallbackMessage));
   }
 }

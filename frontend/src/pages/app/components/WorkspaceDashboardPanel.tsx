@@ -1,16 +1,17 @@
 // frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Briefcase, Calendar, FolderTree, ListTodo, Loader2, MessageCircle, ShieldCheck, UserPlus, Users, X, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Activity, Briefcase, Calendar, FolderTree, ListTodo, Loader2, MessageCircle, ShieldCheck, Trash2, UserPlus, Users, X, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
+import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
-import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
+import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 
@@ -42,6 +43,18 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const toneClass = type === 'success'
+    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
+    : type === 'error'
+      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
+      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
+  const iconShellClass = type === 'info'
+    ? 'bg-amber-500/15 border border-amber-500/20'
+    : 'bg-white/20 border border-white/10';
+  const closeClass = type === 'info'
+    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
+    : 'hover:bg-white/20';
+
   return (
     <AnimatePresence>
       <motion.div
@@ -50,13 +63,12 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
         exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
         className="fixed bottom-6 right-6 z-[100]"
       >
-        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl text-theme-main min-w-[320px] backdrop-blur-xl border border-theme-border-subtle/30 ${type === 'success' ? 'bg-emerald-500/90 shadow-emerald-500/20' : type === 'error' ? 'bg-red-500/90 shadow-red-500/20' : 'bg-primary/90 shadow-primary/20'
-          }`}>
-          <div className="p-2 rounded-xl bg-white/20 border border-white/10">
+        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl min-w-[320px] backdrop-blur-xl border ${toneClass}`}>
+          <div className={`p-2 rounded-xl ${iconShellClass}`}>
             {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
           </div>
           <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-white/20 transition-colors">
+          <button onClick={onClose} className={`p-1.5 rounded-xl transition-colors ${closeClass}`}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -79,6 +91,10 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+  const [confirmData, setConfirmData] = useState<{
+    isOpen: boolean;
+    member: Member | null;
+  }>({ isOpen: false, member: null });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -89,6 +105,11 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
   const canManageMemberRoles = isAdmin || isCreator;
+  const canRemoveMember = (member: Member) => {
+    if (member.role === 'Créateur') return false;
+    if (isCreator) return true;
+    return isAdmin && member.role !== 'Administrateur';
+  };
   const roleManagementOptions = useMemo(
     () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
     [isCreator],
@@ -124,7 +145,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
         formattedMembers = membersData.map((m: any) => ({
           id: m.id_utilisateur || m.utilisateur?.id || m.id,
           name: getMemberDisplayName(m),
-          email: getMemberEmail(m),
+          email: getMemberContactLabel(m),
           role: m.role,
           photo_base64: getMemberPhotoBase64(m),
         }));
@@ -163,7 +184,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
     try {
-      await workspaceService.inviteMember(workspaceId, { email: inviteEmail, role: inviteRole });
+      await workspaceService.inviteMember(workspaceId, inviteEmail, inviteRole);
       showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
       setIsInviteModalOpen(false);
       setInviteEmail('');
@@ -182,10 +203,32 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
       showMessage(`Rôle de ${member.name} mis à jour`, 'success');
     } catch (err: any) {
-      showMessage(err?.message || "Impossible de modifier le rôle", 'error');
+      const message = sanitizeApiErrorMessage(err, "Impossible de modifier le rôle");
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
+        showMessage(
+          `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de ce workspace avec le bouton Retirer.`,
+          'info'
+        );
+      } else {
+        showMessage(message, 'error');
+      }
       await loadData();
     } finally {
       setUpdatingMemberId(null);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    const member = confirmData.member;
+    if (!member) return;
+    try {
+      await workspaceService.removeMember(workspaceId, member.id);
+      setConfirmData({ isOpen: false, member: null });
+      await loadData();
+      showMessage(`${member.name} a été retiré du workspace`, 'success');
+    } catch (err) {
+      showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
     }
   };
 
@@ -333,11 +376,33 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                         >
                           {roleManagementOptions.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
                         </select>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de ce workspace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     ) : (
-                      <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
-                        {getRoleLabel(member.role)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                          {getRoleLabel(member.role)}
+                        </span>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de ce workspace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </GlassCard>
                 </motion.div>
@@ -382,14 +447,14 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       >
         <div className="space-y-8 py-4">
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] ml-2 opacity-60">Email du Contact</label>
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] ml-2 opacity-60">Email ou username</label>
             <div className="relative group">
               <div className="absolute left-5 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-primary transition-colors">
                 <Users size={20} />
               </div>
               <input
-                type="email"
-                placeholder="collaborateur@kplanner.io"
+                type="text"
+                placeholder="collaborateur@kplanner.io ou username"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl pl-14 pr-6 py-5 text-theme-main placeholder:text-theme-muted/20 focus:ring-4 focus:ring-primary/10 focus:border-primary/50 transition-all outline-none font-bold"
@@ -430,6 +495,15 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        isOpen={confirmData.isOpen}
+        onClose={() => setConfirmData({ isOpen: false, member: null })}
+        onConfirm={handleRemoveMember}
+        title="Retirer du workspace"
+        message={`Voulez-vous retirer ${confirmData.member?.name || 'ce membre'} de ce workspace ? Si cette personne possède un accès hérité ailleurs, celui-ci restera actif.`}
+        confirmText="Retirer"
+      />
     </motion.div>
   );
 }

@@ -23,7 +23,7 @@ import { useResourceRole } from '../../hooks/useResourceRole';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
-import { getMemberDisplayName, getMemberEmail } from '../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
 import { useAuth } from '../../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../../services/api';
 import type { Task, Member } from '../../types';
@@ -166,7 +166,7 @@ export default function CenterContent() {
           setMembers(data.map((m: any) => ({
             id: m.id_utilisateur || m.id,
             name: getMemberDisplayName(m),
-            email: getMemberEmail(m),
+            email: getMemberContactLabel(m),
             role: m.role,
           })));
         })
@@ -403,13 +403,15 @@ export default function CenterContent() {
       return (
         <div className="p-4 sm:p-6 space-y-6">
           <SpaceDashboard spaceId={spaceId} />
-          <PlannerToolsPanel
-            workspaceId={workspaceId}
-            espaceId={spaceId}
-            currentUserId={user?.id}
-            effectiveRole={userEspaceRole || userWorkspaceRole}
-            tasks={[]}
-          />
+          <div id="resource-files-panel" className="scroll-mt-6">
+            <PlannerToolsPanel
+              workspaceId={workspaceId}
+              espaceId={spaceId}
+              currentUserId={user?.id}
+              effectiveRole={userEspaceRole || userWorkspaceRole}
+              tasks={[]}
+            />
+          </div>
         </div>
       );
     }
@@ -417,12 +419,14 @@ export default function CenterContent() {
       return (
         <div className="p-4 sm:p-6 space-y-6">
           <WorkspaceDashboardPanel workspaceId={workspaceId} />
-          <PlannerToolsPanel
-            workspaceId={workspaceId}
-            currentUserId={user?.id}
-            effectiveRole={userWorkspaceRole}
-            tasks={[]}
-          />
+          <div id="resource-files-panel" className="scroll-mt-6">
+            <PlannerToolsPanel
+              workspaceId={workspaceId}
+              currentUserId={user?.id}
+              effectiveRole={userWorkspaceRole}
+              tasks={[]}
+            />
+          </div>
         </div>
       );
     }

@@ -1,5 +1,6 @@
 // frontend/src/services/espace.service.ts
 import { apiFetch } from './api';
+import { buildInvitePayload } from '../utils/inviteIdentifier';
 
 const ESPACE_BASE_URL = import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001';
 
@@ -50,10 +51,10 @@ export const espaceService = {
   getMembers: (espaceId: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/list_members_espace`),
   
-  inviteMember: (espaceId: string, email: string, role: string) => 
+  inviteMember: (espaceId: string, identifier: string, role: string) => 
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/invite_member_espace`, { 
       method: 'POST', 
-      body: JSON.stringify({ email, role }) 
+      body: JSON.stringify(buildInvitePayload(identifier, role))
     }),
   
   updateMemberRole: (espaceId: string, userId: string, role: string) => 

@@ -10,7 +10,7 @@ import { tacheService } from '../../../services/tache.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
-import { getAvatarSrc, getInitials, getMemberDisplayName, getMemberEmail, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
+import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import type { Member } from '../../../types';
 
 interface ListDashboardProps {
@@ -95,7 +95,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         formattedMembers = membersData.map((m: any) => ({
           id: m.id_utilisateur || m.utilisateur?.id || m.id,
           name: getMemberDisplayName(m),
-          email: getMemberEmail(m),
+          email: getMemberContactLabel(m),
           role: m.role,
           photo_base64: getMemberPhotoBase64(m),
         }));
@@ -352,11 +352,11 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email du membre
+                Email ou username
               </label>
               <input
-                type="email"
-                placeholder="exemple@email.com"
+                type="text"
+                placeholder="exemple@email.com ou username"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"

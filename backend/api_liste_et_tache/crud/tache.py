@@ -4,7 +4,7 @@ from sqlalchemy import asc, desc, func
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models import Tache, Membre, Checklist, Liste, Espace
 from .notification_events import commit_notification_events, notify_task_assigned
 
@@ -209,11 +209,17 @@ def _ensure_subtask_due_date_within_parent(
 ) -> None:
     if not date_fin_prevue or not parent or not parent.date_fin_prevue:
         return
-    if date_fin_prevue > parent.date_fin_prevue:
+    if _datetime_for_comparison(date_fin_prevue) > _datetime_for_comparison(parent.date_fin_prevue):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La date de fin d'une sous-tache ne peut pas depasser la date de fin de sa tache parent.",
         )
+
+
+def _datetime_for_comparison(value: datetime) -> datetime:
+    if value.tzinfo is not None and value.utcoffset() is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def _ensure_parent_due_date_after_children(
@@ -233,7 +239,7 @@ def _ensure_parent_due_date_after_children(
         .order_by(Tache.date_fin_prevue.desc())
         .first()
     )
-    if latest_child and latest_child.date_fin_prevue > date_fin_prevue:
+    if latest_child and _datetime_for_comparison(latest_child.date_fin_prevue) > _datetime_for_comparison(date_fin_prevue):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(

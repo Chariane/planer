@@ -1,6 +1,7 @@
 // frontend/src/services/liste.service.ts
 import { apiFetch } from './api';
 import type { List } from '../types';
+import { buildInvitePayload } from '../utils/inviteIdentifier';
 
 const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
 
@@ -69,10 +70,10 @@ export const listeService = {
     }),
 
   // ========== Invitations ==========
-  inviteMember: (listeId: string, email: string, role: string) =>
+  inviteMember: (listeId: string, identifier: string, role: string) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/invite_member_liste`, {
       method: 'POST',
-      body: JSON.stringify({ email, role })
+      body: JSON.stringify(buildInvitePayload(identifier, role))
     }),
 
   acceptInvitation: (token: string) =>

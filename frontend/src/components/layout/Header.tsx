@@ -1,9 +1,9 @@
-import { Menu, User, LogOut, Search, ChevronsLeft, AlignLeft, Moon, Sun, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Menu, User, LogOut, Search, ChevronsLeft, AlignLeft, Moon, Sun, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import NotificationBell from '../notifications/NotificationBell';
 import MessagingBell from '../messaging/MessagingBell';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
@@ -17,10 +17,12 @@ interface HeaderProps {
 export default function Header({ onMenuClick, onToggleSidebar, isCompact = false }: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const shouldCompleteProfile = Boolean(user && (!user.nom || !user.prenoms));
   const profileLabel = user?.username || user?.email || 'Profil';
+  const canGoBack = typeof window !== 'undefined' && window.history.length > 1;
 
   return (
     <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-2 py-2 sm:px-4 sm:py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
@@ -49,6 +51,28 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
                   <ChevronsLeft className="h-5 w-5 group-hover:scale-110 transition-transform" />
                 )}
               </motion.div>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              disabled={!canGoBack}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-gray-500 transition-all hover:border-theme-border-subtle hover:bg-theme-surface-hover hover:text-theme-main disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-gray-500 dark:text-slate-400 dark:hover:text-slate-100"
+              title="Retour"
+              aria-label="Retour"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(1)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-gray-500 transition-all hover:border-theme-border-subtle hover:bg-theme-surface-hover hover:text-theme-main dark:text-slate-400 dark:hover:text-slate-100"
+              title="Suivant"
+              aria-label="Suivant"
+            >
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 

@@ -8,7 +8,7 @@ import { LISTE_TACHE_BASE_URL, plannerToolsService } from '../../../services/pla
 import { listeService } from '../../../services/liste.service';
 import { espaceService } from '../../../services/espace.service';
 import { workspaceService } from '../../../services/workspace.service';
-import { getMemberDisplayName, getMemberEmail } from '../../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName } from '../../../utils/memberDisplay';
 import { ROLES } from '../../../lib/roleHierarchy';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Task } from '../../../types';
@@ -117,7 +117,7 @@ export default function PlannerToolsPanel({
 
   const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
-  const canAddFiles = !isGuest && (listeId ? isManager : true);
+  const canAddFiles = !isGuest && isManager;
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
 
@@ -148,6 +148,12 @@ export default function PlannerToolsPanel({
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;')
   );
+
+  const getShortFileType = (file: File): string => {
+    const extension = file.name.split('.').pop()?.trim().toLowerCase();
+    const mimeSubtype = file.type.split('/')[1]?.split(';')[0]?.trim().toLowerCase();
+    return (extension || mimeSubtype || 'fichier').slice(0, 20);
+  };
 
   // Toast Premium
   const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => (
@@ -190,7 +196,7 @@ export default function PlannerToolsPanel({
             id: m.id,
             id_utilisateur: userId,
             name: getMemberDisplayName(m),
-            email: getMemberEmail(m),
+            email: getMemberContactLabel(m),
             role: m.role,
           });
         });
@@ -216,7 +222,7 @@ export default function PlannerToolsPanel({
             id: m.id,
             id_utilisateur: userId,
             name: getMemberDisplayName(m),
-            email: getMemberEmail(m),
+            email: getMemberContactLabel(m),
             role: m.role,
           });
         }
@@ -317,7 +323,7 @@ export default function PlannerToolsPanel({
         ...prev,
         nom: prev.nom || file.name,
         url_fichier: result.url,
-        type_fichier: file.type.split('/')[1] || 'file'
+        type_fichier: getShortFileType(file)
       }));
       showMessage('success', `Fichier "${file.name}" prêt à être joint.`);
     } catch (err: any) {
@@ -953,7 +959,7 @@ export default function PlannerToolsPanel({
             {!canAddFiles ? (
               <div className="flex items-start gap-4 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 text-[11px] text-theme-muted leading-relaxed font-bold">
                 <ShieldAlert className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                <span>Accès restreint. Seuls les administrateurs ou les membres ayant une tâche assignée peuvent joindre des fichiers à cette ressource.</span>
+                <span>Accès restreint. Seuls les administrateurs ou créateurs, directs ou par héritage, peuvent joindre des fichiers à cette ressource.</span>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">

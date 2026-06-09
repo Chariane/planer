@@ -1,12 +1,11 @@
 // frontend/src/services/workspace.service.ts
 import { apiFetch } from './api';
 import type {
-  Workspace,
-  JoinedResource,
   WorkspaceAccessListingResponse,
   WorkspaceLocalResourcesResponse,
   WorkspaceNavigationResponse,
 } from '../types';
+import { buildInvitePayload, type InvitePayload } from '../utils/inviteIdentifier';
 
 const WORKSPACE_BASE_URL = import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003';
 
@@ -48,18 +47,18 @@ export const workspaceService = {
   
   inviteMember: (
     id: string,
-    data: {
-      email?: string;
-      username?: string;
-      role: string;
-      id_liste?: string;
-      id_tache?: string;
-    },
-  ) =>
-    apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite_member_workspace`, { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
-    }),
+    dataOrIdentifier: InvitePayload | string,
+    role?: string,
+  ) => {
+    const data = typeof dataOrIdentifier === 'string'
+      ? buildInvitePayload(dataOrIdentifier, role || 'Invité')
+      : dataOrIdentifier;
+
+    return apiFetch(WORKSPACE_BASE_URL, `/workspaces/${id}/invite_member_workspace`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
   
   updateMemberRole: (workspaceId: string, userId: string, role: string) =>
     apiFetch(WORKSPACE_BASE_URL, `/workspaces/${workspaceId}/members/${userId}/update_workspace_member`, { 

@@ -429,44 +429,17 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
 
 
 def get_liste_members(db: Session, liste_id: str) -> List[Membre]:
-    """Recupere les membres actifs directement liés à une liste OU à ses tâches."""
-    direct_query = (
+    """Recupere uniquement les membres actifs directement rattaches a une liste."""
+    return (
         db.query(Membre)
         .options(joinedload(Membre.utilisateur))
         .filter(
             Membre.id_liste == liste_id,
+            Membre.id_tache.is_(None),
             Membre.statut == "Actif",
         )
+        .all()
     )
-    direct_members = direct_query.all()
-
-    task_members_query = (
-        db.query(Membre)
-        .options(joinedload(Membre.utilisateur))
-        .join(Tache, Membre.id_tache == Tache.id)
-        .filter(
-            Tache.id_liste == liste_id,
-            Membre.statut == "Actif",
-        )
-    )
-    task_members = task_members_query.all()
-
-    # Fusionner sans doublons (basé sur id_utilisateur)
-    # On privilégie le record direct (rôle souvent plus élevé)
-    seen_users = set()
-    result = []
-    
-    for m in direct_members:
-        if m.id_utilisateur not in seen_users:
-            result.append(m)
-            seen_users.add(m.id_utilisateur)
-            
-    for m in task_members:
-        if m.id_utilisateur not in seen_users:
-            result.append(m)
-            seen_users.add(m.id_utilisateur)
-            
-    return result
 
 
 # ============================================================================
