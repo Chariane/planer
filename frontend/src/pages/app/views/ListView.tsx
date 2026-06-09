@@ -7,6 +7,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { useAuth } from '../../../contexts/AuthContext';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 import { plannerToolsService } from '../../../services/plannerTools.service';
 import type { Task } from '../../../types';
 
@@ -509,6 +510,7 @@ export default function ListView({
   const [addingChecklistTaskId, setAddingChecklistTaskId] = useState<string | null>(null);
   const [newChecklistText, setNewChecklistText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const toggleStatus = (status: string) => {
     setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
@@ -527,16 +529,30 @@ export default function ListView({
     setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
     setAddingChecklistTaskId(taskId);
     setNewChecklistText('');
+    setActionError(null);
   };
 
   const handleAddChecklist = async (taskId: string) => {
     if (!onAddChecklist || !newChecklistText.trim()) return;
+    const targetTask = tasks.find(task => task.id === taskId);
+    const normalizedText = newChecklistText.trim().toLowerCase();
+    const hasDuplicateChecklist = (targetTask?.checklists || []).some(checklist =>
+      checklist.texte.trim().toLowerCase() === normalizedText
+    );
+    if (hasDuplicateChecklist) {
+      setActionError("Cette tâche contient déjà une checklist portant exactement ce nom. Choisissez un autre nom.");
+      return;
+    }
+
     setActionLoading(`add-checklist-${taskId}`);
+    setActionError(null);
     try {
       await onAddChecklist(taskId, newChecklistText);
       setNewChecklistText('');
       setAddingChecklistTaskId(null);
       setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } catch (err: unknown) {
+      setActionError(sanitizeApiErrorMessage(err, "Impossible d'ajouter cette checklist."));
     } finally {
       setActionLoading(null);
     }
@@ -545,9 +561,12 @@ export default function ListView({
   const handleToggleChecklist = async (taskId: string, checklistId: string, currentChecked: boolean) => {
     if (!onToggleChecklist) return;
     setActionLoading(`toggle-checklist-${checklistId}`);
+    setActionError(null);
     try {
       await onToggleChecklist(taskId, checklistId, currentChecked);
       setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } catch (err: unknown) {
+      setActionError(sanitizeApiErrorMessage(err, 'Impossible de modifier cette checklist.'));
     } finally {
       setActionLoading(null);
     }
@@ -557,9 +576,12 @@ export default function ListView({
     if (!onDeleteChecklist) return;
     if (!confirm('Supprimer cette checklist ?')) return;
     setActionLoading(`delete-checklist-${checklistId}`);
+    setActionError(null);
     try {
       await onDeleteChecklist(taskId, checklistId);
       setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
+    } catch (err: unknown) {
+      setActionError(sanitizeApiErrorMessage(err, 'Impossible de supprimer cette checklist.'));
     } finally {
       setActionLoading(null);
     }
@@ -834,6 +856,19 @@ export default function ListView({
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-500 shadow-theme-sm">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="rounded-lg p-1 text-red-500/70 transition hover:bg-red-500/10 hover:text-red-500"
+            title="Fermer"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
       {Object.entries(groupedTasks).map(([status, statusTasks]) => (
         <div key={status} className="space-y-3">
           <button

@@ -176,9 +176,15 @@ def _ensure_unique_checklist_sibling_name(
     if not id_tache and not id_section:
         return
     if found_parent:
+        detail = (
+            "Cette tâche contient déjà une checklist portant exactement ce nom. "
+            "Utilisez un autre nom pour éviter les doublons."
+            if id_tache
+            else "Cette section contient déjà une checklist portant exactement ce nom. Utilisez un autre nom pour éviter les doublons."
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Une checklist portant ce nom existe déjà dans {found_parent}. Choisissez un autre nom.",
+            detail=detail,
         )
 
 def create_checklist(db: Session, texte: str, is_checked: bool = False, id_section: Optional[str] = None, id_tache: Optional[str] = None) -> Checklist:

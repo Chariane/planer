@@ -353,6 +353,18 @@ export default function CenterContent() {
   const handleTaskSubmit = async (formData: any) => {
     setTaskModalError(null);
     try {
+      const normalizedTaskTitle = formData.title?.trim().toLowerCase();
+      if (normalizedTaskTitle) {
+        const duplicateTask = tasks.find(task =>
+          task.id !== editingTask?.id &&
+          task.title.trim().toLowerCase() === normalizedTaskTitle
+        );
+        if (duplicateTask) {
+          setTaskModalError("Une tâche ou sous-tâche portant exactement ce nom existe déjà dans ce projet. Choisissez un autre nom.");
+          return;
+        }
+      }
+
       if (isTaskModalLimited && editingTask) {
         await updateTaskStatus(editingTask.id, formData.status);
         setIsTaskModalOpen(false);

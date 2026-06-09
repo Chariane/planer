@@ -150,16 +150,12 @@ def _ensure_unique_tache_sibling_name(
         Tache.id_liste == id_liste,
         func.lower(func.trim(Tache.titre)) == titre.strip().lower(),
     )
-    if id_tache_parent:
-        query = query.filter(Tache.id_tache_parent == id_tache_parent)
-    else:
-        query = query.filter(Tache.id_tache_parent.is_(None))
     if exclude_id:
         query = query.filter(Tache.id != exclude_id)
     if query.first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une tache portant ce nom existe deja au meme niveau.",
+            detail="Une tâche portant exactement ce nom existe déjà dans ce projet. Utilisez un autre nom pour éviter toute confusion entre tâches et sous-tâches.",
         )
 
 
