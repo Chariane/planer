@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import {
   ChevronDown, ChevronRight, CheckCircle, Circle, Edit, X,
-  Target, Sparkles, Plus, Trash2, Save, AlertCircle, Loader2
+  Target, Sparkles, Plus, Trash2, Save, AlertCircle, Loader2, GitBranch, ListChecks
 } from 'lucide-react';
 import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '../../services/canevas.service';
 import { sectionService } from '../../services/section.service';
@@ -23,8 +23,19 @@ type AddChecklistMode = 'manual' | 'task';
 interface TaskChecklistOption {
   id: string;
   text: string;
+  taskId: string;
   taskTitle: string;
+  taskPath: string;
+  parentTaskId: string | null;
+  depth: number;
   isChecked: boolean;
+}
+
+interface CanevasTaskOptionNode {
+  id: string;
+  title: string;
+  parentTaskId: string | null;
+  checklists: any[];
 }
 
 interface RightCanevasProps {
@@ -337,7 +348,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
     try {
       const tasks = await tacheService.getByListe(listId);
       const normalizedTasks = Array.isArray(tasks) ? tasks : [];
-      const options: TaskChecklistOption[] = [];
+      const taskNodes: CanevasTaskOptionNode[] = [];
 
       for (const task of normalizedTasks) {
         const taskTitle = task.titre || task.title || 'Tâche';
@@ -345,16 +356,50 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
           ? task.checklists
           : await checklistService.getByTache(task.id);
 
-        for (const checklist of checklists || []) {
-          if (checklist.id_section) continue;
-          options.push({
-            id: checklist.id,
-            text: checklist.texte,
-            taskTitle,
-            isChecked: Boolean(checklist.is_checked),
-          });
-        }
+        taskNodes.push({
+          id: task.id,
+          title: taskTitle,
+          parentTaskId: task.id_tache_parent || task.parentTaskId || null,
+          checklists: checklists || [],
+        });
       }
+
+      const tasksById = taskNodes.reduce((acc, task) => {
+        acc[task.id] = task;
+        return acc;
+      }, {} as Record<string, CanevasTaskOptionNode>);
+
+      const tasksByParent = taskNodes.reduce((acc, task) => {
+        const parentId = task.parentTaskId && tasksById[task.parentTaskId] ? task.parentTaskId : 'root';
+        acc[parentId] = [...(acc[parentId] || []), task];
+        return acc;
+      }, {} as Record<string, CanevasTaskOptionNode[]>);
+
+      const sortTasks = (items: CanevasTaskOptionNode[]) =>
+        [...items].sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+
+      const options: TaskChecklistOption[] = [];
+      const walkTaskTree = (parentId: string, depth = 0, parentPath: string[] = []) => {
+        for (const task of sortTasks(tasksByParent[parentId] || [])) {
+          const taskPathParts = [...parentPath, task.title];
+          for (const checklist of task.checklists || []) {
+            if (checklist.id_section) continue;
+            options.push({
+              id: checklist.id,
+              text: checklist.texte,
+              taskId: task.id,
+              taskTitle: task.title,
+              taskPath: taskPathParts.join(' / '),
+              parentTaskId: task.parentTaskId,
+              depth,
+              isChecked: Boolean(checklist.is_checked),
+            });
+          }
+          walkTaskTree(task.id, depth + 1, taskPathParts);
+        }
+      };
+
+      walkTaskTree('root');
 
       setTaskChecklistOptions(options);
       setSelectedTaskChecklistId(options[0]?.id || '');
@@ -865,17 +910,61 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                                     </p>
                                   ) : (
                                     <div className="space-y-3">
-                                      <select
-                                        value={selectedTaskChecklistId}
-                                        onChange={(e) => setSelectedTaskChecklistId(e.target.value)}
-                                        className="w-full text-xs bg-theme-surface border border-theme-border-subtle rounded-xl px-3 py-2.5 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium appearance-none cursor-pointer"
-                                      >
-                                        {taskChecklistOptions.map(option => (
-                                          <option key={option.id} value={option.id} className="bg-theme-surface">
-                                            {option.taskTitle.slice(0, 15)}... / {option.text.slice(0, 20)}...
-                                          </option>
-                                        ))}
-                                      </select>
+                                      <div className="max-h-64 overflow-y-auto rounded-2xl border border-theme-border-subtle bg-theme-surface p-2 custom-scrollbar">
+                                        {taskChecklistOptions.map(option => {
+                                          const isSelected = selectedTaskChecklistId === option.id;
+                                          return (
+                                            <button
+                                              key={option.id}
+                                              type="button"
+                                              onClick={() => setSelectedTaskChecklistId(option.id)}
+                                              className={`w-full rounded-xl border px-3 py-2 text-left transition-all ${
+                                                isSelected
+                                                  ? 'border-secondary bg-secondary/10 shadow-theme-sm'
+                                                  : 'border-transparent hover:border-theme-border-subtle hover:bg-theme-surface-hover'
+                                              }`}
+                                              style={{ paddingLeft: `${12 + option.depth * 18}px` }}
+                                            >
+                                              <div className="flex min-w-0 items-start gap-2">
+                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg ${
+                                                  option.depth > 0 ? 'bg-secondary/10 text-secondary' : 'bg-theme-surface-hover text-theme-muted'
+                                                }`}>
+                                                  {option.depth > 0 ? <GitBranch className="h-3 w-3" /> : <ListChecks className="h-3 w-3" />}
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="truncate text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                                                      {option.taskPath}
+                                                    </span>
+                                                    {option.depth > 0 && (
+                                                      <span className="shrink-0 rounded-md bg-secondary/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-secondary">
+                                                        N{option.depth}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  <div className="mt-1 flex items-center gap-2">
+                                                    {option.isChecked ? (
+                                                      <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                                                    ) : (
+                                                      <Circle className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
+                                                    )}
+                                                    <span className={`truncate text-xs font-bold ${
+                                                      option.isChecked ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'
+                                                    }`}>
+                                                      {option.text}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                      {selectedTaskChecklistId && (
+                                        <p className="text-[10px] font-semibold leading-relaxed text-theme-muted/70">
+                                          La checklist sélectionnée sera liée à cette section tout en restant synchronisée avec sa tâche d’origine.
+                                        </p>
+                                      )}
                                       <button
                                         onClick={() => linkTaskChecklistToSection(section.id)}
                                         disabled={!selectedTaskChecklistId || actionLoading === `link-checklist-${section.id}`}
