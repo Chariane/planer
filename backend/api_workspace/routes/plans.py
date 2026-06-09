@@ -5,7 +5,7 @@ from ..core.plans import get_plan_by_code, get_plan_catalog
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..schemas import SubscriptionPlanCatalogOut
-from backend.core.plan_limits import get_plan_usage
+from ..core.plan_limits import get_plan_usage
 
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
