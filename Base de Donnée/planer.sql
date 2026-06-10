@@ -240,7 +240,7 @@ CREATE TABLE planer.section (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
     titre VARCHAR(150) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
     id_canevas VARCHAR(12) REFERENCES planer.canevas(id) ON DELETE SET NULL ,
     CONSTRAINT section_id_canevas_fkey FOREIGN KEY (id_canevas) REFERENCES planer.canevas(id) ON DELETE SET NULL
 );
