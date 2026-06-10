@@ -240,7 +240,7 @@ CREATE TABLE planer.section (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
     titre VARCHAR(150) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP,
     id_canevas VARCHAR(12) REFERENCES planer.canevas(id) ON DELETE SET NULL ,
     CONSTRAINT section_id_canevas_fkey FOREIGN KEY (id_canevas) REFERENCES planer.canevas(id) ON DELETE SET NULL
 );
@@ -250,7 +250,7 @@ CREATE TABLE planer.checklist (
     texte VARCHAR(255) NOT NULL,
     is_checked BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP,
     id_section VARCHAR(12) REFERENCES planer.section(id) ON DELETE SET NULL,
     id_tache VARCHAR(12) REFERENCES planer.tache(id) ON DELETE SET NULL,
     CONSTRAINT checklist_id_section_fkey FOREIGN KEY (id_section) REFERENCES planer.section(id) ON DELETE SET NULL,

@@ -13,3 +13,9 @@ ADD CONSTRAINT membre_statut_check CHECK (
         ]
     )
 );
+
+ALTER TABLE planer.section
+ALTER COLUMN updated_at DROP NOT NULL;
+
+ALTER TABLE planer.checklist
+ALTER COLUMN updated_at DROP NOT NULL;
