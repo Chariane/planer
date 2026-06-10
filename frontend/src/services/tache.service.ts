@@ -1,7 +1,14 @@
 // frontend/src/services/tache.service.ts
 import { apiFetch } from './api';
+import { CHECKLIST_CHANGED_EVENT } from './checklist.service';
 
 const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
+
+const notifyChecklistChanged = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(CHECKLIST_CHANGED_EVENT));
+  }
+};
 
 export interface TacheBulkUpdateItem {
   id: string;
@@ -92,22 +99,31 @@ export const tacheService = {
   getChecklistsByTache: (tacheId: string) => 
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/checklists`),
 
-  createChecklistInTache: (tacheId: string, data: { texte: string; is_checked?: boolean }) => 
-    apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/checklists`, { 
+  createChecklistInTache: async (tacheId: string, data: { texte: string; is_checked?: boolean }) => {
+    const result = await apiFetch(LISTE_TACHE_BASE_URL, `/listes/taches/${tacheId}/checklists`, { 
       method: 'POST', 
       body: JSON.stringify(data) 
-    }),
+    });
+    notifyChecklistChanged();
+    return result;
+  },
 
-  updateChecklist: (checklistId: string, data: { texte?: string; is_checked?: boolean; id_section?: string | null; id_tache?: string | null }) => 
-    apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { 
+  updateChecklist: async (checklistId: string, data: { texte?: string; is_checked?: boolean; id_section?: string | null; id_tache?: string | null }) => {
+    const result = await apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { 
       method: 'PUT', 
       body: JSON.stringify(data) 
-    }),
+    });
+    notifyChecklistChanged();
+    return result;
+  },
 
-  deleteChecklist: (checklistId: string) => 
-    apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { 
+  deleteChecklist: async (checklistId: string) => {
+    const result = await apiFetch(LISTE_TACHE_BASE_URL, `/listes/checklists/${checklistId}`, { 
       method: 'DELETE' 
-    }),
+    });
+    notifyChecklistChanged();
+    return result;
+  },
 
   // ========== Opérations spéciales ==========
   bulkUpdate: (items: TacheBulkUpdateItem[]) =>

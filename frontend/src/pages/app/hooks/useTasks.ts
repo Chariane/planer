@@ -1,6 +1,7 @@
 // frontend/src/pages/app/hooks/useTasks.ts
 import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
+import { CHECKLIST_CHANGED_EVENT } from '../../../services/checklist.service';
 import type { TacheFilters } from '../../../services/tache.service';
 import { getMemberContactLabel, getMemberDisplayName } from '../../../utils/memberDisplay';
 import type { Task } from '../../../types';
@@ -85,6 +86,15 @@ export function useTasks(listId: string | undefined) {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  useEffect(() => {
+    if (!listId) return;
+    const refreshTasksFromChecklistChange = () => {
+      loadTasks();
+    };
+    window.addEventListener(CHECKLIST_CHANGED_EVENT, refreshTasksFromChecklistChange);
+    return () => window.removeEventListener(CHECKLIST_CHANGED_EVENT, refreshTasksFromChecklistChange);
+  }, [listId, loadTasks]);
 
   const addTask = async (newTask: NewTaskInput) => {
     if (!listId) return null;

@@ -1400,6 +1400,63 @@ def _member_is_direct_list_manager(membre: Membre) -> bool:
     return bool(membre.id_liste and membre.role in LISTE_MANAGEMENT_ROLES)
 
 
+def _direct_list_has_admin(db: Session, liste_id: str) -> bool:
+    return db.query(Membre.id).filter(
+        Membre.id_liste == liste_id,
+        Membre.statut == "Actif",
+        Membre.role == LISTE_ADMIN_ROLE,
+    ).first() is not None
+
+
+def _require_direct_list_admin_grant(db: Session, liste_id: str, current_user_id: str) -> Membre:
+    membre = _get_liste_member_record(db, liste_id, current_user_id)
+    if membre and membre.statut == "Actif" and membre.role == LISTE_ADMIN_ROLE:
+        return membre
+    raise HTTPException(status_code=403, detail="Ce rapport est reserve aux administrateurs directs de la liste.")
+
+
+def _require_direct_list_creator_grant(db: Session, liste_id: str, current_user_id: str) -> Membre:
+    membre = _get_liste_member_record(db, liste_id, current_user_id)
+    if membre and membre.statut == "Actif" and membre.role == LISTE_OWNER_ROLE:
+        return membre
+    raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur direct de la liste.")
+
+
+def _report_liste_id_and_author_role(db: Session, rapport: Rapport) -> tuple[str, str | None, str | None]:
+    membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
+    liste_id = getattr(rapport, "id_liste", None) or (membre.id_liste if membre else None)
+    author_role = (membre.role if membre else getattr(rapport, "author_role", None))
+    owner_user_id = (membre.id_utilisateur if membre else getattr(rapport, "owner_user_id", None))
+    if not liste_id:
+        raise HTTPException(status_code=403, detail="Ce rapport n'est plus rattache a une liste accessible.")
+    return liste_id, author_role, owner_user_id
+
+
+def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_user_id: str):
+    """
+    Circuit rapports :
+    - l'auteur voit toujours son rapport ;
+    - rapport d'un Membre direct : administrateurs directs de la liste ;
+      s'il n'y a aucun administrateur direct, le createur direct reçoit le rapport ;
+    - rapport d'un Administrateur direct : createur direct de la liste ;
+    - rapport d'un Createur direct : auteur uniquement.
+    """
+    liste_id, author_role, owner_user_id = _report_liste_id_and_author_role(db, rapport)
+    if owner_user_id == current_user_id:
+        _require_list_read_access(db, liste_id, current_user_id)
+        return _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
+
+    if author_role == LISTE_MEMBER_ROLE:
+        if _direct_list_has_admin(db, liste_id):
+            return _require_direct_list_admin_grant(db, liste_id, current_user_id)
+        return _require_direct_list_creator_grant(db, liste_id, current_user_id)
+
+    if author_role == LISTE_ADMIN_ROLE:
+        return _require_direct_list_creator_grant(db, liste_id, current_user_id)
+
+    raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
+
+
 def _require_member_workflow_read_access(db: Session, member_id: str, current_user_id: str):
     """
     Accès lecture pour rapports et absences/congés :
@@ -1450,13 +1507,24 @@ def _get_absence_or_404(db: Session, absence_id: str) -> AbsenceEtConge:
 
 def _require_report_read_access(db: Session, rapport_id: str, current_user_id: str):
     rapport = _get_rapport_or_404(db, rapport_id)
-    membre = _require_member_workflow_read_access(db, rapport.id_membre, current_user_id)
+    membre = _require_report_workflow_read_access(db, rapport, current_user_id)
     return rapport, membre
 
 
 def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
     rapport = _get_rapport_or_404(db, rapport_id)
-    membre = _require_member_workflow_evaluation_access(db, rapport.id_membre, current_user_id)
+    liste_id, author_role, owner_user_id = _report_liste_id_and_author_role(db, rapport)
+    if owner_user_id == current_user_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre rapport.")
+    if author_role == LISTE_MEMBER_ROLE:
+        if _direct_list_has_admin(db, liste_id):
+            membre = _require_direct_list_admin_grant(db, liste_id, current_user_id)
+        else:
+            membre = _require_direct_list_creator_grant(db, liste_id, current_user_id)
+    elif author_role == LISTE_ADMIN_ROLE:
+        membre = _require_direct_list_creator_grant(db, liste_id, current_user_id)
+    else:
+        raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
     return rapport, membre
 
 
@@ -1466,11 +1534,20 @@ def _require_report_owner_or_management_access(
     current_user_id: str,
 ):
     rapport = _get_rapport_or_404(db, rapport_id)
-    membre = _get_member_or_404(db, rapport.id_membre)
-    if membre.id_utilisateur == current_user_id:
-        _require_member_read_access(db, membre.id, current_user_id)
+    membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
+    owner_user_id = membre.id_utilisateur if membre else getattr(rapport, "owner_user_id", None)
+
+    if owner_user_id == current_user_id:
+        if membre:
+            _require_member_read_access(db, membre.id, current_user_id)
+        else:
+            liste_id = getattr(rapport, "id_liste", None)
+            if not liste_id:
+                raise HTTPException(status_code=403, detail="Ce rapport n'est plus rattache a une liste accessible.")
+            _require_list_read_access(db, liste_id, current_user_id)
         return rapport, membre, "owner"
-    _require_member_workflow_evaluation_access(db, membre.id, current_user_id)
+
+    _require_report_management_access(db, rapport_id, current_user_id)
     return rapport, membre, "manager"
 
 

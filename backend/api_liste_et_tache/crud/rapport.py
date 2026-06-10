@@ -9,24 +9,32 @@ from ..core.function import (
     _member_has_assigned_task_in_list,
     _require_member_management_access,
     _require_member_read_access,
-    _require_member_workflow_read_access,
     _require_report_owner_or_management_access,
     _require_report_read_access,
+    _require_report_workflow_read_access,
     commit_or_raise,
 )
-from ..models import Rapport, Membre, Utilisateur
+from ..models import Rapport, Membre, Liste
 from .notification_events import commit_notification_events, notify_report_created
 
 
+def _member_owner_name(membre: Membre) -> str:
+    if membre.utilisateur:
+        user = membre.utilisateur
+        return f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email or "Utilisateur"
+    return "Utilisateur supprimé"
+
+
 def _serialize_report(rapport: Rapport) -> dict:
-    owner_name = "inconnu"
+    owner_name = rapport.owner_name_snapshot or "inconnu"
     if rapport.membres and rapport.membres.utilisateur:
-        user = rapport.membres.utilisateur
-        owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+        owner_name = _member_owner_name(rapport.membres)
     elif rapport.membres and not rapport.membres.utilisateur:
         owner_name = "Utilisateur supprimé"
-    elif hasattr(rapport, "owner_user_id") and rapport.owner_user_id:
-        pass
+
+    owner_user_id = rapport.owner_user_id or (rapport.membres.id_utilisateur if rapport.membres else None)
+    author_role = rapport.author_role or (rapport.membres.role if rapport.membres else None)
+    liste_id = rapport.id_liste or (rapport.membres.id_liste if rapport.membres else None)
 
     return {
         "id": rapport.id,
@@ -40,6 +48,10 @@ def _serialize_report(rapport: Rapport) -> dict:
         "created_at": rapport.created_at,
         "id_membre": rapport.id_membre,
         "owner_name": owner_name,
+        "owner_user_id": owner_user_id,
+        "author_role": author_role,
+        "id_liste": liste_id,
+        "liste_id": liste_id,
     }
 
 
@@ -55,12 +67,21 @@ def create_report(
     periode_debut=None,
     periode_fin=None,
     id_membre: str,
-) -> Rapport:
+) -> dict:
+    if not id_membre:
+        raise HTTPException(status_code=400, detail="Vous devez etre membre direct de la liste pour creer un rapport.")
+
     membre = _get_member_or_404(db, id_membre)
     liste_id = _get_member_scope_liste_id(db, membre)
 
     if membre.id_utilisateur != current_user_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez creer un rapport que pour vous-meme.")
+
+    if not membre.id_liste:
+        raise HTTPException(
+            status_code=403,
+            detail="Les rapports doivent etre envoyes depuis votre appartenance directe a la liste.",
+        )
 
     _require_member_read_access(db, id_membre, current_user_id)
 
@@ -86,6 +107,10 @@ def create_report(
         periode_debut=periode_debut,
         periode_fin=periode_fin,
         id_membre=id_membre,
+        owner_user_id=current_user_id,
+        owner_name_snapshot=_member_owner_name(membre),
+        author_role=membre.role,
+        id_liste=liste_id,
     )
     db.add(rapport)
     commit_or_raise(
@@ -95,7 +120,7 @@ def create_report(
     )
     notify_report_created(db, report_member=membre, report_title=titre, actor_user_id=current_user_id)
     commit_notification_events(db)
-    return rapport
+    return _serialize_report(rapport)
 
 
 def list_accessible_reports(
@@ -128,36 +153,40 @@ def list_accessible_reports(
     reports = query.limit(max(limit, 1) * 6).all()
     results: list[dict] = []
     for rapport in reports:
+        membre = None
         try:
-            _require_member_workflow_read_access(db, rapport.id_membre, current_user_id)
-            membre = _get_member_or_404(db, rapport.id_membre)
+            membre = _require_report_workflow_read_access(db, rapport, current_user_id)
         except HTTPException:
             continue
 
-        member_liste_id = _get_member_scope_liste_id(db, membre)
+        member_liste_id = rapport.id_liste or (_get_member_scope_liste_id(db, membre) if membre else None)
+        if not member_liste_id:
+            continue
         if liste_id and member_liste_id != liste_id:
             continue
-        if not liste_id and espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
+        report_liste = membre.liste if membre and membre.liste else db.query(Liste).filter(Liste.id == member_liste_id).first()
+        if not liste_id and espace_id and (not report_liste or report_liste.id_espace != espace_id):
             continue
         if not liste_id and workspace_id:
-            member_workspace_id = membre.liste.id_workspace if membre.liste else None
-            if membre.liste and membre.liste.id_espace and membre.liste.espace:
-                member_workspace_id = membre.liste.espace.id_workspace
+            member_workspace_id = report_liste.id_workspace if report_liste else None
+            if report_liste and report_liste.id_espace and report_liste.espace:
+                member_workspace_id = report_liste.espace.id_workspace
             if member_workspace_id != workspace_id:
                 continue
 
         payload = _serialize_report(rapport)
         payload["liste_id"] = member_liste_id
-        payload["owner_user_id"] = membre.id_utilisateur
+        payload["id_liste"] = member_liste_id
+        payload["owner_user_id"] = payload.get("owner_user_id") or (membre.id_utilisateur if membre else None)
         results.append(payload)
         if len(results) >= limit:
             break
     return results
 
 
-def get_report(db: Session, *, report_id: str, current_user_id: str) -> Rapport:
+def get_report(db: Session, *, report_id: str, current_user_id: str) -> dict:
     rapport, _membre = _require_report_read_access(db, report_id, current_user_id)
-    return rapport
+    return _serialize_report(rapport)
 
 
 def update_report(
@@ -166,7 +195,7 @@ def update_report(
     report_id: str,
     current_user_id: str,
     **updates,
-) -> Rapport:
+) -> dict:
     rapport, _membre, actor_kind = _require_report_owner_or_management_access(db, report_id, current_user_id)
 
     if actor_kind != "owner":
@@ -187,7 +216,7 @@ def update_report(
         detail="Impossible de mettre a jour ce rapport.",
         refresh_instance=rapport,
     )
-    return rapport
+    return _serialize_report(rapport)
 
 
 def delete_report(db: Session, *, report_id: str, current_user_id: str) -> None:

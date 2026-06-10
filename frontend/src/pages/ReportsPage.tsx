@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import {
     FileText,
     Search,
-    Download,
     Plus,
-    Calendar,
     ChevronRight,
     TrendingUp,
     FileCheck,
@@ -15,8 +13,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { plannerToolsService } from '../services/plannerTools.service';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ReportsPage() {
+    const { user } = useAuth();
     const [reports, setReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -50,6 +50,10 @@ export default function ReportsPage() {
         { label: 'En attente de revue', value: 0, icon: Clock, color: 'text-amber-500' },
         { label: 'Validés', value: reports.length, icon: FileCheck, color: 'text-primary-hover' },
     ];
+
+    const displayedReports = activeTab === 'mine'
+        ? reports.filter(report => report.owner_user_id === user?.id)
+        : reports;
 
     return (
         <div className="p-8 max-w-7xl mx-auto space-y-10 min-h-screen pb-20">
@@ -127,7 +131,7 @@ export default function ReportsPage() {
                     <div className="h-12 w-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
                     <p className="text-sm font-black text-theme-muted uppercase tracking-widest">Synchronisation...</p>
                 </div>
-            ) : reports.length === 0 ? (
+            ) : displayedReports.length === 0 ? (
                 <GlassCard className="py-24 flex flex-col items-center justify-center text-center space-y-6 border-dashed border-white/10 italic">
                     <div className="h-20 w-20 rounded-3xl bg-white/5 flex items-center justify-center text-theme-muted/20">
                         <FileText size={40} />
@@ -140,7 +144,7 @@ export default function ReportsPage() {
             ) : (
                 <div className="grid grid-cols-1 gap-4">
                     <AnimatePresence mode="popLayout">
-                        {reports.map((report) => (
+                        {displayedReports.map((report) => (
                             <motion.div
                                 key={report.id}
                                 initial={{ opacity: 0, y: 20 }}

@@ -910,7 +910,11 @@ class RapportOut(RapportBase):
     id: str
     created_at: datetime
     id_membre: Optional[str] = None
+    liste_id: Optional[str] = None
+    id_liste: Optional[str] = None
+    owner_user_id: Optional[str] = None
     owner_name: Optional[str] = None
+    author_role: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class RapportDelete(BaseModel):

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Calendar, Check, Download, Edit, Eye, FileText, ListTodo, Loader2, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Search, Filter, Plus } from 'lucide-react';
+import { Archive, Calendar, Check, Download, Edit, Eye, FileText, Loader2, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Filter, Plus } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
@@ -105,7 +105,6 @@ export default function PlannerToolsPanel({
 
   const isDirectMemberRecord = directMembers.find(member => member.id_utilisateur === currentUserId);
   const isDirectAdmin = isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN;
-  const isDirectSimpleMember = isDirectMemberRecord?.role === ROLES.MEMBER;
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
   const isGuest = effectiveRole === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
@@ -408,11 +407,10 @@ export default function PlannerToolsPanel({
 
 
   const handleCreateReport = async () => {
-    // On cherche un record de membre valide pour l'utilisateur courant (direct ou hérité)
-    const currentUserMemberRecord = members.find(m => m.id_utilisateur === currentUserId);
+    const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
 
     if (!currentUserMemberRecord || !reportForm.titre.trim()) {
-      showMessage('error', 'Impossible de trouver votre identifiant membre ou le titre est manquant.');
+      showMessage('error', 'Vous devez être membre direct de cette liste et renseigner un titre pour envoyer un rapport.');
       return;
     }
     if (!canCreateReport) {
@@ -427,9 +425,10 @@ export default function PlannerToolsPanel({
       setReports(prev => [
         {
           ...createdReport,
-          owner_user_id: currentUserId,
-          owner_name: 'Moi',
-          liste_id: listeId,
+          owner_user_id: createdReport.owner_user_id || currentUserId,
+          owner_name: createdReport.owner_name || 'Moi',
+          liste_id: createdReport.liste_id || listeId,
+          id_liste: createdReport.id_liste || listeId,
         },
         ...prev.filter(report => report.id !== createdReport.id),
       ]);
@@ -482,8 +481,8 @@ export default function PlannerToolsPanel({
         try {
           await plannerToolsService.deleteReport(report.id);
           setReports(prev => prev.filter(item => item.id !== report.id));
-          setSelectedReport(prev => prev?.id === report.id ? null : prev);
-          setEditingReport(prev => prev?.id === report.id ? null : prev);
+          setSelectedReport((prev: any | null) => prev?.id === report.id ? null : prev);
+          setEditingReport((prev: any | null) => prev?.id === report.id ? null : prev);
           closeConfirm();
           showMessage('success', 'Rapport supprimé avec succès.');
         } catch (err: any) {
@@ -748,70 +747,6 @@ export default function PlannerToolsPanel({
     `);
     win.document.close();
   };
-
-  const renderEmptyReports = (label: string) => (
-    <div className="text-center py-12 bg-theme-surface-hover/30 rounded-2xl border-2 border-dashed border-theme-border-subtle">
-      <FileText className="h-10 w-10 mx-auto text-theme-muted/20 mb-2" />
-      <p className="text-sm text-theme-muted italic font-medium">{label}</p>
-    </div>
-  );
-
-  const renderReportCard = (report: any, mode: 'own' | 'accessible') => (
-    <div key={report.id} className="group bg-theme-surface rounded-2xl shadow-theme-sm border border-theme-border-subtle hover:border-secondary/30 transition-all hover:shadow-theme-md overflow-hidden flex flex-col">
-      <button onClick={() => setSelectedReport(report)} className="bg-theme-surface-hover/50 px-5 py-4 border-b border-theme-border-subtle flex justify-between items-center text-left">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center text-white font-black text-[10px] shadow-theme-sm uppercase tracking-widest">
-            Doc
-          </div>
-          <div>
-            <h4 className="font-bold text-theme-main group-hover:text-secondary transition-colors text-sm tracking-tight">{report.titre}</h4>
-            <p className="text-[9px] font-black text-theme-muted/50 uppercase tracking-widest">
-              {formatDate(report.created_at)} · {report.authorName}
-            </p>
-          </div>
-        </div>
-        <Eye size={16} className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-      </button>
-
-      <div className="p-5 space-y-4 flex-1">
-        <div className="relative pl-4 border-l-2 border-secondary/20">
-          <p className="text-[10px] font-black text-secondary/40 uppercase mb-2 tracking-widest">I. RÉALISATIONS</p>
-          <p className="text-sm text-theme-muted whitespace-pre-wrap leading-relaxed line-clamp-4 font-medium">{report.realisations || 'Aucune réalisation renseignée.'}</p>
-        </div>
-        {report.difficultes_et_solutions && (
-          <div className="relative pl-4 border-l-2 border-red-500/20">
-            <p className="text-[10px] font-black text-red-500/40 uppercase mb-2 tracking-widest">II. DIFFICULTÉS & SOLUTIONS</p>
-            <p className="text-sm text-theme-muted whitespace-pre-wrap leading-relaxed line-clamp-3 font-medium">{report.difficultes_et_solutions}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="px-5 py-3 bg-theme-surface-hover/30 border-t border-theme-border-subtle flex items-center justify-between">
-        <span className="text-[10px] text-theme-muted font-black uppercase tracking-widest">
-          Signé: <span className="text-secondary">{report.authorName}</span>
-        </span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => printReport(report)} className="p-2 rounded-lg hover:bg-secondary/10 text-secondary transition-all" title="Imprimer / PDF">
-            <Download size={14} />
-          </button>
-          {mode === 'own' ? (
-            <>
-              <button onClick={() => startEditReport(report)} className="p-2 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-all" title="Modifier">
-                <Edit size={14} />
-              </button>
-              <button onClick={() => handleDeleteReport(report)} className="p-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-all" title="Supprimer">
-                <Trash2 size={14} />
-              </button>
-            </>
-          ) : (
-            <button onClick={() => archiveReport(report.id)} className="p-2 rounded-lg hover:bg-amber-500/10 text-amber-500 transition-all" title="Archiver dans mon espace">
-              <Archive size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 
   const renderAbsenceCard = (absence: any, mode: 'own' | 'accessible' | 'archive') => (
     <div key={absence.id} className="border border-theme-border-subtle rounded-2xl p-4 flex items-center justify-between gap-3 bg-theme-surface shadow-theme-sm hover:shadow-theme-md transition-all">

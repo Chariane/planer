@@ -1619,6 +1619,10 @@ class Rapport(Base):
     periode_fin: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     id_membre: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.membre.id', ondelete='SET NULL'))
+    owner_user_id: Mapped[Optional[str]] = mapped_column(String(12))
+    owner_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255))
+    author_role: Mapped[Optional[str]] = mapped_column(String(30))
+    id_liste: Mapped[Optional[str]] = mapped_column(String(12))
 
     # Relations
     membres: Mapped[Optional['Membre']] = relationship('Membre', back_populates='rapports')

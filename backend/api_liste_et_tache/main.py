@@ -25,15 +25,36 @@ else:
     from .core.deadline_scheduler import deadline_reminder_scheduler
 
 
-def ensure_task_creator_columns() -> None:
+def ensure_runtime_columns() -> None:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE planer.tache ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
         conn.execute(text("ALTER TABLE planer.checklist ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
+        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS owner_user_id varchar(12)"))
+        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS owner_name_snapshot varchar(255)"))
+        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS author_role varchar(30)"))
+        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_liste varchar(12)"))
+        conn.execute(text("""
+            UPDATE planer.rapport AS r
+            SET
+                owner_user_id = COALESCE(r.owner_user_id, m.id_utilisateur),
+                author_role = COALESCE(r.author_role, m.role),
+                id_liste = COALESCE(r.id_liste, m.id_liste),
+                owner_name_snapshot = COALESCE(
+                    r.owner_name_snapshot,
+                    NULLIF(TRIM(CONCAT(COALESCE(u.nom, ''), ' ', COALESCE(u.prenoms, ''))), ''),
+                    u.username,
+                    u.email,
+                    'Utilisateur supprimé'
+                )
+            FROM planer.membre AS m
+            LEFT JOIN public.utilisateur AS u ON u.id = m.id_utilisateur
+            WHERE r.id_membre = m.id
+        """))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_task_creator_columns()
+    ensure_runtime_columns()
     deadline_reminder_scheduler.start()
     try:
         yield

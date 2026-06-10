@@ -160,6 +160,32 @@ def _direct_list_manager_user_ids(db: Session, liste_id: str, *, exclude_user_id
     return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
 
 
+def _direct_list_admin_user_ids(db: Session, liste_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.statut == "Actif",
+            Membre.role == "Administrateur",
+        )
+        .all()
+    )
+    return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
+
+
+def _direct_list_creator_user_ids(db: Session, liste_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_liste == liste_id,
+            Membre.statut == "Actif",
+            Membre.role == "Créateur",
+        )
+        .all()
+    )
+    return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
+
+
 def _inherited_list_manager_user_ids(db: Session, liste: Liste, *, exclude_user_id: str | None = None) -> list[str]:
     user_ids: list[str | None] = []
 
@@ -207,9 +233,13 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
     message = f"{author_name} a envoyé un rapport dans la liste « {liste_name} » : {report_title}."
 
     if report_member.role == "Membre":
-        recipients = _direct_list_manager_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+        recipients = _direct_list_admin_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+        if not recipients:
+            recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+    elif report_member.role == "Administrateur":
+        recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
     else:
-        recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
+        recipients = []
 
     for user_id in recipients:
         _create_notification(

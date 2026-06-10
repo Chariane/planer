@@ -247,8 +247,9 @@ def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Check
             exclude_id=checklist.id,
         )
     
+    nullable_relation_fields = {"id_section", "id_tache"}
     for key, value in kwargs.items():
-        if hasattr(checklist, key) and value is not None:
+        if hasattr(checklist, key) and (value is not None or key in nullable_relation_fields):
             setattr(checklist, key, value)
     checklist.updated_at = datetime.now()
 

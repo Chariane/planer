@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { canevasService, type EnhancedCanevas, type EnhancedChecklist } from '../../services/canevas.service';
 import { sectionService } from '../../services/section.service';
-import { checklistService } from '../../services/checklist.service';
+import { CHECKLIST_CHANGED_EVENT, checklistService } from '../../services/checklist.service';
 import { listeService } from '../../services/liste.service';
 import { tacheService } from '../../services/tache.service';
 import { workspaceService } from '../../services/workspace.service';
@@ -269,6 +269,15 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
     }
   }, [listId, permissionChecked]);
 
+  useEffect(() => {
+    if (!listId || !permissionChecked) return;
+    const refreshCanevasFromChecklistChange = () => {
+      loadCanevas();
+    };
+    window.addEventListener(CHECKLIST_CHANGED_EVENT, refreshCanevasFromChecklistChange);
+    return () => window.removeEventListener(CHECKLIST_CHANGED_EVENT, refreshCanevasFromChecklistChange);
+  }, [listId, permissionChecked]);
+
   const addSection = async () => {
     if (!newSectionTitle.trim() || !canevas || !canModify) return;
     clearActionError();
@@ -474,20 +483,32 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
     }
   };
 
-  const deleteChecklist = async (checklistId: string) => {
+  const deleteChecklist = async (checklist: EnhancedChecklist) => {
     if (!canModify) return;
+    const isTaskChecklist = checklist.source === 'task';
     setConfirmModal({
       isOpen: true,
-      title: 'Supprimer l\'élément',
-      message: 'Voulez-vous vraiment supprimer cet élément ?',
+      title: isTaskChecklist ? 'Retirer de la section' : 'Supprimer l\'élément',
+      message: isTaskChecklist
+        ? 'Cette checklist restera dans sa tâche d’origine. Elle sera seulement retirée de cette section.'
+        : 'Voulez-vous vraiment supprimer cet élément ?',
       onConfirm: async () => {
-        setActionLoading(`delete-${checklistId}`);
+        setActionLoading(`delete-${checklist.id}`);
         try {
-          await checklistService.delete(checklistId);
+          if (isTaskChecklist) {
+            await checklistService.update(checklist.id, { id_section: null });
+          } else {
+            await checklistService.delete(checklist.id);
+          }
           await loadCanevas();
         } catch (err) {
-          console.error('Erreur suppression checklist:', err);
-          alert('Erreur lors de la suppression de l\'élément');
+          console.error('Erreur suppression/retrait checklist:', err);
+          showActionError(
+            err,
+            isTaskChecklist
+              ? 'Impossible de retirer cette checklist de la section.'
+              : 'Impossible de supprimer cet élément.'
+          );
         } finally {
           setActionLoading(null);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -551,14 +572,14 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
   if (isReadOnly) {
     return (
       <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-full">
-        <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-secondary" />
-            <h2 className="font-bold text-theme-main uppercase tracking-tight">
+        <div className="p-4 border-b border-theme-border-subtle flex justify-between items-start gap-3 bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
+          <div className="flex min-w-0 items-start gap-2">
+            <Sparkles className="h-5 w-5 shrink-0 text-secondary" />
+            <h2 className="min-w-0 break-words font-bold text-theme-main uppercase tracking-tight leading-snug">
               {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
             </h2>
           </div>
-          <button onClick={closeCanevas} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
+          <button onClick={closeCanevas} className="shrink-0 p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -605,7 +626,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
             canevas.sections.map((section) => (
               <div key={section.id} className="border border-theme-border-subtle rounded-2xl mb-4 overflow-hidden shadow-theme-sm">
                 <div className="p-3 bg-theme-surface-hover/50">
-                  <span className="text-sm font-bold text-theme-main uppercase tracking-tight">{section.titre}</span>
+                  <span className="block min-w-0 break-words text-sm font-bold text-theme-main uppercase tracking-tight leading-snug">{section.titre}</span>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-black text-secondary uppercase tracking-widest">{section.progress}%</span>
                     <div className="w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
@@ -615,7 +636,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                 </div>
                 <div className="p-3 space-y-2">
                   {section.checklists.map((checklist) => (
-                    <div key={checklist.id} className="flex items-center gap-2">
+                    <div key={checklist.id} className="flex min-w-0 items-start gap-2">
                       {checklist.source === 'task' && (
                         <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
                       )}
@@ -623,11 +644,11 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                         <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
                       )}
                       {checklist.is_checked ? (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
                       ) : (
-                        <Circle className="h-4 w-4 text-theme-muted/40" />
+                        <Circle className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted/40" />
                       )}
-                      <span className={`text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
+                      <span className={`min-w-0 flex-1 break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
                         {checklist.texte}
                       </span>
                     </div>
@@ -644,10 +665,10 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
   // Vue normale (avec modifications possibles)
   return (
     <div className="h-full bg-theme-surface flex flex-col border-l border-theme-border-subtle shadow-theme-lg w-full">
-      <div className="p-4 border-b border-theme-border-subtle flex justify-between items-center bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-secondary" />
-          <h2 className="font-bold text-theme-main uppercase tracking-tight">
+      <div className="p-4 border-b border-theme-border-subtle flex justify-between items-start gap-3 bg-theme-surface/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+          <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
+          <h2 className="min-w-0 flex-1 basis-full break-words font-bold text-theme-main uppercase tracking-tight leading-snug sm:basis-auto">
             {canevas?.liste_nom ? `Canevas de ${canevas.liste_nom}` : "Canevas"}
           </h2>
           {canevas && canevas.is_verrouille && (
@@ -655,11 +676,11 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
           )}
           {userRoleDisplay && (
             <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-lg uppercase tracking-widest border border-emerald-500/20" title="Permission héritée">
-              {userRoleDisplay}
+              <span className="line-clamp-1 max-w-[220px]">{userRoleDisplay}</span>
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {canevas && canevas.sections.length === 0 && canModify && (
             <button
               onClick={deleteCanevas}
@@ -676,7 +697,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
         {actionError && (
           <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm font-semibold text-red-500 dark:text-red-300">
             <span>{actionError}</span>
@@ -713,13 +734,13 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
               const isExpanded = expandedSections[section.id] !== false;
 
               return (
-                <div key={section.id} className="border border-theme-border-subtle rounded-2xl overflow-hidden shadow-theme-sm group/section">
-                  <div className="flex items-center justify-between p-3 bg-theme-surface-hover/30 hover:bg-theme-surface-hover/60 transition group-hover/section:shadow-inner">
-                    <button onClick={() => toggleSection(section.id)} className="flex items-center gap-2 flex-1">
+                <div key={section.id} className="min-w-0 border border-theme-border-subtle rounded-2xl overflow-hidden shadow-theme-sm group/section">
+                  <div className="flex flex-col gap-3 p-3 bg-theme-surface-hover/30 hover:bg-theme-surface-hover/60 transition group-hover/section:shadow-inner sm:flex-row sm:items-start sm:justify-between">
+                    <button onClick={() => toggleSection(section.id)} className="flex min-w-0 flex-1 items-start gap-2 text-left">
                       {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-theme-muted" />
+                        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-theme-muted" />
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted" />
                       )}
                       {editingSectionId === section.id && canModify ? (
                         <input
@@ -727,17 +748,17 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                           value={editingSectionTitle}
                           onChange={(e) => setEditingSectionTitle(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && updateSection(section.id)}
-                          className="text-sm font-bold text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
+                          className="min-w-0 w-full text-sm font-bold text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
                           autoFocus
                         />
                       ) : (
-                        <span className="text-sm font-black text-theme-main uppercase tracking-tight">{section.titre}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-black text-theme-main uppercase tracking-tight leading-snug">{section.titre}</span>
                       )}
                     </button>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                       <span className="text-[10px] font-black text-secondary uppercase tracking-widest">{progress}%</span>
-                      <div className="w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
+                      <div className="w-16 sm:w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
                         <div className="bg-secondary h-1.5 rounded-full transition-all shadow-[0_0_8px_rgba(var(--secondary-rgb),0.4)]" style={{ width: `${progress}%` }} />
                       </div>
 
@@ -776,9 +797,9 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                   </div>
 
                   {isExpanded && (
-                    <div className="p-3 space-y-2">
+                    <div className="min-w-0 p-3 space-y-2">
                       {section.checklists.map((checklist) => (
-                        <div key={checklist.id} className="flex items-center gap-2 group">
+                        <div key={checklist.id} className="group flex min-w-0 items-start gap-2 rounded-xl px-1 py-1 hover:bg-theme-surface-hover/40">
                           {checklist.source === 'task' && (
                             <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
                           )}
@@ -789,7 +810,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                           <button
                             onClick={() => toggleChecklist(checklist)}
                             disabled={canevas.is_verrouille || !canModify || actionLoading?.startsWith('toggle')}
-                            className="flex-shrink-0"
+                            className="mt-0.5 flex-shrink-0"
                           >
                             {actionLoading === `toggle-${checklist.id}` ? (
                               <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
@@ -806,17 +827,17 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                               value={editingChecklistText}
                               onChange={(e) => setEditingChecklistText(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && updateChecklist(checklist)}
-                              className="flex-1 text-sm text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
+                              className="min-w-0 flex-1 text-sm text-theme-main bg-theme-surface border border-secondary/30 rounded-xl px-2 py-1 focus:ring-2 focus:ring-secondary/20 outline-none"
                               autoFocus
                             />
                           ) : (
-                            <span className={`text-sm flex-1 font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
+                            <span className={`min-w-0 flex-1 break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
                               {checklist.texte}
                             </span>
                           )}
 
-                          {canModify && !canevas.is_verrouille && checklist.source === 'manual' && (
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                          {canModify && !canevas.is_verrouille && (
+                            <div className="ml-auto flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                               {editingChecklistId !== checklist.id && (
                                 <button
                                   onClick={() => {
@@ -838,9 +859,10 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                                 </button>
                               )}
                               <button
-                                onClick={() => deleteChecklist(checklist.id)}
+                                onClick={() => deleteChecklist(checklist)}
                                 disabled={actionLoading === `delete-${checklist.id}`}
                                 className="p-1 text-gray-400 hover:text-red-500"
+                                title={checklist.source === 'task' ? 'Retirer de la section' : 'Supprimer'}
                               >
                                 {actionLoading === `delete-${checklist.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                               </button>
@@ -852,21 +874,21 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                       {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">
                           {addingChecklistToSection === section.id ? (
-                            <div className="space-y-3 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/50 p-3 shadow-inner">
-                              <div className="flex items-center gap-1 bg-theme-surface/50 p-1 rounded-xl border border-theme-border-subtle">
+                            <div className="min-w-0 space-y-3 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/50 p-3 shadow-inner">
+                              <div className="flex min-w-0 items-center gap-1 overflow-x-auto bg-theme-surface/50 p-1 rounded-xl border border-theme-border-subtle custom-scrollbar">
                                 <button
                                   type="button"
                                   onClick={() => setAddChecklistMode('manual')}
-                                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'manual' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
+                                  className={`min-w-24 flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'manual' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
                                 >
                                   Créer
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setAddChecklistMode('task')}
-                                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'task' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
+                                  className={`min-w-28 flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${addChecklistMode === 'task' ? 'bg-secondary text-white shadow-theme-md' : 'text-theme-muted hover:text-theme-main'}`}
                                 >
-                                  Tâches
+                                  Checklists
                                 </button>
                                 <button
                                   onClick={cancelAddChecklist}
@@ -878,21 +900,21 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                               </div>
 
                               {addChecklistMode === 'manual' ? (
-                                <div className="flex items-center gap-3 px-1">
-                                  <Circle className="h-4 w-4 text-theme-muted/40" />
+                                <div className="flex min-w-0 items-center gap-3 px-1">
+                                  <Circle className="h-4 w-4 shrink-0 text-theme-muted/40" />
                                   <input
                                     type="text"
                                     placeholder="Libellé de l'élément..."
                                     value={newChecklistText}
                                     onChange={(e) => setNewChecklistText(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && addChecklist(section.id)}
-                                    className="flex-1 text-sm bg-transparent border-b border-theme-border-subtle focus:border-secondary outline-none py-2 text-theme-main placeholder:text-theme-muted/30 font-medium"
+                                    className="min-w-0 flex-1 text-sm bg-transparent border-b border-theme-border-subtle focus:border-secondary outline-none py-2 text-theme-main placeholder:text-theme-muted/30 font-medium"
                                     autoFocus
                                   />
                                   <button
                                     onClick={() => addChecklist(section.id)}
                                     disabled={actionLoading === `add-checklist-${section.id}`}
-                                    className="text-secondary text-[11px] font-black uppercase tracking-widest hover:text-secondary/80 disabled:opacity-30"
+                                  className="shrink-0 text-secondary text-[11px] font-black uppercase tracking-widest hover:text-secondary/80 disabled:opacity-30"
                                   >
                                     {actionLoading === `add-checklist-${section.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Ajouter'}
                                   </button>
@@ -909,8 +931,9 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                                       Aucune checklist orpheline
                                     </p>
                                   ) : (
-                                    <div className="space-y-3">
-                                      <div className="max-h-64 overflow-y-auto rounded-2xl border border-theme-border-subtle bg-theme-surface p-2 custom-scrollbar">
+                                    <div className="min-w-0 space-y-3">
+                                      <div className="max-h-72 overflow-auto rounded-2xl border border-theme-border-subtle bg-theme-surface p-2 custom-scrollbar">
+                                        <div className="min-w-[340px] space-y-1">
                                         {taskChecklistOptions.map(option => {
                                           const isSelected = selectedTaskChecklistId === option.id;
                                           return (
@@ -959,6 +982,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                                             </button>
                                           );
                                         })}
+                                        </div>
                                       </div>
                                       {selectedTaskChecklistId && (
                                         <p className="text-[10px] font-semibold leading-relaxed text-theme-muted/70">
@@ -997,20 +1021,20 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
             {canModify && !canevas.is_verrouille && (
               <div className="mt-8 pt-6 border-t border-theme-border-subtle">
                 {isAddingSection ? (
-                  <div className="flex flex-col gap-3 bg-theme-surface-hover/30 p-4 rounded-2xl border border-theme-border-subtle shadow-inner">
+                  <div className="min-w-0 flex flex-col gap-3 bg-theme-surface-hover/30 p-4 rounded-2xl border border-theme-border-subtle shadow-inner">
                     <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Titre de la section</label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <input
                         type="text"
                         placeholder="Mois de Décembre, Semaine du 05/12..."
                         value={newSectionTitle}
                         onChange={(e) => setNewSectionTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && addSection()}
-                        className="flex-1 text-sm bg-theme-surface border border-theme-border-subtle rounded-xl px-4 py-3 text-theme-main focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all outline-none font-bold"
+                        className="min-w-0 flex-1 text-sm bg-theme-surface border border-theme-border-subtle rounded-xl px-4 py-3 text-theme-main focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all outline-none font-bold"
                         autoFocus
                       />
                     </div>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex flex-col gap-2 mt-1 sm:flex-row">
                       <button
                         onClick={addSection}
                         disabled={actionLoading === 'add-section'}
