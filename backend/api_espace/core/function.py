@@ -750,6 +750,45 @@ def _require_espace_delete_access(
         and source_type == "espace"
         and source_id == espace_id
     ):
+        espace = _get_espace_or_404(db, espace_id)
+
+        workspace_owner = db.query(Workspace).filter(
+            Workspace.id == espace.id_workspace,
+            Workspace.id_utilisateur == current_user_id,
+        ).first()
+        if workspace_owner:
+            return Membre(
+                role=WORKSPACE_OWNER_ROLE,
+                statut="Actif",
+                id_utilisateur=current_user_id,
+                id_workspace=espace.id_workspace,
+            )
+
+        parent_id = espace.id_espace_parent
+        while parent_id:
+            parent_member = _get_espace_member_record(db, parent_id, current_user_id)
+            if (
+                parent_member
+                and parent_member.statut == "Actif"
+                and parent_member.role in ESPACE_MANAGEMENT_ROLES
+            ):
+                return parent_member
+
+            parent_espace = db.query(Espace).filter(Espace.id == parent_id).first()
+            if not parent_espace:
+                break
+            parent_id = parent_espace.id_espace_parent
+
+        if espace.id_workspace:
+            workspace_admin = db.query(Membre).filter(
+                Membre.id_workspace == espace.id_workspace,
+                Membre.id_utilisateur == current_user_id,
+                Membre.role == WORKSPACE_ADMIN_ROLE,
+                Membre.statut == "Actif",
+            ).first()
+            if workspace_admin:
+                return workspace_admin
+
         raise HTTPException(
             status_code=403,
             detail="Un administrateur ne peut pas supprimer l'espace racine de son perimetre.",

@@ -828,6 +828,16 @@ def _require_list_delete_access(db: Session, liste_id: str, current_user_id: str
         and source_type == ResourceType.LISTE
         and source_id == liste_id
     ):
+        try:
+            inherited_member, _, _, _ = _get_inherited_list_management_grant(
+                db,
+                liste_id,
+                current_user_id,
+            )
+            return inherited_member
+        except HTTPException:
+            pass
+
         raise HTTPException(
             status_code=403,
             detail="Un administrateur ne peut pas supprimer la liste racine de son perimetre.",

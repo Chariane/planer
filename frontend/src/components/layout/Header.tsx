@@ -2,8 +2,8 @@ import { ArrowLeft, ArrowRight, Menu, User, LogOut, Search, ChevronsLeft, AlignL
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../notifications/NotificationBell';
 import MessagingBell from '../messaging/MessagingBell';
 import LanguageSwitcher from '../i18n/LanguageSwitcher';
@@ -18,11 +18,24 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [historyState, setHistoryState] = useState({ index: 0, maxIndex: 0 });
   const shouldCompleteProfile = Boolean(user && (!user.nom || !user.prenoms));
   const profileLabel = user?.username || user?.email || 'Profil';
-  const canGoBack = typeof window !== 'undefined' && window.history.length > 1;
+  const canGoBack = historyState.index > 0;
+  const canGoForward = historyState.index < historyState.maxIndex;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const currentIndex = Number(window.history.state?.idx ?? 0);
+    const storedMaxIndex = Number(window.sessionStorage.getItem('kplanner:max-history-index') || currentIndex);
+    const maxIndex = Math.max(storedMaxIndex, currentIndex);
+    window.sessionStorage.setItem('kplanner:max-history-index', String(maxIndex));
+    setHistoryState({ index: currentIndex, maxIndex });
+  }, [location.key]);
 
   return (
     <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-2 py-2 sm:px-4 sm:py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
@@ -68,7 +81,8 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
             <button
               type="button"
               onClick={() => navigate(1)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-gray-500 transition-all hover:border-theme-border-subtle hover:bg-theme-surface-hover hover:text-theme-main dark:text-slate-400 dark:hover:text-slate-100"
+              disabled={!canGoForward}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-gray-500 transition-all hover:border-theme-border-subtle hover:bg-theme-surface-hover hover:text-theme-main disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-gray-500 dark:text-slate-400 dark:hover:text-slate-100"
               title="Suivant"
               aria-label="Suivant"
             >

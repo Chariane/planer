@@ -1718,6 +1718,22 @@ class Tache(Base):
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='tache')
     checklists: Mapped[List['Checklist']] = relationship('Checklist', back_populates='tache')
 
+    @property
+    def content_mode(self) -> str:
+        if self.checklists:
+            return "checklist"
+        if self.sous_taches:
+            return "subtasks"
+        return "leaf"
+
+    @property
+    def can_add_checklist(self) -> bool:
+        return self.content_mode != "subtasks"
+
+    @property
+    def can_add_subtask(self) -> bool:
+        return self.content_mode != "checklist"
+
 
 class Canevas(Base):
     __tablename__ = 'canevas'

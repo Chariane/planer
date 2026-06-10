@@ -49,6 +49,8 @@ export default function PlannerToolsPanel({
   const [members, setMembers] = useState<ListMemberRecord[]>([]);
   const [directMembers, setDirectMembers] = useState<ListMemberRecord[]>([]);
   const [inheritedMembers, setInheritedMembers] = useState<ListMemberRecord[]>([]);
+  const [hasCreatedDirectChildInSpace, setHasCreatedDirectChildInSpace] = useState(false);
+  const [hasCreatedDirectChildInWorkspace, setHasCreatedDirectChildInWorkspace] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -117,15 +119,18 @@ export default function PlannerToolsPanel({
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
   const hasReportScope = !!(listeId || espaceId || workspaceId);
+  const canViewFiles = isManager;
 
   const canViewReports = hasReportScope && (!!isDirectMemberRecord || isManager);
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
-    : isDirectResourceAdmin;
+    : espaceId
+      ? isDirectResourceAdmin && hasCreatedDirectChildInSpace
+      : isDirectResourceAdmin && hasCreatedDirectChildInWorkspace;
 
   const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
-  const canAddFiles = !isGuest && isManager;
+  const canAddFiles = canViewFiles;
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
 
@@ -137,16 +142,30 @@ export default function PlannerToolsPanel({
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
-    if (initialTool === 'files' || initialTool === 'reports') {
+    if (initialTool === 'files' && canViewFiles) {
+      setActiveTool(initialTool);
+      return;
+    }
+    if (initialTool === 'reports' && canViewReports) {
       setActiveTool(initialTool);
     }
-  }, [initialTool]);
+  }, [initialTool, canViewFiles, canViewReports]);
+
+  useEffect(() => {
+    if (activeTool === 'files' && !canViewFiles) {
+      if (canViewReports) {
+        setActiveTool('reports');
+      } else if (listeId) {
+        setActiveTool('absences');
+      }
+    }
+  }, [activeTool, canViewFiles, canViewReports, listeId]);
 
   useEffect(() => {
     if (!listeId && activeTool === 'absences') {
-      setActiveTool('files');
+      setActiveTool(canViewFiles ? 'files' : 'reports');
     }
-  }, [listeId, activeTool]);
+  }, [listeId, activeTool, canViewFiles]);
 
   const closeConfirm = () => {
     if (loading) return;
@@ -251,6 +270,96 @@ export default function PlannerToolsPanel({
     }
   };
 
+  useEffect(() => {
+    const loadSpaceReportEligibility = async () => {
+      setHasCreatedDirectChildInSpace(false);
+      if (!espaceId || listeId || !currentUserId || !isDirectResourceAdmin) return;
+
+      try {
+        const [subSpacesRaw, listesRaw] = await Promise.all([
+          espaceService.getSubSpaces(espaceId).catch(() => []),
+          listeService.getByEspace(espaceId).catch(() => []),
+        ]);
+        const subSpaces = Array.isArray(subSpacesRaw) ? subSpacesRaw : [];
+        const listes = Array.isArray(listesRaw) ? listesRaw : [];
+
+        const ownsDirectSubSpace = await Promise.all(
+          subSpaces.map(async (space: any) => {
+            const spaceMembers = await espaceService.getMembers(space.id).catch(() => []);
+            return (Array.isArray(spaceMembers) ? spaceMembers : []).some((member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId
+              && member.role === ROLES.CREATOR
+            );
+          })
+        );
+        if (ownsDirectSubSpace.some(Boolean)) {
+          setHasCreatedDirectChildInSpace(true);
+          return;
+        }
+
+        const ownsDirectList = await Promise.all(
+          listes.map(async (liste: any) => {
+            const listeMembers = await listeService.getMembers(liste.id).catch(() => []);
+            return (Array.isArray(listeMembers) ? listeMembers : []).some((member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId
+              && member.role === ROLES.CREATOR
+            );
+          })
+        );
+        setHasCreatedDirectChildInSpace(ownsDirectList.some(Boolean));
+      } catch {
+        setHasCreatedDirectChildInSpace(false);
+      }
+    };
+
+    loadSpaceReportEligibility();
+  }, [espaceId, listeId, currentUserId, isDirectResourceAdmin]);
+
+  useEffect(() => {
+    const loadWorkspaceReportEligibility = async () => {
+      setHasCreatedDirectChildInWorkspace(false);
+      if (!workspaceId || espaceId || listeId || !currentUserId || !isDirectResourceAdmin) return;
+
+      try {
+        const [spacesRaw, listesRaw] = await Promise.all([
+          espaceService.getByWorkspace(workspaceId).catch(() => []),
+          listeService.getByWorkspace(workspaceId).catch(() => []),
+        ]);
+        const spaces = Array.isArray(spacesRaw) ? spacesRaw : [];
+        const listes = Array.isArray(listesRaw) ? listesRaw : [];
+
+        const ownsDirectSpace = await Promise.all(
+          spaces.map(async (space: any) => {
+            const spaceMembers = await espaceService.getMembers(space.id).catch(() => []);
+            return (Array.isArray(spaceMembers) ? spaceMembers : []).some((member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId
+              && member.role === ROLES.CREATOR
+            );
+          })
+        );
+        if (ownsDirectSpace.some(Boolean)) {
+          setHasCreatedDirectChildInWorkspace(true);
+          return;
+        }
+
+        const ownsDirectList = await Promise.all(
+          listes.map(async (liste: any) => {
+            const listeMembers = await listeService.getMembers(liste.id).catch(() => []);
+            return (Array.isArray(listeMembers) ? listeMembers : []).some((member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId
+              && member.role === ROLES.CREATOR
+            );
+          })
+        );
+        setHasCreatedDirectChildInWorkspace(ownsDirectList.some(Boolean));
+      } catch {
+        setHasCreatedDirectChildInWorkspace(false);
+      }
+    };
+
+    loadWorkspaceReportEligibility();
+  }, [workspaceId, espaceId, listeId, currentUserId, isDirectResourceAdmin]);
+
   const loadFiles = async () => {
     if (!fileTargetId) return;
     try {
@@ -298,7 +407,7 @@ export default function PlannerToolsPanel({
     setLoading(true);
     try {
       await loadMembers();
-      if (activeTool === 'files') await loadFiles();
+      if (activeTool === 'files' && canViewFiles) await loadFiles();
       if (activeTool === 'reports') await loadReports();
       if (activeTool === 'absences') await loadAbsences();
     } catch (err: any) {
@@ -310,7 +419,7 @@ export default function PlannerToolsPanel({
 
   useEffect(() => {
     refreshCurrentTool();
-  }, [activeTool, listeId, espaceId, workspaceId, selectedMemberId]);
+  }, [activeTool, listeId, espaceId, workspaceId, selectedMemberId, canViewFiles]);
 
   useEffect(() => {
     try {
@@ -437,7 +546,9 @@ export default function PlannerToolsPanel({
         'error',
         listeId
           ? 'Seuls les administrateurs directs ou les membres directs ayant au moins une tâche assignée peuvent envoyer un rapport.'
-          : 'Seuls les administrateurs directs de cette ressource peuvent envoyer un rapport.'
+          : espaceId
+            ? "Seuls les administrateurs directs ayant créé au moins une liste ou un sous-espace direct dans cet espace peuvent envoyer un rapport."
+            : "Seuls les administrateurs directs ayant créé au moins une liste ou un espace direct dans ce workspace peuvent envoyer un rapport."
       );
       return;
     }
@@ -830,15 +941,17 @@ export default function PlannerToolsPanel({
 
       {/* Navigation Premium */}
       <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
-        <button
-          onClick={() => setActiveTool('files')}
-          className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'files' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
-            }`}
-        >
-          <Paperclip className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'files' ? 'text-secondary' : ''}`} />
-          <span className="text-[10px] uppercase tracking-[0.2em]">Fichiers</span>
-          {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
-        </button>
+        {canViewFiles && (
+          <button
+            onClick={() => setActiveTool('files')}
+            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'files' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+              }`}
+          >
+            <Paperclip className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'files' ? 'text-secondary' : ''}`} />
+            <span className="text-[10px] uppercase tracking-[0.2em]">Fichiers</span>
+            {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+          </button>
+        )}
 
         {canViewReports && (
           <button
@@ -909,7 +1022,7 @@ export default function PlannerToolsPanel({
         </motion.div>
       )}
 
-      {activeTool === 'files' && (
+      {activeTool === 'files' && canViewFiles && (
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
           <div className="p-6 border border-theme-border-subtle bg-theme-surface/30 backdrop-blur-xl rounded-3xl">
             <div className="flex items-center gap-2 mb-6">
@@ -1022,7 +1135,9 @@ export default function PlannerToolsPanel({
                       <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
                         {listeId
                           ? 'Seuls les administrateurs directs ou les membres directs ayant une tâche assignée peuvent émettre un rapport.'
-                          : 'Seuls les administrateurs directs de cette ressource peuvent émettre un rapport.'}
+                          : espaceId
+                            ? "Seuls les administrateurs directs ayant créé au moins une liste ou un sous-espace direct dans cet espace peuvent émettre un rapport."
+                            : "Seuls les administrateurs directs ayant créé au moins une liste ou un espace direct dans ce workspace peuvent émettre un rapport."}
                       </p>
                     </div>
                   </div>

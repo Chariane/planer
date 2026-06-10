@@ -18,6 +18,8 @@ export interface EnhancedChecklist {
   source: 'manual' | 'task';
   task_id?: string;
   task_title?: string | null;
+  task_path?: string | null;
+  task_depth?: number | null;
   due_date?: string | null;
   section_id?: string | null;
 }

@@ -37,22 +37,69 @@ const statusLabels: Record<string, string> = {
   bloqué: 'Bloqué',
 };
 
-function getChecklistProgress(task: Task) {
+function getTaskProgressInfo(task: Task, childCount = 0) {
   const checklists = task.checklists || [];
-  if (checklists.length === 0) return null;
   const done = checklists.filter(item => item.is_checked).length;
+  const mode = task.contentMode || (checklists.length > 0 ? 'checklist' : childCount > 0 ? 'subtasks' : 'leaf');
+  const fallback = task.status === 'terminé' ? 100 : task.status === 'en cours' ? 50 : 0;
+  const percent = Math.max(0, Math.min(100, Math.round(task.progression ?? fallback)));
+
   return {
     done,
     total: checklists.length,
-    percent: Math.round((done / checklists.length) * 100),
+    mode,
+    percent,
   };
 }
+
+const contentModeLabels: Record<string, string> = {
+  leaf: 'Progression par statut',
+  checklist: 'Progression par checklists',
+  subtasks: 'Progression par sous-tâches',
+};
 
 function isOverdue(task: Task) {
   if (!task.dueDate || task.status === 'terminé') return false;
   const due = new Date(task.dueDate);
   due.setHours(23, 59, 59, 999);
   return due.getTime() < Date.now();
+}
+
+function getAssigneeInitial(name: string) {
+  return (name || '?').trim().charAt(0).toUpperCase();
+}
+
+function AssigneeInitials({ assignees, compact = false }: { assignees: Task['assignees']; compact?: boolean }) {
+  const sizeClass = compact ? 'h-6 w-6 text-[9px]' : 'h-7 w-7 text-[10px]';
+  const visibleAssignees = assignees.slice(0, compact ? 2 : 3);
+  const remainingCount = assignees.length - visibleAssignees.length;
+
+  if (assignees.length === 0) {
+    return (
+      <div className={`${sizeClass} flex items-center justify-center rounded-lg border border-dashed border-theme-border-subtle bg-theme-surface-hover text-theme-muted opacity-40`} title="Aucun membre assigné">
+        <Users size={compact ? 12 : 14} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center -space-x-2">
+      {visibleAssignees.map((assignee) => (
+        <div
+          key={assignee.id}
+          className={`${sizeClass} flex items-center justify-center rounded-lg border-2 border-theme-border-subtle bg-theme-surface font-black text-secondary shadow-sm`}
+          title={assignee.name}
+        >
+          {getAssigneeInitial(assignee.name)}
+        </div>
+      ))}
+      {remainingCount > 0 && (
+        <div className={`${sizeClass} flex items-center justify-center rounded-lg border-2 border-theme-border-subtle bg-theme-surface-hover font-black text-theme-muted shadow-sm`}>
+          +{remainingCount}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function GanttView({ tasks }: GanttViewProps) {
@@ -144,11 +191,12 @@ export default function GanttView({ tasks }: GanttViewProps) {
     ? `${(todayDiff / Math.max(dayDiff, 1)) * 100}%`
     : null;
 
-  const totalChecklists = validTasks.reduce((sum, task) => sum + (task.checklists?.length || 0), 0);
-  const doneChecklists = validTasks.reduce((sum, task) => sum + (task.checklists || []).filter(item => item.is_checked).length, 0);
+  const averageProgress = validTasks.length
+    ? Math.round(validTasks.reduce((sum, task) => sum + getTaskProgressInfo(task, (allTasksByParent[task.id] || []).length).percent, 0) / validTasks.length)
+    : 0;
   const overdueCount = validTasks.filter(isOverdue).length;
-  const selectedProgress = selectedTask ? getChecklistProgress(selectedTask) : null;
   const selectedChildren = selectedTask ? (allTasksByParent[selectedTask.id] || []).sort(sortByPlanning) : [];
+  const selectedProgress = selectedTask ? getTaskProgressInfo(selectedTask, selectedChildren.length) : null;
 
   return (
     <div className="mt-4 space-y-4">
@@ -158,8 +206,8 @@ export default function GanttView({ tasks }: GanttViewProps) {
           <p className="mt-1 text-2xl font-black text-theme-main">{validTasks.length}</p>
         </div>
         <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 shadow-theme-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists terminées</p>
-          <p className="mt-1 text-2xl font-black text-theme-main">{doneChecklists}/{totalChecklists}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Avancement moyen</p>
+          <p className="mt-1 text-2xl font-black text-theme-main">{averageProgress}%</p>
         </div>
         <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 shadow-theme-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Retards</p>
@@ -209,7 +257,8 @@ export default function GanttView({ tasks }: GanttViewProps) {
         <div className="space-y-2">
           {sortedTasks.map(({ task, depth }, idx) => {
             const position = getTaskPosition(task);
-            const checklistProgress = getChecklistProgress(task);
+            const childCount = (allTasksByParent[task.id] || []).length;
+            const progressInfo = getTaskProgressInfo(task, childCount);
             const overdue = isOverdue(task);
             const parentTitle = task.parentTaskId ? tasksById[task.parentTaskId]?.title : null;
             return (
@@ -249,10 +298,17 @@ export default function GanttView({ tasks }: GanttViewProps) {
                       <span className="h-1 w-1 rounded-full bg-current" />
                       {priorityLabels[task.priority]}
                     </span>
-                    {checklistProgress && (
+                    <AssigneeInitials assignees={task.assignees} compact />
+                    {progressInfo.mode === 'checklist' && progressInfo.total > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
                         <ListChecks size={11} />
-                        {checklistProgress.done}/{checklistProgress.total}
+                        {progressInfo.done}/{progressInfo.total}
+                      </span>
+                    )}
+                    {progressInfo.mode === 'subtasks' && (
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
+                        <GitBranch size={11} />
+                        {childCount} sous-tâche{childCount > 1 ? 's' : ''}
                       </span>
                     )}
                     {overdue && (
@@ -293,15 +349,26 @@ export default function GanttView({ tasks }: GanttViewProps) {
                     }}
                   >
                     <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-xl bg-black/15">
-                      {checklistProgress && (
-                        <div className="h-full bg-white/70" style={{ width: `${checklistProgress.percent}%` }} />
-                      )}
+                      <div className="h-full bg-white/70" style={{ width: `${progressInfo.percent}%` }} />
                     </div>
                     <Calendar size={12} className="opacity-70" />
                     <span className="truncate px-2">
                       {task.startDate ? `${task.startDate.split('-').reverse().slice(0, 2).join('/')} - ` : ''}
                       {task.dueDate.split('-').reverse().slice(0, 2).join('/')}
                     </span>
+                    {task.assignees.length > 0 && (
+                      <span className="ml-1 hidden max-w-[54px] items-center -space-x-1.5 sm:flex">
+                        {task.assignees.slice(0, 2).map((assignee) => (
+                          <span
+                            key={assignee.id}
+                            className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-white/20 text-[8px] font-black text-white shadow-sm backdrop-blur"
+                            title={assignee.name}
+                          >
+                            {getAssigneeInitial(assignee.name)}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                     {task.status === 'terminé' && <CheckCircle size={12} className="opacity-80" />}
                   </motion.div>
                 </div>
@@ -362,79 +429,114 @@ export default function GanttView({ tasks }: GanttViewProps) {
 
             <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                  <ListChecks size={14} className="text-secondary" />
-                  Checklists
+                <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                  {selectedProgress ? contentModeLabels[selectedProgress.mode] || 'Progression' : 'Progression'}
                 </p>
                 <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main">
-                  {selectedProgress ? `${selectedProgress.done}/${selectedProgress.total}` : '0'}
+                  {selectedProgress?.percent ?? 0}%
                 </span>
               </div>
-              {selectedProgress ? (
-                <>
-                  <div className="mb-3 h-2 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
-                    <div
-                      className={`h-full ${selectedProgress.percent === 100 ? 'bg-emerald-500' : 'bg-secondary'}`}
-                      style={{ width: `${selectedProgress.percent}%` }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    {(selectedTask.checklists || []).map(checklist => (
-                      <div key={checklist.id} className="flex items-center gap-2 rounded-xl border border-theme-border-subtle/50 bg-theme-surface-hover/30 px-3 py-2">
-                        {checklist.is_checked ? (
-                          <CheckCircle size={15} className="text-emerald-500" />
-                        ) : (
-                          <span className="h-3.5 w-3.5 rounded-full border border-theme-muted/40" />
-                        )}
-                        <span className={`text-sm font-semibold ${checklist.is_checked ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
-                          {checklist.texte}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold uppercase tracking-widest text-theme-muted opacity-50">
-                  Aucune checklist liée à cette tâche.
-                </p>
-              )}
+              <div className="h-2 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
+                <div
+                  className={`${selectedProgress?.percent === 100 ? 'bg-emerald-500' : 'bg-secondary'} h-full`}
+                  style={{ width: `${selectedProgress?.percent ?? 0}%` }}
+                />
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                  <GitBranch size={14} className="text-secondary" />
-                  Sous-tâches
-                </p>
-                <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main">
-                  {selectedChildren.length}
-                </span>
-              </div>
-              {selectedChildren.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedChildren.map(child => (
-                    <button
-                      key={child.id}
-                      type="button"
-                      onClick={() => setSelectedTask(child)}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-theme-border-subtle/50 bg-theme-surface-hover/30 px-3 py-2 text-left transition hover:border-secondary/40 hover:bg-secondary/5"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-theme-main">{child.title}</p>
-                        <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-theme-muted opacity-50">
-                          {child.dueDate || 'Sans échéance'}
-                        </p>
-                      </div>
-                      <ChevronRight size={16} className="shrink-0 text-theme-muted" />
-                    </button>
-                  ))}
+            {selectedProgress?.mode === 'checklist' && (
+              <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                    <ListChecks size={14} className="text-secondary" />
+                    Checklists
+                  </p>
+                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main">
+                    {selectedProgress.done}/{selectedProgress.total}
+                  </span>
                 </div>
-              ) : (
-                <p className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold uppercase tracking-widest text-theme-muted opacity-50">
-                  Aucune sous-tâche.
+                {selectedProgress.total > 0 ? (
+                  <>
+                    <div className="mb-3 h-2 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
+                      <div
+                        className={`h-full ${selectedProgress.percent === 100 ? 'bg-emerald-500' : 'bg-secondary'}`}
+                        style={{ width: `${selectedProgress.percent}%` }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {(selectedTask.checklists || []).map(checklist => (
+                        <div key={checklist.id} className="flex items-center gap-2 rounded-xl border border-theme-border-subtle/50 bg-theme-surface-hover/30 px-3 py-2">
+                          {checklist.is_checked ? (
+                            <CheckCircle size={15} className="text-emerald-500" />
+                          ) : (
+                            <span className="h-3.5 w-3.5 rounded-full border border-theme-muted/40" />
+                          )}
+                          <span className={`text-sm font-semibold ${checklist.is_checked ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
+                            {checklist.texte}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold uppercase tracking-widest text-theme-muted opacity-50">
+                    Aucune checklist liée à cette tâche.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {selectedProgress?.mode === 'subtasks' && (
+              <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                    <GitBranch size={14} className="text-secondary" />
+                    Sous-tâches
+                  </p>
+                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main">
+                    {selectedChildren.length}
+                  </span>
+                </div>
+                {selectedChildren.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedChildren.map(child => {
+                      const childProgress = getTaskProgressInfo(child, (allTasksByParent[child.id] || []).length);
+                      return (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => setSelectedTask(child)}
+                          className="flex w-full items-center justify-between gap-3 rounded-xl border border-theme-border-subtle/50 bg-theme-surface-hover/30 px-3 py-2 text-left transition hover:border-secondary/40 hover:bg-secondary/5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-theme-main">{child.title}</p>
+                            <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-theme-muted opacity-50">
+                              {child.dueDate || 'Sans échéance'} · {childProgress.percent}%
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <AssigneeInitials assignees={child.assignees} compact />
+                            <ChevronRight size={16} className="text-theme-muted" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold uppercase tracking-widest text-theme-muted opacity-50">
+                    Aucune sous-tâche.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {selectedProgress?.mode === 'leaf' && (
+              <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
+                <p className="text-center text-xs font-bold uppercase tracking-widest text-theme-muted opacity-60">
+                  Cette tâche est suivie directement par son statut.
                 </p>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface p-4">
               <p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">

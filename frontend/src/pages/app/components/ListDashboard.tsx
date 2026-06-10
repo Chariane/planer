@@ -112,17 +112,20 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         console.warn('Impossible de charger les tâches:', err);
       }
 
-      const pendingTasksCount = tasks.filter(task => task.statut === 'en attente').length;
-      const inProgressTasksCount = tasks.filter(task => task.statut === 'en cours').length;
-      const doneTasksCount = tasks.filter(task => task.statut === 'terminé').length;
-      const blockedTasksCount = tasks.filter(task => task.statut === 'bloqué').length;
-      const listProgress = tasks.length > 0
-        ? Math.round(tasks.reduce((total, task) => total + Number(task.progression || 0), 0) / tasks.length)
+      const rootTasks = tasks.filter(task => !task.id_tache_parent);
+      const projectTasks = rootTasks.length > 0 ? rootTasks : tasks;
+
+      const pendingTasksCount = projectTasks.filter(task => task.statut === 'en attente').length;
+      const inProgressTasksCount = projectTasks.filter(task => task.statut === 'en cours').length;
+      const doneTasksCount = projectTasks.filter(task => task.statut === 'terminé').length;
+      const blockedTasksCount = projectTasks.filter(task => task.statut === 'bloqué').length;
+      const listProgress = projectTasks.length > 0
+        ? Math.round(projectTasks.reduce((total, task) => total + Number(task.progression || 0), 0) / projectTasks.length)
         : 0;
 
       setStats({
         membersCount: formattedMembers.length,
-        tasksCount: tasks.length,
+        tasksCount: projectTasks.length,
         pendingTasksCount,
         inProgressTasksCount,
         doneTasksCount,

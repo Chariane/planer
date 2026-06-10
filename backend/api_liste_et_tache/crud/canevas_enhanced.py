@@ -6,6 +6,42 @@ from ..models import Canevas, Section, Tache, Liste
 from ..crud.checklist_canevas import get_checklists_for_section, get_checklists_for_tache
 
 
+def get_task_path(db: Session, task: Tache, cache: Optional[Dict[str, str]] = None) -> str:
+    if cache is None:
+        cache = {}
+    if task.id in cache:
+        return cache[task.id]
+
+    path = [task.titre]
+    parent_id = task.id_tache_parent
+    visited = {task.id}
+    while parent_id and parent_id not in visited:
+        visited.add(parent_id)
+        parent = db.query(Tache).filter(Tache.id == parent_id).first()
+        if not parent:
+            break
+        path.insert(0, parent.titre)
+        parent_id = parent.id_tache_parent
+
+    task_path = " / ".join(part for part in path if part)
+    cache[task.id] = task_path
+    return task_path
+
+
+def get_task_depth(db: Session, task: Tache) -> int:
+    depth = 0
+    parent_id = task.id_tache_parent
+    visited = {task.id}
+    while parent_id and parent_id not in visited:
+        visited.add(parent_id)
+        parent = db.query(Tache.id, Tache.id_tache_parent).filter(Tache.id == parent_id).first()
+        if not parent:
+            break
+        depth += 1
+        parent_id = parent.id_tache_parent
+    return depth
+
+
 def get_week_range(date: datetime) -> tuple:
     start = date - timedelta(days=date.weekday())
     end = start + timedelta(days=6)
@@ -96,18 +132,23 @@ def get_task_checklists_for_period(
     ).all()
     
     task_checklists = []
+    path_cache: Dict[str, str] = {}
     for task in tasks:
         checklists = get_checklists_for_tache(db, task.id)
+        task_path = get_task_path(db, task, path_cache)
+        task_depth = get_task_depth(db, task)
         for checklist in checklists:
             if checklist.id_section:
                 continue
             task_checklists.append({
                 "id": checklist.id,
-                "texte": f"[{task.titre}] {checklist.texte}",
+                "texte": checklist.texte,
                 "is_checked": checklist.is_checked,
                 "source": "task",
                 "task_id": task.id,
                 "task_title": task.titre,
+                "task_path": task_path,
+                "task_depth": task_depth,
                 "due_date": task.date_fin_prevue.isoformat() if task.date_fin_prevue else None,
                 "section_id": checklist.id_section
             })
@@ -128,6 +169,7 @@ def get_enhanced_canevas(db: Session, liste_id: str) -> Dict[str, Any]:
     sections = db.query(Section).filter(Section.id_canevas == canevas.id).all()
     
     result_sections = []
+    path_cache: Dict[str, str] = {}
     for section in sections:
         manual_checklists = get_checklists_for_section(db, section.id)
         
@@ -150,11 +192,13 @@ def get_enhanced_canevas(db: Session, liste_id: str) -> Dict[str, Any]:
                 task = db.query(Tache).filter(Tache.id == cl.id_tache).first()
                 all_checklists.append({
                     "id": cl.id,
-                    "texte": f"[{task.titre}] {cl.texte}" if task else cl.texte,
+                    "texte": cl.texte,
                     "is_checked": cl.is_checked,
                     "source": "task",
                     "task_id": cl.id_tache,
                     "task_title": task.titre if task else None,
+                    "task_path": get_task_path(db, task, path_cache) if task else None,
+                    "task_depth": get_task_depth(db, task) if task else 0,
                     "due_date": task.date_fin_prevue.isoformat() if task and task.date_fin_prevue else None,
                     "section_id": section.id
                 })

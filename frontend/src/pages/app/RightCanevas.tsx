@@ -42,6 +42,18 @@ interface RightCanevasProps {
   onClose?: () => void;
 }
 
+const stripLegacyTaskPrefix = (text: string, taskTitle?: string | null) => {
+  if (!taskTitle) return text;
+  const prefix = `[${taskTitle}] `;
+  return text.startsWith(prefix) ? text.slice(prefix.length) : text;
+};
+
+const getChecklistLabel = (checklist: EnhancedChecklist) =>
+  stripLegacyTaskPrefix(checklist.texte, checklist.task_title);
+
+const getChecklistTaskPath = (checklist: EnhancedChecklist) =>
+  checklist.task_path || checklist.task_title || null;
+
 export default function RightCanevas({ onClose }: RightCanevasProps) {
   const { pathname } = useLocation();
   const { id: flatRouteId, listId: legacyListId, workspaceId: legacyWorkspaceId } = useParams();
@@ -635,24 +647,35 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                   </div>
                 </div>
                 <div className="p-3 space-y-2">
-                  {section.checklists.map((checklist) => (
-                    <div key={checklist.id} className="flex min-w-0 items-start gap-2">
-                      {checklist.source === 'task' && (
-                        <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
-                      )}
-                      {checklist.source === 'manual' && (
-                        <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
-                      )}
-                      {checklist.is_checked ? (
-                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                      ) : (
-                        <Circle className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted/40" />
-                      )}
-                      <span className={`min-w-0 flex-1 break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
-                        {checklist.texte}
-                      </span>
-                    </div>
-                  ))}
+                  {section.checklists.map((checklist) => {
+                    const checklistLabel = getChecklistLabel(checklist);
+                    const taskPath = getChecklistTaskPath(checklist);
+                    return (
+                      <div key={checklist.id} className="flex min-w-0 items-start gap-2 rounded-xl px-1 py-1">
+                        {checklist.source === 'task' && (
+                          <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={taskPath ? `Tâche: ${taskPath}` : 'Checklist de tâche'}>Tâche</span>
+                        )}
+                        {checklist.source === 'manual' && (
+                          <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
+                        )}
+                        {checklist.is_checked ? (
+                          <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                        ) : (
+                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted/40" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          {checklist.source === 'task' && taskPath && (
+                            <span className="mb-0.5 block break-words text-[10px] font-black uppercase tracking-widest text-theme-muted/60">
+                              {taskPath}
+                            </span>
+                          )}
+                          <span className={`block break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
+                            {checklistLabel}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))
@@ -798,10 +821,13 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
 
                   {isExpanded && (
                     <div className="min-w-0 p-3 space-y-2">
-                      {section.checklists.map((checklist) => (
+                      {section.checklists.map((checklist) => {
+                        const checklistLabel = getChecklistLabel(checklist);
+                        const taskPath = getChecklistTaskPath(checklist);
+                        return (
                         <div key={checklist.id} className="group flex min-w-0 items-start gap-2 rounded-xl px-1 py-1 hover:bg-theme-surface-hover/40">
                           {checklist.source === 'task' && (
-                            <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={`Tâche: ${checklist.task_title}`}>Tâche</span>
+                            <span className="shrink-0 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-500" title={taskPath ? `Tâche: ${taskPath}` : 'Checklist de tâche'}>Tâche</span>
                           )}
                           {checklist.source === 'manual' && (
                             <span className="shrink-0 rounded-md bg-theme-surface-hover px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-theme-muted" title="Checklist manuelle">Manuel</span>
@@ -831,8 +857,15 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                               autoFocus
                             />
                           ) : (
-                            <span className={`min-w-0 flex-1 break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
-                              {checklist.texte}
+                            <span className="min-w-0 flex-1">
+                              {checklist.source === 'task' && taskPath && (
+                                <span className="mb-0.5 block break-words text-[10px] font-black uppercase tracking-widest text-theme-muted/60">
+                                  {taskPath}
+                                </span>
+                              )}
+                              <span className={`block break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
+                                {checklistLabel}
+                              </span>
                             </span>
                           )}
 
@@ -869,7 +902,8 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
 
                       {canModify && !canevas.is_verrouille && (
                         <div className="mt-2">

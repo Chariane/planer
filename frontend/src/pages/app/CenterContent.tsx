@@ -37,6 +37,7 @@ export default function CenterContent() {
   const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
   const [currentListDescription, setCurrentListDescription] = useState('');
   const [listInheritedSpaceRole, setListInheritedSpaceRole] = useState<string | null>(null);
+  const [selectedSpaceInheritedRole, setSelectedSpaceInheritedRole] = useState<string | null>(null);
   const { joinedEspaces } = useNavigationStore();
 
   // Récupérer le rôle dans le workspace
@@ -64,6 +65,11 @@ export default function CenterContent() {
   const isAdmin = effectiveRole === ROLES.ADMIN;
   const isCreator = effectiveRole === ROLES.CREATOR;
   const isGuest = effectiveRole === ROLES.GUEST;
+  const selectedSpacePanelRole = getHighestRole([
+    selectedSpaceInheritedRole,
+    userEspaceRole,
+    userWorkspaceRole,
+  ]);
 
   // Permissions
   const { canCreateContent } = usePermissions({
@@ -172,6 +178,25 @@ export default function CenterContent() {
   }, [currentListEspaceId, joinedEspaces]);
 
   useEffect(() => {
+    const resolveSelectedSpaceInheritedRole = async () => {
+      setSelectedSpaceInheritedRole(null);
+      if (!spaceId || spaceId === 'list') return;
+
+      const hierarchy = await espaceService.getHierarchy(spaceId).catch(() => []);
+      const roleCandidates = (Array.isArray(hierarchy) ? hierarchy : []).map((space: any) => {
+        const role = joinedEspaces.find(espace => espace.id === space.id)?.role || null;
+        const isSelectedSpace = space.id === spaceId;
+        const isInheritedRole = role === ROLES.CREATOR || role === ROLES.ADMIN || role === ROLES.MEMBER || role === ROLES.GUEST;
+        return isSelectedSpace || isInheritedRole ? role : null;
+      });
+
+      setSelectedSpaceInheritedRole(getHighestRole(roleCandidates));
+    };
+
+    resolveSelectedSpaceInheritedRole();
+  }, [spaceId, joinedEspaces]);
+
+  useEffect(() => {
     if (!canAssignToList && isAssignListModalOpen) {
       setIsAssignListModalOpen(false);
     }
@@ -208,13 +233,16 @@ export default function CenterContent() {
   const renderListProgressSummary = () => {
     if (!listId || tasks.length === 0) return null;
 
-    const pendingCount = tasks.filter(task => task.status === 'en attente').length;
-    const inProgressCount = tasks.filter(task => task.status === 'en cours').length;
-    const doneCount = tasks.filter(task => task.status === 'terminé').length;
-    const blockedCount = tasks.filter(task => task.status === 'bloqué').length;
+    const rootTasks = tasks.filter(task => !task.parentTaskId);
+    const projectTasks = rootTasks.length > 0 ? rootTasks : tasks;
+
+    const pendingCount = projectTasks.filter(task => task.status === 'en attente').length;
+    const inProgressCount = projectTasks.filter(task => task.status === 'en cours').length;
+    const doneCount = projectTasks.filter(task => task.status === 'terminé').length;
+    const blockedCount = projectTasks.filter(task => task.status === 'bloqué').length;
 
     const averageProgress = Math.round(
-      tasks.reduce((total, task) => total + getTaskProgress(task), 0) / tasks.length
+      projectTasks.reduce((total, task) => total + getTaskProgress(task), 0) / projectTasks.length
     );
 
     return (
@@ -374,12 +402,20 @@ export default function CenterContent() {
     try {
       const normalizedTaskTitle = formData.title?.trim().toLowerCase();
       if (normalizedTaskTitle) {
+        const targetParentId = editingTask
+          ? editingTask.parentTaskId || null
+          : parentTaskForCreation?.id || null;
         const duplicateTask = tasks.find(task =>
           task.id !== editingTask?.id &&
+          (task.parentTaskId || null) === targetParentId &&
           task.title.trim().toLowerCase() === normalizedTaskTitle
         );
         if (duplicateTask) {
-          setTaskModalError("Une tâche ou sous-tâche portant exactement ce nom existe déjà dans ce projet. Choisissez un autre nom.");
+          setTaskModalError(
+            targetParentId
+              ? "Cette tâche contient déjà une sous-tâche portant exactement ce nom. Deux sous-tâches au même niveau doivent avoir des noms différents."
+              : "Ce projet contient déjà une tâche directe portant exactement ce nom. Deux tâches directes du même projet doivent avoir des noms différents."
+          );
           return;
         }
       }
@@ -440,7 +476,7 @@ export default function CenterContent() {
               workspaceId={workspaceId}
               espaceId={spaceId}
               currentUserId={user?.id}
-              effectiveRole={userEspaceRole || userWorkspaceRole}
+              effectiveRole={selectedSpacePanelRole}
               tasks={[]}
               initialTool={requestedTool}
             />
@@ -678,7 +714,7 @@ export default function CenterContent() {
               searchTerm="" // Géré maintenant par CenterContent via filteredTasks
               onSearchChange={() => { }}
               onEditTask={openEditTask}
-              onDeleteTask={canCreateContent ? deleteTask : () => { }}
+              onDeleteTask={deleteTask}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
               onUpdateTaskStatus={updateTaskStatus}
               onAddChecklist={addChecklistToTask}
@@ -695,7 +731,7 @@ export default function CenterContent() {
             />
           )}
 
-          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={(canCreateContent || isListGuest) ? updateTask : () => { }} />}
+          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
           {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
           {activeTab === 'outils' && (
             <PlannerToolsPanel

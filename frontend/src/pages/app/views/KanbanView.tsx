@@ -36,16 +36,26 @@ interface KanbanCardProps {
   isOverlay?: boolean;
 }
 
-function getChecklistProgress(task: Task) {
+function getTaskProgressInfo(task: Task, childCount = 0) {
   const checklists = task.checklists || [];
-  if (checklists.length === 0) return null;
   const done = checklists.filter(item => item.is_checked).length;
+  const mode = task.contentMode || (checklists.length > 0 ? 'checklist' : childCount > 0 ? 'subtasks' : 'leaf');
+  const fallback = task.status === 'terminé' ? 100 : task.status === 'en cours' ? 50 : 0;
+  const percent = Math.max(0, Math.min(100, Math.round(task.progression ?? fallback)));
+
   return {
     done,
     total: checklists.length,
-    percent: Math.round((done / checklists.length) * 100),
+    mode,
+    percent,
   };
 }
+
+const contentModeLabels: Record<string, string> = {
+  leaf: 'Statut',
+  checklist: 'Checklists',
+  subtasks: 'Sous-tâches',
+};
 
 function isOverdue(task: Task) {
   if (!task.dueDate || task.status === 'terminé') return false;
@@ -56,7 +66,7 @@ function isOverdue(task: Task) {
 
 function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOverlay = false }: KanbanCardProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const checklistProgress = getChecklistProgress(task);
+  const progressInfo = getTaskProgressInfo(task, childCount);
   const overdue = isOverdue(task);
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
@@ -118,12 +128,17 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
             </div>
           )}
 
-          {checklistProgress && (
+          {progressInfo.mode === 'checklist' && progressInfo.total > 0 && (
             <div className="inline-flex items-center gap-1.5 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
               <ListChecks size={12} />
-              {checklistProgress.done}/{checklistProgress.total}
+              {progressInfo.done}/{progressInfo.total}
             </div>
           )}
+
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+            {progressInfo.mode === 'subtasks' ? <GitBranch size={12} /> : <ListChecks size={12} />}
+            {contentModeLabels[progressInfo.mode] || 'Statut'}
+          </div>
 
           {overdue && (
             <div className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-500">
@@ -133,20 +148,18 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
           )}
         </div>
 
-        {checklistProgress && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-theme-muted">
-              <span>Avancement</span>
-              <span>{checklistProgress.percent}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
-              <div
-                className={`h-full rounded-full ${checklistProgress.percent === 100 ? 'bg-emerald-500' : 'bg-secondary'}`}
-                style={{ width: `${checklistProgress.percent}%` }}
-              />
-            </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-theme-muted">
+            <span>Avancement</span>
+            <span>{progressInfo.percent}%</span>
           </div>
-        )}
+          <div className="h-1.5 overflow-hidden rounded-full border border-theme-border-subtle bg-theme-surface-hover">
+            <div
+              className={`h-full rounded-full ${progressInfo.percent === 100 ? 'bg-emerald-500' : progressInfo.percent > 0 ? 'bg-secondary' : 'bg-theme-muted/30'}`}
+              style={{ width: `${Math.max(progressInfo.percent, 4)}%` }}
+            />
+          </div>
+        </div>
 
         <div className="flex items-center justify-between mt-1 pt-4 border-t border-theme-border-subtle/30">
           <div className="flex items-center -space-x-2">
@@ -200,11 +213,10 @@ interface KanbanColumnProps {
 
 function KanbanColumn({ title, tasks, status, color, tasksByParent, tasksById, getDepth }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
-  const completedChecklistCount = tasks.reduce((sum, task) => {
-    const progress = getChecklistProgress(task);
-    return sum + (progress?.done || 0);
-  }, 0);
-  const totalChecklistCount = tasks.reduce((sum, task) => sum + (task.checklists?.length || 0), 0);
+  const averageProgress = tasks.length
+    ? Math.round(tasks.reduce((sum, task) => sum + getTaskProgressInfo(task, (tasksByParent[task.id] || []).length).percent, 0) / tasks.length)
+    : 0;
+  const childTasksCount = tasks.reduce((sum, task) => sum + (tasksByParent[task.id] || []).length, 0);
 
   return (
     <div
@@ -223,12 +235,12 @@ function KanbanColumn({ title, tasks, status, color, tasksByParent, tasksById, g
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
-          <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Checklists</p>
-          <p className="text-sm font-black text-theme-main">{completedChecklistCount}/{totalChecklistCount}</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Avancement</p>
+          <p className="text-sm font-black text-theme-main">{averageProgress}%</p>
         </div>
         <div className="rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
           <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Sous-tâches</p>
-          <p className="text-sm font-black text-theme-main">{tasks.filter(task => task.parentTaskId).length}</p>
+          <p className="text-sm font-black text-theme-main">{childTasksCount}</p>
         </div>
       </div>
 

@@ -687,6 +687,9 @@ class TacheOut(TacheBase):
     id_tache_parent: Optional[str] = None
     id_createur: Optional[str] = None
     progression: float = 0.0
+    content_mode: str = "leaf"
+    can_add_checklist: bool = True
+    can_add_subtask: bool = True
     model_config = ConfigDict(from_attributes=True)
 
 class TacheFullOut(TacheOut):

@@ -196,6 +196,10 @@ def create_checklist(
     id_tache: Optional[str] = None,
     id_createur: Optional[str] = None,
 ) -> Checklist:
+    if id_tache:
+        from ..crud.tache import ensure_task_can_receive_checklist
+        ensure_task_can_receive_checklist(db, id_tache)
+
     _ensure_unique_checklist_sibling_name(
         db,
         texte=texte,
@@ -239,6 +243,10 @@ def update_checklist(db: Session, checklist_id: str, **kwargs) -> Optional[Check
     target_texte = kwargs.get("texte", checklist.texte)
     target_section_id = kwargs.get("id_section", checklist.id_section)
     target_tache_id = kwargs.get("id_tache", checklist.id_tache)
+    if target_tache_id and target_tache_id != checklist.id_tache:
+        from ..crud.tache import ensure_task_can_receive_checklist
+        ensure_task_can_receive_checklist(db, target_tache_id)
+
     if any(key in kwargs for key in ("texte", "id_section", "id_tache")):
         _ensure_unique_checklist_sibling_name(
             db,

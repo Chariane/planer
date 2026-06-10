@@ -31,6 +31,9 @@ function transformTask(apiTask: any): Task {
       creatorId: c.id_createur || null,
     })),
     progression: apiTask.progression || 0,
+    contentMode: apiTask.content_mode || 'leaf',
+    canAddChecklist: apiTask.can_add_checklist ?? true,
+    canAddSubtask: apiTask.can_add_subtask ?? true,
   };
 }
 
@@ -121,10 +124,6 @@ export function useTasks(listId: string | undefined) {
         await tacheService.createChecklistInTache(created.id, checklist);
       }
 
-      if (taskChecklists.length > 0) {
-        await tacheService.updateTaskStatusFromChecklists(created.id);
-      }
-
       await loadTasks();
       return created;
     } catch (err) {
@@ -162,30 +161,7 @@ export function useTasks(listId: string | undefined) {
     if (!taskId) return;
 
     try {
-      if (status === 'terminé') {
-        const collectDescendantIds = (parentId: string): string[] => {
-          const directChildren = tasks.filter(task => task.parentTaskId === parentId);
-          return directChildren.flatMap(child => [child.id, ...collectDescendantIds(child.id)]);
-        };
-
-        const taskIdsToComplete = [taskId, ...collectDescendantIds(taskId)];
-
-        for (const currentTaskId of taskIdsToComplete) {
-          const checklists = await tacheService.getChecklistsByTache(currentTaskId);
-          const checklistItems = Array.isArray(checklists) ? checklists : [];
-          await Promise.all(
-            checklistItems
-              .filter((checklist: any) => !checklist.is_checked)
-              .map((checklist: any) => tacheService.updateChecklist(checklist.id, { is_checked: true }))
-          );
-        }
-
-        for (const currentTaskId of [...taskIdsToComplete].reverse()) {
-          await tacheService.update(currentTaskId, { statut: 'terminé' });
-        }
-      } else {
-        await tacheService.update(taskId, { statut: status });
-      }
+      await tacheService.update(taskId, { statut: status });
       await loadTasks();
     } catch (err) {
       console.error('Erreur mise à jour du statut de la tâche:', err);
@@ -208,7 +184,6 @@ export function useTasks(listId: string | undefined) {
     if (!taskId || !texte.trim()) return;
     try {
       await tacheService.createChecklistInTache(taskId, { texte: texte.trim(), is_checked: false });
-      await tacheService.updateTaskStatusFromChecklists(taskId);
       await loadTasks();
     } catch (err) {
       console.error('Erreur ajout checklist tâche:', err);
@@ -220,7 +195,6 @@ export function useTasks(listId: string | undefined) {
     if (!taskId || !checklistId) return;
     try {
       await tacheService.updateChecklist(checklistId, { is_checked: !currentChecked });
-      await tacheService.updateTaskStatusFromChecklists(taskId);
       await loadTasks();
     } catch (err) {
       console.error('Erreur mise à jour checklist tâche:', err);
@@ -232,7 +206,6 @@ export function useTasks(listId: string | undefined) {
     if (!taskId || !checklistId) return;
     try {
       await tacheService.deleteChecklist(checklistId);
-      await tacheService.updateTaskStatusFromChecklists(taskId);
       await loadTasks();
     } catch (err) {
       console.error('Erreur suppression checklist tâche:', err);

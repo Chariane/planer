@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     ESPACE_ADMIN_ROLE,
+    ESPACE_OWNER_ROLE,
     LISTE_ADMIN_ROLE,
     LISTE_GUEST_ROLE,
     LISTE_MEMBER_ROLE,
+    LISTE_OWNER_ROLE,
     ResourceType,
     WORKSPACE_ADMIN_ROLE,
     _get_member_or_404,
@@ -70,6 +72,80 @@ def _serialize_report(rapport: Rapport) -> dict:
     }
 
 
+def _collect_descendant_espace_ids(db: Session, espace_id: str) -> set[str]:
+    espace_ids = {espace_id}
+    pending = [espace_id]
+
+    while pending:
+        current_id = pending.pop()
+        children = db.query(Espace.id).filter(Espace.id_espace_parent == current_id).all()
+        for (child_id,) in children:
+            if child_id and child_id not in espace_ids:
+                espace_ids.add(child_id)
+                pending.append(child_id)
+
+    return espace_ids
+
+
+def _direct_space_admin_has_created_direct_child(db: Session, *, espace_id: str, user_id: str) -> bool:
+    created_direct_subspace = (
+        db.query(Membre.id)
+        .join(Espace, Membre.id_espace == Espace.id)
+        .filter(
+            Espace.id_espace_parent == espace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.role == ESPACE_OWNER_ROLE,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+    if created_direct_subspace:
+        return True
+
+    created_direct_list = (
+        db.query(Membre.id)
+        .join(Liste, Membre.id_liste == Liste.id)
+        .filter(
+            Liste.id_espace == espace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.role == LISTE_OWNER_ROLE,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+    return bool(created_direct_list)
+
+
+def _direct_workspace_admin_has_created_direct_child(db: Session, *, workspace_id: str, user_id: str) -> bool:
+    created_direct_space = (
+        db.query(Membre.id)
+        .join(Espace, Membre.id_espace == Espace.id)
+        .filter(
+            Espace.id_workspace == workspace_id,
+            Espace.id_espace_parent.is_(None),
+            Membre.id_utilisateur == user_id,
+            Membre.role == ESPACE_OWNER_ROLE,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+    if created_direct_space:
+        return True
+
+    created_direct_list = (
+        db.query(Membre.id)
+        .join(Liste, Membre.id_liste == Liste.id)
+        .filter(
+            Liste.id_workspace == workspace_id,
+            Membre.id_utilisateur == user_id,
+            Membre.role == LISTE_OWNER_ROLE,
+            Membre.statut == "Actif",
+        )
+        .first()
+    )
+    return bool(created_direct_list)
+
+
 def create_report(
     db: Session,
     *,
@@ -123,12 +199,28 @@ def create_report(
                 status_code=403,
                 detail="Seuls les administrateurs directs de cet espace peuvent produire un rapport d'espace.",
             )
+        if not _direct_space_admin_has_created_direct_child(db, espace_id=espace_id, user_id=current_user_id):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Pour produire un rapport dans cet espace, vous devez etre administrateur direct "
+                    "et createur direct d'au moins une liste ou d'un sous-espace directement rattache a cet espace."
+                ),
+            )
     elif workspace_id:
         _require_workspace_read_access(db, workspace_id, current_user_id)
         if membre.role != WORKSPACE_ADMIN_ROLE:
             raise HTTPException(
                 status_code=403,
                 detail="Seuls les administrateurs directs de ce workspace peuvent produire un rapport de workspace.",
+            )
+        if not _direct_workspace_admin_has_created_direct_child(db, workspace_id=workspace_id, user_id=current_user_id):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Pour produire un rapport dans ce workspace, vous devez etre administrateur direct "
+                    "et createur direct d'au moins une liste ou d'un espace directement rattache a ce workspace."
+                ),
             )
     else:
         raise HTTPException(
@@ -190,6 +282,7 @@ def list_accessible_reports(
             | (Rapport.commentaire.ilike(pattern))
         )
 
+    espace_scope_ids = _collect_descendant_espace_ids(db, espace_id) if espace_id else set()
     reports = query.limit(max(limit, 1) * 6).all()
     results: list[dict] = []
     for rapport in reports:
@@ -211,8 +304,8 @@ def list_accessible_reports(
             report_liste = membre.liste if membre and membre.liste else db.query(Liste).filter(Liste.id == member_liste_id).first()
 
         if not liste_id and espace_id:
-            in_espace_scope = member_espace_id == espace_id
-            in_liste_espace_scope = bool(report_liste and report_liste.id_espace == espace_id)
+            in_espace_scope = member_espace_id in espace_scope_ids
+            in_liste_espace_scope = bool(report_liste and report_liste.id_espace in espace_scope_ids)
             if not in_espace_scope and not in_liste_espace_scope:
                 continue
 

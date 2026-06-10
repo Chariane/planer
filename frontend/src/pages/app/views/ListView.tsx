@@ -39,12 +39,24 @@ const roleLabels: Record<string, string> = {
   Invité: 'Invité',
 };
 
+const contentModeLabels: Record<string, string> = {
+  leaf: 'Libre',
+  checklist: 'Mode checklist',
+  subtasks: 'Mode sous-tâches',
+};
+
+const contentModeClasses: Record<string, string> = {
+  leaf: 'bg-theme-surface-hover text-theme-muted border-theme-border-subtle',
+  checklist: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  subtasks: 'bg-secondary/10 text-secondary border-secondary/20',
+};
+
 interface ListViewProps {
   tasks: Task[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
   onEditTask: (task: Task) => void;
-  onDeleteTask: (taskId: string) => void;
+  onDeleteTask: (taskId: string) => void | Promise<void>;
   onAssignTask: (task: Task) => void;
   onUpdateTaskStatus?: (taskId: string, status: string) => Promise<void>;
   onAddChecklist?: (taskId: string, texte: string) => Promise<void>;
@@ -287,6 +299,7 @@ function TaskDetailModal({
   const progress = getTaskProgress(task);
   const taskChecklists = task.checklists || [];
   const childTasks = tasks.filter(item => item.parentTaskId === task.id);
+  const contentMode = task.contentMode || (taskChecklists.length > 0 ? 'checklist' : childTasks.length > 0 ? 'subtasks' : 'leaf');
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Détails de la tâche`} size="lg">
@@ -307,7 +320,12 @@ function TaskDetailModal({
         <div className="space-y-1">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Titre de la mission</label>
           <div className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
-            <p className="text-lg font-bold text-theme-main leading-tight">{task.title}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
+                {contentModeLabels[contentMode] || 'Libre'}
+              </span>
+              <p className="text-lg font-bold text-theme-main leading-tight">{task.title}</p>
+            </div>
           </div>
         </div>
 
@@ -528,6 +546,24 @@ export default function ListView({
   const [newChecklistText, setNewChecklistText] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirmer',
+    onConfirm: () => { },
+  });
+
+  const taskHasChildren = (taskId: string) => tasks.some(task => task.parentTaskId === taskId);
+  const getTaskMode = (task: Task) => task.contentMode || ((task.checklists || []).length > 0 ? 'checklist' : taskHasChildren(task.id) ? 'subtasks' : 'leaf');
+  const canTaskReceiveChecklist = (task: Task) => task.canAddChecklist ?? getTaskMode(task) !== 'subtasks';
+  const canTaskReceiveSubtask = (task: Task) => task.canAddSubtask ?? getTaskMode(task) !== 'checklist';
 
   const toggleStatus = (status: string) => {
     setExpandedStatus(prev => ({ ...prev, [status]: !prev[status] }));
@@ -562,6 +598,11 @@ export default function ListView({
   };
 
   const startAddingChecklist = (taskId: string) => {
+    const targetTask = tasks.find(task => task.id === taskId);
+    if (targetTask && !canTaskReceiveChecklist(targetTask)) {
+      setActionError("Cette tâche contient déjà des sous-tâches. Vous ne pouvez pas y ajouter de checklist au même niveau.");
+      return;
+    }
     setExpandedTasks(prev => ({ ...prev, [taskId]: true }));
     setAddingChecklistTaskId(taskId);
     setNewChecklistText('');
@@ -571,6 +612,10 @@ export default function ListView({
   const handleAddChecklist = async (taskId: string) => {
     if (!onAddChecklist || !newChecklistText.trim()) return;
     const targetTask = tasks.find(task => task.id === taskId);
+    if (targetTask && !canTaskReceiveChecklist(targetTask)) {
+      setActionError("Cette tâche contient déjà des sous-tâches. Vous ne pouvez pas y ajouter de checklist au même niveau.");
+      return;
+    }
     const normalizedText = newChecklistText.trim().toLowerCase();
     const hasDuplicateChecklist = (targetTask?.checklists || []).some(checklist =>
       checklist.texte.trim().toLowerCase() === normalizedText
@@ -608,9 +653,70 @@ export default function ListView({
     }
   };
 
+  const handleCompleteTask = async (task: Task) => {
+    if (!onUpdateTaskStatus || task.status === 'terminé') return;
+    setActionLoading(`complete-task-${task.id}`);
+    setActionError(null);
+    try {
+      await onUpdateTaskStatus(task.id, 'terminé');
+      setExpandedTasks(prev => ({ ...prev, [task.id]: true }));
+    } catch (err: unknown) {
+      setActionError(sanitizeApiErrorMessage(
+        err,
+        task.parentTaskId
+          ? 'Impossible de marquer cette sous-tâche comme terminée.'
+          : 'Impossible de marquer cette tâche comme terminée.'
+      ));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const requestDeleteTask = (task: Task) => {
+    const isSubtask = Boolean(task.parentTaskId);
+    const childCount = tasks.filter(item => item.parentTaskId === task.id).length;
+    const checklistCount = task.checklists?.length || 0;
+    const details = [
+      childCount > 0 ? `${childCount} sous-tâche${childCount > 1 ? 's' : ''}` : null,
+      checklistCount > 0 ? `${checklistCount} checklist${checklistCount > 1 ? 's' : ''}` : null,
+    ].filter(Boolean).join(' et ');
+
+    setConfirmAction({
+      isOpen: true,
+      title: isSubtask ? 'Supprimer la sous-tâche' : 'Supprimer la tâche',
+      message: details
+        ? `Voulez-vous vraiment supprimer « ${task.title} » ? Cette action supprimera aussi ${details}.`
+        : `Voulez-vous vraiment supprimer « ${task.title} » ? Cette action est irréversible.`,
+      confirmText: 'Supprimer',
+      onConfirm: async () => {
+        setActionLoading(`delete-task-${task.id}`);
+        setActionError(null);
+        try {
+          await onDeleteTask(task.id);
+        } catch (err: unknown) {
+          setActionError(sanitizeApiErrorMessage(err, isSubtask ? 'Impossible de supprimer cette sous-tâche.' : 'Impossible de supprimer cette tâche.'));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
+
+  const requestDeleteChecklist = (taskId: string, checklistId: string, checklistText: string) => {
+    if (!onDeleteChecklist) return;
+    setConfirmAction({
+      isOpen: true,
+      title: 'Supprimer la checklist',
+      message: `Voulez-vous vraiment supprimer « ${checklistText} » ? Cette action est irréversible.`,
+      confirmText: 'Supprimer',
+      onConfirm: async () => {
+        await handleDeleteChecklist(taskId, checklistId);
+      },
+    });
+  };
+
   const handleDeleteChecklist = async (taskId: string, checklistId: string) => {
     if (!onDeleteChecklist) return;
-    if (!confirm('Supprimer cette checklist ?')) return;
     setActionLoading(`delete-checklist-${checklistId}`);
     setActionError(null);
     try {
@@ -656,6 +762,14 @@ export default function ListView({
       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
       : '0';
     const progress = getTaskProgress(task);
+    const contentMode = getTaskMode(task);
+    const canAddChecklistHere = canOperateTask && !!onAddChecklist && canTaskReceiveChecklist(task);
+    const canAddSubtaskHere = canOperateTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
+    const isSubtaskMode = contentMode === 'subtasks';
+    const isChecklistMode = contentMode === 'checklist';
+    const structureSummary = isSubtaskMode
+      ? `${childTasks.length} sous-tâche${childTasks.length > 1 ? 's' : ''}`
+      : `Checklists ${checklistSummary}`;
 
     return (
       <div key={task.id} className="space-y-2">
@@ -667,15 +781,15 @@ export default function ListView({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (canOperateTask && onUpdateTaskStatus && task.status !== 'terminé') {
-                onUpdateTaskStatus(task.id, 'terminé');
+              if (canOperateTask) {
+                handleCompleteTask(task);
               }
             }}
-            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé'}
+            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
             className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
             title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
           >
-            {task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
+            {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
           </button>
 
           <button
@@ -694,6 +808,9 @@ export default function ListView({
               <span className="rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
                 Niveau {depth}
               </span>
+              <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
+                {contentModeLabels[contentMode] || 'Libre'}
+              </span>
               <h4 className={`text-sm font-black tracking-tight ${task.status === 'terminé' ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
                 {task.title}
               </h4>
@@ -702,14 +819,9 @@ export default function ListView({
               <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
                 {priorityLabels[task.priority]}
               </span>
-              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
-                Checklists {checklistSummary}
+              <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
+                {structureSummary}
               </span>
-              {childTasks.length > 0 && (
-                <span className="text-[10px] font-black uppercase tracking-tighter text-secondary">
-                  {childTasks.length} sous-tâche{childTasks.length > 1 ? 's' : ''}
-                </span>
-              )}
               <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
                 {progress}%
               </span>
@@ -745,11 +857,12 @@ export default function ListView({
             )}
             {canDeleteCurrentTask && (
               <button
-                onClick={() => onDeleteTask(task.id)}
+                onClick={() => requestDeleteTask(task)}
+                disabled={actionLoading === `delete-task-${task.id}`}
                 className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
                 title="Supprimer la sous-tâche"
               >
-                <Trash size={15} />
+                {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={15} />}
               </button>
             )}
           </div>
@@ -764,14 +877,20 @@ export default function ListView({
               className="overflow-hidden"
             >
               <div className="ml-4 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-4 space-y-3 sm:ml-10">
-                {(childTasks.length > 0 || (canOperateTask && onCreateSubtask)) && (
+                {isChecklistMode && canOperateTask && onCreateSubtask && (
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
+                    Sous-tâches indisponibles : cette tâche contient déjà des checklists.
+                  </div>
+                )}
+
+                {!isChecklistMode && (childTasks.length > 0 || canAddSubtaskHere) && (
                   <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Sous-tâches</p>
                         <p className="text-[11px] font-medium text-theme-muted opacity-60">Même structure, mêmes responsabilités, avec un niveau hiérarchique supplémentaire.</p>
                       </div>
-                      {canOperateTask && onCreateSubtask && (
+                      {canAddSubtaskHere && (
                         <Button size="sm" variant="outline" onClick={() => onCreateSubtask(task)} className="w-full sm:w-auto">
                           <Plus className="mr-2 h-4 w-4" />
                           Sous-tâche
@@ -790,55 +909,61 @@ export default function ListView({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la sous-tâche</p>
-                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Points de contrôle propres à cette sous-tâche.</p>
-                  </div>
-                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
-                    {checklistSummary}
-                  </span>
-                </div>
-
-                {taskChecklists.length === 0 && addingChecklistTaskId !== task.id && (
-                  <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
-                    Aucune checklist pour cette sous-tâche.
+                {isSubtaskMode && canOperateTask && onAddChecklist && (
+                  <div className="rounded-xl border border-secondary/20 bg-secondary/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-secondary">
+                    Checklists indisponibles : cette tâche contient déjà des sous-tâches.
                   </div>
                 )}
 
-                {taskChecklists.map((checklist) => (
-                  <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
-                    <button
-                      onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                      disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
-                      className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                      title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
-                    >
-                      {actionLoading === `toggle-checklist-${checklist.id}` ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : checklist.is_checked ? (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
-                      ) : (
-                        <Circle className="h-4 w-4" />
-                      )}
-                    </button>
-                    <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
-                      {checklist.texte}
-                    </span>
-                    {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
-                      <button
-                        onClick={() => handleDeleteChecklist(task.id, checklist.id)}
-                        disabled={actionLoading === `delete-checklist-${checklist.id}`}
-                        className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
-                        title="Supprimer la checklist"
-                      >
-                        {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
-                      </button>
+                {!isSubtaskMode && (
+                  <>
+                    {(taskChecklists.length > 0 || addingChecklistTaskId === task.id) && (
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la sous-tâche</p>
+                          <p className="text-[11px] font-medium text-theme-muted opacity-60">Points de contrôle propres à cette sous-tâche.</p>
+                        </div>
+                        <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
+                          {checklistSummary}
+                        </span>
+                      </div>
                     )}
-                  </div>
-                ))}
 
-                {canOperateTask && onAddChecklist && (
+                    {taskChecklists.map((checklist) => (
+                      <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
+                        <button
+                          onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                          disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                          className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                          title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
+                        >
+                          {actionLoading === `toggle-checklist-${checklist.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : checklist.is_checked ? (
+                            <CheckCircle className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <Circle className="h-4 w-4" />
+                          )}
+                        </button>
+                        <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
+                          {checklist.texte}
+                        </span>
+                        {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
+                          <button
+                            onClick={() => requestDeleteChecklist(task.id, checklist.id, checklist.texte)}
+                            disabled={actionLoading === `delete-checklist-${checklist.id}`}
+                            className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
+                            title="Supprimer la checklist"
+                          >
+                            {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {canAddChecklistHere && (
                   <div className="pt-1">
                     {addingChecklistTaskId === task.id ? (
                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -944,9 +1069,18 @@ export default function ListView({
                     const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
                     const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canDeleteCurrentTask;
                     const childTasks = tasksByParent[task.id] || [];
+                    const progress = getTaskProgress(task);
                     const checklistSummary = taskChecklists.length > 0
                       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
                       : '0';
+                    const contentMode = getTaskMode(task);
+                    const canAddChecklistHere = canOperateTask && !!onAddChecklist && canTaskReceiveChecklist(task);
+                    const canAddSubtaskHere = canOperateTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
+                    const isSubtaskMode = contentMode === 'subtasks';
+                    const isChecklistMode = contentMode === 'checklist';
+                    const structureSummary = isSubtaskMode
+                      ? `${childTasks.length} sous-tâche${childTasks.length > 1 ? 's' : ''}`
+                      : `Checklists ${checklistSummary}`;
 
                     return (
                       <motion.div
@@ -963,15 +1097,15 @@ export default function ListView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (canOperateTask && onUpdateTaskStatus && task.status !== 'terminé') {
-                                onUpdateTaskStatus(task.id, 'terminé');
+                              if (canOperateTask) {
+                                handleCompleteTask(task);
                               }
                             }}
-                            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé'}
+                            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
                             className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
                             title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
                           >
-                            {task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
+                            {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
                           </button>
 
 
@@ -991,17 +1125,18 @@ export default function ListView({
                               {task.title}
                             </h4>
                             <div className="flex flex-wrap items-center gap-3">
+                              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
+                                {contentModeLabels[contentMode] || 'Libre'}
+                              </span>
                               <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
                                 {priorityLabels[task.priority]}
                               </span>
-                              <span className="text-[10px] font-black text-theme-muted opacity-50 uppercase tracking-tighter">
-                                Checklists {checklistSummary}
+                              <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
+                                {structureSummary}
                               </span>
-                              {childTasks.length > 0 && (
-                                <span className="text-[10px] font-black text-secondary uppercase tracking-tighter">
-                                  {childTasks.length} sous-tâche{childTasks.length > 1 ? 's' : ''}
-                                </span>
-                              )}
+                              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                                {progress}%
+                              </span>
                               {task.dueDate && (
                                 <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
                                   {task.dueDate}
@@ -1046,11 +1181,12 @@ export default function ListView({
                             )}
                             {canDeleteCurrentTask && (
                               <button
-                                onClick={() => onDeleteTask(task.id)}
+                                onClick={() => requestDeleteTask(task)}
+                                disabled={actionLoading === `delete-task-${task.id}`}
                                 className="p-2 rounded-lg text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-all"
                                 title="Supprimer"
                               >
-                                <Trash size={16} />
+                                {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={16} />}
                               </button>
                             )}
                           </div>
@@ -1065,7 +1201,13 @@ export default function ListView({
                               className="overflow-hidden"
                             >
                               <div className="ml-0 sm:ml-28 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-4 space-y-3">
-                                {(childTasks.length > 0 || (canOperateTask && onCreateSubtask)) && (
+                                {isChecklistMode && canOperateTask && onCreateSubtask && (
+                                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
+                                    Sous-tâches indisponibles : cette tâche contient déjà des checklists.
+                                  </div>
+                                )}
+
+                                {!isChecklistMode && (childTasks.length > 0 || canAddSubtaskHere) && (
                                   <div className="rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/40 p-4 space-y-3">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                       <div>
@@ -1074,7 +1216,7 @@ export default function ListView({
                                           Travail détaillé avec statut, échéance et progression propres.
                                         </p>
                                       </div>
-                                      {canOperateTask && onCreateSubtask && (
+                                      {canAddSubtaskHere && (
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -1099,55 +1241,61 @@ export default function ListView({
                                   </div>
                                 )}
 
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la tâche</p>
-                                    <p className="text-[11px] font-medium text-theme-muted opacity-60">Suivez les points terminés. La suppression reste réservée aux gestionnaires.</p>
-                                  </div>
-                                  <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
-                                    {checklistSummary}
-                                  </span>
-                                </div>
-
-                                {taskChecklists.length === 0 && addingChecklistTaskId !== task.id && (
-                                  <div className="rounded-xl border border-dashed border-theme-border-subtle p-4 text-center text-xs font-bold text-theme-muted opacity-50">
-                                    Aucune checklist pour cette tâche.
+                                {isSubtaskMode && canOperateTask && onAddChecklist && (
+                                  <div className="rounded-xl border border-secondary/20 bg-secondary/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-secondary">
+                                    Checklists indisponibles : cette tâche contient déjà des sous-tâches.
                                   </div>
                                 )}
 
-                                {taskChecklists.map((checklist) => (
-                                  <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
-                                    <button
-                                      onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                                      disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
-                                      className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                                      title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
-                                    >
-                                      {actionLoading === `toggle-checklist-${checklist.id}` ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : checklist.is_checked ? (
-                                        <CheckCircle className="h-4 w-4 text-emerald-500" />
-                                      ) : (
-                                        <Circle className="h-4 w-4" />
-                                      )}
-                                    </button>
-                                    <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
-                                      {checklist.texte}
-                                    </span>
-                                    {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
-                                      <button
-                                        onClick={() => handleDeleteChecklist(task.id, checklist.id)}
-                                        disabled={actionLoading === `delete-checklist-${checklist.id}`}
-                                        className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
-                                        title="Supprimer la checklist"
-                                      >
-                                        {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
-                                      </button>
+                                {!isSubtaskMode && (
+                                  <>
+                                    {(taskChecklists.length > 0 || addingChecklistTaskId === task.id) && (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Checklists de la tâche</p>
+                                          <p className="text-[11px] font-medium text-theme-muted opacity-60">Suivez les points terminés. La suppression reste réservée aux gestionnaires.</p>
+                                        </div>
+                                        <span className="rounded-lg bg-theme-surface-hover px-2 py-1 text-[10px] font-black text-theme-main border border-theme-border-subtle">
+                                          {checklistSummary}
+                                        </span>
+                                      </div>
                                     )}
-                                  </div>
-                                ))}
 
-                                {canOperateTask && onAddChecklist && (
+                                    {taskChecklists.map((checklist) => (
+                                      <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
+                                        <button
+                                          onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                                          disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                                          className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                                          title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
+                                        >
+                                          {actionLoading === `toggle-checklist-${checklist.id}` ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : checklist.is_checked ? (
+                                            <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                          ) : (
+                                            <Circle className="h-4 w-4" />
+                                          )}
+                                        </button>
+                                        <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
+                                          {checklist.texte}
+                                        </span>
+                                        {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
+                                          <button
+                                            onClick={() => requestDeleteChecklist(task.id, checklist.id, checklist.texte)}
+                                            disabled={actionLoading === `delete-checklist-${checklist.id}`}
+                                            className="rounded-lg p-1.5 text-theme-muted opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover/checklist:opacity-100 disabled:opacity-50"
+                                            title="Supprimer la checklist"
+                                          >
+                                            {actionLoading === `delete-checklist-${checklist.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash size={14} />}
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </>
+                                )}
+
+                                {canAddChecklistHere && (
                                   <div className="pt-1">
                                     {addingChecklistTaskId === task.id ? (
                                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -1218,6 +1366,18 @@ export default function ListView({
         onBack={goBackInTaskDetail}
         canGoBack={detailTaskHistory.length > 0}
         getTaskProgress={getTaskProgress}
+      />
+
+      <ConfirmModal
+        isOpen={confirmAction.isOpen}
+        onClose={() => setConfirmAction(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmAction.onConfirm}
+        title={confirmAction.title}
+        message={confirmAction.message}
+        confirmText={confirmAction.confirmText}
+        cancelText="Annuler"
+        confirmVariant="danger"
+        isLoading={actionLoading?.startsWith('delete-') || false}
       />
     </div>
   );

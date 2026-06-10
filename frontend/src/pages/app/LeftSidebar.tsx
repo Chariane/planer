@@ -370,9 +370,28 @@ export default function LeftSidebar() {
     return role === ROLES.CREATOR || role === ROLES.ADMIN;
   };
 
+  const hasInheritedSpaceManagement = (targetSpaceId: string): boolean => {
+    if (isWorkspaceCreator || isWorkspaceAdmin) return true;
+
+    const workspace = workspaces.find(ws => ws.id === workspaceId);
+    const path = findSpacePath(workspace?.espaces || [], targetSpaceId);
+    if (!path || path.length <= 1) return false;
+
+    return path
+      .slice(0, -1)
+      .some(space => {
+        const role = getDirectSpaceRole(space.id);
+        return role === ROLES.CREATOR || role === ROLES.ADMIN;
+      });
+  };
+
   const canDeleteTargetSpace = (targetSpaceId: string): boolean => {
+    const directRole = getDirectSpaceRole(targetSpaceId);
+    if (directRole === ROLES.CREATOR) return true;
+    if (directRole === ROLES.ADMIN) return hasInheritedSpaceManagement(targetSpaceId);
+
     const role = getEffectiveSpaceRole(targetSpaceId);
-    return role === ROLES.CREATOR;
+    return role === ROLES.CREATOR || role === ROLES.ADMIN || isWorkspaceCreator || isWorkspaceAdmin;
   };
 
   const getAvailableInvitationRolesForSpace = (targetSpaceId: string | null): string[] => {
@@ -395,8 +414,8 @@ export default function LeftSidebar() {
   };
 
   const canDeleteListContext = (parentSpaceIdParam: string | null, isWorkspaceListParam: boolean): boolean => {
-    if (isWorkspaceListParam) return isWorkspaceCreator;
-    return !!parentSpaceIdParam && canDeleteTargetSpace(parentSpaceIdParam);
+    if (isWorkspaceListParam) return isWorkspaceCreator || isWorkspaceAdmin;
+    return !!parentSpaceIdParam && canManageSpace(parentSpaceIdParam);
   };
 
   const selectedSpaceEffectiveRole = spaceId && spaceId !== 'list' ? getEffectiveSpaceRole(spaceId) : workspaceRole;
@@ -450,6 +469,18 @@ export default function LeftSidebar() {
     || (activeEntryType === 'list' && !selectedListSpaceId);
   const showProjectOnlyFallback = activeEntryType === 'list' && selectedListContext && !selectedListSpaceNode && !showWorkspaceLevelLists;
   const showTreeNavigation = !showProjectOnlyFallback;
+  const activeResourceRole = activeEntryType === 'list'
+    ? getHighestRole([
+      directJoinedList?.role,
+      selectedListContext?.role,
+      selectedListContext?.current_user_role,
+      selectedListSpaceId ? getEffectiveSpaceRole(selectedListSpaceId) : null,
+      workspaceRole,
+    ])
+    : activeEntryType === 'space'
+      ? selectedSpaceEffectiveRole
+      : workspaceRole || currentWorkspace?.current_user_role || null;
+  const canViewResourceFilesShortcut = activeResourceRole === ROLES.CREATOR || activeResourceRole === ROLES.ADMIN;
   const showResourceToolsShortcut = hasWorkspaceAccess
     && (activeEntryType === 'workspace' || activeEntryType === 'space' || activeEntryType === 'list');
   const navigationTitle = activeEntryType === 'space'
@@ -460,17 +491,19 @@ export default function LeftSidebar() {
 
   const renderResourceToolShortcuts = () => (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={() => openResourceTool('files')}
-        className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-primary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
-          <span className="truncate">Fichiers</span>
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
-      </button>
+      {canViewResourceFilesShortcut && (
+        <button
+          type="button"
+          onClick={() => openResourceTool('files')}
+          className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-primary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="truncate">Fichiers</span>
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => openResourceTool('reports')}
@@ -634,7 +667,7 @@ export default function LeftSidebar() {
 
   const handleDeleteSpace = (space: any) => {
     if (!space?.id || !canDeleteTargetSpace(space.id)) {
-      showMessage("Seul le créateur peut supprimer cet espace.", 'error');
+      showMessage("Vous ne pouvez pas supprimer la ressource racine de votre périmètre. Seuls les créateurs ou gestionnaires par héritage peuvent supprimer un espace descendant.", 'error');
       return;
     }
     setConfirmModal({
@@ -791,7 +824,7 @@ export default function LeftSidebar() {
 
   const handleDeleteList = (list: any, parentSpaceIdParam: string | null, isWorkspaceListParam: boolean) => {
     if (!canDeleteListContext(parentSpaceIdParam, isWorkspaceListParam)) {
-      showMessage("Seul le créateur peut supprimer ce projet.", 'error');
+      showMessage("Vous ne pouvez pas supprimer la ressource racine de votre périmètre. Seuls les créateurs ou gestionnaires par héritage peuvent supprimer un projet descendant.", 'error');
       return;
     }
     setConfirmModal({

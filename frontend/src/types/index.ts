@@ -80,6 +80,9 @@ export interface Task {
   subTasks?: ChecklistItem[];
   checklists?: TaskChecklist[];
   progression?: number;
+  contentMode?: 'leaf' | 'checklist' | 'subtasks';
+  canAddChecklist?: boolean;
+  canAddSubtask?: boolean;
 }
 
 export interface Period {

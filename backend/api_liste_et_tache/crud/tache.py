@@ -21,7 +21,11 @@ def _next_status_from_progress(progress: float) -> str:
 
 
 def _progress_from_manual_status(tache: Tache) -> float:
-    return 100.0 if tache.statut == "terminé" else 0.0
+    if tache.statut == "terminé":
+        return 100.0
+    if tache.statut == "en cours":
+        return 50.0
+    return 0.0
 
 
 def _apply_computed_status(tache: Tache, progress: float) -> bool:
@@ -112,7 +116,8 @@ def get_taches_for_liste(
     # Eager loading des membres, profils et checklists
     query = query.options(
         selectinload(Tache.membres).joinedload(Membre.utilisateur),
-        selectinload(Tache.checklists)
+        selectinload(Tache.checklists),
+        selectinload(Tache.sous_taches),
     )
     
     # Filtres
@@ -146,16 +151,36 @@ def _ensure_unique_tache_sibling_name(
     id_tache_parent: Optional[str] = None,
     exclude_id: Optional[str] = None,
 ) -> None:
+    normalized_title = (titre or "").strip().lower()
+    if not normalized_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le nom de la tâche est obligatoire.",
+        )
+
     query = db.query(Tache).filter(
         Tache.id_liste == id_liste,
-        func.lower(func.trim(Tache.titre)) == titre.strip().lower(),
+        func.lower(func.trim(Tache.titre)) == normalized_title,
     )
+    if id_tache_parent:
+        query = query.filter(Tache.id_tache_parent == id_tache_parent)
+    else:
+        query = query.filter(Tache.id_tache_parent.is_(None))
+
     if exclude_id:
         query = query.filter(Tache.id != exclude_id)
+
     if query.first():
+        detail = (
+            "Cette tâche contient déjà une sous-tâche portant exactement ce nom. "
+            "Deux sous-tâches au même niveau doivent avoir des noms différents."
+            if id_tache_parent
+            else "Ce projet contient déjà une tâche directe portant exactement ce nom. "
+            "Deux tâches directes du même projet doivent avoir des noms différents."
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Une tâche portant exactement ce nom existe déjà dans ce projet. Utilisez un autre nom pour éviter toute confusion entre tâches et sous-tâches.",
+            detail=detail,
         )
 
 
@@ -254,6 +279,44 @@ def _get_tache_descendant_ids(db: Session, tache_id: str) -> list[str]:
     return descendants
 
 
+def has_task_checklists(db: Session, tache_id: str) -> bool:
+    return db.query(Checklist.id).filter(Checklist.id_tache == tache_id).first() is not None
+
+
+def has_task_subtasks(db: Session, tache_id: str) -> bool:
+    return db.query(Tache.id).filter(Tache.id_tache_parent == tache_id).first() is not None
+
+
+def get_task_content_mode(db: Session, tache_id: str) -> str:
+    if has_task_checklists(db, tache_id):
+        return "checklist"
+    if has_task_subtasks(db, tache_id):
+        return "subtasks"
+    return "leaf"
+
+
+def ensure_task_can_receive_checklist(db: Session, tache_id: str) -> None:
+    if has_task_subtasks(db, tache_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cette tâche contient déjà des sous-tâches. "
+                "Vous ne pouvez pas y ajouter de checklist au même niveau."
+            ),
+        )
+
+
+def ensure_task_can_receive_subtask(db: Session, tache_id: str) -> None:
+    if has_task_checklists(db, tache_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cette tâche contient déjà des checklists. "
+                "Vous ne pouvez pas y ajouter de sous-tâche au même niveau."
+            ),
+        )
+
+
 def _mark_task_branch_completed(db: Session, tache_id: str) -> None:
     """Termine une tâche et tout ce qu'elle contient."""
     branch_ids = [tache_id] + _get_tache_descendant_ids(db, tache_id)
@@ -283,6 +346,8 @@ def create_tache(
     id_createur: Optional[str] = None,
 ) -> Tache:
     id_liste, parent = _resolve_parent_scope(db, id_tache_parent=id_tache_parent, id_liste=id_liste)
+    if parent:
+        ensure_task_can_receive_subtask(db, parent.id)
     _ensure_subtask_due_date_within_parent(
         date_fin_prevue=date_fin_prevue,
         parent=parent,
@@ -338,6 +403,8 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
             id_tache_parent=target_parent_id,
             id_liste=target_liste_id,
         )
+        if target_parent:
+            ensure_task_can_receive_subtask(db, target_parent.id)
         kwargs["id_liste"] = target_liste_id
 
     _ensure_subtask_due_date_within_parent(
@@ -562,7 +629,8 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
     taches = db.query(Tache).filter(Tache.id_liste == liste_id)\
         .options(
             selectinload(Tache.membres).joinedload(Membre.utilisateur),
-            selectinload(Tache.checklists)
+            selectinload(Tache.checklists),
+            selectinload(Tache.sous_taches),
         )\
         .order_by(Tache.ordre_affichage).all()
     
