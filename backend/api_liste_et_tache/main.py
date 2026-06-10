@@ -36,53 +36,6 @@ def ensure_runtime_columns() -> None:
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_espace varchar(12)"))
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_workspace varchar(12)"))
         conn.execute(text("""
-            DO $$
-            DECLARE
-                constraint_name text;
-                index_name text;
-            BEGIN
-                FOR constraint_name IN
-                    SELECT con.conname
-                    FROM pg_constraint con
-                    JOIN pg_class rel ON rel.oid = con.conrelid
-                    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
-                    WHERE nsp.nspname = 'planer'
-                      AND rel.relname = 'section'
-                      AND con.contype = 'u'
-                      AND (
-                        SELECT array_agg(att.attname::text ORDER BY att.attnum)
-                        FROM unnest(con.conkey) AS key(attnum)
-                        JOIN pg_attribute att ON att.attrelid = rel.oid AND att.attnum = key.attnum
-                      ) = ARRAY['titre']::text[]
-                LOOP
-                    EXECUTE format('ALTER TABLE planer.section DROP CONSTRAINT IF EXISTS %I', constraint_name);
-                END LOOP;
-
-                FOR index_name IN
-                    SELECT idx.relname
-                    FROM pg_class tbl
-                    JOIN pg_namespace nsp ON nsp.oid = tbl.relnamespace
-                    JOIN pg_index ix ON ix.indrelid = tbl.oid
-                    JOIN pg_class idx ON idx.oid = ix.indexrelid
-                    WHERE nsp.nspname = 'planer'
-                      AND tbl.relname = 'section'
-                      AND ix.indisunique
-                      AND ix.indnatts = 1
-                      AND ix.indexprs IS NULL
-                      AND (
-                        SELECT att.attname::text
-                        FROM pg_attribute att
-                        WHERE att.attrelid = tbl.oid
-                          AND att.attnum = ix.indkey[0]
-                      ) = 'titre'
-                LOOP
-                    EXECUTE format('DROP INDEX IF EXISTS planer.%I', index_name);
-                END LOOP;
-            END
-            $$;
-        """))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_section_titre ON planer.section (titre)"))
-        conn.execute(text("""
             UPDATE planer.rapport AS r
             SET
                 owner_user_id = COALESCE(r.owner_user_id, m.id_utilisateur),
