@@ -912,6 +912,10 @@ class RapportOut(RapportBase):
     id_membre: Optional[str] = None
     liste_id: Optional[str] = None
     id_liste: Optional[str] = None
+    id_espace: Optional[str] = None
+    id_workspace: Optional[str] = None
+    scope_type: Optional[str] = None
+    scope_id: Optional[str] = None
     owner_user_id: Optional[str] = None
     owner_name: Optional[str] = None
     author_role: Optional[str] = None

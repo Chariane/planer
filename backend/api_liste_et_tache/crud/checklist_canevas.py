@@ -84,6 +84,28 @@ def _ensure_unique_section_sibling_name(
             detail="Une section portant ce nom existe déjà dans ce canevas. Choisissez un autre nom.",
         )
 
+
+def _section_create_integrity_message(exc: IntegrityError) -> str:
+    original = getattr(exc, "orig", None)
+    pgcode = getattr(original, "pgcode", None)
+    diag = getattr(original, "diag", None)
+    constraint_name = (getattr(diag, "constraint_name", "") or "").lower()
+    column_name = (getattr(diag, "column_name", "") or "").lower()
+    raw_error = str(original or exc).lower()
+
+    if pgcode == "23505":
+        if "titre" in constraint_name or "titre" in raw_error:
+            return "Une section portant ce nom existe déjà dans ce canevas. Choisissez un autre nom."
+        return "Un identifiant technique de section existe déjà. Réessayez dans un instant."
+
+    if pgcode == "23503":
+        return "Le canevas ciblé n'existe plus ou n'est plus accessible. Rechargez la page puis réessayez."
+
+    if pgcode == "23502" and (column_name == "titre" or "titre" in raw_error):
+        return "Le nom de la section est obligatoire."
+
+    return "Impossible de créer la section. Vérifiez le nom de la section puis réessayez."
+
 # --- SECTION CRUD ---
 
 def get_section_by_id(db: Session, section_id: str) -> Optional[Section]:
@@ -103,7 +125,7 @@ def create_section(db: Session, titre: str, id_canevas: Optional[str] = None) ->
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Impossible de creer la section.",
+            detail=_section_create_integrity_message(exc),
         ) from exc
     return section
 

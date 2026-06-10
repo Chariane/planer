@@ -281,9 +281,17 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
   const addSection = async () => {
     if (!newSectionTitle.trim() || !canevas || !canModify) return;
     clearActionError();
+    const normalizedTitle = newSectionTitle.trim().toLowerCase();
+    const sectionAlreadyExists = canevas.sections.some(
+      section => section.titre.trim().toLowerCase() === normalizedTitle
+    );
+    if (sectionAlreadyExists) {
+      setActionError('Une section portant ce nom existe déjà dans ce canevas. Choisissez un autre nom.');
+      return;
+    }
     setActionLoading('add-section');
     try {
-      await sectionService.create(canevas.id, { titre: newSectionTitle });
+      await sectionService.create(canevas.id, { titre: newSectionTitle.trim() });
       await loadCanevas();
       setNewSectionTitle('');
       setIsAddingSection(false);

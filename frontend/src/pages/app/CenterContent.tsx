@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, MessageCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
 import GanttView from './views/GanttView';
@@ -31,6 +31,7 @@ import type { Task, Member } from '../../types';
 export default function CenterContent() {
   const { workspaceId, spaceId, listId } = useActiveResource();
   const { user } = useAuth();
+  const location = useLocation();
 
   const [currentListWorkspaceId, setCurrentListWorkspaceId] = useState<string | null>(null);
   const [currentListEspaceId, setCurrentListEspaceId] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export default function CenterContent() {
 
   // States
   const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres' | 'outils'>(availableTabs[0]);
+  const [requestedTool, setRequestedTool] = useState<'files' | 'reports'>('files');
   const [members, setMembers] = useState<Member[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [memberSearchTerm, setMemberSearchTerm] = useState('');
@@ -111,6 +113,23 @@ export default function CenterContent() {
       loadTasks();
     }
   );
+
+  useEffect(() => {
+    const tool = new URLSearchParams(location.search).get('tool');
+    if (tool !== 'files' && tool !== 'reports') return;
+
+    setRequestedTool(tool);
+    if (listId) {
+      setActiveTab('outils');
+    }
+
+    window.setTimeout(() => {
+      document.getElementById('resource-files-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 80);
+  }, [location.search, listId]);
 
   // Charger les informations de la liste pour le dashboard
   useEffect(() => {
@@ -423,6 +442,7 @@ export default function CenterContent() {
               currentUserId={user?.id}
               effectiveRole={userEspaceRole || userWorkspaceRole}
               tasks={[]}
+              initialTool={requestedTool}
             />
           </div>
         </div>
@@ -438,6 +458,7 @@ export default function CenterContent() {
               currentUserId={user?.id}
               effectiveRole={userWorkspaceRole}
               tasks={[]}
+              initialTool={requestedTool}
             />
           </div>
         </div>
@@ -528,6 +549,7 @@ export default function CenterContent() {
             currentUserId={user?.id}
             effectiveRole={effectiveRole}
             tasks={tasks}
+            initialTool={requestedTool}
           />
         )}
       </div>
@@ -683,6 +705,7 @@ export default function CenterContent() {
               currentUserId={user?.id}
               effectiveRole={effectiveRole}
               tasks={tasks}
+              initialTool={requestedTool}
             />
           )}
 

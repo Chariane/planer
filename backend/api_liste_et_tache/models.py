@@ -1623,6 +1623,8 @@ class Rapport(Base):
     owner_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255))
     author_role: Mapped[Optional[str]] = mapped_column(String(30))
     id_liste: Mapped[Optional[str]] = mapped_column(String(12))
+    id_espace: Mapped[Optional[str]] = mapped_column(String(12))
+    id_workspace: Mapped[Optional[str]] = mapped_column(String(12))
 
     # Relations
     membres: Mapped[Optional['Membre']] = relationship('Membre', back_populates='rapports')

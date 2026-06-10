@@ -1,13 +1,13 @@
 // frontend/src/pages/app/LeftSidebar.tsx
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash,
   FileText, Plus, Edit, Trash2, ListTodo, Settings, X, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Info
+  CheckCircle2, AlertTriangle, Info, Paperclip
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { listeService } from '../../services/liste.service';
@@ -86,6 +86,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 
 export default function LeftSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { workspaceId, spaceId, listId } = useActiveResource();
   const {
     workspaces, joinedWorkspaces, joinedEspaces, joinedListes, loadEspacesTree, addEspace, updateEspace, deleteEspace,
@@ -118,11 +119,18 @@ export default function LeftSidebar() {
     setToast({ message, type });
   };
 
-  const scrollToFilesPanel = () => {
+  const scrollToToolsPanel = () => {
     document.getElementById('resource-files-panel')?.scrollIntoView({
       behavior: 'smooth',
       block: 'start',
     });
+  };
+
+  const openResourceTool = (tool: 'files' | 'reports') => {
+    const nextSearch = new URLSearchParams(location.search);
+    nextSearch.set('tool', tool);
+    navigate(`${location.pathname}?${nextSearch.toString()}`);
+    setTimeout(scrollToToolsPanel, 80);
   };
 
   // État pour la modale de confirmation
@@ -442,12 +450,40 @@ export default function LeftSidebar() {
     || (activeEntryType === 'list' && !selectedListSpaceId);
   const showProjectOnlyFallback = activeEntryType === 'list' && selectedListContext && !selectedListSpaceNode && !showWorkspaceLevelLists;
   const showTreeNavigation = !showProjectOnlyFallback;
-  const showFilesShortcut = hasWorkspaceAccess && activeEntryType !== 'list';
+  const showResourceToolsShortcut = hasWorkspaceAccess
+    && (activeEntryType === 'workspace' || activeEntryType === 'space' || activeEntryType === 'list');
   const navigationTitle = activeEntryType === 'space'
     ? 'Espace actif'
     : activeEntryType === 'list'
       ? 'Projet actif'
       : 'Espaces et listes';
+
+  const renderResourceToolShortcuts = () => (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => openResourceTool('files')}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-primary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate">Fichiers</span>
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
+      </button>
+      <button
+        type="button"
+        onClick={() => openResourceTool('reports')}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-secondary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <FileText className="h-3.5 w-3.5 shrink-0 text-secondary" />
+          <span className="truncate">Rapports</span>
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
+      </button>
+    </div>
+  );
 
   useEffect(() => {
     const idsToOpen = new Set<string>();
@@ -1133,16 +1169,10 @@ export default function LeftSidebar() {
             </div>
           </div>
         )}
-        {showFilesShortcut && (
+        {showResourceToolsShortcut && (
           <div className="mt-4">
             <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Ressources</h3>
-            <button
-              type="button"
-              onClick={scrollToFilesPanel}
-              className="w-full flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors"
-            >
-              <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
-            </button>
+            {renderResourceToolShortcuts()}
           </div>
         )}
         {/* Affichage des espaces en lecture seule */}
@@ -1348,18 +1378,10 @@ export default function LeftSidebar() {
       )}
 
       {/* Ressources rapides */}
-      {showFilesShortcut && (
+      {showResourceToolsShortcut && (
         <div className="mb-4">
           <h3 className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mb-1.5 pl-1">Ressources</h3>
-          <div className="space-y-0.5">
-            <button
-              type="button"
-              onClick={scrollToFilesPanel}
-              className="w-full flex items-center gap-1.5 text-xs text-theme-main hover:bg-theme-surface-hover rounded p-1 cursor-pointer transition-colors"
-            >
-              <FileText className="h-3.5 w-3.5 text-primary" /> Fichiers
-            </button>
-          </div>
+          {renderResourceToolShortcuts()}
         </div>
       )}
 

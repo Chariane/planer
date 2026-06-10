@@ -4,17 +4,24 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
+    ESPACE_ADMIN_ROLE,
+    LISTE_ADMIN_ROLE,
+    LISTE_GUEST_ROLE,
+    LISTE_MEMBER_ROLE,
+    ResourceType,
+    WORKSPACE_ADMIN_ROLE,
     _get_member_or_404,
-    _get_member_scope_liste_id,
+    _require_espace_read_access,
     _member_has_assigned_task_in_list,
     _require_member_management_access,
     _require_member_read_access,
     _require_report_owner_or_management_access,
     _require_report_read_access,
     _require_report_workflow_read_access,
+    _require_workspace_read_access,
     commit_or_raise,
 )
-from ..models import Rapport, Membre, Liste
+from ..models import Rapport, Membre, Liste, Espace
 from .notification_events import commit_notification_events, notify_report_created
 
 
@@ -35,6 +42,10 @@ def _serialize_report(rapport: Rapport) -> dict:
     owner_user_id = rapport.owner_user_id or (rapport.membres.id_utilisateur if rapport.membres else None)
     author_role = rapport.author_role or (rapport.membres.role if rapport.membres else None)
     liste_id = rapport.id_liste or (rapport.membres.id_liste if rapport.membres else None)
+    espace_id = rapport.id_espace or (rapport.membres.id_espace if rapport.membres else None)
+    workspace_id = rapport.id_workspace or (rapport.membres.id_workspace if rapport.membres else None)
+    scope_type = ResourceType.LISTE if liste_id else ResourceType.ESPACE if espace_id else ResourceType.WORKSPACE if workspace_id else None
+    scope_id = liste_id or espace_id or workspace_id
 
     return {
         "id": rapport.id,
@@ -52,6 +63,10 @@ def _serialize_report(rapport: Rapport) -> dict:
         "author_role": author_role,
         "id_liste": liste_id,
         "liste_id": liste_id,
+        "id_espace": espace_id,
+        "id_workspace": workspace_id,
+        "scope_type": scope_type,
+        "scope_id": scope_id,
     }
 
 
@@ -69,33 +84,56 @@ def create_report(
     id_membre: str,
 ) -> dict:
     if not id_membre:
-        raise HTTPException(status_code=400, detail="Vous devez etre membre direct de la liste pour creer un rapport.")
+        raise HTTPException(status_code=400, detail="Vous devez etre membre direct de la ressource pour creer un rapport.")
 
     membre = _get_member_or_404(db, id_membre)
-    liste_id = _get_member_scope_liste_id(db, membre)
 
     if membre.id_utilisateur != current_user_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez creer un rapport que pour vous-meme.")
 
-    if not membre.id_liste:
+    liste_id = membre.id_liste
+    espace_id = membre.id_espace
+    workspace_id = membre.id_workspace
+
+    if liste_id:
+        _require_member_read_access(db, id_membre, current_user_id)
+
+        if membre.role == LISTE_GUEST_ROLE:
+            raise HTTPException(status_code=403, detail="Un invite de liste ne peut pas creer de rapport.")
+
+        if membre.role not in {LISTE_MEMBER_ROLE, LISTE_ADMIN_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail="Seuls les membres assignes et les administrateurs directs de la liste peuvent produire un rapport.",
+            )
+
+        if membre.role == LISTE_MEMBER_ROLE and not _member_has_assigned_task_in_list(
+            db,
+            liste_id=liste_id,
+            user_id=current_user_id,
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Un membre de liste doit avoir au moins une tache assignee pour creer un rapport.",
+            )
+    elif espace_id:
+        _require_espace_read_access(db, espace_id, current_user_id)
+        if membre.role != ESPACE_ADMIN_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Seuls les administrateurs directs de cet espace peuvent produire un rapport d'espace.",
+            )
+    elif workspace_id:
+        _require_workspace_read_access(db, workspace_id, current_user_id)
+        if membre.role != WORKSPACE_ADMIN_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Seuls les administrateurs directs de ce workspace peuvent produire un rapport de workspace.",
+            )
+    else:
         raise HTTPException(
-            status_code=403,
-            detail="Les rapports doivent etre envoyes depuis votre appartenance directe a la liste.",
-        )
-
-    _require_member_read_access(db, id_membre, current_user_id)
-
-    if membre.role == "Invité":
-        raise HTTPException(status_code=403, detail="Un invite de liste ne peut pas creer de rapport.")
-
-    if membre.role == "Membre" and not _member_has_assigned_task_in_list(
-        db,
-        liste_id=liste_id,
-        user_id=current_user_id,
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Un membre de liste doit avoir au moins une tache assignee pour creer un rapport.",
+            status_code=400,
+            detail="Cette appartenance n'est rattachee a aucune ressource pouvant recevoir un rapport.",
         )
 
     rapport = Rapport(
@@ -111,6 +149,8 @@ def create_report(
         owner_name_snapshot=_member_owner_name(membre),
         author_role=membre.role,
         id_liste=liste_id,
+        id_espace=espace_id,
+        id_workspace=workspace_id,
     )
     db.add(rapport)
     commit_or_raise(
@@ -159,24 +199,43 @@ def list_accessible_reports(
         except HTTPException:
             continue
 
-        member_liste_id = rapport.id_liste or (_get_member_scope_liste_id(db, membre) if membre else None)
-        if not member_liste_id:
-            continue
+        member_liste_id = rapport.id_liste or (membre.id_liste if membre else None)
+        member_espace_id = rapport.id_espace or (membre.id_espace if membre else None)
+        member_workspace_id = rapport.id_workspace or (membre.id_workspace if membre else None)
+
         if liste_id and member_liste_id != liste_id:
             continue
-        report_liste = membre.liste if membre and membre.liste else db.query(Liste).filter(Liste.id == member_liste_id).first()
-        if not liste_id and espace_id and (not report_liste or report_liste.id_espace != espace_id):
-            continue
-        if not liste_id and workspace_id:
-            member_workspace_id = report_liste.id_workspace if report_liste else None
-            if report_liste and report_liste.id_espace and report_liste.espace:
-                member_workspace_id = report_liste.espace.id_workspace
-            if member_workspace_id != workspace_id:
+
+        report_liste = None
+        if member_liste_id:
+            report_liste = membre.liste if membre and membre.liste else db.query(Liste).filter(Liste.id == member_liste_id).first()
+
+        if not liste_id and espace_id:
+            in_espace_scope = member_espace_id == espace_id
+            in_liste_espace_scope = bool(report_liste and report_liste.id_espace == espace_id)
+            if not in_espace_scope and not in_liste_espace_scope:
                 continue
+
+        if not liste_id and workspace_id:
+            resolved_workspace_id = member_workspace_id
+            if member_espace_id and not resolved_workspace_id:
+                report_espace = db.query(Espace).filter(Espace.id == member_espace_id).first()
+                resolved_workspace_id = report_espace.id_workspace if report_espace else None
+            if report_liste:
+                resolved_workspace_id = report_liste.id_workspace
+                if report_liste.id_espace and report_liste.espace:
+                    resolved_workspace_id = report_liste.espace.id_workspace
+            if resolved_workspace_id != workspace_id:
+                continue
+
+        if not member_liste_id and not member_espace_id and not member_workspace_id:
+            continue
 
         payload = _serialize_report(rapport)
         payload["liste_id"] = member_liste_id
         payload["id_liste"] = member_liste_id
+        payload["id_espace"] = member_espace_id
+        payload["id_workspace"] = member_workspace_id
         payload["owner_user_id"] = payload.get("owner_user_id") or (membre.id_utilisateur if membre else None)
         results.append(payload)
         if len(results) >= limit:

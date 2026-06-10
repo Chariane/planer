@@ -20,6 +20,7 @@ interface PlannerToolsPanelProps {
   currentUserId?: string | null;
   effectiveRole: string | null;
   tasks: Task[];
+  initialTool?: 'files' | 'reports';
 }
 
 interface ListMemberRecord {
@@ -42,6 +43,7 @@ export default function PlannerToolsPanel({
   currentUserId,
   effectiveRole,
   tasks,
+  initialTool,
 }: PlannerToolsPanelProps) {
   const [activeTool, setActiveTool] = useState<'files' | 'reports' | 'absences'>('files');
   const [members, setMembers] = useState<ListMemberRecord[]>([]);
@@ -100,19 +102,26 @@ export default function PlannerToolsPanel({
     espace_id: espaceId || undefined,
     liste_id: listeId || undefined,
   }), [workspaceId, espaceId, listeId]);
-  const reportArchiveKey = `kplanner:archived-reports:${currentUserId || 'anonymous'}:${listeId || 'global'}`;
+  const activeScopeKey = listeId ? `liste:${listeId}` : espaceId ? `espace:${espaceId}` : workspaceId ? `workspace:${workspaceId}` : 'global';
+  const directMembersLabel = listeId ? 'Membres de la liste' : espaceId ? "Membres de l'espace" : 'Membres du workspace';
+  const inheritedMembersLabel = listeId ? 'Membres workspace/espace' : 'Membres du workspace parent';
+  const reportArchiveKey = `kplanner:archived-reports:${currentUserId || 'anonymous'}:${activeScopeKey}`;
   const absenceArchiveKey = `kplanner:archived-absences:${currentUserId || 'anonymous'}:${listeId || 'global'}`;
 
   const isDirectMemberRecord = directMembers.find(member => member.id_utilisateur === currentUserId);
   const isDirectAdmin = isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN;
+  const isDirectResourceAdmin = isDirectMemberRecord?.role === ROLES.ADMIN;
+  const isDirectListMember = !!listeId && isDirectMemberRecord?.role === ROLES.MEMBER;
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
   const isGuest = effectiveRole === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
+  const hasReportScope = !!(listeId || espaceId || workspaceId);
 
-  const canViewReports = !!listeId && (!!isDirectMemberRecord || isManager);
-  // Rapport création : Administrateurs OU toute personne ayant une tâche assignée dans la liste.
-  const canCreateReport = isDirectAdmin || hasAssignedTask;
+  const canViewReports = hasReportScope && (!!isDirectMemberRecord || isManager);
+  const canCreateReport = listeId
+    ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
+    : isDirectResourceAdmin;
 
   const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
@@ -128,7 +137,13 @@ export default function PlannerToolsPanel({
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
-    if (!listeId && activeTool !== 'files') {
+    if (initialTool === 'files' || initialTool === 'reports') {
+      setActiveTool(initialTool);
+    }
+  }, [initialTool]);
+
+  useEffect(() => {
+    if (!listeId && activeTool === 'absences') {
       setActiveTool('files');
     }
   }, [listeId, activeTool]);
@@ -202,9 +217,13 @@ export default function PlannerToolsPanel({
         return Array.from(map.values());
       };
 
-      const direct = processMembers(listeRes);
+      const workspaceMembers = processMembers(workspaceRes);
+      const espaceMembers = processMembers(espaceRes);
+      const listeMembers = processMembers(listeRes);
+      const direct = listeId ? listeMembers : espaceId ? espaceMembers : workspaceMembers;
       const inheritedNames = new Set(direct.map(m => m.id_utilisateur));
-      const inherited = [...processMembers(espaceRes), ...processMembers(workspaceRes)]
+      const inheritedSources = listeId ? [...espaceMembers, ...workspaceMembers] : espaceId ? workspaceMembers : [];
+      const inherited = inheritedSources
         .filter(m => !inheritedNames.has(m.id_utilisateur));
 
       setDirectMembers(direct);
@@ -248,10 +267,10 @@ export default function PlannerToolsPanel({
   };
 
   const loadReports = async () => {
-    if (!listeId) return;
+    if (!hasReportScope) return;
     try {
       const data = await plannerToolsService.listReports({
-        ...(listeId ? { liste_id: listeId } : scope),
+        ...scope,
         member_id: selectedMemberId || undefined,
         limit: 100
       });
@@ -410,11 +429,16 @@ export default function PlannerToolsPanel({
     const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
 
     if (!currentUserMemberRecord || !reportForm.titre.trim()) {
-      showMessage('error', 'Vous devez être membre direct de cette liste et renseigner un titre pour envoyer un rapport.');
+      showMessage('error', 'Vous devez avoir un rôle direct autorisé sur cette ressource et renseigner un titre pour envoyer un rapport.');
       return;
     }
     if (!canCreateReport) {
-      showMessage('error', 'Vous devez avoir au moins une tâche assignée pour envoyer un rapport.');
+      showMessage(
+        'error',
+        listeId
+          ? 'Seuls les administrateurs directs ou les membres directs ayant au moins une tâche assignée peuvent envoyer un rapport.'
+          : 'Seuls les administrateurs directs de cette ressource peuvent envoyer un rapport.'
+      );
       return;
     }
     setLoading(true);
@@ -429,6 +453,8 @@ export default function PlannerToolsPanel({
           owner_name: createdReport.owner_name || 'Moi',
           liste_id: createdReport.liste_id || listeId,
           id_liste: createdReport.id_liste || listeId,
+          id_espace: createdReport.id_espace || espaceId,
+          id_workspace: createdReport.id_workspace || workspaceId,
         },
         ...prev.filter(report => report.id !== createdReport.id),
       ]);
@@ -814,7 +840,7 @@ export default function PlannerToolsPanel({
           {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
         </button>
 
-        {listeId && canViewReports && (
+        {canViewReports && (
           <button
             onClick={() => setActiveTool('reports')}
             className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'reports' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
@@ -851,7 +877,7 @@ export default function PlannerToolsPanel({
             >
               <option value="" className="bg-theme-surface">Tous les membres</option>
               {directMembers.length > 0 && (
-                <optgroup label="Membres de la liste" className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
+                <optgroup label={directMembersLabel} className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
                   {directMembers.map(member => (
                     <option key={member.id} value={member.id} className="bg-theme-surface">
                       {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
@@ -860,7 +886,7 @@ export default function PlannerToolsPanel({
                 </optgroup>
               )}
               {inheritedMembers.length > 0 && (
-                <optgroup label="Héritage Gestion" className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
+                <optgroup label={inheritedMembersLabel} className="bg-theme-surface font-black uppercase text-[10px] tracking-widest">
                   {inheritedMembers.map(member => (
                     <option key={member.id} value={member.id} className="bg-theme-surface">
                       {member.name} {member.id_utilisateur === currentUserId ? '(Moi)' : ''}
@@ -994,7 +1020,9 @@ export default function PlannerToolsPanel({
                     <div>
                       <p className="text-[10px] font-black uppercase text-orange-500 mb-2 tracking-widest">Accès restreint</p>
                       <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
-                        Seuls les administrateurs ou les membres ayant des tâches assignées peuvent émettre des rapports.
+                        {listeId
+                          ? 'Seuls les administrateurs directs ou les membres directs ayant une tâche assignée peuvent émettre un rapport.'
+                          : 'Seuls les administrateurs directs de cette ressource peuvent émettre un rapport.'}
                       </p>
                     </div>
                   </div>

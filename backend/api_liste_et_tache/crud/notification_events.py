@@ -186,6 +186,39 @@ def _direct_list_creator_user_ids(db: Session, liste_id: str, *, exclude_user_id
     return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
 
 
+def _direct_espace_creator_user_ids(db: Session, espace_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_espace == espace_id,
+            Membre.statut == "Actif",
+            Membre.role == "Créateur",
+        )
+        .all()
+    )
+    return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
+
+
+def _workspace_creator_user_ids(db: Session, workspace_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    user_ids: list[str | None] = []
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.statut == "Actif",
+            Membre.role == "Créateur",
+        )
+        .all()
+    )
+    user_ids.extend(member.id_utilisateur for member in members)
+
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if workspace:
+        user_ids.append(workspace.id_utilisateur)
+
+    return _unique_user_ids(user_ids, exclude_user_id=exclude_user_id)
+
+
 def _inherited_list_manager_user_ids(db: Session, liste: Liste, *, exclude_user_id: str | None = None) -> list[str]:
     user_ids: list[str | None] = []
 
@@ -223,23 +256,40 @@ def _inherited_list_manager_user_ids(db: Session, liste: Liste, *, exclude_user_
 
 
 def notify_report_created(db: Session, *, report_member: Membre, report_title: str, actor_user_id: str) -> None:
-    liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
-    if not liste:
-        return
-
     author = db.query(Utilisateur).filter(Utilisateur.id == report_member.id_utilisateur).first()
     author_name = _display_user(author)
-    liste_name = liste.nom or "une liste"
-    message = f"{author_name} a envoyé un rapport dans la liste « {liste_name} » : {report_title}."
 
-    if report_member.role == "Membre":
-        recipients = _direct_list_admin_user_ids(db, liste.id, exclude_user_id=actor_user_id)
-        if not recipients:
+    recipients: list[str] = []
+    if report_member.id_liste:
+        liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
+        if not liste:
+            return
+        resource_name = liste.nom or "une liste"
+        message = f"{author_name} a envoyé un rapport dans la liste « {resource_name} » : {report_title}."
+        if report_member.role == "Membre":
+            recipients = _direct_list_admin_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+            if not recipients:
+                recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+        elif report_member.role == "Administrateur":
             recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
-    elif report_member.role == "Administrateur":
-        recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+    elif report_member.id_espace:
+        espace = db.query(Espace).filter(Espace.id == report_member.id_espace).first()
+        if not espace:
+            return
+        resource_name = espace.nom or "un espace"
+        message = f"{author_name} a envoyé un rapport dans l'espace « {resource_name} » : {report_title}."
+        if report_member.role == "Administrateur":
+            recipients = _direct_espace_creator_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+    elif report_member.id_workspace:
+        workspace = db.query(Workspace).filter(Workspace.id == report_member.id_workspace).first()
+        if not workspace:
+            return
+        resource_name = workspace.nom or "un workspace"
+        message = f"{author_name} a envoyé un rapport dans le workspace « {resource_name} » : {report_title}."
+        if report_member.role == "Administrateur":
+            recipients = _workspace_creator_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
     else:
-        recipients = []
+        return
 
     for user_id in recipients:
         _create_notification(

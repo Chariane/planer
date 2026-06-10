@@ -1422,14 +1422,43 @@ def _require_direct_list_creator_grant(db: Session, liste_id: str, current_user_
     raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur direct de la liste.")
 
 
-def _report_liste_id_and_author_role(db: Session, rapport: Rapport) -> tuple[str, str | None, str | None]:
+def _get_direct_espace_creator_record(db: Session, espace_id: str, user_id: str) -> Membre | None:
+    membre = _get_espace_member_record(db, espace_id, user_id)
+    if membre and membre.statut == "Actif" and membre.role == ESPACE_OWNER_ROLE:
+        return membre
+    return None
+
+
+def _require_direct_espace_creator_grant(db: Session, espace_id: str, current_user_id: str) -> Membre:
+    membre = _get_direct_espace_creator_record(db, espace_id, current_user_id)
+    if membre:
+        return membre
+    raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur direct de l'espace.")
+
+
+def _require_workspace_creator_grant(db: Session, workspace_id: str, current_user_id: str) -> Membre:
+    membre = _get_active_workspace_membership(db, workspace_id, current_user_id)
+    if membre and membre.statut == "Actif" and membre.role == WORKSPACE_OWNER_ROLE:
+        return membre
+    raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur du workspace.")
+
+
+def _report_scope_and_author(db: Session, rapport: Rapport) -> tuple[str, str, str | None, str | None]:
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
     liste_id = getattr(rapport, "id_liste", None) or (membre.id_liste if membre else None)
-    author_role = (membre.role if membre else getattr(rapport, "author_role", None))
-    owner_user_id = (membre.id_utilisateur if membre else getattr(rapport, "owner_user_id", None))
-    if not liste_id:
-        raise HTTPException(status_code=403, detail="Ce rapport n'est plus rattache a une liste accessible.")
-    return liste_id, author_role, owner_user_id
+    espace_id = getattr(rapport, "id_espace", None) or (membre.id_espace if membre else None)
+    workspace_id = getattr(rapport, "id_workspace", None) or (membre.id_workspace if membre else None)
+    author_role = getattr(rapport, "author_role", None) or (membre.role if membre else None)
+    owner_user_id = getattr(rapport, "owner_user_id", None) or (membre.id_utilisateur if membre else None)
+
+    if liste_id:
+        return ResourceType.LISTE, liste_id, author_role, owner_user_id
+    if espace_id:
+        return ResourceType.ESPACE, espace_id, author_role, owner_user_id
+    if workspace_id:
+        return ResourceType.WORKSPACE, workspace_id, author_role, owner_user_id
+
+    raise HTTPException(status_code=403, detail="Ce rapport n'est plus rattache a une ressource accessible.")
 
 
 def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_user_id: str):
@@ -1441,18 +1470,30 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
     - rapport d'un Administrateur direct : createur direct de la liste ;
     - rapport d'un Createur direct : auteur uniquement.
     """
-    liste_id, author_role, owner_user_id = _report_liste_id_and_author_role(db, rapport)
+    scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
     if owner_user_id == current_user_id:
-        _require_list_read_access(db, liste_id, current_user_id)
+        if scope_type == ResourceType.LISTE:
+            _require_list_read_access(db, scope_id, current_user_id)
+        elif scope_type == ResourceType.ESPACE:
+            _require_espace_read_access(db, scope_id, current_user_id)
+        elif scope_type == ResourceType.WORKSPACE:
+            _require_workspace_read_access(db, scope_id, current_user_id)
         return _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
 
-    if author_role == LISTE_MEMBER_ROLE:
-        if _direct_list_has_admin(db, liste_id):
-            return _require_direct_list_admin_grant(db, liste_id, current_user_id)
-        return _require_direct_list_creator_grant(db, liste_id, current_user_id)
+    if scope_type == ResourceType.LISTE:
+        if author_role == LISTE_MEMBER_ROLE:
+            if _direct_list_has_admin(db, scope_id):
+                return _require_direct_list_admin_grant(db, scope_id, current_user_id)
+            return _require_direct_list_creator_grant(db, scope_id, current_user_id)
 
-    if author_role == LISTE_ADMIN_ROLE:
-        return _require_direct_list_creator_grant(db, liste_id, current_user_id)
+        if author_role == LISTE_ADMIN_ROLE:
+            return _require_direct_list_creator_grant(db, scope_id, current_user_id)
+
+    if scope_type == ResourceType.ESPACE and author_role == ESPACE_ADMIN_ROLE:
+        return _require_direct_espace_creator_grant(db, scope_id, current_user_id)
+
+    if scope_type == ResourceType.WORKSPACE and author_role == WORKSPACE_ADMIN_ROLE:
+        return _require_workspace_creator_grant(db, scope_id, current_user_id)
 
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
 
@@ -1513,19 +1554,29 @@ def _require_report_read_access(db: Session, rapport_id: str, current_user_id: s
 
 def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
     rapport = _get_rapport_or_404(db, rapport_id)
-    liste_id, author_role, owner_user_id = _report_liste_id_and_author_role(db, rapport)
+    scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
     if owner_user_id == current_user_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre rapport.")
-    if author_role == LISTE_MEMBER_ROLE:
-        if _direct_list_has_admin(db, liste_id):
-            membre = _require_direct_list_admin_grant(db, liste_id, current_user_id)
+
+    if scope_type == ResourceType.LISTE:
+        if author_role == LISTE_MEMBER_ROLE:
+            if _direct_list_has_admin(db, scope_id):
+                membre = _require_direct_list_admin_grant(db, scope_id, current_user_id)
+            else:
+                membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
+        elif author_role == LISTE_ADMIN_ROLE:
+            membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
         else:
-            membre = _require_direct_list_creator_grant(db, liste_id, current_user_id)
-    elif author_role == LISTE_ADMIN_ROLE:
-        membre = _require_direct_list_creator_grant(db, liste_id, current_user_id)
-    else:
-        raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
-    return rapport, membre
+            raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
+        return rapport, membre
+
+    if scope_type == ResourceType.ESPACE and author_role == ESPACE_ADMIN_ROLE:
+        return rapport, _require_direct_espace_creator_grant(db, scope_id, current_user_id)
+
+    if scope_type == ResourceType.WORKSPACE and author_role == WORKSPACE_ADMIN_ROLE:
+        return rapport, _require_workspace_creator_grant(db, scope_id, current_user_id)
+
+    raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
 
 
 def _require_report_owner_or_management_access(
@@ -1535,16 +1586,24 @@ def _require_report_owner_or_management_access(
 ):
     rapport = _get_rapport_or_404(db, rapport_id)
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
-    owner_user_id = membre.id_utilisateur if membre else getattr(rapport, "owner_user_id", None)
+    owner_user_id = getattr(rapport, "owner_user_id", None) or (membre.id_utilisateur if membre else None)
 
     if owner_user_id == current_user_id:
         if membre:
-            _require_member_read_access(db, membre.id, current_user_id)
+            if membre.id_liste:
+                _require_member_read_access(db, membre.id, current_user_id)
+            elif membre.id_espace:
+                _require_espace_read_access(db, membre.id_espace, current_user_id)
+            elif membre.id_workspace:
+                _require_workspace_read_access(db, membre.id_workspace, current_user_id)
         else:
-            liste_id = getattr(rapport, "id_liste", None)
-            if not liste_id:
-                raise HTTPException(status_code=403, detail="Ce rapport n'est plus rattache a une liste accessible.")
-            _require_list_read_access(db, liste_id, current_user_id)
+            scope_type, scope_id, _, _ = _report_scope_and_author(db, rapport)
+            if scope_type == ResourceType.LISTE:
+                _require_list_read_access(db, scope_id, current_user_id)
+            elif scope_type == ResourceType.ESPACE:
+                _require_espace_read_access(db, scope_id, current_user_id)
+            elif scope_type == ResourceType.WORKSPACE:
+                _require_workspace_read_access(db, scope_id, current_user_id)
         return rapport, membre, "owner"
 
     _require_report_management_access(db, rapport_id, current_user_id)
