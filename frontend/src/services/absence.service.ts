@@ -21,6 +21,9 @@ export interface AbsenceEtConge {
     is_conge_planifie: boolean;
     created_at: string;
     duree_demandee_en_jours?: number;
+    decision_commentaire?: string | null;
+    decision_by?: string | null;
+    decision_at?: string | null;
     id_membre?: string;
     owner_name?: string;
 }
@@ -61,9 +64,9 @@ export const absenceService = {
         method: 'DELETE',
     }),
 
-    approve: (id: string) => apiFetch(LIST_BASE_URL, `/listes/absences/${id}/approve`, {
+    approve: (id: string, commentaire?: string) => apiFetch(LIST_BASE_URL, `/listes/absences/${id}/approve`, {
         method: 'POST',
-        body: JSON.stringify({ motif: '' })
+        body: JSON.stringify({ commentaire: commentaire || '' })
     }),
 
     reject: (id: string, motif?: string) => apiFetch(LIST_BASE_URL, `/listes/absences/${id}/reject`, {

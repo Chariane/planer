@@ -211,6 +211,9 @@ export interface AbsenceEtConge {
   is_conge_planifie: boolean;
   created_at: string;
   duree_demandee_en_jours?: number;
+  decision_commentaire?: string | null;
+  decision_by?: string | null;
+  decision_at?: string | null;
   id_membre?: string;
   owner_name?: string;
 }
@@ -239,6 +242,8 @@ export interface AbsenceImpactOut {
   overdue_tasks: Task[];
   high_priority_tasks: Task[];
   conflicting_absences: AbsenceConflictOut[];
+  risk_level: 'faible' | 'moyen' | 'eleve' | string;
+  recommendation?: string | null;
 }
 
 export interface UserAvailabilityOut {

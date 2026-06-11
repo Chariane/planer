@@ -1312,10 +1312,11 @@ def update_absence_endpoint(
 @router.post("/absences/{absence_id}/approve", response_model=AbsenceEtCongeOut)
 def approve_absence_endpoint(
     absence_id: str,
+    decision: AbsenceDecisionRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    return approve_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+    return approve_leave(db, absence_id=absence_id, current_user_id=current_user.id, commentaire=decision.commentaire or decision.motif)
 
 
 @router.post("/absences/{absence_id}/reject", response_model=AbsenceEtCongeOut)
@@ -1325,7 +1326,7 @@ def reject_absence_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    return reject_leave(db, absence_id=absence_id, current_user_id=current_user.id, motif_rejet=decision.motif)
+    return reject_leave(db, absence_id=absence_id, current_user_id=current_user.id, motif_rejet=decision.motif or decision.commentaire)
 
 
 @router.post("/absences/{absence_id}/cancel", response_model=AbsenceEtCongeOut)

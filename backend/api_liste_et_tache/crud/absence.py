@@ -82,6 +82,9 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
         "created_at": absence.created_at,
         "duree_demandee_en_jours": absence.duree_demandee_en_jours,
         "conge_interrompu_at": absence.conge_interrompu_at,
+        "decision_commentaire": getattr(absence, "decision_commentaire", None),
+        "decision_by": getattr(absence, "decision_by", None),
+        "decision_at": getattr(absence, "decision_at", None),
         "id_membre": absence.id_membre,
         "owner_name": owner_name,
         "author_role": author_role
@@ -174,11 +177,26 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         exclude_absence_id=absence.id
     )
     
+    risk_level = "faible"
+    if high_priority or overdue:
+        risk_level = "eleve"
+    elif overlapping or conflicts:
+        risk_level = "moyen"
+
+    if risk_level == "eleve":
+        recommendation = "Impact élevé : vérifiez les tâches critiques ou en retard avant de valider."
+    elif risk_level == "moyen":
+        recommendation = "Impact modéré : quelques éléments se chevauchent avec la période demandée."
+    else:
+        recommendation = "Aucun impact majeur détecté. La demande peut être traitée sereinement."
+
     return {
         "overlapping_tasks": overlapping,
         "overdue_tasks": overdue,
         "high_priority_tasks": high_priority,
-        "conflicting_absences": conflicts
+        "conflicting_absences": conflicts,
+        "risk_level": risk_level,
+        "recommendation": recommendation,
     }
 
 
@@ -359,7 +377,7 @@ def update_absence(
     return absence
 
 
-def approve_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
+def approve_leave(db: Session, *, absence_id: str, current_user_id: str, commentaire: Optional[str] = None) -> AbsenceEtConge:
     absence, target_membre = _require_absence_management_access(db, absence_id, current_user_id)
     if absence.statut != "en_attente":
         raise HTTPException(
@@ -389,6 +407,9 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str) -> Abse
 
     absence.statut = "approuvee"
     absence.statut_date = datetime.utcnow()
+    absence.decision_commentaire = commentaire
+    absence.decision_by = current_user_id
+    absence.decision_at = absence.statut_date
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=True)
     commit_notification_events(db)
@@ -424,8 +445,9 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
 
     absence.statut = "rejetee"
     absence.statut_date = datetime.utcnow()
-    if motif_rejet:
-        absence.motif = (absence.motif or "") + f" [REJET: {motif_rejet}]"
+    absence.decision_commentaire = motif_rejet
+    absence.decision_by = current_user_id
+    absence.decision_at = absence.statut_date
         
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=False)

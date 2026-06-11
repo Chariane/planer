@@ -964,6 +964,9 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
     created_at: datetime
     id_membre: Optional[str] = None
     owner_name: Optional[str] = None
+    decision_commentaire: Optional[str] = None
+    decision_by: Optional[str] = None
+    decision_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AbsenceEtCongeDelete(BaseModel):
@@ -972,6 +975,7 @@ class AbsenceEtCongeDelete(BaseModel):
 
 class AbsenceDecisionRequest(BaseModel):
     motif: Optional[str] = Field(None, max_length=255)
+    commentaire: Optional[str] = Field(None, max_length=255)
 
 
 class AbsenceCalendarOut(BaseModel):
@@ -999,6 +1003,8 @@ class AbsenceImpactOut(BaseModel):
     overdue_tasks: List[TacheOut] = []
     high_priority_tasks: List[TacheOut] = []
     conflicting_absences: List[AbsenceConflictOut] = []
+    risk_level: str = "faible"
+    recommendation: Optional[str] = None
 
 class UserAvailabilityOut(BaseModel):
     id_utilisateur: str

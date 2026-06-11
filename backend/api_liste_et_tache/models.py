@@ -1679,6 +1679,9 @@ class AbsenceEtConge(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     duree_demandee_en_jours: Mapped[Optional[int]] = mapped_column(Integer)
     conge_interrompu_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
+    decision_commentaire: Mapped[Optional[str]] = mapped_column(String(255))
+    decision_by: Mapped[Optional[str]] = mapped_column(String(12))
+    decision_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     id_membre: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.membre.id', ondelete='SET NULL'))
     
     # Relations

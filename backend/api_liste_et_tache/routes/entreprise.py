@@ -1027,21 +1027,21 @@ def entreprise_update_absence_endpoint(
 @router.post("/absences/{absence_id}/approve", response_model=AbsenceEtCongeOut)
 def entreprise_approve_absence_endpoint(
     absence_id: str,
-    _decision: AbsenceDecisionRequest,
+    decision: AbsenceDecisionRequest,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    return approve_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+    return approve_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id, commentaire=decision.commentaire or decision.motif)
 
 
 @router.post("/absences/{absence_id}/reject", response_model=AbsenceEtCongeOut)
 def entreprise_reject_absence_endpoint(
     absence_id: str,
-    _decision: AbsenceDecisionRequest,
+    decision: AbsenceDecisionRequest,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
 ):
-    return reject_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id)
+    return reject_leave(db, absence_id=absence_id, current_user_id=current_entreprise.id, motif_rejet=decision.motif or decision.commentaire)
 
 
 @router.post("/absences/{absence_id}/cancel", response_model=AbsenceEtCongeOut)

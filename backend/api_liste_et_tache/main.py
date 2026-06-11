@@ -35,6 +35,9 @@ def ensure_runtime_columns() -> None:
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_liste varchar(12)"))
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_espace varchar(12)"))
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_workspace varchar(12)"))
+        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_commentaire varchar(255)"))
+        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_by varchar(12)"))
+        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_at timestamp"))
         
         # Correction de la contrainte de statut pour absences (V1)
         conn.execute(text("ALTER TABLE planer.absence_et_conge DROP CONSTRAINT IF EXISTS absence_et_conge_statut_check"))
