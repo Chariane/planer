@@ -12,6 +12,7 @@ WORKSPACE_ASSIGNABLE_ROLES = {"Administrateur", "Membre", "Invité"}
 
 TACHE_STATUSES = {"en attente", "en cours", "terminé", "bloqué"}
 TACHE_PRIORITIES = {"basse", "moyenne", "haute", "critique"}
+ABSENCE_STATUSES = {"en_attente", "approuvee", "rejetee", "annulee", "terminee"}
 
 # ----------------------------------------
 # 🔐 UTILISATEURS
@@ -992,6 +993,18 @@ class AbsenceConflictOut(BaseModel):
     date_fin: Optional[datetime] = None
     statut: str
     motif: Optional[str] = None
+
+class AbsenceImpactOut(BaseModel):
+    overlapping_tasks: List[TacheOut] = []
+    overdue_tasks: List[TacheOut] = []
+    high_priority_tasks: List[TacheOut] = []
+    conflicting_absences: List[AbsenceConflictOut] = []
+
+class UserAvailabilityOut(BaseModel):
+    id_utilisateur: str
+    is_available: bool
+    current_absence: Optional[AbsenceEtCongeOut] = None
+    next_absence_start: Optional[datetime] = None
 
 # Canevas
 class CanevasBase(BaseModel):

@@ -7,12 +7,15 @@ import ConfirmModal from '../../../components/ui/ConfirmModal';
 import Modal from '../../../components/ui/Modal';
 import { LISTE_TACHE_BASE_URL, plannerToolsService } from '../../../services/plannerTools.service';
 import { listeService } from '../../../services/liste.service';
+import { absenceService } from '../../../services/absence.service';
 import { espaceService } from '../../../services/espace.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { getMemberContactLabel, getMemberDisplayName } from '../../../utils/memberDisplay';
 import { ROLES } from '../../../lib/roleHierarchy';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Task } from '../../../types';
+import type { Task, UserAvailabilityOut } from '../../../types';
+import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
+import { Toast } from '../../../components/ui/Toast';
 
 interface PlannerToolsPanelProps {
   workspaceId?: string | null;
@@ -97,6 +100,11 @@ export default function PlannerToolsPanel({
     motif: '',
     duree_demandee_en_jours: '',
   });
+  const [impactData, setImpactData] = useState<any | null>(null);
+  const [isImpactLoading, setIsImpactLoading] = useState(false);
+  const [selectedAbsenceForImpact, setSelectedAbsenceForImpact] = useState<any | null>(null);
+  const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -118,6 +126,7 @@ export default function PlannerToolsPanel({
   const canReceiveReports = listeId
     ? isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN
     : isDirectMemberRecord?.role === ROLES.CREATOR;
+  const directListHasAdmin = !!listeId && directMembers.some(member => member.role === ROLES.ADMIN);
   const isDirectListMember = !!listeId && isDirectMemberRecord?.role === ROLES.MEMBER;
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
   const listMemberNeedsAssignedTaskForReport = !!listeId && isDirectListMember && !hasAssignedTask;
@@ -155,7 +164,7 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
-  const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
+  const canCreateAbsence = !!listeId && !!isDirectMemberRecord && isDirectMemberRecord.role !== ROLES.CREATOR;
 
   const canAddFiles = canViewFiles;
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
@@ -223,29 +232,6 @@ export default function PlannerToolsPanel({
     return (extension || mimeSubtype || 'fichier').slice(0, 20);
   };
 
-  // Toast Premium
-  const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-        className="fixed bottom-6 right-6 z-[120]"
-      >
-        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg text-white min-w-[300px] glass border border-white/10 ${type === 'success' ? 'bg-emerald-500/90' : type === 'error' ? 'bg-red-500/90' : 'bg-primary/90'
-          }`}>
-          <div className="p-1.5 rounded-full bg-white/20">
-            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-          </div>
-          <span className="text-sm font-bold flex-1 tracking-tight">{message}</span>
-          <button onClick={onClose} className="p-1 rounded-xl hover:bg-white/20 transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-
   const loadMembers = async () => {
     if (!workspaceId && !espaceId && !listeId) return;
     try {
@@ -300,8 +286,10 @@ export default function PlannerToolsPanel({
         }
       });
       (window as any)._membershipMap = membershipIdMap;
+      return allMembers;
     } catch (err) {
-      console.error('Failed to load members', err);
+      console.error('Failed to load members:', err);
+      return [];
     }
   };
 
@@ -424,15 +412,23 @@ export default function PlannerToolsPanel({
     }
   };
 
-  const loadAbsences = async () => {
+  const loadAbsences = async (customMembers?: ListMemberRecord[]) => {
     if (!listeId) return;
     try {
-      const data = await plannerToolsService.listAbsences({
-        ...(listeId ? { liste_id: listeId } : scope),
-        member_id: selectedMemberId || undefined,
+      const data = await absenceService.list({
+        liste_id: listeId,
         limit: 100
       });
       setAbsences(Array.isArray(data) ? data : []);
+
+      // Fetch availability for all members of the list
+      const currentMembers = customMembers || members;
+      const userIds = currentMembers.map(m => m.id_utilisateur).filter(Boolean);
+
+      if (userIds.length > 0) {
+        const availability = await absenceService.getAvailability(listeId, userIds);
+        setListAvailability(availability);
+      }
     } catch (err) {
       console.error('Failed to load absences:', err);
     }
@@ -441,10 +437,10 @@ export default function PlannerToolsPanel({
   const refreshCurrentTool = async () => {
     setLoading(true);
     try {
-      await loadMembers();
+      const loadedMembers = await loadMembers();
       if (activeTool === 'files' && canViewFiles) await loadFiles();
       if (activeTool === 'reports') await loadReports();
-      if (activeTool === 'absences') await loadAbsences();
+      if (activeTool === 'absences') await loadAbsences(loadedMembers);
     } catch (err: any) {
       showMessage('error', err?.message || 'Impossible de charger les données.');
     } finally {
@@ -704,15 +700,10 @@ export default function PlannerToolsPanel({
       return;
     }
 
-    if (!canCreateAbsence) {
-      showMessage('error', "Vous devez être administrateur/créateur direct de la liste ou membre avec au moins une tâche assignée.");
-      return;
-    }
-
     setLoading(true);
     try {
       const typeLabel = absenceForm.is_absence ? 'Absence' : 'Congé';
-      await plannerToolsService.createAbsence({
+      await absenceService.create({
         id_membre: targetMemberId,
         is_absence: absenceForm.is_absence,
         date_debut: new Date(absenceForm.date_debut).toISOString(),
@@ -728,6 +719,36 @@ export default function PlannerToolsPanel({
       showMessage('error', err?.message || 'Impossible de créer la demande.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAbsenceDecision = async (absence: any, action: 'approve' | 'reject') => {
+    setLoading(true);
+    try {
+      if (action === 'approve') {
+        await absenceService.approve(absence.id);
+      } else {
+        await absenceService.reject(absence.id);
+      }
+      await loadAbsences();
+      showMessage('success', action === 'approve' ? 'Demande approuvée.' : 'Demande rejetée.');
+    } catch (err: any) {
+      showMessage('error', err?.message || 'Action impossible.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkImpact = async (absence: any) => {
+    setSelectedAbsenceForImpact(absence);
+    setIsImpactLoading(true);
+    try {
+      const impact = await absenceService.getImpact(absence.id);
+      setImpactData(impact);
+    } catch (err: any) {
+      showMessage('error', 'Impossible de charger l\'impact.');
+    } finally {
+      setIsImpactLoading(false);
     }
   };
 
@@ -759,6 +780,162 @@ export default function PlannerToolsPanel({
     return 'inconnu';
   };
 
+  const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
+    const isOwn = absence.owner_user_id === currentUserId;
+    const canApproveThis = !isOwn && (
+      absence.author_role === ROLES.MEMBER
+        ? (isDirectResourceAdmin || (!directListHasAdmin && isDirectResourceCreator))
+        : (absence.author_role === ROLES.ADMIN ? isDirectResourceCreator : false)
+    );
+
+    const statusConfig: Record<string, { bg: string, text: string, border: string }> = {
+      'en_attente': { bg: 'bg-theme-muted/10', text: 'text-theme-muted', border: 'border-theme-border-subtle' },
+      'approuvee': { bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/20' },
+      'rejetee': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20' },
+      'annulee': { bg: 'bg-rose-500/10', text: 'text-rose-500', border: 'border-rose-500/20' },
+      'terminee': { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/20' }
+    };
+
+    const cfg = statusConfig[absence.statut] || statusConfig['en_attente'];
+
+    const typeCfg = absence.is_absence
+      ? { color: 'amber', icon: AlertTriangle, bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-500' }
+      : { color: 'primary', icon: Calendar, bg: 'bg-primary/10', border: 'border-primary/20', text: 'text-primary' };
+
+    const isUrgentAbsence = absence.is_absence && absence.statut === 'en_attente' && new Date(absence.date_debut).toDateString() === new Date().toDateString();
+
+    return (
+      <GlassCard
+        key={absence.id}
+        className={`p-5 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/card ${absence.is_absence ? 'hover:border-amber-500/30' : 'hover:border-primary/30'}`}
+      >
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex gap-2">
+            <div className={`p-2 rounded-xl border ${typeCfg.bg} ${typeCfg.border} ${typeCfg.text}`}>
+              <typeCfg.icon size={20} />
+            </div>
+            {isUrgentAbsence && (
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="px-2 py-1 bg-rose-500 text-white text-[8px] font-black uppercase rounded-lg h-fit self-center shadow-lg shadow-rose-500/20"
+              >
+                Urgent
+              </motion.div>
+            )}
+          </div>
+          <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+            {absence.statut.replace('_', ' ')}
+          </span>
+        </div>
+
+        <div className="mb-4">
+          <p className="font-black text-theme-main text-sm mb-1">{absence.is_absence ? 'Absence' : 'Congé'}</p>
+          <div className="flex items-center gap-2">
+            <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === absence.owner_user_id)} />
+            <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{absence.authorName}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs font-bold text-theme-main mb-4 bg-theme-surface-hover/30 p-3 rounded-xl border border-theme-border-subtle">
+          <div className="flex-1 text-center">
+            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Début</p>
+            <p>{formatDate(absence.date_debut)}</p>
+          </div>
+          <div className="h-6 w-[1px] bg-theme-border-subtle" />
+          <div className="flex-1 text-center">
+            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Fin</p>
+            <p>{formatDate(absence.date_fin)}</p>
+          </div>
+        </div>
+
+        {absence.motif && <p className="text-[11px] text-theme-muted italic mb-6 font-medium line-clamp-2">"{absence.motif}"</p>}
+
+        <div className="flex flex-col gap-2 pt-4 border-t border-theme-border-subtle">
+          {absence.statut === 'en_attente' && canApproveThis && (
+            <button
+              onClick={() => checkImpact(absence)}
+              className="w-full py-2 bg-secondary/10 hover:bg-secondary/20 text-secondary text-[10px] font-black uppercase rounded-lg transition-all border border-secondary/10"
+            >
+              Vérifier Impact
+            </button>
+          )}
+
+          {absence.statut === 'en_attente' && canApproveThis && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleAbsenceDecision(absence, 'approve')}
+                className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase rounded-lg transition-all border border-emerald-500/10"
+              >
+                Approuver
+              </button>
+              <button
+                onClick={() => handleAbsenceDecision(absence, 'reject')}
+                className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-lg transition-all border border-red-500/10"
+              >
+                Rejeter
+              </button>
+            </div>
+          )}
+
+          {absence.statut === 'en_attente' && isOwn && (
+            <button
+              onClick={async () => {
+                await absenceService.cancel(absence.id);
+                await loadAbsences();
+                showMessage('success', 'Demande annulée.');
+              }}
+              className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-lg transition-all border border-rose-500/10"
+            >
+              Annuler ma demande
+            </button>
+          )}
+
+          {absence.statut !== 'en_attente' && (
+            <button
+              onClick={() => context === 'list' ? archiveAbsence(absence.id) : unarchiveAbsence(absence.id)}
+              className="w-full py-2 bg-theme-surface-hover/50 hover:bg-theme-surface-hover text-theme-muted text-[10px] font-black uppercase rounded-lg transition-all border border-theme-border-subtle flex items-center justify-center gap-2"
+            >
+              {context === 'list' ? <><Archive size={12} /> Archiver</> : 'Désarchiver'}
+            </button>
+          )}
+        </div>
+      </GlassCard>
+    );
+  };
+
+  const absencesWithAuthors = useMemo(() => {
+    return absences.map(a => ({
+      ...a,
+      owner_user_id: a.owner_user_id
+        || members.find(m => m.id === a.id_membre)?.id_utilisateur
+        || (window as any)._membershipMap?.get(a.id_membre)?.id_utilisateur
+        || null,
+      authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
+      author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
+    }));
+  }, [absences, members, currentUserId]);
+
+  const ownAbsences = useMemo(
+    () => absencesWithAuthors.filter(a => a.owner_user_id === currentUserId || a.id_membre === isDirectMemberRecord?.id),
+    [absencesWithAuthors, currentUserId, isDirectMemberRecord?.id],
+  );
+
+  const accessibleAbsences = useMemo(
+    () => absencesWithAuthors.filter(a => a.owner_user_id !== currentUserId && a.id_membre !== isDirectMemberRecord?.id && !archivedAbsenceIds.includes(a.id)),
+    [absencesWithAuthors, archivedAbsenceIds, currentUserId, isDirectMemberRecord?.id],
+  );
+
+  const archivedAbsences = useMemo(() => {
+    return absencesWithAuthors.filter(a => archivedAbsenceIds.includes(a.id));
+  }, [absencesWithAuthors, archivedAbsenceIds]);
+
+  const visibleAbsences = useMemo(
+    () => (isManager ? [...ownAbsences, ...accessibleAbsences] : ownAbsences),
+    [isManager, ownAbsences, accessibleAbsences],
+  );
+
   const reportsWithAuthors = useMemo(() => {
     return reports.map(report => ({
       ...report,
@@ -786,6 +963,7 @@ export default function PlannerToolsPanel({
     ),
     [reportsWithAuthors, archivedReportIds, currentUserId, isDirectMemberRecord?.id],
   );
+
   const archivedReports = useMemo(
     () => reportsWithAuthors.filter(report => archivedReportIds.includes(report.id)),
     [reportsWithAuthors, archivedReportIds],
@@ -798,68 +976,6 @@ export default function PlannerToolsPanel({
       authorName: getAuthorName(file.id_membre, file.meta_donnees?.owner_user_id, file.owner_name)
     }));
   }, [files, members, currentUserId]);
-
-  const absencesWithAuthors = useMemo(() => {
-    return absences.map(absence => ({
-      ...absence,
-      owner_user_id: absence.owner_user_id
-        || members.find(member => member.id === absence.id_membre)?.id_utilisateur
-        || (window as any)._membershipMap?.get(absence.id_membre)?.id_utilisateur
-        || null,
-      authorName: getAuthorName(absence.id_membre, absence.owner_user_id, absence.owner_name),
-    }));
-  }, [absences, members, currentUserId]);
-  const ownAbsences = useMemo(
-    () => absencesWithAuthors.filter(absence =>
-      absence.owner_user_id === currentUserId
-      || absence.id_membre === isDirectMemberRecord?.id
-    ),
-    [absencesWithAuthors, currentUserId, isDirectMemberRecord?.id],
-  );
-  const accessibleAbsences = useMemo(
-    () => absencesWithAuthors.filter(absence =>
-      absence.owner_user_id !== currentUserId
-      && absence.id_membre !== isDirectMemberRecord?.id
-      && !archivedAbsenceIds.includes(absence.id)
-    ),
-    [absencesWithAuthors, archivedAbsenceIds, currentUserId, isDirectMemberRecord?.id],
-  );
-  const archivedAbsences = useMemo(
-    () => absencesWithAuthors.filter(absence => archivedAbsenceIds.includes(absence.id)),
-    [absencesWithAuthors, archivedAbsenceIds],
-  );
-  const visibleAbsences = useMemo(
-    () => (isManager ? [...ownAbsences, ...accessibleAbsences] : ownAbsences),
-    [isManager, ownAbsences, accessibleAbsences],
-  );
-
-  const decideAbsence = async (absenceId: string, action: 'approve' | 'reject' | 'finish') => {
-    try {
-      if (action === 'approve') await plannerToolsService.approveAbsence(absenceId);
-      if (action === 'reject') await plannerToolsService.rejectAbsence(absenceId);
-      if (action === 'finish') await plannerToolsService.finishAbsence(absenceId);
-      await loadAbsences();
-    } catch (err: any) {
-      showMessage('error', err?.message || 'Action impossible.');
-    }
-  };
-
-  const confirmAbsenceDecision = (absence: any, action: 'approve' | 'reject') => {
-    const isApprove = action === 'approve';
-    setConfirmData({
-      id: absence.id,
-      title: isApprove ? 'Accepter la demande' : 'Rejeter la demande',
-      message: `Voulez-vous vraiment ${isApprove ? 'accepter' : 'rejeter'} la demande de ${absence.authorName} ?`,
-      confirmText: isApprove ? 'Accepter' : 'Rejeter',
-      confirmVariant: isApprove ? 'primary' : 'danger',
-      loadingText: isApprove ? 'Acceptation...' : 'Rejet...',
-      onConfirm: async () => {
-        await decideAbsence(absence.id, action);
-        closeConfirm();
-      },
-    });
-    setIsConfirmOpen(true);
-  };
 
   const printReport = (report: any) => {
     const win = window.open('', '_blank');
@@ -920,55 +1036,7 @@ export default function PlannerToolsPanel({
     win.document.close();
   };
 
-  const renderAbsenceCard = (absence: any, mode: 'own' | 'accessible' | 'archive') => (
-    <div key={absence.id} className="border border-theme-border-subtle rounded-2xl p-4 flex items-center justify-between gap-3 bg-theme-surface shadow-theme-sm hover:shadow-theme-md transition-all">
-      <div className="flex gap-4">
-        <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-black text-[10px] uppercase tracking-widest ${absence.is_absence ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-primary/10 text-primary border border-primary/20'}`}>
-          {absence.is_absence ? 'Abs' : 'Congé'}
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="font-bold text-theme-main">
-              {absence.is_absence ? 'Absence' : 'Congé'} <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-50">— {absence.authorName}</span>
-            </p>
-            <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${absence.statut === 'Approuvé' || absence.statut === 'Accepté' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-              absence.statut === 'Refusé' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-theme-surface-hover/80 text-theme-muted border-theme-border-subtle'
-              }`}>
-              {absence.statut}
-            </span>
-          </div>
-          <p className="text-xs text-theme-muted mt-1 font-medium">
-            Du <span className="text-theme-main font-bold">{formatDate(absence.date_debut)}</span> au <span className="text-theme-main font-bold">{formatDate(absence.date_fin)}</span>
-          </p>
-          {absence.motif && <p className="text-[10px] text-theme-muted mt-2 font-medium italic">"{absence.motif}"</p>}
-        </div>
-      </div>
-      {mode === 'accessible' && (() => {
-        // Logique Hiérarchique : 
-        // 1. Membres simples -> validés par Administrateurs Directs (ou +)
-        // 2. Administrateurs Directs -> validés par Gestionnaires Hérités (Espace/Workspace)
-        const authorIsAdmin = absence.author_role === ROLES.CREATOR || absence.author_role === ROLES.ADMIN;
-        const canApproveThis = authorIsAdmin ? isInheritedManager : (isDirectAdmin || isInheritedManager);
 
-        return (
-          <div className="flex gap-2">
-            {absence.statut === 'En attente' && canApproveThis && (
-              <>
-                <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 transition-all border border-emerald-500/10" title="Approuver"><Check className="h-4 w-4" /></button>
-                <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all border border-red-500/10" title="Rejeter"><X className="h-4 w-4" /></button>
-              </>
-            )}
-            <button onClick={() => archiveAbsence(absence.id)} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all border border-amber-500/10" title="Archiver">
-              <Archive className="h-4 w-4" />
-            </button>
-          </div>
-        );
-      })()}
-      {mode === 'archive' && (
-        <Button variant="outline" size="sm" onClick={() => unarchiveAbsence(absence.id)} className="rounded-xl border-theme-border-subtle text-[10px] font-black uppercase tracking-widest">Restaurer</Button>
-      )}
-    </div>
-  );
 
   return (
     <div className="space-y-8 pb-20">
@@ -976,43 +1044,43 @@ export default function PlannerToolsPanel({
 
       {/* Navigation Premium */}
       {hasVisibleTool && (
-      <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
-        {canViewFiles && (
-          <button
-            onClick={() => setActiveTool('files')}
-            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'files' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
-              }`}
-          >
-            <Paperclip className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'files' ? 'text-secondary' : ''}`} />
-            <span className="text-[10px] uppercase tracking-[0.2em]">Fichiers</span>
-            {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
-          </button>
-        )}
+        <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
+          {canViewFiles && (
+            <button
+              onClick={() => setActiveTool('files')}
+              className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'files' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+                }`}
+            >
+              <Paperclip className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'files' ? 'text-secondary' : ''}`} />
+              <span className="text-[10px] uppercase tracking-[0.2em]">Fichiers</span>
+              {activeTool === 'files' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+            </button>
+          )}
 
-        {canViewReports && (
-          <button
-            onClick={() => setActiveTool('reports')}
-            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'reports' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
-              }`}
-          >
-            <FileText className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'reports' ? 'text-secondary' : ''}`} />
-            <span className="text-[10px] uppercase tracking-[0.2em]">Rapports</span>
-            {activeTool === 'reports' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
-          </button>
-        )}
+          {canViewReports && (
+            <button
+              onClick={() => setActiveTool('reports')}
+              className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'reports' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+                }`}
+            >
+              <FileText className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'reports' ? 'text-secondary' : ''}`} />
+              <span className="text-[10px] uppercase tracking-[0.2em]">Rapports</span>
+              {activeTool === 'reports' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+            </button>
+          )}
 
-        {listeId && (
-          <button
-            onClick={() => setActiveTool('absences')}
-            className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'absences' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
-              }`}
-          >
-            <Calendar className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'absences' ? 'text-secondary' : ''}`} />
-            <span className="text-[10px] uppercase tracking-[0.2em]">Absences</span>
-            {activeTool === 'absences' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
-          </button>
-        )}
-      </div>
+          {listeId && (
+            <button
+              onClick={() => setActiveTool('absences')}
+              className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'absences' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
+                }`}
+            >
+              <Calendar className={`h-4 w-4 transition-transform group-hover:scale-110 ${activeTool === 'absences' ? 'text-secondary' : ''}`} />
+              <span className="text-[10px] uppercase tracking-[0.2em]">Absences</span>
+              {activeTool === 'absences' && <motion.div layoutId="activeTool" className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary mx-4 rounded-full" />}
+            </button>
+          )}
+        </div>
       )}
 
       {/* Filter Bar */}
@@ -1428,13 +1496,21 @@ export default function PlannerToolsPanel({
               <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">
                 Absences & Congés
               </h4>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <div className={`h-1.5 w-1.5 rounded-full ${absenceForm.is_absence ? 'bg-amber-500 animate-pulse' : 'bg-primary'}`} />
+                <span className={`text-[10px] font-black uppercase tracking-widest ${absenceForm.is_absence ? 'text-amber-500' : 'text-primary'}`}>
+                  Mode {absenceForm.is_absence ? 'Réactif' : 'Planification'}
+                </span>
+              </div>
             </div>
 
             {!canCreateAbsence ? (
               <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex gap-4">
                 <ShieldAlert className="h-6 w-6 text-primary flex-shrink-0" />
                 <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
-                  Vous pourrez faire une demande dès que vous serez administrateur/créateur direct de la liste ou membre direct avec au moins une tâche assignée.
+                  {isDirectResourceCreator
+                    ? "En tant que créateur de cette liste, vous n'avez pas besoin de formuler de demande d'absence ici (gestion administrative prévalente)."
+                    : "Vous pourrez faire une demande dès que vous serez membre ou administrateur direct de cette liste."}
                 </p>
               </div>
             ) : (
@@ -1478,9 +1554,11 @@ export default function PlannerToolsPanel({
                   />
                 </div>
                 <div className="md:col-span-12 lg:col-span-2">
-                  <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut} className="w-full h-[52px] rounded-2xl shadow-premium-primary group">
+                  <Button onClick={handleCreateAbsence} disabled={loading || !absenceForm.date_debut} className={`w-full h-[52px] rounded-2xl shadow-premium-lg group ${absenceForm.is_absence ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'shadow-primary/20'}`}>
                     <Check size={20} className="mr-2 group-hover:scale-125 transition-transform" />
-                    <span className="font-black uppercase tracking-widest text-[10px]">Envoyer</span>
+                    <span className="font-black uppercase tracking-widest text-[10px]">
+                      {absenceForm.is_absence ? 'Signaler' : 'Demander'}
+                    </span>
                   </Button>
                 </div>
               </div>
@@ -1510,59 +1588,7 @@ export default function PlannerToolsPanel({
                     <p className="font-black text-[10px] uppercase tracking-widest">Aucune donnée</p>
                   </div>
                 ) : (
-                  visibleAbsences.map((absence, i) => (
-                    <motion.div key={absence.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
-                      <GlassCard className="p-5 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/card">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className={`p-2 rounded-xl border ${absence.is_absence ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' : 'bg-primary/10 border-primary/20 text-primary'}`}>
-                            <Calendar size={20} />
-                          </div>
-                          <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${absence.statut === 'Approuvé' || absence.statut === 'Accepté' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                            absence.statut === 'Refusé' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
-                              'bg-theme-muted/10 text-theme-muted border border-theme-border-subtle'
-                            }`}>
-                            {absence.statut}
-                          </span>
-                        </div>
-                        <div className="mb-4">
-                          <p className="font-black text-theme-main text-sm mb-1">{absence.is_absence ? 'Absence' : 'Congé'}</p>
-                          <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{absence.authorName}</p>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs font-bold text-theme-main mb-4 bg-theme-surface-hover/30 p-3 rounded-xl border border-theme-border-subtle">
-                          <div className="flex-1 text-center">
-                            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Début</p>
-                            <p>{formatDate(absence.date_debut)}</p>
-                          </div>
-                          <div className="h-6 w-[1px] bg-theme-border-subtle" />
-                          <div className="flex-1 text-center">
-                            <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Fin</p>
-                            <p>{formatDate(absence.date_fin)}</p>
-                          </div>
-                        </div>
-                        {absence.motif && <p className="text-[11px] text-theme-muted italic mb-6 font-medium">"{absence.motif}"</p>}
-
-                        {isManager && (() => {
-                          const authorIsAdmin = absence.author_role === ROLES.CREATOR || absence.author_role === ROLES.ADMIN;
-                          const canApproveThis = authorIsAdmin ? isInheritedManager : (isDirectAdmin || isInheritedManager);
-
-                          return (
-                            <div className="flex items-center gap-2 pt-4 border-t border-theme-border-subtle">
-                              {absence.statut === 'En attente' && canApproveThis ? (
-                                <>
-                                  <button onClick={() => confirmAbsenceDecision(absence, 'approve')} className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase rounded-lg transition-all border border-emerald-500/10">Approuver</button>
-                                  <button onClick={() => confirmAbsenceDecision(absence, 'reject')} className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-lg transition-all border border-red-500/10">Rejeter</button>
-                                </>
-                              ) : (
-                                <button onClick={() => archiveAbsence(absence.id)} className="w-full py-2 bg-theme-surface-hover/50 hover:bg-theme-surface-hover text-theme-muted text-[10px] font-black uppercase rounded-lg transition-all border border-theme-border-subtle flex items-center justify-center gap-2">
-                                  <Archive size={12} /> Archiver
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </GlassCard>
-                    </motion.div>
-                  ))
+                  visibleAbsences.map(absence => renderAbsenceCard(absence))
                 )}
               </AnimatePresence>
             </div>
@@ -1723,6 +1749,58 @@ export default function PlannerToolsPanel({
             archivedAbsences.map(absence => renderAbsenceCard(absence, 'archive'))
           )}
         </div>
+      </Modal>
+
+      <Modal isOpen={!!selectedAbsenceForImpact} onClose={() => setSelectedAbsenceForImpact(null)} title="Analyse d'Impact de l'Absence" size="lg">
+        {isImpactLoading ? (
+          <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto h-8 w-8 text-secondary" /></div>
+        ) : impactData && (
+          <div className="space-y-6">
+            <div className="bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4 flex gap-4">
+              <AlertTriangle className="h-6 w-6 text-amber-500 shrink-0" />
+              <div>
+                <p className="text-xs font-black text-theme-main uppercase tracking-widest mb-1">Attention</p>
+                <p className="text-[11px] text-theme-muted leading-relaxed">
+                  Cette absence chevauche {impactData.overlapping_tasks.length} tâches. ({impactData.high_priority_tasks.length} prioritaires, {impactData.overdue_tasks.length} en retard).
+                </p>
+              </div>
+            </div>
+
+            {impactData.overlapping_tasks.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Tâches impactées</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {impactData.overlapping_tasks.map((t: any) => (
+                    <div key={t.id} className="p-3 bg-theme-surface/50 border border-theme-border-subtle rounded-xl flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-bold text-theme-main">{t.title}</p>
+                        <p className="text-[9px] text-theme-muted uppercase font-black">Échéance: {formatDate(t.dueDate)}</p>
+                      </div>
+                      <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${t.priority === 'haute' || t.priority === 'critique' ? 'bg-red-500/10 text-red-500' : 'bg-theme-muted/10 text-theme-muted'}`}>
+                        {t.priority}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {impactData.conflicting_absences.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Conflits d'absences (Même période)</p>
+                <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl">
+                  {impactData.conflicting_absences.map((a: any) => (
+                    <p key={a.id} className="text-xs text-rose-600 font-medium">Déjà une demande {a.statut} du {formatDate(a.date_debut)} au {formatDate(a.date_fin)}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4 pt-4">
+              <Button variant="outline" onClick={() => setSelectedAbsenceForImpact(null)} className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase">Fermer</Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmModal

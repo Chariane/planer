@@ -979,7 +979,7 @@ def commit_or_raise(
             db.refresh(refresh_instance)
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=status_code, detail=detail) from exc
+        raise HTTPException(status_code=status_code, detail=f"{detail} Error: {str(exc.orig)}") from exc
 
 
 def _serialize_member(membre):
@@ -1422,14 +1422,14 @@ def _require_direct_list_admin_grant(db: Session, liste_id: str, current_user_id
     membre = _get_liste_member_record(db, liste_id, current_user_id)
     if membre and membre.statut == "Actif" and membre.role == LISTE_ADMIN_ROLE:
         return membre
-    raise HTTPException(status_code=403, detail="Ce rapport est reserve aux administrateurs directs de la liste.")
+    raise HTTPException(status_code=403, detail="Cette action est reservee aux administrateurs directs de la liste.")
 
 
 def _require_direct_list_creator_grant(db: Session, liste_id: str, current_user_id: str) -> Membre:
     membre = _get_liste_member_record(db, liste_id, current_user_id)
     if membre and membre.statut == "Actif" and membre.role == LISTE_OWNER_ROLE:
         return membre
-    raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur direct de la liste.")
+    raise HTTPException(status_code=403, detail="Cette action est reservee au createur direct de la liste.")
 
 
 def _get_direct_espace_creator_record(db: Session, espace_id: str, user_id: str) -> Membre | None:
@@ -1512,8 +1512,10 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
     """
     Accès lecture pour absences/congés :
     - l'auteur voit toujours son propre historique ;
-    - les demandes d'un membre simple vont aux gestionnaires directs de la liste ;
-    - les demandes d'un admin/créateur direct de liste vont aux gestionnaires hérités.
+    - les demandes d'un membre direct de liste vont aux admins directs ;
+      s'il n'y a aucun admin direct, elles vont au créateur direct ;
+    - les demandes d'un administrateur direct de liste vont au créateur direct ;
+    - le créateur direct ne crée pas de demande dans sa propre liste en V1.
     """
     membre = _get_member_or_404(db, member_id)
     liste_id = _get_member_scope_liste_id(db, membre)
@@ -1522,12 +1524,24 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
         _require_member_read_access(db, member_id, current_user_id)
         return membre
 
-    if _member_is_direct_list_manager(membre):
-        _get_inherited_list_management_grant(db, liste_id, current_user_id)
+    if membre.id_liste and membre.role == LISTE_MEMBER_ROLE:
+        if _direct_list_has_admin(db, liste_id):
+            _require_direct_list_admin_grant(db, liste_id, current_user_id)
+        else:
+            _require_direct_list_creator_grant(db, liste_id, current_user_id)
         return membre
 
-    _get_direct_list_management_grant(db, liste_id, current_user_id)
-    return membre
+    if membre.id_liste and membre.role == LISTE_ADMIN_ROLE:
+        _require_direct_list_creator_grant(db, liste_id, current_user_id)
+        return membre
+
+    if membre.id_liste and membre.role == LISTE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Le createur direct de la liste ne fait pas de demande dans sa propre liste en V1.",
+        )
+
+    raise HTTPException(status_code=403, detail="Vous n'avez pas acces a cette demande.")
 
 
 def _require_member_workflow_evaluation_access(db: Session, member_id: str, current_user_id: str):

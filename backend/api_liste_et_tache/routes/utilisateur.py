@@ -60,7 +60,9 @@ from ..crud.absence import (
     finish_leave,
     get_absence,
     get_absence_conflicts,
+    get_absence_impact,
     get_team_calendar,
+    get_user_availability_for_liste,
     list_accessible_absences,
     reject_leave,
     update_absence,
@@ -128,12 +130,14 @@ from ..schemas import (
     RapportCreate,
     RapportOut,
     RapportUpdate,
-    AbsenceConflictOut,
-    AbsenceDecisionRequest,
     AbsenceEtCongeCreate,
-    AbsenceEtCongeOut,
     AbsenceEtCongeUpdate,
+    AbsenceEtCongeOut,
+    AbsenceDecisionRequest,
     AbsenceCalendarOut,
+    AbsenceConflictOut,
+    AbsenceImpactOut,
+    UserAvailabilityOut,
     CanevasOut, CanevasCreate, CanevasUpdate,
     SectionOut, SectionCreate, SectionUpdate,
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
@@ -1308,7 +1312,6 @@ def update_absence_endpoint(
 @router.post("/absences/{absence_id}/approve", response_model=AbsenceEtCongeOut)
 def approve_absence_endpoint(
     absence_id: str,
-    _decision: AbsenceDecisionRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
@@ -1318,11 +1321,11 @@ def approve_absence_endpoint(
 @router.post("/absences/{absence_id}/reject", response_model=AbsenceEtCongeOut)
 def reject_absence_endpoint(
     absence_id: str,
-    _decision: AbsenceDecisionRequest,
+    decision: AbsenceDecisionRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    return reject_leave(db, absence_id=absence_id, current_user_id=current_user.id)
+    return reject_leave(db, absence_id=absence_id, current_user_id=current_user.id, motif_rejet=decision.motif)
 
 
 @router.post("/absences/{absence_id}/cancel", response_model=AbsenceEtCongeOut)
@@ -1350,6 +1353,33 @@ def absence_conflicts_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     return get_absence_conflicts(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.get("/absences/{absence_id}/impact", response_model=AbsenceImpactOut)
+def absence_impact_endpoint(
+    absence_id: str,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    return get_absence_impact(db, absence_id=absence_id, current_user_id=current_user.id)
+
+
+@router.post("/absences/availability/liste/{liste_id}", response_model=List[UserAvailabilityOut])
+def list_availability_endpoint(
+    liste_id: str,
+    user_ids: List[str] = Body(...),
+    reference_date: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    # On délègue la vérification d'accès lecture liste
+    _require_list_read_access(db, liste_id, current_user.id)
+    return get_user_availability_for_liste(
+        db, 
+        liste_id=liste_id, 
+        user_ids=user_ids, 
+        reference_date=reference_date
+    )
 
 
 @router.delete("/absences/{absence_id}", status_code=status.HTTP_204_NO_CONTENT)

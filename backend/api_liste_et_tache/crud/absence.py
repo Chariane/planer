@@ -19,32 +19,33 @@ from .notification_events import commit_notification_events, notify_absence_crea
 
 
 ABSENCE_STATUS_ALIASES = {
-    "en attente": "En attente",
-    "en_attente": "En attente",
-    "pending": "En attente",
-    "validee": "Accepté",
-    "validee": "Accepté",
-    "validée": "Accepté",
-    "validé": "Accepté",
-    "accepte": "Accepté",
-    "accepté": "Accepté",
-    "accepted": "Accepté",
-    "refusee": "Refusé",
-    "refusée": "Refusé",
-    "refuse": "Refusé",
-    "refusé": "Refusé",
-    "rejected": "Refusé",
-    "terminee": "Effectué",
-    "terminée": "Effectué",
-    "effectue": "Effectué",
-    "effectué": "Effectué",
-    "done": "Effectué",
+    "en_attente": "en_attente",
+    "en attente": "en_attente",
+    "pending": "en_attente",
+    "approuvee": "approuvee",
+    "approuvée": "approuvee",
+    "accepte": "approuvee",
+    "accepté": "approuvee",
+    "approved": "approuvee",
+    "rejetee": "rejetee",
+    "rejetée": "rejetee",
+    "refusee": "rejetee",
+    "refusée": "rejetee",
+    "rejected": "rejetee",
+    "annulee": "annulee",
+    "annulée": "annulee",
+    "cancelled": "annulee",
+    "terminee": "terminee",
+    "terminée": "terminee",
+    "effectue": "terminee",
+    "effectué": "terminee",
+    "done": "terminee",
 }
 
-ABSENCE_ALLOWED_DB_STATUSES = {"En attente", "Accepté", "Refusé", "Effectué"}
+ABSENCE_ALLOWED_DB_STATUSES = {"en_attente", "approuvee", "rejetee", "annulee", "terminee"}
 
 
-def _normalize_absence_status(value: Optional[str], *, default: str = "En attente") -> str:
+def _normalize_absence_status(value: Optional[str], *, default: str = "en_attente") -> str:
     if value is None:
         return default
     normalized = ABSENCE_STATUS_ALIASES.get(value.strip().lower())
@@ -112,22 +113,73 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
     if not membre.id_liste:
         raise HTTPException(
             status_code=400,
-            detail="La demande doit être rattachée à votre rôle direct dans la liste.",
+            detail="La demande doit être rattachée à votre rôle direct dans la liste (V1).",
+        )
+
+    if membre.role == "Créateur":
+        raise HTTPException(
+            status_code=403,
+            detail="Le créateur d'une liste ne fait pas de demande d'absences/congés dans sa propre liste.",
         )
 
     liste_id = _get_member_scope_liste_id(db, membre)
-    _require_member_read_access(db, membre.id, current_user_id)
+    
+    # On autorise tout membre direct (Membre, Admin, Créateur) à faire une demande dans sa liste.
+    # Pour V1 : Le créateur peut créer une demande mais elle restera 'en_attente' 
+    # car il n'a pas de validateur direct supérieur dans la liste.
+    return liste_id
 
-    if membre.role in {"Créateur", "Administrateur"}:
-        return liste_id
 
-    if membre.role == "Membre" and _member_has_assigned_task_in_list(db, liste_id=liste_id, user_id=current_user_id):
-        return liste_id
-
-    raise HTTPException(
-        status_code=403,
-        detail="Seuls les administrateurs/créateurs de la liste ou les membres ayant au moins une tâche assignée peuvent faire une demande.",
+def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) -> dict:
+    absence, _membre = _require_absence_read_access(db, absence_id, current_user_id)
+    target_membre = _get_member_or_404(db, absence.id_membre)
+    liste_id = _get_member_scope_liste_id(db, target_membre)
+    
+    # 1. Tâches assignées à l'utilisateur dans cette liste
+    assigned_tasks = (
+        db.query(Tache)
+        .join(Membre, Tache.id == Membre.id_tache)
+        .filter(
+            Membre.id_utilisateur == target_membre.id_utilisateur,
+            Membre.statut == "Actif",
+            Tache.id_liste == liste_id,
+            Tache.statut != "terminé"
+        )
+        .all()
     )
+    
+    overlapping = []
+    overdue = []
+    high_priority = []
+    
+    now = datetime.utcnow()
+    
+    for task in assigned_tasks:
+        # Chevauchement
+        if _date_overlap(absence.date_debut, absence.date_fin, task.date_debut, task.date_fin_prevue):
+            overlapping.append(task)
+            if task.priorite in {"haute", "critique"}:
+                high_priority.append(task)
+        
+        # En retard
+        if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
+            overdue.append(task)
+            
+    # Conflits avec d'autres absences
+    conflicts = detect_leave_conflicts_for_member(
+        db, 
+        member_id=absence.id_membre, 
+        date_debut=absence.date_debut, 
+        date_fin=absence.date_fin,
+        exclude_absence_id=absence.id
+    )
+    
+    return {
+        "overlapping_tasks": overlapping,
+        "overdue_tasks": overdue,
+        "high_priority_tasks": high_priority,
+        "conflicting_absences": conflicts
+    }
 
 
 def _date_overlap(start_a, end_a, start_b, end_b) -> bool:
@@ -163,7 +215,7 @@ def detect_leave_conflicts_for_member(
     ):
         if exclude_absence_id and absence.id == exclude_absence_id:
             continue
-        if absence.statut not in {"En attente", "Accepté"}:
+        if absence.statut not in {"en_attente", "approuvee"}:
             continue
         if _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin):
             conflicts.append(absence)
@@ -192,10 +244,10 @@ def create_leave_request(
         is_absence=is_absence,
         date_debut=date_debut,
         date_fin=date_fin,
-        statut=_normalize_absence_status(statut, default="En attente"),
+        statut=_normalize_absence_status(statut, default="en_attente"),
         statut_date=datetime.utcnow(),
         motif=motif,
-        is_conge_planifie=False,
+        is_conge_planifie=is_conge_planifie,
         duree_demandee_en_jours=duree_demandee_en_jours,
         conge_interrompu_at=conge_interrompu_at,
     )
@@ -279,7 +331,7 @@ def update_absence(
 ) -> AbsenceEtConge:
     absence, membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
 
-    if actor_kind == "owner" and absence.statut != "En attente":
+    if actor_kind == "owner" and absence.statut != "en_attente":
         raise HTTPException(
             status_code=403,
             detail="Vous ne pouvez modifier que vos demandes encore en attente.",
@@ -308,28 +360,82 @@ def update_absence(
 
 
 def approve_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
-    absence, membre = _require_absence_management_access(db, absence_id, current_user_id)
-    absence.statut = "Accepté"
+    absence, target_membre = _require_absence_management_access(db, absence_id, current_user_id)
+    if absence.statut != "en_attente":
+        raise HTTPException(
+            status_code=409,
+            detail="Cette demande a deja ete traitee.",
+        )
+    
+    # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
+    actor_direct_member = db.query(Membre).filter(
+        Membre.id_liste == target_membre.id_liste,
+        Membre.id_utilisateur == current_user_id,
+        Membre.statut == "Actif"
+    ).first()
+    
+    if not actor_direct_member:
+        # TODO: Gérer l'héritage parent (Workspace/Espace) en V2
+        raise HTTPException(status_code=403, detail="Seul un gestionnaire direct de la liste peut valider en V1.")
+
+    if target_membre.role == "Membre":
+        if actor_direct_member.role not in {"Administrateur", "Créateur"}:
+            raise HTTPException(status_code=403, detail="Seul un Administrateur ou le Créateur peut valider la demande d'un Membre.")
+    elif target_membre.role == "Administrateur":
+        if actor_direct_member.role != "Créateur":
+            raise HTTPException(status_code=403, detail="Seul le Créateur de la liste peut valider la demande d'un Administrateur.")
+    elif target_membre.role == "Créateur":
+        raise HTTPException(status_code=403, detail="La demande du Créateur doit être validée par la hiérarchie supérieure (Espace/Workspace).")
+
+    absence.statut = "approuvee"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
-    notify_absence_decision(db, absence_member=membre, accepted=True)
+    notify_absence_decision(db, absence_member=target_membre, accepted=True)
     commit_notification_events(db)
     return absence
 
 
-def reject_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
-    absence, membre = _require_absence_management_access(db, absence_id, current_user_id)
-    absence.statut = "Refusé"
+def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_rejet: Optional[str] = None) -> AbsenceEtConge:
+    absence, target_membre = _require_absence_management_access(db, absence_id, current_user_id)
+    if absence.statut != "en_attente":
+        raise HTTPException(
+            status_code=409,
+            detail="Cette demande a deja ete traitee.",
+        )
+    
+    # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
+    actor_direct_member = db.query(Membre).filter(
+        Membre.id_liste == target_membre.id_liste,
+        Membre.id_utilisateur == current_user_id,
+        Membre.statut == "Actif"
+    ).first()
+    
+    if not actor_direct_member:
+        raise HTTPException(status_code=403, detail="Seul un gestionnaire direct de la liste peut rejeter en V1.")
+
+    if target_membre.role == "Membre":
+        if actor_direct_member.role not in {"Administrateur", "Créateur"}:
+            raise HTTPException(status_code=403, detail="Seul un Administrateur ou le Créateur peut rejeter la demande d'un Membre.")
+    elif target_membre.role == "Administrateur":
+        if actor_direct_member.role != "Créateur":
+            raise HTTPException(status_code=403, detail="Seul le Créateur de la liste peut rejeter la demande d'un Administrateur.")
+    elif target_membre.role == "Créateur":
+        raise HTTPException(status_code=403, detail="La demande du Créateur ne devrait pas exister (V1).")
+
+    absence.statut = "rejetee"
     absence.statut_date = datetime.utcnow()
+    if motif_rejet:
+        absence.motif = (absence.motif or "") + f" [REJET: {motif_rejet}]"
+        
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
-    notify_absence_decision(db, absence_member=membre, accepted=False)
+    notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
     return absence
 
 
 def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
     absence, _membre = _require_absence_management_access(db, absence_id, current_user_id)
-    absence.statut = "Effectué"
+    absence.statut = "terminee"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible de cloturer cette demande.", refresh_instance=absence)
     return absence
@@ -337,20 +443,61 @@ def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> Absen
 
 def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
     absence, _membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
-    if actor_kind == "owner" and absence.statut != "En attente":
+    if actor_kind == "owner" and absence.statut != "en_attente":
         raise HTTPException(
             status_code=403,
             detail="Vous ne pouvez annuler que vos demandes encore en attente.",
         )
-    absence.statut = "Refusé"
+    absence.statut = "annulee"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible d'annuler cette demande.", refresh_instance=absence)
     return absence
 
 
+def get_user_availability_for_liste(
+    db: Session, 
+    *, 
+    liste_id: str, 
+    user_ids: list[str],
+    reference_date: Optional[datetime] = None
+) -> list[dict]:
+    if not reference_date:
+        reference_date = datetime.utcnow()
+        
+    # On récupère tous les membres actifs de la liste pour ces utilisateurs
+    active_members = db.query(Membre).filter(
+        Membre.id_liste == liste_id,
+        Membre.id_utilisateur.in_(user_ids),
+        Membre.statut == "Actif"
+    ).all()
+    
+    member_map = {m.id: m.id_utilisateur for m in active_members}
+    member_ids = list(member_map.keys())
+    
+    # On cherche les absences approuvées qui couvrent la date de référence
+    absences = db.query(AbsenceEtConge).filter(
+        AbsenceEtConge.id_membre.in_(member_ids),
+        AbsenceEtConge.statut == "approuvee",
+        AbsenceEtConge.date_debut <= reference_date,
+        (AbsenceEtConge.date_fin.is_(None) | (AbsenceEtConge.date_fin >= reference_date))
+    ).all()
+    
+    absent_user_ids = {member_map[a.id_membre]: a for a in absences}
+    
+    results = []
+    for uid in user_ids:
+        absence = absent_user_ids.get(uid)
+        results.append({
+            "id_utilisateur": uid,
+            "is_available": absence is None,
+            "current_absence": _serialize_absence(absence) if absence else None
+        })
+    return results
+
+
 def delete_absence(db: Session, *, absence_id: str, current_user_id: str) -> None:
     absence, _membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
-    if actor_kind == "owner" and absence.statut != "En attente":
+    if actor_kind == "owner" and absence.statut != "en_attente":
         raise HTTPException(
             status_code=403,
             detail="Vous ne pouvez supprimer que vos demandes encore en attente.",

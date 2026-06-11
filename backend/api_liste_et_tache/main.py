@@ -35,6 +35,25 @@ def ensure_runtime_columns() -> None:
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_liste varchar(12)"))
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_espace varchar(12)"))
         conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_workspace varchar(12)"))
+        
+        # Correction de la contrainte de statut pour absences (V1)
+        conn.execute(text("ALTER TABLE planer.absence_et_conge DROP CONSTRAINT IF EXISTS absence_et_conge_statut_check"))
+        conn.execute(text("""
+            UPDATE planer.absence_et_conge
+            SET statut = CASE
+                WHEN statut IS NULL OR TRIM(statut) = '' THEN 'en_attente'
+                WHEN LOWER(TRIM(statut)) IN ('en_attente', 'en attente', 'pending') THEN 'en_attente'
+                WHEN LOWER(TRIM(statut)) IN ('approuvee', 'approuvée', 'accepte', 'accepté', 'acceptée', 'accepted', 'validee', 'validée', 'validé') THEN 'approuvee'
+                WHEN LOWER(TRIM(statut)) IN ('rejetee', 'rejetée', 'refusee', 'refusée', 'refuse', 'refusé', 'rejected') THEN 'rejetee'
+                WHEN LOWER(TRIM(statut)) IN ('annulee', 'annulée', 'cancelled', 'canceled') THEN 'annulee'
+                WHEN LOWER(TRIM(statut)) IN ('terminee', 'terminée', 'effectue', 'effectué', 'done') THEN 'terminee'
+                ELSE 'en_attente'
+            END
+        """))
+        conn.execute(text("""
+            ALTER TABLE planer.absence_et_conge ADD CONSTRAINT absence_et_conge_statut_check 
+            CHECK (statut = ANY (ARRAY['en_attente', 'approuvee', 'rejetee', 'annulee', 'terminee']))
+        """))
         conn.execute(text("""
             UPDATE planer.rapport AS r
             SET

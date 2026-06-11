@@ -233,3 +233,17 @@ export interface AbsenceConflictOut {
   statut: string;
   motif?: string;
 }
+
+export interface AbsenceImpactOut {
+  overlapping_tasks: Task[];
+  overdue_tasks: Task[];
+  high_priority_tasks: Task[];
+  conflicting_absences: AbsenceConflictOut[];
+}
+
+export interface UserAvailabilityOut {
+  id_utilisateur: string;
+  is_available: boolean;
+  current_absence?: AbsenceEtConge | null;
+  next_absence_start?: string | null;
+}
