@@ -1475,10 +1475,10 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
     """
     Circuit rapports :
     - l'auteur voit toujours son rapport ;
-    - rapport d'un Membre direct : administrateurs directs de la liste ;
-      s'il n'y a aucun administrateur direct, le createur direct reçoit le rapport ;
-    - rapport d'un Administrateur direct : createur direct de la liste ;
-    - rapport d'un Createur direct : auteur uniquement.
+    - rapports des membres directs de liste : administrateurs directs de la liste ;
+      s'il n'y a aucun administrateur direct, le createur direct de la liste reçoit ;
+    - rapports des administrateurs directs de liste : createur direct de la liste ;
+    - rapports d'espace/workspace : createur direct de la ressource uniquement.
     """
     scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
     if owner_user_id == current_user_id:
@@ -1510,10 +1510,10 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
 
 def _require_member_workflow_read_access(db: Session, member_id: str, current_user_id: str):
     """
-    Accès lecture pour rapports et absences/congés :
+    Accès lecture pour absences/congés :
     - l'auteur voit toujours son propre historique ;
-    - les rapports/demandes d'un membre simple vont aux gestionnaires directs de la liste ;
-    - les rapports/demandes d'un admin/créateur direct de liste vont aux gestionnaires hérités.
+    - les demandes d'un membre simple vont aux gestionnaires directs de la liste ;
+    - les demandes d'un admin/créateur direct de liste vont aux gestionnaires hérités.
     """
     membre = _get_member_or_404(db, member_id)
     liste_id = _get_member_scope_liste_id(db, membre)

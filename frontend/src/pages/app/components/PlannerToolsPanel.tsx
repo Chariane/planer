@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Calendar, Check, Download, Edit, Eye, FileText, Loader2, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Filter, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Archive, Calendar, Check, Download, Edit, Eye, FileText, Loader2, MessageCircle, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Filter, Plus } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
@@ -113,20 +114,46 @@ export default function PlannerToolsPanel({
   const isDirectMemberRecord = directMembers.find(member => member.id_utilisateur === currentUserId);
   const isDirectAdmin = isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN;
   const isDirectResourceAdmin = isDirectMemberRecord?.role === ROLES.ADMIN;
+  const isDirectResourceCreator = isDirectMemberRecord?.role === ROLES.CREATOR;
+  const canReceiveReports = listeId
+    ? isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN
+    : isDirectMemberRecord?.role === ROLES.CREATOR;
   const isDirectListMember = !!listeId && isDirectMemberRecord?.role === ROLES.MEMBER;
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
+  const listMemberNeedsAssignedTaskForReport = !!listeId && isDirectListMember && !hasAssignedTask;
+  const reportContactMembers = listeId
+    ? (() => {
+      const admins = directMembers.filter(member => member.role === ROLES.ADMIN);
+      if (admins.length > 0) return admins;
+      const creator = directMembers.find(member => member.role === ROLES.CREATOR);
+      return creator ? [creator] : [];
+    })()
+    : [];
   const isGuest = effectiveRole === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
   const hasReportScope = !!(listeId || espaceId || workspaceId);
   const canViewFiles = isManager;
 
-  const canViewReports = hasReportScope && (!!isDirectMemberRecord || isManager);
+  const canViewReports = hasReportScope && (
+    listeId
+      ? !!isDirectMemberRecord || isManager
+      : isDirectAdmin
+  );
+  const hasVisibleTool = canViewFiles || canViewReports || !!listeId;
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
     : espaceId
       ? isDirectResourceAdmin && hasCreatedDirectChildInSpace
       : isDirectResourceAdmin && hasCreatedDirectChildInWorkspace;
+  const directAdminNeedsChildForReport = !listeId && isDirectResourceAdmin && (
+    espaceId
+      ? !hasCreatedDirectChildInSpace
+      : !!workspaceId && !hasCreatedDirectChildInWorkspace
+  );
+  const canShowReportComposer = !isInheritedManager && !isDirectResourceCreator;
+  const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
+  const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
   const canCreateAbsence = !!listeId && !!isDirectMemberRecord && (isDirectAdmin || hasAssignedTask);
 
@@ -152,6 +179,14 @@ export default function PlannerToolsPanel({
   }, [initialTool, canViewFiles, canViewReports]);
 
   useEffect(() => {
+    if (activeTool === 'reports' && !canViewReports) {
+      if (canViewFiles) {
+        setActiveTool('files');
+      } else if (listeId) {
+        setActiveTool('absences');
+      }
+      return;
+    }
     if (activeTool === 'files' && !canViewFiles) {
       if (canViewReports) {
         setActiveTool('reports');
@@ -940,6 +975,7 @@ export default function PlannerToolsPanel({
       {toast && <Toast message={toast.text} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Navigation Premium */}
+      {hasVisibleTool && (
       <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
         {canViewFiles && (
           <button
@@ -977,9 +1013,10 @@ export default function PlannerToolsPanel({
           </button>
         )}
       </div>
+      )}
 
       {/* Filter Bar */}
-      {activeTool !== 'absences' && (
+      {((activeTool === 'files' && canViewFiles) || (activeTool === 'reports' && canViewReports)) && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3">
           <div className="relative flex-1 group">
             <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted group-focus-within:text-secondary transition-colors" />
@@ -1112,8 +1149,8 @@ export default function PlannerToolsPanel({
       )}
 
       {activeTool === 'reports' && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`grid grid-cols-1 gap-8 ${isInheritedManager ? '' : 'lg:grid-cols-12'}`}>
-          {!isInheritedManager && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`grid grid-cols-1 gap-8 ${useFullReportWidth ? '' : 'lg:grid-cols-12'}`}>
+          {canShowReportComposer && (
             <div className="lg:col-span-4 lg:sticky lg:top-4 self-start">
               <GlassCard className="p-6 border-secondary/10 bg-secondary/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12">
@@ -1128,19 +1165,94 @@ export default function PlannerToolsPanel({
                 </div>
 
                 {!canCreateReport ? (
-                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-5 flex gap-4 relative">
-                    <ShieldAlert className="h-6 w-6 text-orange-500 flex-shrink-0" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase text-orange-500 mb-2 tracking-widest">Accès restreint</p>
-                      <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
-                        {listeId
-                          ? 'Seuls les administrateurs directs ou les membres directs ayant une tâche assignée peuvent émettre un rapport.'
-                          : espaceId
-                            ? "Seuls les administrateurs directs ayant créé au moins une liste ou un sous-espace direct dans cet espace peuvent émettre un rapport."
-                            : "Seuls les administrateurs directs ayant créé au moins une liste ou un espace direct dans ce workspace peuvent émettre un rapport."}
-                      </p>
+                  listMemberNeedsAssignedTaskForReport ? (
+                    <div className="relative space-y-5 rounded-3xl border border-amber-500/20 bg-amber-500/5 p-5">
+                      <div className="flex gap-4">
+                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 ring-1 ring-amber-500/20">
+                          <ShieldAlert className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-500">Rapport indisponible</p>
+                          <p className="text-sm font-bold leading-relaxed text-theme-main">
+                            Vous devez avoir au moins une tâche assignée dans cette liste avant de pouvoir envoyer un rapport.
+                          </p>
+                          <p className="mt-2 text-xs font-medium leading-relaxed text-theme-muted">
+                            Le rapport sert à faire le point sur un travail réellement confié. Vous pouvez contacter un responsable du projet pour demander une assignation.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface/70 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-theme-muted">
+                          <MessageCircle className="h-4 w-4 text-secondary" />
+                          Contacter un responsable
+                        </div>
+                        {reportContactMembers.length > 0 ? (
+                          <div className="space-y-2">
+                            {reportContactMembers.map(member => (
+                              <Link
+                                key={member.id_utilisateur}
+                                to={`/messagerie?private_user_id=${member.id_utilisateur}`}
+                                className="group flex items-center justify-between gap-3 rounded-2xl border border-theme-border-subtle bg-theme-bg/60 px-4 py-3 transition-all hover:border-secondary/30 hover:bg-secondary/10"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-black text-theme-main">{member.name}</p>
+                                  <p className="truncate text-[11px] font-bold text-theme-muted">{member.role === ROLES.CREATOR ? 'Créateur du projet' : 'Administrateur du projet'}</p>
+                                </div>
+                                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-secondary text-white shadow-theme-sm transition-transform group-hover:scale-105">
+                                  <MessageCircle className="h-4 w-4" />
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs font-medium leading-relaxed text-theme-muted">
+                            Aucun responsable direct n’est disponible dans cette liste pour le moment.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : directAdminNeedsChildForReport ? (
+                    <div className="relative space-y-5 rounded-3xl border border-sky-500/20 bg-sky-500/5 p-5">
+                      <div className="flex gap-4">
+                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-500 ring-1 ring-sky-500/20">
+                          <Info className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-sky-500">Rapport pas encore disponible</p>
+                          <p className="text-sm font-bold leading-relaxed text-theme-main">
+                            Vous êtes administrateur direct de cette ressource, mais vous devez d’abord créer au moins un élément direct dans ce périmètre.
+                          </p>
+                          <p className="mt-2 text-xs font-medium leading-relaxed text-theme-muted">
+                            {espaceId
+                              ? "Créez une liste ou un sous-espace directement dans cet espace. Vous pourrez ensuite produire un rapport sur ce que vous pilotez réellement ici."
+                              : "Créez une liste ou un espace directement dans ce workspace. Vous pourrez ensuite produire un rapport sur ce que vous pilotez réellement ici."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface/70 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-theme-muted">Pourquoi cette règle ?</p>
+                        <p className="mt-2 text-xs font-medium leading-relaxed text-theme-muted">
+                          Le rapport doit être rattaché à une responsabilité concrète. Tant que vous n’avez créé aucun élément direct dans cette ressource, il n’y a pas encore de périmètre de travail à rapporter au créateur.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-5 flex gap-4 relative">
+                      <ShieldAlert className="h-6 w-6 text-orange-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-orange-500 mb-2 tracking-widest">Accès restreint</p>
+                        <p className="text-[11px] text-theme-muted leading-relaxed font-medium">
+                          {listeId
+                            ? 'Seuls les administrateurs directs ou les membres directs ayant une tâche assignée peuvent émettre un rapport.'
+                            : espaceId
+                              ? "Seuls les administrateurs directs ayant créé au moins une liste ou un sous-espace direct dans cet espace peuvent émettre un rapport."
+                              : "Seuls les administrateurs directs ayant créé au moins une liste ou un espace direct dans ce workspace peuvent émettre un rapport."}
+                        </p>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <div className="space-y-5 relative">
                     <div className="space-y-2">
@@ -1183,9 +1295,9 @@ export default function PlannerToolsPanel({
             </div>
           )}
 
-          <div className={`${isInheritedManager ? 'w-full' : 'lg:col-span-8'} space-y-8`}>
+          <div className={`${useFullReportWidth ? 'w-full' : 'lg:col-span-8'} space-y-8`}>
             {/* Mes rapports */}
-            {!isInheritedManager && (
+            {canShowOwnReportHistory && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <div className="flex items-center gap-3">
@@ -1235,13 +1347,13 @@ export default function PlannerToolsPanel({
               </div>
             )}
 
-            {/* Rapports accessibles */}
-            {isManager && (
+            {/* Rapports reçus selon le circuit métier de la ressource */}
+            {canReceiveReports && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-1 bg-primary rounded-full" />
-                    <h4 className="text-xs font-black text-theme-main uppercase tracking-[0.2em]">Rapports de l'Équipe</h4>
+                    <h4 className="text-xs font-black text-theme-main uppercase tracking-[0.2em]">Rapports reçus</h4>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-black uppercase text-theme-muted/50 tracking-widest">{accessibleReports.length} reçus</span>

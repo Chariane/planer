@@ -72,21 +72,6 @@ def _serialize_report(rapport: Rapport) -> dict:
     }
 
 
-def _collect_descendant_espace_ids(db: Session, espace_id: str) -> set[str]:
-    espace_ids = {espace_id}
-    pending = [espace_id]
-
-    while pending:
-        current_id = pending.pop()
-        children = db.query(Espace.id).filter(Espace.id_espace_parent == current_id).all()
-        for (child_id,) in children:
-            if child_id and child_id not in espace_ids:
-                espace_ids.add(child_id)
-                pending.append(child_id)
-
-    return espace_ids
-
-
 def _direct_space_admin_has_created_direct_child(db: Session, *, espace_id: str, user_id: str) -> bool:
     created_direct_subspace = (
         db.query(Membre.id)
@@ -282,7 +267,6 @@ def list_accessible_reports(
             | (Rapport.commentaire.ilike(pattern))
         )
 
-    espace_scope_ids = _collect_descendant_espace_ids(db, espace_id) if espace_id else set()
     reports = query.limit(max(limit, 1) * 6).all()
     results: list[dict] = []
     for rapport in reports:
@@ -296,29 +280,14 @@ def list_accessible_reports(
         member_espace_id = rapport.id_espace or (membre.id_espace if membre else None)
         member_workspace_id = rapport.id_workspace or (membre.id_workspace if membre else None)
 
-        if liste_id and member_liste_id != liste_id:
-            continue
-
-        report_liste = None
-        if member_liste_id:
-            report_liste = membre.liste if membre and membre.liste else db.query(Liste).filter(Liste.id == member_liste_id).first()
-
-        if not liste_id and espace_id:
-            in_espace_scope = member_espace_id in espace_scope_ids
-            in_liste_espace_scope = bool(report_liste and report_liste.id_espace in espace_scope_ids)
-            if not in_espace_scope and not in_liste_espace_scope:
+        if liste_id:
+            if member_liste_id != liste_id:
                 continue
-
-        if not liste_id and workspace_id:
-            resolved_workspace_id = member_workspace_id
-            if member_espace_id and not resolved_workspace_id:
-                report_espace = db.query(Espace).filter(Espace.id == member_espace_id).first()
-                resolved_workspace_id = report_espace.id_workspace if report_espace else None
-            if report_liste:
-                resolved_workspace_id = report_liste.id_workspace
-                if report_liste.id_espace and report_liste.espace:
-                    resolved_workspace_id = report_liste.espace.id_workspace
-            if resolved_workspace_id != workspace_id:
+        elif espace_id:
+            if member_espace_id != espace_id or member_liste_id or member_workspace_id:
+                continue
+        elif workspace_id:
+            if member_workspace_id != workspace_id or member_liste_id or member_espace_id:
                 continue
 
         if not member_liste_id and not member_espace_id and not member_workspace_id:

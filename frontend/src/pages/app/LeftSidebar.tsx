@@ -480,9 +480,27 @@ export default function LeftSidebar() {
     : activeEntryType === 'space'
       ? selectedSpaceEffectiveRole
       : workspaceRole || currentWorkspace?.current_user_role || null;
+  const activeDirectResourceRole = activeEntryType === 'list'
+    ? getHighestRole([
+      directJoinedList?.role,
+      selectedListContext?.current_user_role,
+      selectedListContext?.role,
+    ])
+    : activeEntryType === 'space'
+      ? getHighestRole([
+        spaceId && spaceId !== 'list' ? getDirectSpaceRole(spaceId) : null,
+        selectedSpaceNode?.current_user_role,
+        selectedSpaceNode?.role,
+        espaceRole,
+      ])
+      : workspaceRole || currentWorkspace?.current_user_role || null;
   const canViewResourceFilesShortcut = activeResourceRole === ROLES.CREATOR || activeResourceRole === ROLES.ADMIN;
+  const canViewResourceReportsShortcut = activeEntryType === 'list'
+    ? activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN || activeDirectResourceRole === ROLES.MEMBER
+    : activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN;
   const showResourceToolsShortcut = hasWorkspaceAccess
-    && (activeEntryType === 'workspace' || activeEntryType === 'space' || activeEntryType === 'list');
+    && (activeEntryType === 'workspace' || activeEntryType === 'space' || activeEntryType === 'list')
+    && (canViewResourceFilesShortcut || canViewResourceReportsShortcut);
   const navigationTitle = activeEntryType === 'space'
     ? 'Espace actif'
     : activeEntryType === 'list'
@@ -504,17 +522,19 @@ export default function LeftSidebar() {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => openResourceTool('reports')}
-        className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-secondary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          <FileText className="h-3.5 w-3.5 shrink-0 text-secondary" />
-          <span className="truncate">Rapports</span>
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
-      </button>
+      {canViewResourceReportsShortcut && (
+        <button
+          type="button"
+          onClick={() => openResourceTool('reports')}
+          className="w-full flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/60 px-3 py-2 text-left text-xs font-bold text-theme-main transition-all hover:border-secondary/25 hover:bg-theme-surface-hover hover:shadow-theme-sm"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-secondary" />
+            <span className="truncate">Rapports</span>
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
+        </button>
+      )}
     </div>
   );
 
@@ -1000,7 +1020,8 @@ export default function LeftSidebar() {
     return items.map(item => {
       const canManageCurrentSpace = canManageSpace(item.id);
       const isExpanded = openSpaces[item.id];
-      const hasChildren = item.sous_espaces?.length > 0 || (listsBySpace[item.id]?.length ?? 0) > 0;
+      const listsHaveBeenLoaded = Object.prototype.hasOwnProperty.call(listsBySpace, item.id);
+      const hasChildren = item.sous_espaces?.length > 0 || !listsHaveBeenLoaded || (listsBySpace[item.id]?.length ?? 0) > 0;
 
       return (
         <div key={item.id} className="mb-0.5">
