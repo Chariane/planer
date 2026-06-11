@@ -133,7 +133,7 @@ export default function PlannerToolsPanel({
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
   const hasReportScope = !!(listeId || espaceId || workspaceId);
-  const canViewFiles = isManager;
+  const canViewFiles = !!(listeId || espaceId || workspaceId);
 
   const canViewReports = hasReportScope && (
     listeId
@@ -1070,7 +1070,7 @@ export default function PlannerToolsPanel({
             {!canAddFiles ? (
               <div className="flex items-start gap-4 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 text-[11px] text-theme-muted leading-relaxed font-bold">
                 <ShieldAlert className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                <span>Accès restreint. Seuls les administrateurs ou créateurs, directs ou par héritage, peuvent joindre des fichiers à cette ressource.</span>
+                <span>Lecture seule. Vous pouvez consulter les fichiers de cette ressource, mais seuls les administrateurs ou créateurs, directs ou par héritage, peuvent en joindre de nouveaux.</span>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">

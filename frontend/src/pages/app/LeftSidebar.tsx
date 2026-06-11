@@ -494,7 +494,7 @@ export default function LeftSidebar() {
         espaceRole,
       ])
       : workspaceRole || currentWorkspace?.current_user_role || null;
-  const canViewResourceFilesShortcut = activeResourceRole === ROLES.CREATOR || activeResourceRole === ROLES.ADMIN;
+  const canViewResourceFilesShortcut = Boolean(activeResourceRole);
   const canViewResourceReportsShortcut = activeEntryType === 'list'
     ? activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN || activeDirectResourceRole === ROLES.MEMBER
     : activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN;
