@@ -966,6 +966,7 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
     owner_name: Optional[str] = None
     decision_commentaire: Optional[str] = None
     decision_by: Optional[str] = None
+    decision_by_name: Optional[str] = None
     decision_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -1005,6 +1006,7 @@ class AbsenceImpactOut(BaseModel):
     conflicting_absences: List[AbsenceConflictOut] = []
     risk_level: str = "faible"
     recommendation: Optional[str] = None
+    risk_reasons: List[str] = []
 
 class UserAvailabilityOut(BaseModel):
     id_utilisateur: str

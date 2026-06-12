@@ -23,6 +23,7 @@ export interface AbsenceEtConge {
     duree_demandee_en_jours?: number;
     decision_commentaire?: string | null;
     decision_by?: string | null;
+    decision_by_name?: string | null;
     decision_at?: string | null;
     id_membre?: string;
     owner_name?: string;

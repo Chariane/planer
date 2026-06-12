@@ -1525,11 +1525,13 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
         return membre
 
     if membre.id_liste and membre.role == LISTE_MEMBER_ROLE:
-        if _direct_list_has_admin(db, liste_id):
+        # Les admins directs ET le créateur direct peuvent voir les demandes des membres
+        try:
             _require_direct_list_admin_grant(db, liste_id, current_user_id)
-        else:
+        except HTTPException:
             _require_direct_list_creator_grant(db, liste_id, current_user_id)
         return membre
+
 
     if membre.id_liste and membre.role == LISTE_ADMIN_ROLE:
         _require_direct_list_creator_grant(db, liste_id, current_user_id)

@@ -213,6 +213,7 @@ export interface AbsenceEtConge {
   duree_demandee_en_jours?: number;
   decision_commentaire?: string | null;
   decision_by?: string | null;
+  decision_by_name?: string | null;
   decision_at?: string | null;
   id_membre?: string;
   owner_name?: string;
@@ -244,6 +245,7 @@ export interface AbsenceImpactOut {
   conflicting_absences: AbsenceConflictOut[];
   risk_level: 'faible' | 'moyen' | 'eleve' | string;
   recommendation?: string | null;
+  risk_reasons?: string[];
 }
 
 export interface UserAvailabilityOut {

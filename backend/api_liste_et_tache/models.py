@@ -1680,12 +1680,13 @@ class AbsenceEtConge(Base):
     duree_demandee_en_jours: Mapped[Optional[int]] = mapped_column(Integer)
     conge_interrompu_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     decision_commentaire: Mapped[Optional[str]] = mapped_column(String(255))
-    decision_by: Mapped[Optional[str]] = mapped_column(String(12))
+    decision_by: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     decision_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     id_membre: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.membre.id', ondelete='SET NULL'))
     
     # Relations
     membres: Mapped[Optional['Membre']] = relationship('Membre', back_populates='absences_et_conges')
+    decisionnaire: Mapped[Optional['Utilisateur']] = relationship('Utilisateur', foreign_keys=[decision_by])
 
 
 class Tache(Base):

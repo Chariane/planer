@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, object_session
 
 from ..core.function import (
     _get_absence_or_404,
@@ -14,7 +14,7 @@ from ..core.function import (
     _require_member_management_access,
     commit_or_raise,
 )
-from ..models import AbsenceEtConge, Membre, Tache
+from ..models import AbsenceEtConge, Membre, Tache, Utilisateur
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
 
 
@@ -62,6 +62,7 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "en_attent
 def _serialize_absence(absence: AbsenceEtConge) -> dict:
     owner_name = "Utilisateur supprimé"
     author_role = "Membre"
+    decision_by_name = None
     if absence.membres:
         author_role = absence.membres.role
         if absence.membres.utilisateur:
@@ -69,6 +70,19 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
             owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
         else:
             owner_name = "Utilisateur supprimé"
+
+    decision_by_name = None
+    decisionnaire = getattr(absence, "decisionnaire", None)
+    if decisionnaire:
+        decision_by_name = f"{decisionnaire.nom or ''} {decisionnaire.prenoms or ''}".strip() or decisionnaire.username or decisionnaire.email
+    elif absence.decision_by:
+        # Fallback if relationship not loaded but ID exists
+        session = object_session(absence)
+        decision_user = session.query(Utilisateur).filter(Utilisateur.id == absence.decision_by).first() if session else None
+        if decision_user:
+            decision_by_name = f"{decision_user.nom or ''} {decision_user.prenoms or ''}".strip() or decision_user.username or decision_user.email
+        else:
+            decision_by_name = "Utilisateur supprimé"
         
     return {
         "id": absence.id,
@@ -83,7 +97,8 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
         "duree_demandee_en_jours": absence.duree_demandee_en_jours,
         "conge_interrompu_at": absence.conge_interrompu_at,
         "decision_commentaire": getattr(absence, "decision_commentaire", None),
-        "decision_by": getattr(absence, "decision_by", None),
+        "decision_by": absence.decision_by,
+        "decision_by_name": decision_by_name,
         "decision_at": getattr(absence, "decision_at", None),
         "id_membre": absence.id_membre,
         "owner_name": owner_name,
@@ -183,6 +198,16 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     elif overlapping or conflicts:
         risk_level = "moyen"
 
+    risk_reasons: list[str] = []
+    if high_priority:
+        risk_reasons.append(f"{len(high_priority)} tâche(s) prioritaire(s) touchée(s)")
+    if overdue:
+        risk_reasons.append(f"{len(overdue)} tâche(s) déjà en retard")
+    if overlapping:
+        risk_reasons.append(f"{len(overlapping)} tâche(s) chevauchent la période")
+    if conflicts:
+        risk_reasons.append(f"{len(conflicts)} autre(s) demande(s) sur la même période")
+
     if risk_level == "eleve":
         recommendation = "Impact élevé : vérifiez les tâches critiques ou en retard avant de valider."
     elif risk_level == "moyen":
@@ -197,13 +222,67 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         "conflicting_absences": conflicts,
         "risk_level": risk_level,
         "recommendation": recommendation,
+        "risk_reasons": risk_reasons,
     }
 
 
 def _date_overlap(start_a, end_a, start_b, end_b) -> bool:
+    start_a = _as_naive_datetime(start_a)
+    end_a = _as_naive_datetime(end_a)
+    start_b = _as_naive_datetime(start_b)
+    end_b = _as_naive_datetime(end_b)
+    if not start_a or not start_b:
+        return False
     a_end = end_a or start_a
     b_end = end_b or start_b
     return start_a <= b_end and start_b <= a_end
+
+
+def _as_naive_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _ensure_no_overlapping_active_leave(
+    db: Session,
+    *,
+    user_id: str,
+    liste_id: str,
+    date_debut,
+    date_fin,
+    exclude_absence_id: Optional[str] = None,
+) -> None:
+    if not date_debut:
+        raise HTTPException(
+            status_code=400,
+            detail="La date de début est obligatoire pour une demande d'absence ou de congé.",
+        )
+
+    query = (
+        db.query(AbsenceEtConge)
+        .join(Membre, AbsenceEtConge.id_membre == Membre.id)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+            Membre.id_liste == liste_id,
+            AbsenceEtConge.statut.in_(["en_attente", "approuvee"]),
+        )
+    )
+    if exclude_absence_id:
+        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+
+    for existing in query.all():
+        if _date_overlap(date_debut, date_fin, existing.date_debut, existing.date_fin):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Vous avez déjà une demande d'absence ou de congé en attente ou approuvée "
+                    "sur cette période. Annulez ou modifiez la demande existante avant d'en créer une autre."
+                ),
+            )
 
 
 def detect_leave_conflicts_for_member(
@@ -255,7 +334,14 @@ def create_leave_request(
     conge_interrompu_at=None,
 ) -> AbsenceEtConge:
     membre = _get_member_or_404(db, id_membre)
-    _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
+    liste_id = _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
+    _ensure_no_overlapping_active_leave(
+        db,
+        user_id=membre.id_utilisateur,
+        liste_id=liste_id,
+        date_debut=date_debut,
+        date_fin=date_fin,
+    )
 
     absence = AbsenceEtConge(
         id_membre=id_membre,
@@ -295,7 +381,10 @@ def list_accessible_absences(
 ) -> list[dict]:
     query = (
         db.query(AbsenceEtConge)
-        .options(joinedload(AbsenceEtConge.membres).joinedload(Membre.utilisateur))
+        .options(
+            joinedload(AbsenceEtConge.membres).joinedload(Membre.utilisateur),
+            joinedload(AbsenceEtConge.decisionnaire)
+        )
         .order_by(AbsenceEtConge.date_debut.desc())
     )
     if member_id:
@@ -364,6 +453,22 @@ def update_absence(
 
     if "id_membre" in updates and updates["id_membre"] and updates["id_membre"] != absence.id_membre:
         _require_member_management_access(db, updates["id_membre"], current_user_id)
+
+    next_member_id = updates.get("id_membre") or absence.id_membre
+    next_member = _get_member_or_404(db, next_member_id)
+    next_liste_id = _get_member_scope_liste_id(db, next_member)
+    next_date_debut = updates.get("date_debut") or absence.date_debut
+    next_date_fin = updates.get("date_fin") if "date_fin" in updates else absence.date_fin
+    next_status = updates.get("statut") or absence.statut
+    if next_status in {"en_attente", "approuvee"}:
+        _ensure_no_overlapping_active_leave(
+            db,
+            user_id=next_member.id_utilisateur,
+            liste_id=next_liste_id,
+            date_debut=next_date_debut,
+            date_fin=next_date_fin,
+            exclude_absence_id=absence.id,
+        )
 
     for key, value in updates.items():
         if hasattr(absence, key) and value is not None:
@@ -463,17 +568,38 @@ def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> Absen
     return absence
 
 
-def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
+def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence, _membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
-    if actor_kind == "owner" and absence.statut != "en_attente":
-        raise HTTPException(
-            status_code=403,
-            detail="Vous ne pouvez annuler que vos demandes encore en attente.",
-        )
+    
+    # Règle Métier : Le demandeur peut annuler AVANT la date de début.
+    if actor_kind == "owner":
+        # On ne peut pas annuler si c'est déjà commencé
+        if datetime.utcnow() >= absence.date_debut:
+            raise HTTPException(
+                status_code=403,
+                detail="Une demande ne peut plus être annulée après sa date de début.",
+            )
+        
+        # On peut annuler si c'est en attente ou approuvé
+        if absence.statut not in {"en_attente", "approuvee"}:
+            raise HTTPException(
+                status_code=403,
+                detail="Vous ne pouvez annuler qu'une demande en attente ou approuvée.",
+            )
+    
+    # Pour un manager, on autorise l'annulation de toute demande non terminée
+    elif actor_kind == "manager":
+        if absence.statut == "terminee":
+            raise HTTPException(
+                status_code=403,
+                detail="Un manager ne peut pas annuler une demande déjà terminée.",
+            )
+
     absence.statut = "annulee"
     absence.statut_date = datetime.utcnow()
+    
     commit_or_raise(db, detail="Impossible d'annuler cette demande.", refresh_instance=absence)
-    return absence
+    return _serialize_absence(absence)
 
 
 def get_user_availability_for_liste(
@@ -497,14 +623,27 @@ def get_user_availability_for_liste(
     member_ids = list(member_map.keys())
     
     # On cherche les absences approuvées qui couvrent la date de référence
+    # Pour garantir que l'on reste absent TOUTE la journée de fin, 
+    # on compare les dates brutes (sans l'heure) si possible, 
+    # ou on s'assure que d'un point de vue logique, le jour j (debut) à j (fin) est couvert.
+    
+    # On normalise reference_date pour la comparaison
+    ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
+    
     absences = db.query(AbsenceEtConge).filter(
         AbsenceEtConge.id_membre.in_(member_ids),
-        AbsenceEtConge.statut == "approuvee",
-        AbsenceEtConge.date_debut <= reference_date,
-        (AbsenceEtConge.date_fin.is_(None) | (AbsenceEtConge.date_fin >= reference_date))
+        AbsenceEtConge.statut == "approuvee"
     ).all()
     
-    absent_user_ids = {member_map[a.id_membre]: a for a in absences}
+    absent_map = {}
+    for a in absences:
+        a_start = a.date_debut.date() if a.date_debut else None
+        a_end = a.date_fin.date() if a.date_fin else a_start
+        
+        if a_start and ref_date >= a_start and (not a_end or ref_date <= a_end):
+            absent_map[member_map[a.id_membre]] = a
+    
+    absent_user_ids = absent_map
     
     results = []
     for uid in user_ids:
