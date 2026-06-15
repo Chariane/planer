@@ -204,7 +204,10 @@ def verify_email_code(
 ):
     user = get_utilisateur_by_email(db, payload.email)
     if not user:
-        raise HTTPException(status_code=404, detail="Aucun utilisateur trouve avec cette adresse email")
+        raise HTTPException(
+            status_code=404, 
+            detail="Nous n'avons pas trouvé de compte associé à cette adresse email. Veuillez vérifier votre saisie."
+        )
 
     if user.is_utilisateur_verifie:
         return {"message": "Votre adresse email est deja verifiee."}
@@ -217,7 +220,10 @@ def verify_email_code(
 
     expected_code = user.code_verification_email
     if not expected_code or expected_code != payload.code:
-        raise HTTPException(status_code=400, detail="Code de verification invalide")
+        raise HTTPException(
+            status_code=400, 
+            detail="Le code de confirmation saisi est incorrect. Merci de bien vouloir vérifier le code reçu par email ou de demander un nouvel envoi."
+        )
 
     user.is_utilisateur_verifie = True
     user.email_verified_at = get_current_utc_datetime()
@@ -239,7 +245,10 @@ def resend_verification_code(
 ):
     user = get_utilisateur_by_email(db, payload.email)
     if not user:
-        raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé avec cette adresse email")
+        raise HTTPException(
+            status_code=404, 
+            detail="Impossible d'identifier votre compte. Veuillez vérifier votre adresse email."
+        )
 
     if user.is_utilisateur_verifie:
         return {"message": "Cette adresse email est déjà vérifiée."}
@@ -312,7 +321,10 @@ def reset_password(
 ):
     reset_request = get_password_reset_request_by_email_and_code(db, payload.email, payload.code)
     if not reset_request or not reset_request.utilisateur:
-        raise HTTPException(status_code=400, detail="Code de reinitialisation invalide")
+        raise HTTPException(
+            status_code=400, 
+            detail="Le code de réinitialisation saisi est invalide. Veuillez vérifier le code reçu ou effectuer une nouvelle demande."
+        )
 
     if is_expired_datetime(reset_request.date_exp_token_reinitialisation):
         raise HTTPException(

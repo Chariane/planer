@@ -12,6 +12,7 @@ import {
 import { motion } from 'framer-motion';
 import { Button } from '../ui/Button';
 import { absenceService } from '../../services/absence.service';
+import { Toast } from '../ui/Toast';
 
 interface LeaveRequestModalProps {
     isOpen: boolean;
@@ -22,6 +23,7 @@ interface LeaveRequestModalProps {
 
 export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveRequestModalProps) {
     const [loading, setLoading] = useState(false);
+    const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
     const [formData, setFormData] = useState({
         date_debut: '',
         date_fin: '',
@@ -55,8 +57,9 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
             });
             onSuccess();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to submit leave request", error);
+            setToast({ type: 'error', text: error.message || "Une erreur est survenue lors de la demande." });
         } finally {
             setLoading(false);
         }
@@ -213,6 +216,14 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                             : "Votre demande de congé sera transmise à votre responsable. Une fois approuvée, elle apparaîtra au planning pour assurer la continuité."}
                     </p>
                 </div>
+
+                {toast && (
+                    <Toast
+                        type={toast.type}
+                        message={toast.text}
+                        onClose={() => setToast(null)}
+                    />
+                )}
             </motion.div>
         </div>
     );

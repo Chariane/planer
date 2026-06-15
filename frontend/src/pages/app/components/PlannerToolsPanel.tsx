@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Task, UserAvailabilityOut } from '../../../types';
 import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
 import { Toast } from '../../../components/ui/Toast';
+import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
 interface PlannerToolsPanelProps {
   workspaceId?: string | null;
@@ -25,7 +26,7 @@ interface PlannerToolsPanelProps {
   currentUserId?: string | null;
   effectiveRole: string | null;
   tasks: Task[];
-  initialTool?: 'files' | 'reports';
+  initialTool?: 'files' | 'reports' | 'absences';
 }
 
 interface ListMemberRecord {
@@ -34,6 +35,10 @@ interface ListMemberRecord {
   name: string;
   email: string;
   role: string;
+  photo_base64?: string | null;
+  username?: string;
+  nom?: string;
+  prenoms?: string;
 }
 
 const formatDate = (value?: string | null) => {
@@ -103,9 +108,8 @@ export default function PlannerToolsPanel({
     motif: '',
     duree_demandee_en_jours: '',
   });
-  const [impactData, setImpactData] = useState<any | null>(null);
-  const [isImpactLoading, setIsImpactLoading] = useState(false);
   const [selectedAbsenceForImpact, setSelectedAbsenceForImpact] = useState<any | null>(null);
+  const [absenceImpacts, setAbsenceImpacts] = useState<Record<string, any>>({});
   const [taskReplacementByTaskId, setTaskReplacementByTaskId] = useState<Record<string, string>>({});
   const [adminCandidateUserId, setAdminCandidateUserId] = useState('');
   const [adminInviteIdentifier, setAdminInviteIdentifier] = useState('');
@@ -126,7 +130,7 @@ export default function PlannerToolsPanel({
   const directMembersLabel = listeId ? 'Membres de la liste' : espaceId ? "Membres de l'espace" : 'Membres du workspace';
   const inheritedMembersLabel = listeId ? 'Membres workspace/espace' : 'Membres du workspace parent';
   const reportArchiveKey = `kplanner:archived-reports:${currentUserId || 'anonymous'}:${activeScopeKey}`;
-  const absenceArchiveKey = `kplanner:archived-absences:${currentUserId || 'anonymous'}:${listeId || 'global'}`;
+  const absenceArchiveKey = `kplanner:archived-absences:${currentUserId || 'anonymous'}:${activeScopeKey}`;
 
   const isDirectMemberRecord = directMembers.find(member => member.id_utilisateur === currentUserId);
   const isDirectAdmin = isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN;
@@ -147,17 +151,13 @@ export default function PlannerToolsPanel({
       return creator ? [creator] : [];
     })()
     : [];
-  const isGuest = effectiveRole === ROLES.GUEST;
+  // const isGuest = effectiveRole === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
   const hasReportScope = !!(listeId || espaceId || workspaceId);
   const canViewFiles = !!(listeId || espaceId || workspaceId);
 
-  const canViewReports = hasReportScope && (
-    listeId
-      ? !!isDirectMemberRecord || isManager
-      : isDirectAdmin
-  );
+  const canViewReports = hasReportScope && (!!isDirectMemberRecord || isManager);
   const hasVisibleTool = canViewFiles || canViewReports || !!listeId;
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
@@ -173,7 +173,9 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
-  const canCreateAbsence = !!listeId && !!isDirectMemberRecord && isDirectMemberRecord.role !== ROLES.CREATOR;
+  const canCreateAbsence = (!!listeId || !!espaceId)
+    && !!isDirectMemberRecord
+    && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role);
   const canViewOwnAbsenceRequests = !isDirectResourceCreator;
 
   const canAddFiles = isManager;
@@ -195,13 +197,16 @@ export default function PlannerToolsPanel({
     if (initialTool === 'reports' && canViewReports) {
       setActiveTool(initialTool);
     }
-  }, [initialTool, canViewFiles, canViewReports]);
+    if (initialTool === 'absences' && listeId) {
+      setActiveTool(initialTool);
+    }
+  }, [initialTool, canViewFiles, canViewReports, listeId]);
 
   useEffect(() => {
     if (activeTool === 'reports' && !canViewReports) {
       if (canViewFiles) {
         setActiveTool('files');
-      } else if (listeId) {
+      } else if (listeId || espaceId) {
         setActiveTool('absences');
       }
       return;
@@ -209,17 +214,17 @@ export default function PlannerToolsPanel({
     if (activeTool === 'files' && !canViewFiles) {
       if (canViewReports) {
         setActiveTool('reports');
-      } else if (listeId) {
+      } else if (listeId || espaceId) {
         setActiveTool('absences');
       }
     }
-  }, [activeTool, canViewFiles, canViewReports, listeId]);
+  }, [activeTool, canViewFiles, canViewReports, listeId, espaceId]);
 
   useEffect(() => {
-    if (!listeId && activeTool === 'absences') {
+    if (!listeId && !espaceId && activeTool === 'absences') {
       setActiveTool(canViewFiles ? 'files' : 'reports');
     }
-  }, [listeId, activeTool, canViewFiles]);
+  }, [listeId, espaceId, activeTool, canViewFiles]);
 
   useEffect(() => {
     if (activeTool !== 'absences') return;
@@ -306,7 +311,7 @@ export default function PlannerToolsPanel({
         }
       });
       (window as any)._membershipMap = membershipIdMap;
-      return allMembers;
+      return all;
     } catch (err) {
       console.error('Failed to load members:', err);
       return [];
@@ -433,20 +438,24 @@ export default function PlannerToolsPanel({
   };
 
   const loadAbsences = async (customMembers?: ListMemberRecord[]) => {
-    if (!listeId) return;
+    if (!listeId && !espaceId && !workspaceId) return;
     try {
       const data = await absenceService.list({
-        liste_id: listeId,
+        liste_id: listeId || undefined,
+        espace_id: espaceId || undefined,
+        workspace_id: workspaceId || undefined,
         limit: 100
       });
       setAbsences(Array.isArray(data) ? data : []);
 
-      // Fetch availability for all members of the list
+      // Fetch availability for all members
       const currentMembers = customMembers || members;
       const userIds = currentMembers.map(m => m.id_utilisateur).filter(Boolean);
 
       if (userIds.length > 0) {
-        const availability = await absenceService.getAvailability(listeId, userIds);
+        // Use the most specific ID for availability service
+        const resourceId = listeId || espaceId || workspaceId || '';
+        const availability = await absenceService.getAvailability(resourceId, userIds);
         setListAvailability(availability);
       }
     } catch (err) {
@@ -779,14 +788,14 @@ export default function PlannerToolsPanel({
 
   const checkImpact = async (absence: any) => {
     setSelectedAbsenceForImpact(absence);
-    setIsImpactLoading(true);
+    setLoading(true); // Re-use general loading or add specific if preferred
     try {
       const impact = await absenceService.getImpact(absence.id);
-      setImpactData(impact);
+      setAbsenceImpacts(prev => ({ ...prev, [absence.id]: impact }));
     } catch (err: any) {
       showMessage('error', 'Impossible de charger l\'impact.');
     } finally {
-      setIsImpactLoading(false);
+      setLoading(false);
     }
   };
 
@@ -819,6 +828,7 @@ export default function PlannerToolsPanel({
   };
 
   const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
+    if (!absence) return null;
     const isOwn = absence.owner_user_id === currentUserId;
     const canApproveThis = !isOwn && (
       absence.author_role === ROLES.MEMBER
@@ -928,23 +938,37 @@ export default function PlannerToolsPanel({
             </div>
           )}
 
-          {isOwn && (absence.statut === 'en_attente' || absence.statut === 'approuvee') && new Date() < new Date(absence.date_debut) && (
-            <button
-              onClick={async () => {
-                try {
-                  await absenceService.cancel(absence.id);
-                  await loadAbsences();
-                  showMessage('success', absence.statut === 'en_attente' ? 'Demande retirée.' : 'Demande annulée.');
-                } catch (err: any) {
-                  showMessage('error', err?.detail || "Erreur lors de l'annulation.");
-                }
-              }}
-              className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-lg transition-all border border-rose-500/10 flex items-center justify-center gap-2"
-            >
-              <XCircle size={14} />
-              {absence.statut === 'en_attente' ? 'Retirer la demande' : 'Annuler la demande'}
-            </button>
-          )}
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const start = new Date(absence.date_debut);
+            start.setHours(0, 0, 0, 0);
+
+            const canCancel = isOwn && (
+              absence.statut === 'en_attente' ||
+              (absence.statut === 'approuvee' && today < start)
+            );
+
+            if (!canCancel) return null;
+
+            return (
+              <button
+                onClick={async () => {
+                  try {
+                    await absenceService.cancel(absence.id);
+                    await loadAbsences();
+                    showMessage('success', absence.statut === 'en_attente' ? 'Demande retirée.' : 'Demande annulée.');
+                  } catch (err: any) {
+                    showMessage('error', err?.detail || "Erreur lors de l'annulation.");
+                  }
+                }}
+                className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-lg transition-all border border-rose-500/10 flex items-center justify-center gap-2"
+              >
+                <XCircle size={14} />
+                {absence.statut === 'en_attente' ? 'Retirer la demande' : 'Annuler la demande'}
+              </button>
+            );
+          })()}
 
           {absence.statut !== 'en_attente' && (
             <button
@@ -960,7 +984,10 @@ export default function PlannerToolsPanel({
   };
 
   const absencesWithAuthors = useMemo(() => {
-    return absences.map(a => ({
+    return (absences || [])
+      .filter(Boolean)
+      .filter(a => a.statut !== 'annulee')
+      .map(a => ({
       ...a,
       owner_user_id: a.owner_user_id
         || members.find(m => m.id === a.id_membre)?.id_utilisateur
@@ -1011,6 +1038,7 @@ export default function PlannerToolsPanel({
     return aStart <= bEnd && bStart <= aEnd;
   };
 
+  /*
   const absencePhaseLabel = (absence: any) => {
     if (absence.statut !== 'approuvee') {
       return absence.statut === 'en_attente' ? 'En attente' : absence.statut.replace('_', ' ');
@@ -1020,11 +1048,33 @@ export default function PlannerToolsPanel({
     if (new Date(absence.date_debut) > today) return 'À venir';
     return 'Terminée';
   };
+  */
 
-  const pendingAbsences = useMemo(
-    () => accessibleAbsences.filter(absence => absence.statut === 'en_attente'),
-    [accessibleAbsences],
-  );
+  const pendingAbsences = useMemo(() => {
+    return accessibleAbsences.filter(absence => {
+      if (!absence || absence.statut !== 'en_attente') return false;
+
+      // Un Admin voit toutes les demandes des Membres
+      if (isDirectResourceAdmin) {
+        return absence.author_role === ROLES.MEMBER;
+      }
+
+      // Un Créateur voit :
+      // 1. Toutes les demandes des Admins
+      // 2. Les demandes des Membres SEULEMENT s'il n'y a pas d'Admin direct disponible dans la ressource
+      if (isDirectResourceCreator) {
+        if (absence.author_role === ROLES.ADMIN) return true;
+
+        const hasAvailableAdmin = listAvailability.some(a =>
+          a.is_available &&
+          members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
+        );
+        if (absence.author_role === ROLES.MEMBER && !hasAvailableAdmin) return true;
+      }
+
+      return false;
+    });
+  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, directListHasAdmin]);
 
   const calendarAbsences = useMemo(
     () => [...visibleAbsences]
@@ -1037,8 +1087,9 @@ export default function PlannerToolsPanel({
     visibleAbsences
       .filter(absence => ['en_attente', 'approuvee'].includes(absence.statut))
       .forEach(absence => {
+        if (!absence) return;
         tasks.forEach(task => {
-          const assignedToAbsenceOwner = task.assignees.some(assignee => assignee.id === absence.owner_user_id);
+          const assignedToAbsenceOwner = task.assignees?.some(assignee => assignee.id === absence.owner_user_id);
           if (assignedToAbsenceOwner && rangesOverlap(absence.date_debut, absence.date_fin, task.startDate || task.dueDate, task.dueDate)) {
             impacted.add(task.id);
           }
@@ -1070,26 +1121,26 @@ export default function PlannerToolsPanel({
     return map;
   }, [flattenedTasks]);
 
-  const directAdminCount = useMemo(
-    () => directMembers.filter(member => member.role === ROLES.ADMIN).length,
-    [directMembers],
-  );
+  // const directAdminCount = useMemo(() => directMembers.filter(member => member.role === ROLES.ADMIN).length, [directMembers]);
 
-  const getTasksImpactedByAbsence = (absence: any) => (
-    flattenedTasks.filter(task => {
-      const assignedToOwner = task.assignees.some(assignee => assignee.id === absence.owner_user_id);
+  const getTasksImpactedByAbsence = (absence: any) => {
+    if (!absence) return [];
+    return flattenedTasks.filter(task => {
+      const assignedToOwner = task.assignees?.some(assignee => assignee.id === absence.owner_user_id);
       return assignedToOwner && rangesOverlap(absence.date_debut, absence.date_fin, task.startDate || task.dueDate, task.dueDate);
-    })
-  );
+    });
+  };
 
-  const getTaskReplacementCandidates = (task: Task, absence: any) => (
-    directMembers.filter(member =>
-      member.id_utilisateur !== absence.owner_user_id
-      && !task.assignees.some(assignee => assignee.id === member.id_utilisateur)
-    )
-  );
+  const getTaskReplacementCandidates = (task: Task, absence: any) => {
+    if (!absence) return [];
+    return directMembers.filter(member =>
+      member.role === ROLES.MEMBER
+      && member.id_utilisateur !== absence.owner_user_id
+      && !task.assignees?.some(assignee => assignee.id === member.id_utilisateur)
+    );
+  };
 
-  const handleAssignTaskReplacement = async (task: Task, absence: any) => {
+  const handleAssignTaskReplacement = async (task: Task, _absence: any) => {
     const replacementUserId = taskReplacementByTaskId[task.id];
     if (!replacementUserId) {
       showMessage('error', 'Choisissez un membre à ajouter sur cette tâche.');
@@ -1163,7 +1214,7 @@ export default function PlannerToolsPanel({
   );
 
   const renderImpactPanel = () => {
-    const impactAbsences = visibleAbsences.filter(absence => ['en_attente', 'approuvee'].includes(absence.statut));
+    const impactAbsences = visibleAbsences.filter(absence => absence.statut === 'approuvee');
 
     if (impactAbsences.length === 0) {
       return (
@@ -1177,14 +1228,24 @@ export default function PlannerToolsPanel({
     return (
       <div className="space-y-5">
         {impactAbsences.map(absence => {
+          const absenceImpact = absenceImpacts[absence.id];
           const impactedTasks = getTasksImpactedByAbsence(absence);
-          const canManageThisImpact = absence.statut === 'en_attente' && isManager && absence.owner_user_id !== currentUserId;
-          const isPendingAdminRequest = absence.statut === 'en_attente'
-            && absence.author_role === ROLES.ADMIN
-            && isDirectResourceCreator
-            && absence.owner_user_id !== currentUserId;
-          const needsBackupAdmin = isPendingAdminRequest && directAdminCount <= 1;
-          const hasOperationalImpact = impactedTasks.length > 0 || needsBackupAdmin;
+          const isOwn = absence.owner_user_id === currentUserId;
+          const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
+
+          // Backend-driven risks
+          const hasSoleAdminRisk = !!absenceImpact?.sole_admin_lists?.length;
+          const hasSubSpaceRisk = !!absenceImpact?.admin_subspaces?.length;
+          const hasGovernanceRisk = hasSoleAdminRisk || hasSubSpaceRisk;
+
+          const otherAdmins = directMembers.filter(m => m.role === ROLES.ADMIN && m.id_utilisateur !== absence.owner_user_id);
+          const needsBackupAdmin = hasGovernanceRisk && otherAdmins.length === 0;
+
+          const showTasks = (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
+          const showGovernance = (isDirectResourceCreator || isInheritedManager) && hasGovernanceRisk;
+          const hasOperationalImpact = showTasks || showGovernance;
+
+          if (!hasOperationalImpact) return null;
 
           return (
             <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70">
@@ -1208,8 +1269,11 @@ export default function PlannerToolsPanel({
                     {hasOperationalImpact ? 'Action recommandée' : 'Impact faible'}
                   </p>
                   <p className="mt-1 text-xs font-bold text-theme-main">
-                    {impactedTasks.length} tâche(s) touchée(s)
-                    {needsBackupAdmin ? ' · admin unique' : ''}
+                    {!hasGovernanceRisk ? (
+                      `${impactedTasks.length} tâche(s) touchée(s)`
+                    ) : (
+                      needsBackupAdmin ? 'Admin unique (Projet)' : `Gouvernance assurée (${otherAdmins.length} autres admins)`
+                    )}
                   </p>
                 </div>
               </div>
@@ -1232,115 +1296,149 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
-              <div className="mt-5 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches réellement impactées</p>
-                {impactedTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs font-bold text-emerald-600">
-                    Aucune tâche assignée à cette personne ne chevauche la période demandée.
-                  </div>
-                ) : (
-                  impactedTasks.map(task => {
-                    const isSoleAssignee = task.assignees.length === 1 && task.assignees[0]?.id === absence.owner_user_id;
-                    const candidates = getTaskReplacementCandidates(task, absence);
-                    return (
-                      <div key={task.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="min-w-0">
-                            <p className="text-sm font-black text-theme-main truncate">{task.title}</p>
-                            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-theme-muted">
-                              Échéance {formatDate(task.dueDate)} · {task.priority}
-                            </p>
+              {showTasks && (
+                <div className="mt-5 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches réellement impactées</p>
+                  {impactedTasks.length === 0 ? (
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs font-bold text-emerald-600">
+                      Aucune tâche assignée à cette personne ne chevauche la période demandée.
+                    </div>
+                  ) : (
+                    impactedTasks.map(task => {
+                      const candidates = getTaskReplacementCandidates(task, absence);
+                      return (
+                        <div key={task.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="min-w-0">
+                              <Link to={`/tache/${task.id}`} className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2">
+                                {task.title}
+                                <Eye size={12} className="shrink-0" />
+                              </Link>
+                              <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-theme-muted">
+                                Échéance {formatDate(task.dueDate)} · {task.priority}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {task.assignees?.map(assignee => (
+                                <span key={assignee.id} className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-main">
+                                  {assignee.name}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {task.assignees.map(assignee => (
-                              <span key={assignee.id} className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-main">
-                                {assignee.name}
+
+                          {canManageThisImpact && (
+                            <div className="mt-4 space-y-3">
+                              <div className="flex items-center gap-2 px-3">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Assignation alternative :</span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-3 md:grid-cols-[1fr_auto]">
+                                <select
+                                  value={taskReplacementByTaskId[task.id] || ''}
+                                  onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                  className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                                >
+                                  <option value="">Choisir un remplaçant ou renfort</option>
+                                  {candidates.map(candidate => (
+                                    <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
+                                      {candidate.name} · {candidate.role}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  type="button"
+                                  onClick={() => handleAssignTaskReplacement(task, absence)}
+                                  disabled={loading || candidates.length === 0}
+                                  className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
+                                >
+                                  {candidates.length === 0 ? 'Aucun candidat' : 'Réaffecter / Renforcer'}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {showGovernance && (
+                <div className="mt-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance de la liste</p>
+                    <Link to={`/liste/${listeId}`} className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-secondary hover:underline">
+                      <Eye size={12} />
+                      Voir le projet
+                    </Link>
+                  </div>
+
+                  {!needsBackupAdmin ? (
+                    <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                      <div className="flex items-start gap-4">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-black text-theme-main">Continuité assurée</p>
+                          <p className="mt-1 text-xs text-theme-muted leading-relaxed">
+                            La liste possède {otherAdmins.length} autre(s) administrateur(s) actif(s) :
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {otherAdmins.map(adm => (
+                              <span key={adm.id} className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-bold">
+                                {adm.name}
                               </span>
                             ))}
                           </div>
                         </div>
-
-                        {canManageThisImpact && (
-                          <div className="mt-4 space-y-3">
-                            <div className="flex items-center gap-2 px-3">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Assignation alternative :</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-3 md:grid-cols-[1fr_auto]">
-                              <select
-                                value={taskReplacementByTaskId[task.id] || ''}
-                                onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
-                              >
-                                <option value="">Choisir un remplaçant ou renfort</option>
-                                {candidates.map(candidate => (
-                                  <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
-                                    {candidate.name} · {candidate.role}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                type="button"
-                                onClick={() => handleAssignTaskReplacement(task, absence)}
-                                disabled={loading || candidates.length === 0}
-                                className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
-                              >
-                                {candidates.length === 0 ? 'Aucun candidat' : 'Réaffecter / Renforcer'}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {needsBackupAdmin && (
-                <div className="mt-5 rounded-3xl border border-secondary/20 bg-secondary/5 p-5">
-                  <div className="flex items-start gap-3">
-                    <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-secondary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-black text-theme-main">Administrateur unique sur cette liste</p>
-                      <p className="mt-1 text-xs font-medium leading-relaxed text-theme-muted">
-                        Si vous approuvez cette demande, la liste risque de se retrouver sans administrateur direct disponible. Ajoutez un administrateur avant validation si nécessaire.
-                      </p>
-                      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
-                        <select
-                          value={adminCandidateUserId}
-                          onChange={e => {
-                            setAdminCandidateUserId(e.target.value);
-                            if (e.target.value) setAdminInviteIdentifier('');
-                          }}
-                          className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
-                        >
-                          <option value="">Membre par héritage</option>
-                          {inheritedMembers.map(member => (
-                            <option key={member.id_utilisateur} value={member.id_utilisateur}>
-                              {member.name} · {member.email}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          value={adminInviteIdentifier}
-                          onChange={e => {
-                            setAdminInviteIdentifier(e.target.value);
-                            if (e.target.value.trim()) setAdminCandidateUserId('');
-                          }}
-                          placeholder="Ou email / username"
-                          className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20"
-                        />
-                        <Button
-                          type="button"
-                          onClick={handleAddBackupAdmin}
-                          disabled={loading || (!adminCandidateUserId && !adminInviteIdentifier.trim())}
-                          className="h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-widest"
-                        >
-                          Ajouter admin
-                        </Button>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="mt-4 rounded-3xl border border-secondary/20 bg-secondary/5 p-5">
+                      <div className="flex items-start gap-3">
+                        <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-secondary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-black text-theme-main">Ajouter un administrateur de secours</p>
+                          <p className="mt-1 text-xs font-medium leading-relaxed text-theme-muted">
+                            Promouvez un membre hérité ou invitez un nouvel administrateur pour assurer la continuité.
+                          </p>
+                          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                            <select
+                              value={adminCandidateUserId}
+                              onChange={e => {
+                                setAdminCandidateUserId(e.target.value);
+                                if (e.target.value) setAdminInviteIdentifier('');
+                              }}
+                              className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
+                            >
+                              <option value="">Membre par héritage</option>
+                              {inheritedMembers.map(member => (
+                                <option key={member.id_utilisateur} value={member.id_utilisateur}>
+                                  {member.name} · {member.email}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={adminInviteIdentifier}
+                              onChange={e => {
+                                setAdminInviteIdentifier(e.target.value);
+                                if (e.target.value.trim()) setAdminCandidateUserId('');
+                              }}
+                              placeholder="Ou email / username"
+                              className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20"
+                            />
+                            <Button
+                              type="button"
+                              onClick={handleAddBackupAdmin}
+                              disabled={loading || (!adminCandidateUserId && !adminInviteIdentifier.trim())}
+                              className="h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-widest bg-secondary text-white hover:bg-secondary/80 shadow-premium-sm"
+                            >
+                              Ajouter admin
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </GlassCard>
@@ -1351,7 +1449,7 @@ export default function PlannerToolsPanel({
   };
 
   const reportsWithAuthors = useMemo(() => {
-    return reports.map(report => ({
+    return (reports || []).filter(Boolean).map(report => ({
       ...report,
       owner_user_id: report.owner_user_id
         || members.find(member => member.id === report.id_membre)?.id_utilisateur
@@ -1384,7 +1482,7 @@ export default function PlannerToolsPanel({
   );
 
   const filesWithAuthors = useMemo(() => {
-    return files.map(file => ({
+    return (files || []).filter(Boolean).map(file => ({
       ...file,
       owner_user_id: file.owner_user_id || file.meta_donnees?.owner_user_id || null,
       authorName: getAuthorName(file.id_membre, file.meta_donnees?.owner_user_id, file.owner_name)
@@ -1400,53 +1498,53 @@ export default function PlannerToolsPanel({
     const safeDifficultes = escapeHtml(report.difficultes_et_solutions);
     const safeCommentaire = escapeHtml(report.commentaire);
     win.document.write(`
-      <html>
-        <head>
-          <title>Rapport - ${safeTitle}</title>
-          <style>
-            body { font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
-            .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
-            .title { font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
-            .meta { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-            .section { margin-bottom: 30px; }
-            .section-title { font-size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
-            .content { font-size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
-            .content.warning { background: #fff1f2; border-left-color: #f43f5e; color: #9f1239; }
-            .content.note { background: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; }
-            .footer { margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
-            .signature { font-weight: 700; color: #059669; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="meta">Rapport d'activité</div>
-              <h1 class="title">${safeTitle}</h1>
+        <html>
+          <head>
+            <title>Rapport - ${safeTitle}</title>
+            <style>
+              body {font - family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
+              .header {border - bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+              .title {font - size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
+              .meta {font - size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+              .section {margin - bottom: 30px; }
+              .section-title {font - size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+              .content {font - size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
+              .content.warning {background: #fff1f2; border-left-color: #f43f5e; color: #9f1239; }
+              .content.note {background: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; }
+              .footer {margin - top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
+              .signature {font - weight: 700; color: #059669; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="meta">Rapport d'activité</div>
+                <h1 class="title">${safeTitle}</h1>
+              </div>
+              <div class="meta">Date: ${formatDate(report.created_at)}</div>
             </div>
-            <div class="meta">Date: ${formatDate(report.created_at)}</div>
-          </div>
-          <div class="section">
-            <div class="section-title">I. Réalisations</div>
-            <div class="content">${safeRealisations}</div>
-          </div>
-          ${safeDifficultes ? `
+            <div class="section">
+              <div class="section-title">I. Réalisations</div>
+              <div class="content">${safeRealisations}</div>
+            </div>
+            ${safeDifficultes ? `
           <div class="section">
             <div class="section-title">II. Difficultés & Solutions</div>
             <div class="content warning">${safeDifficultes}</div>
           </div>` : ''}
-          ${safeCommentaire ? `
+            ${safeCommentaire ? `
           <div class="section">
             <div class="section-title">III. Commentaires Additionnels</div>
             <div class="content note">${safeCommentaire}</div>
           </div>` : ''}
-          <div class="footer">
-            <div>Généré par K-Planner le ${new Date().toLocaleDateString('fr-FR')}</div>
-            <div>Signé: <span class="signature">${safeAuthor}</span></div>
-          </div>
-          <script>window.onload = () => { window.print(); window.close(); }</script>
-        </body>
-      </html>
-    `);
+            <div class="footer">
+              <div>Généré par K-Planner le ${new Date().toLocaleDateString('fr-FR')}</div>
+              <div>Signé: <span class="signature">${safeAuthor}</span></div>
+            </div>
+            <script>window.onload = () => {window.print(); window.close(); }</script>
+          </body>
+        </html>
+        `);
     win.document.close();
   };
 
@@ -1483,7 +1581,7 @@ export default function PlannerToolsPanel({
             </button>
           )}
 
-          {listeId && (
+          {(listeId || espaceId) && (
             <button
               onClick={() => setActiveTool('absences')}
               className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'absences' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'
@@ -1875,9 +1973,10 @@ export default function PlannerToolsPanel({
                             </div>
                             <div className="flex items-center justify-between pt-4 border-t border-theme-border-subtle">
                               <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
-                                  {report.authorName.substring(0, 2).toUpperCase()}
-                                </div>
+                                <MemberAvatar
+                                  member={(members.find(m => m.id === report.id_membre) || { username: report.authorName }) as any}
+                                  size="xs"
+                                />
                                 <span className="text-[10px] font-black text-theme-main uppercase tracking-tight">{report.authorName}</span>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); printReport(report); }} className="hover:scale-110 transition-transform">
@@ -1937,7 +2036,7 @@ export default function PlannerToolsPanel({
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-1 shadow-theme-sm">
             {[
               ...(canViewOwnAbsenceRequests ? [{ id: 'mine', label: 'Mes demandes' }] : []),
-              ...(isManager ? [{ id: 'pending', label: `À traiter (${pendingAbsences.length})` }] : []),
+              ...(isManager && (isDirectResourceCreator || (isDirectResourceAdmin && (listAvailability.find(a => a.id_utilisateur === currentUserId)?.is_available !== false))) ? [{ id: 'pending', label: `À traiter (${pendingAbsences.length})` }] : []),
               ...(isManager ? [{ id: 'calendar', label: 'Calendrier' }] : []),
               ...(isManager ? [{ id: 'impact', label: 'Impact' }] : []),
             ].map(tab => (
@@ -2039,19 +2138,24 @@ export default function PlannerToolsPanel({
           {absenceView === 'impact' && renderImpactPanel()}
           {absenceView === 'calendar' && (
             <div className="space-y-3">
-              {calendarAbsences.filter(a => a.statut === 'approuvee').length === 0 ? (
+              {calendarAbsences.filter(a => a && a.statut === 'approuvee').length === 0 ? (
                 <div className="py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
                   <Calendar className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
                   <p className="font-black text-[10px] uppercase tracking-widest">Calendrier vide</p>
                 </div>
-              ) : calendarAbsences.filter(a => a.statut === 'approuvee').map(absence => {
+              ) : calendarAbsences.filter(a => a && a.statut === 'approuvee').map(absence => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 const start = new Date(absence.date_debut);
                 const end = new Date(absence.date_fin);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(0, 0, 0, 0);
+                const isCurrent = today >= start && today <= end;
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
                 return (
-                  <GlassCard key={absence.id} className="p-4 border-theme-border-subtle bg-theme-surface/70">
+                  <GlassCard key={absence.id} className={`p-4 border-theme-border-subtle bg-theme-surface/70 ${isCurrent ? 'ring-2 ring-emerald-500/30 bg-emerald-500/5' : ''}`}>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
@@ -2061,6 +2165,11 @@ export default function PlannerToolsPanel({
                           <div className="flex items-center gap-2">
                             <AvailabilityBadge availability={listAvailability.find(avail => avail.id_utilisateur === absence.owner_user_id)} />
                             <p className="text-sm font-black text-theme-main truncate">{absence.authorName}</p>
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse">
+                                En cours
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">
                             {absence.is_absence ? 'Absence' : 'Congé'} · {diffDays} jour(s)
@@ -2254,103 +2363,217 @@ export default function PlannerToolsPanel({
       </Modal>
 
       <Modal isOpen={!!selectedAbsenceForImpact} onClose={() => setSelectedAbsenceForImpact(null)} title="Analyse d'Impact de l'Absence" size="lg">
-        {isImpactLoading ? (
+        {loading ? (
           <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto h-8 w-8 text-secondary" /></div>
-        ) : impactData && (
-          <div className="space-y-6">
-            <div className={`border rounded-2xl p-4 flex gap-4 ${impactData.risk_level === 'eleve' ? 'bg-red-500/5 border-red-500/10' : impactData.risk_level === 'moyen' ? 'bg-amber-500/5 border-amber-500/10' : 'bg-emerald-500/5 border-emerald-500/10'}`}>
-              <AlertTriangle className={`h-6 w-6 shrink-0 ${impactData.risk_level === 'eleve' ? 'text-red-500' : impactData.risk_level === 'moyen' ? 'text-amber-500' : 'text-emerald-500'}`} />
-              <div>
-                <p className="text-xs font-black text-theme-main uppercase tracking-widest mb-1">Risque {impactData.risk_level || 'faible'}</p>
-                <p className="text-[11px] text-theme-muted leading-relaxed">
-                  Cette absence chevauche {impactData.overlapping_tasks.length} tâches. ({impactData.high_priority_tasks.length} prioritaires, {impactData.overdue_tasks.length} en retard).
-                </p>
-                {impactData.recommendation && (
-                  <p className="mt-2 text-xs font-bold text-theme-main">{impactData.recommendation}</p>
-                )}
-                {Array.isArray(impactData.risk_reasons) && impactData.risk_reasons.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {impactData.risk_reasons.map((reason: string) => (
-                      <span key={reason} className="rounded-full border border-theme-border-subtle bg-theme-surface/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                        {reason}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+        ) : (selectedAbsenceForImpact && absenceImpacts[selectedAbsenceForImpact.id]) ? (() => {
+          const impactData = absenceImpacts[selectedAbsenceForImpact.id];
+          const isOwn = selectedAbsenceForImpact.owner_user_id === currentUserId;
+          const isPendingAdminRequest = selectedAbsenceForImpact.statut === 'en_attente'
+            && selectedAbsenceForImpact.author_role === ROLES.ADMIN
+            && isDirectResourceCreator
+            && !isOwn;
 
-            {impactData.overlapping_tasks.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Tâches impactées & Réaffectation</p>
-                <div className="space-y-4">
-                  {impactData.overlapping_tasks.map((t: any) => {
-                    const task = taskById.get(t.id);
-                    if (!task) return null;
-                    const candidates = getTaskReplacementCandidates(task, selectedAbsenceForImpact);
+          const otherAdmins = directMembers.filter(m => m.role === ROLES.ADMIN && m.id_utilisateur !== selectedAbsenceForImpact.owner_user_id);
+          const needsBackupAdmin = isPendingAdminRequest && otherAdmins.length === 0;
 
-                    return (
-                      <div key={task.id} className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl space-y-4">
-                        <div className="flex justify-between items-start gap-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-black text-theme-main truncate">{task.title}</p>
-                            <p className="text-[9px] text-theme-muted uppercase font-black mt-1">
-                              Échéance: {formatDate(task.dueDate)} · {task.priority}
-                            </p>
-                          </div>
-                          <div className="flex -space-x-2">
-                            {task.assignees.map(a => (
-                              <div key={a.id} className="h-6 w-6 rounded-lg bg-theme-surface border border-theme-border-subtle flex items-center justify-center text-[8px] font-black" title={a.name}>
-                                {a.name.substring(0, 2).toUpperCase()}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 pt-2">
-                          <select
-                            value={taskReplacementByTaskId[task.id] || ''}
-                            onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
-                            className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
-                          >
-                            <option value="">Remplaçant / Renfort...</option>
-                            {candidates.map(candidate => (
-                              <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
-                                {candidate.name} ({candidate.role})
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            onClick={() => handleAssignTaskReplacement(task, selectedAbsenceForImpact)}
-                            disabled={loading || !taskReplacementByTaskId[task.id]}
-                            className="h-10 rounded-xl bg-secondary px-4 text-[9px] font-black uppercase tracking-widest"
-                          >
-                            Assigner
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+          return (
+            <div className="space-y-6">
+              <div className={`border rounded-2xl p-4 flex gap-4 ${impactData.risk_level === 'eleve' ? 'bg-red-500/5 border-red-500/10' : impactData.risk_level === 'moyen' ? 'bg-amber-500/5 border-amber-500/10' : 'bg-emerald-500/5 border-emerald-500/10'}`}>
+                <AlertTriangle className={`h-6 w-6 shrink-0 ${impactData.risk_level === 'eleve' ? 'text-red-500' : impactData.risk_level === 'moyen' ? 'text-amber-500' : 'text-emerald-500'}`} />
+                <div>
+                  <p className="text-xs font-black text-theme-main uppercase tracking-widest mb-1">Risque {impactData.risk_level || 'faible'}</p>
+                  <p className="text-[11px] text-theme-muted leading-relaxed">
+                    Cette absence chevauche {impactData.overlapping_tasks.length} tâches. ({impactData.high_priority_tasks.length} prioritaires, {impactData.overdue_tasks.length} en retard).
+                  </p>
+                  {impactData.recommendation && (
+                    <p className="mt-2 text-xs font-bold text-theme-main">{impactData.recommendation}</p>
+                  )}
                 </div>
               </div>
-            )}
 
-            {impactData.conflicting_absences.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Conflits d'absences (Même période)</p>
-                <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl">
-                  {impactData.conflicting_absences.map((a: any) => (
-                    <p key={a.id} className="text-xs text-rose-600 font-medium">Déjà une demande {a.statut} du {formatDate(a.date_debut)} au {formatDate(a.date_fin)}</p>
+              {(impactData.sole_admin_resources?.length > 0 || impactData.sole_creator_resources?.length > 0) && (
+                <div className="space-y-4">
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Alerte Gouvernance Critique</p>
+
+                  {impactData.sole_admin_resources?.map((res: any) => (
+                    <div key={res.id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+                      <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-black text-theme-main">Admin Unique : {res.nom}</p>
+                        <p className="text-[11px] text-theme-muted">
+                          {res.type === 'liste' ? 'Cette liste' : 'Ce sous-espace'} n'aura plus d'admin actif durant l'absence.
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {impactData.sole_creator_resources?.map((res: any) => (
+                    <div key={res.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 flex items-start gap-3">
+                      <ShieldAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-black text-theme-main">Créateur Unique : {res.nom}</p>
+                        <p className="text-[11px] text-theme-muted">
+                          {res.type === 'liste' ? 'Cette liste' : 'Ce sous-espace'} n'aura plus de créateur direct actif.
+                        </p>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="flex gap-4 pt-4">
-              <Button variant="outline" onClick={() => setSelectedAbsenceForImpact(null)} className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase">Fermer</Button>
+              {isPendingAdminRequest && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Gouvernance Directe</p>
+                  </div>
+
+                  {!needsBackupAdmin ? (
+                    <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                      <div className="flex items-start gap-4">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-black text-theme-main">Continuité assurée</p>
+                          <p className="mt-1 text-xs text-theme-muted leading-relaxed">
+                            La ressource possède {otherAdmins.length} autre(s) administrateur(s) actif(s).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-5">
+                      <div className="flex items-start gap-4">
+                        <ShieldAlert className="h-6 w-6 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-black text-theme-main">Impact Gouvernance Critique</p>
+                          <p className="mt-1 text-xs text-theme-muted leading-relaxed font-medium">
+                            Cet administrateur est seul. Son absence laisserait la ressource sans supervision directe.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {needsBackupAdmin && (
+                    <div className="mt-4 rounded-3xl border border-secondary/20 bg-secondary/5 p-5">
+                      <div className="flex items-start gap-3">
+                        <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-secondary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-black text-theme-main">Ajouter un admin de secours</p>
+                          <div className="mt-4 grid grid-cols-1 gap-3">
+                            <select
+                              value={adminCandidateUserId}
+                              onChange={e => {
+                                setAdminCandidateUserId(e.target.value);
+                                if (e.target.value) setAdminInviteIdentifier('');
+                              }}
+                              className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none"
+                            >
+                              <option value="">Membre par héritage</option>
+                              {inheritedMembers.map(member => (
+                                <option key={member.id_utilisateur} value={member.id_utilisateur}>
+                                  {member.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={adminInviteIdentifier}
+                              onChange={e => {
+                                setAdminInviteIdentifier(e.target.value);
+                                if (e.target.value.trim()) setAdminCandidateUserId('');
+                              }}
+                              placeholder="Ou email / username"
+                              className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none"
+                            />
+                            <Button
+                              onClick={handleAddBackupAdmin}
+                              disabled={loading || (!adminCandidateUserId && !adminInviteIdentifier.trim())}
+                              className="h-10 rounded-xl bg-secondary text-[10px] font-black uppercase"
+                            >
+                              Ajouter admin
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedAbsenceForImpact.author_role === ROLES.MEMBER && impactData.overlapping_tasks.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Tâches impactées & Réaffectation</p>
+                  <div className="space-y-4">
+                    {impactData.overlapping_tasks.map((t: any) => {
+                      const task = taskById.get(t.id);
+                      if (!task) return null;
+                      const candidates = getTaskReplacementCandidates(task, selectedAbsenceForImpact);
+
+                      return (
+                        <div key={task.id} className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl space-y-4">
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="min-w-0">
+                              <Link to={`/tache/${task.id}`} className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2">
+                                {task.title}
+                                <Eye size={12} className="shrink-0" />
+                              </Link>
+                              <p className="text-[9px] text-theme-muted uppercase font-black mt-1">
+                                Échéance: {formatDate(task.dueDate)} · {task.priority}
+                              </p>
+                            </div>
+                            <div className="flex -space-x-2">
+                              {task.assignees?.map(a => (
+                                <div key={a.id} className="h-6 w-6 rounded-lg bg-theme-surface border border-theme-border-subtle flex items-center justify-center text-[8px] font-black" title={a.name}>
+                                  {a.name.substring(0, 2).toUpperCase()}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 pt-2">
+                            <select
+                              value={taskReplacementByTaskId[task.id] || ''}
+                              onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
+                              className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                            >
+                              <option value="">Remplaçant / Renfort...</option>
+                              {candidates.map(candidate => (
+                                <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
+                                  {candidate.name} ({candidate.role})
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              onClick={() => handleAssignTaskReplacement(task, selectedAbsenceForImpact)}
+                              disabled={loading || !taskReplacementByTaskId[task.id]}
+                              className="h-10 rounded-xl bg-secondary px-4 text-[9px] font-black uppercase tracking-widest"
+                            >
+                              Assigner
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {impactData.conflicting_absences.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Conflits d'absences (Même période)</p>
+                  <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl">
+                    {impactData.conflicting_absences.map((a: any) => (
+                      <p key={a.id} className="text-xs text-rose-600 font-medium">Déjà une demande {a.statut} du {formatDate(a.date_debut)} au {formatDate(a.date_fin)}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-4">
+                <Button variant="outline" onClick={() => setSelectedAbsenceForImpact(null)} className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase">Fermer</Button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })() : null}
       </Modal>
 
       <Modal
@@ -2403,6 +2626,6 @@ export default function PlannerToolsPanel({
         loadingText={confirmData?.loadingText}
         isLoading={loading}
       />
-    </div>
+    </div >
   );
 }

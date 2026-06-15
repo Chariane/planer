@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload, object_session
@@ -8,13 +8,16 @@ from ..core.function import (
     _get_absence_or_404,
     _get_member_or_404,
     _get_member_scope_liste_id,
+    _is_user_available_now,
     _require_absence_management_access,
     _require_absence_read_access,
     _require_absence_self_or_management_access,
     _require_member_management_access,
+    _get_all_descendant_espace_ids,
+    _get_all_descendant_lists,
     commit_or_raise,
 )
-from ..models import AbsenceEtConge, Membre, Tache, Utilisateur
+from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
 
 
@@ -121,79 +124,229 @@ def _member_has_assigned_task_in_list(db: Session, *, liste_id: str, user_id: st
     )
 
 
-def _require_self_leave_request_access(db: Session, *, membre: Membre, current_user_id: str) -> str:
+def _get_absence_scope_for_member(db: Session, membre: Membre) -> tuple[str, str]:
+    if membre.id_liste:
+        return "liste", _get_member_scope_liste_id(db, membre)
+    if membre.id_espace and membre.id_liste is None and membre.id_tache is None:
+        return "espace", membre.id_espace
+    raise HTTPException(
+        status_code=400,
+        detail="La demande doit être rattachée à un rôle direct dans une liste ou dans un espace.",
+    )
+
+
+def _require_self_leave_request_access(db: Session, *, membre: Membre, current_user_id: str) -> tuple[str, str]:
+    """
+    Vérifie que l'utilisateur peut créer une demande pour lui-même.
+    Retourne le scope direct de la demande : ("liste", id) ou ("espace", id).
+    """
     if membre.id_utilisateur != current_user_id:
         raise HTTPException(
             status_code=403,
             detail="Vous ne pouvez créer une demande d'absence ou de congé que pour vous-même.",
         )
 
-    if not membre.id_liste:
+    if not membre.id_liste and not membre.id_espace:
         raise HTTPException(
             status_code=400,
-            detail="La demande doit être rattachée à votre rôle direct dans la liste (V1).",
+            detail="La demande doit être rattachée à votre rôle direct dans la liste ou dans l'espace.",
         )
 
     if membre.role == "Créateur":
         raise HTTPException(
             status_code=403,
-            detail="Le créateur d'une liste ne fait pas de demande d'absences/congés dans sa propre liste.",
+            detail="Le créateur d'une ressource ne fait pas de demande d'absences/congés dans sa propre ressource.",
         )
 
-    liste_id = _get_member_scope_liste_id(db, membre)
-    
-    # On autorise tout membre direct (Membre, Admin, Créateur) à faire une demande dans sa liste.
-    # Pour V1 : Le créateur peut créer une demande mais elle restera 'en_attente' 
-    # car il n'a pas de validateur direct supérieur dans la liste.
-    return liste_id
+    if membre.role == "Invité":
+        raise HTTPException(
+            status_code=403,
+            detail="Les invités peuvent consulter la liste, mais ne peuvent pas créer de demande d'absence ou de congé.",
+        )
+
+    return _get_absence_scope_for_member(db, membre)
+
+
+def _has_overlapping_approved_leave(
+    db: Session,
+    *,
+    user_id: str,
+    date_debut,
+    date_fin,
+    exclude_absence_id: Optional[str] = None,
+) -> bool:
+    query = (
+        db.query(AbsenceEtConge)
+        .join(Membre, AbsenceEtConge.id_membre == Membre.id)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+            AbsenceEtConge.statut == "approuvee",
+        )
+    )
+    if exclude_absence_id:
+        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+    return any(
+        _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin)
+        for absence in query.all()
+    )
+
+
+def _direct_resource_members(db: Session, *, resource_type: str, resource_id: str, role: Optional[str] = None) -> list[Membre]:
+    query = db.query(Membre).filter(Membre.statut == "Actif")
+    if resource_type == "liste":
+        query = query.filter(Membre.id_liste == resource_id)
+    elif resource_type == "espace":
+        query = query.filter(
+            Membre.id_espace == resource_id,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    else:
+        return []
+    if role:
+        query = query.filter(Membre.role == role)
+    return query.all()
+
+
+def _available_direct_admins(
+    db: Session,
+    *,
+    resource_type: str,
+    resource_id: str,
+    date_debut,
+    date_fin,
+    exclude_absence_id: Optional[str] = None,
+) -> list[Membre]:
+    admins = _direct_resource_members(db, resource_type=resource_type, resource_id=resource_id, role="Administrateur")
+    return [
+        admin
+        for admin in admins
+        if admin.id_utilisateur and not _has_overlapping_approved_leave(
+            db,
+            user_id=admin.id_utilisateur,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            exclude_absence_id=exclude_absence_id,
+        )
+    ]
+
+
+def _user_direct_role_in_resource(db: Session, *, user_id: str, resource_type: str, resource_id: str) -> Optional[str]:
+    query = db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif",
+    )
+    if resource_type == "liste":
+        query = query.filter(Membre.id_liste == resource_id)
+    elif resource_type == "espace":
+        query = query.filter(
+            Membre.id_espace == resource_id,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    else:
+        return None
+    membre = query.first()
+    return membre.role if membre else None
 
 
 def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence, _membre = _require_absence_read_access(db, absence_id, current_user_id)
     target_membre = _get_member_or_404(db, absence.id_membre)
-    liste_id = _get_member_scope_liste_id(db, target_membre)
-    
-    # 1. Tâches assignées à l'utilisateur dans cette liste
-    assigned_tasks = (
-        db.query(Tache)
-        .join(Membre, Tache.id == Membre.id_tache)
-        .filter(
-            Membre.id_utilisateur == target_membre.id_utilisateur,
-            Membre.statut == "Actif",
-            Tache.id_liste == liste_id,
-            Tache.statut != "terminé"
+    scope_type, scope_id = _get_absence_scope_for_member(db, target_membre)
+
+    assigned_tasks: list[Tache] = []
+    sole_admin_resources: list[dict] = []
+    sole_creator_resources: list[dict] = []
+
+    if scope_type == "liste":
+        assigned_tasks = (
+            db.query(Tache)
+            .join(Membre, Tache.id == Membre.id_tache)
+            .filter(
+                Membre.id_utilisateur == target_membre.id_utilisateur,
+                Membre.statut == "Actif",
+                Tache.id_liste == scope_id,
+                Tache.statut != "terminé",
+            )
+            .all()
         )
-        .all()
-    )
-    
+
+    if scope_type == "espace":
+        direct_lists = db.query(Liste).filter(Liste.id_espace == scope_id).all()
+        direct_subspaces = db.query(Espace).filter(Espace.id_espace_parent == scope_id).all()
+        direct_children = [
+            *[
+                {"type": "liste", "id": liste.id, "nom": liste.nom, "resource_type": "liste"}
+                for liste in direct_lists
+            ],
+            *[
+                {"type": "sous-espace", "id": espace.id, "nom": espace.nom, "resource_type": "espace"}
+                for espace in direct_subspaces
+            ],
+        ]
+
+        for child in direct_children:
+            child_role = _user_direct_role_in_resource(
+                db,
+                user_id=target_membre.id_utilisateur,
+                resource_type=child["resource_type"],
+                resource_id=child["id"],
+            )
+            available_admins = _available_direct_admins(
+                db,
+                resource_type=child["resource_type"],
+                resource_id=child["id"],
+                date_debut=absence.date_debut,
+                date_fin=absence.date_fin,
+                exclude_absence_id=absence.id,
+            )
+
+            if target_membre.role == "Membre" and child_role == "Administrateur":
+                other_available_admins = [
+                    admin for admin in available_admins
+                    if admin.id_utilisateur != target_membre.id_utilisateur
+                ]
+                if not other_available_admins:
+                    sole_admin_resources.append({
+                        "type": child["type"],
+                        "id": child["id"],
+                        "nom": child["nom"],
+                    })
+
+            if target_membre.role == "Administrateur" and child_role == "Créateur":
+                if not available_admins:
+                    sole_creator_resources.append({
+                        "type": child["type"],
+                        "id": child["id"],
+                        "nom": child["nom"],
+                    })
+
     overlapping = []
     overdue = []
     high_priority = []
-    
     now = datetime.utcnow()
-    
+
     for task in assigned_tasks:
-        # Chevauchement
         if _date_overlap(absence.date_debut, absence.date_fin, task.date_debut, task.date_fin_prevue):
             overlapping.append(task)
             if task.priorite in {"haute", "critique"}:
                 high_priority.append(task)
-        
-        # En retard
+
         if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
             overdue.append(task)
-            
-    # Conflits avec d'autres absences
+
     conflicts = detect_leave_conflicts_for_member(
-        db, 
-        member_id=absence.id_membre, 
-        date_debut=absence.date_debut, 
+        db,
+        member_id=absence.id_membre,
+        date_debut=absence.date_debut,
         date_fin=absence.date_fin,
-        exclude_absence_id=absence.id
+        exclude_absence_id=absence.id,
     )
-    
+
     risk_level = "faible"
-    if high_priority or overdue:
+    if high_priority or overdue or sole_admin_resources or sole_creator_resources:
         risk_level = "eleve"
     elif overlapping or conflicts:
         risk_level = "moyen"
@@ -207,19 +360,25 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         risk_reasons.append(f"{len(overlapping)} tâche(s) chevauchent la période")
     if conflicts:
         risk_reasons.append(f"{len(conflicts)} autre(s) demande(s) sur la même période")
+    if sole_admin_resources:
+        risk_reasons.append(f"Seul administrateur disponible dans {len(sole_admin_resources)} ressource(s) enfant(s) directe(s)")
+    if sole_creator_resources:
+        risk_reasons.append(f"Créateur direct de {len(sole_creator_resources)} ressource(s) enfant(s) sans administrateur disponible")
 
     if risk_level == "eleve":
-        recommendation = "Impact élevé : vérifiez les tâches critiques ou en retard avant de valider."
+        recommendation = "Impact élevé : sécurisez les ressources enfants ou les tâches critiques avant d'approuver."
     elif risk_level == "moyen":
-        recommendation = "Impact modéré : quelques éléments se chevauchent avec la période demandée."
+        recommendation = "Impact modéré : vérifiez les chevauchements avant décision."
     else:
-        recommendation = "Aucun impact majeur détecté. La demande peut être traitée sereinement."
+        recommendation = "Impact faible : aucun risque opérationnel majeur détecté."
 
     return {
         "overlapping_tasks": overlapping,
         "overdue_tasks": overdue,
         "high_priority_tasks": high_priority,
         "conflicting_absences": conflicts,
+        "sole_admin_resources": sole_admin_resources,
+        "sole_creator_resources": sole_creator_resources,
         "risk_level": risk_level,
         "recommendation": recommendation,
         "risk_reasons": risk_reasons,
@@ -250,7 +409,8 @@ def _ensure_no_overlapping_active_leave(
     db: Session,
     *,
     user_id: str,
-    liste_id: str,
+    scope_type: str,
+    scope_id: str,
     date_debut,
     date_fin,
     exclude_absence_id: Optional[str] = None,
@@ -267,10 +427,19 @@ def _ensure_no_overlapping_active_leave(
         .filter(
             Membre.id_utilisateur == user_id,
             Membre.statut == "Actif",
-            Membre.id_liste == liste_id,
             AbsenceEtConge.statut.in_(["en_attente", "approuvee"]),
         )
     )
+    if scope_type == "liste":
+        query = query.filter(Membre.id_liste == scope_id)
+    elif scope_type == "espace":
+        query = query.filter(
+            Membre.id_espace == scope_id,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Scope de demande invalide.")
     if exclude_absence_id:
         query = query.filter(AbsenceEtConge.id != exclude_absence_id)
 
@@ -294,14 +463,18 @@ def detect_leave_conflicts_for_member(
     exclude_absence_id: Optional[str] = None,
 ) -> list[AbsenceEtConge]:
     membre = _get_member_or_404(db, member_id)
-    liste_id = _get_member_scope_liste_id(db, membre)
+    scope_type, scope_id = _get_absence_scope_for_member(db, membre)
 
-    sibling_member_ids = [
-        item.id
-        for item in db.query(Membre)
-        .filter(Membre.id_liste == liste_id, Membre.statut == "Actif")
-        .all()
-    ]
+    siblings_query = db.query(Membre).filter(Membre.statut == "Actif")
+    if scope_type == "liste":
+        siblings_query = siblings_query.filter(Membre.id_liste == scope_id)
+    else:
+        siblings_query = siblings_query.filter(
+            Membre.id_espace == scope_id,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    sibling_member_ids = [item.id for item in siblings_query.all()]
 
     conflicts: list[AbsenceEtConge] = []
     for absence in (
@@ -319,6 +492,46 @@ def detect_leave_conflicts_for_member(
     return conflicts
 
 
+def _validate_absence_dates(date_debut: Any, date_fin: Any = None):
+    """
+    Valide la cohérence des dates d'absence/congé.
+    """
+    if not date_debut:
+        raise HTTPException(status_code=400, detail="La date de début est obligatoire.")
+    
+    try:
+        # Conversion si nécessaire
+        start_date = date_debut if isinstance(date_debut, datetime) else datetime.fromisoformat(str(date_debut).replace('Z', '+00:00'))
+        
+        # Vérification de l'année (réaliste)
+        if start_date.year < 2000 or start_date.year > 2100:
+            raise HTTPException(status_code=400, detail=f"L'année {start_date.year} n'est pas valide. Veuillez saisir une année entre 2000 et 2100.")
+
+        # Empêcher les dates dans le passé
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        check_start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        if check_start < today:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"La date de début ({start_date.strftime('%d/%m/%Y')}) ne peut pas être dans le passé."
+            )
+        
+        if date_fin:
+            end_date = date_fin if isinstance(date_fin, datetime) else datetime.fromisoformat(str(date_fin).replace('Z', '+00:00'))
+            
+            if end_date.year < 2000 or end_date.year > 2100:
+                raise HTTPException(status_code=400, detail=f"L'année {end_date.year} n'est pas valide.")
+            
+            if end_date < start_date:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"La date de fin ({end_date.strftime('%d/%m/%Y')}) ne peut pas être antérieure à la date de début ({start_date.strftime('%d/%m/%Y')})."
+                )
+    except (ValueError, TypeError) as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=400, detail="Format de date invalide.")
+
+
 def create_leave_request(
     db: Session,
     *,
@@ -334,11 +547,15 @@ def create_leave_request(
     conge_interrompu_at=None,
 ) -> AbsenceEtConge:
     membre = _get_member_or_404(db, id_membre)
-    liste_id = _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
+    scope_type, scope_id = _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
+    
+    _validate_absence_dates(date_debut, date_fin)
+
     _ensure_no_overlapping_active_leave(
         db,
         user_id=membre.id_utilisateur,
-        liste_id=liste_id,
+        scope_type=scope_type,
+        scope_id=scope_id,
         date_debut=date_debut,
         date_fin=date_fin,
     )
@@ -391,6 +608,8 @@ def list_accessible_absences(
         query = query.filter(AbsenceEtConge.id_membre == member_id)
     if statut:
         query = query.filter(AbsenceEtConge.statut == _normalize_absence_status(statut))
+    else:
+        query = query.filter(AbsenceEtConge.statut != "annulee")
     if date_from:
         query = query.filter(AbsenceEtConge.date_debut >= date_from)
     if date_to:
@@ -399,24 +618,28 @@ def list_accessible_absences(
     absences = query.limit(max(limit, 1) * 6).all()
     results: list[dict] = []
     for absence in absences:
+        membre = _get_member_or_404(db, absence.id_membre)
+        
+        # Filtre exclusif et direct
+        if liste_id:
+            if membre.id_liste != liste_id:
+                continue
+        elif espace_id:
+            if membre.id_espace != espace_id or membre.id_liste is not None:
+                continue
+        elif workspace_id:
+            if membre.id_workspace != workspace_id or membre.id_espace is not None or membre.id_liste is not None:
+                continue
+        
         try:
             _require_absence_read_access(db, absence.id, current_user_id)
         except HTTPException:
             continue
-        membre = _get_member_or_404(db, absence.id_membre)
-        member_liste_id = _get_member_scope_liste_id(db, membre)
-        if liste_id and member_liste_id != liste_id:
-            continue
-        if not liste_id and espace_id and (not membre.liste or membre.liste.id_espace != espace_id):
-            continue
-        if not liste_id and workspace_id:
-            member_workspace_id = membre.liste.id_workspace if membre.liste else None
-            if membre.liste and membre.liste.id_espace and membre.liste.espace:
-                member_workspace_id = membre.liste.espace.id_workspace
-            if member_workspace_id != workspace_id:
-                continue
+            
         payload = _serialize_absence(absence)
-        payload["liste_id"] = member_liste_id
+        payload["liste_id"] = membre.id_liste
+        payload["espace_id"] = membre.id_espace
+        payload["workspace_id"] = membre.id_workspace
         payload["owner_user_id"] = membre.id_utilisateur
         results.append(payload)
         if len(results) >= limit:
@@ -456,15 +679,21 @@ def update_absence(
 
     next_member_id = updates.get("id_membre") or absence.id_membre
     next_member = _get_member_or_404(db, next_member_id)
-    next_liste_id = _get_member_scope_liste_id(db, next_member)
+    next_scope_type, next_scope_id = _get_absence_scope_for_member(db, next_member)
     next_date_debut = updates.get("date_debut") or absence.date_debut
     next_date_fin = updates.get("date_fin") if "date_fin" in updates else absence.date_fin
+    
+    # Validation des dates si elles changent
+    if "date_debut" in updates or "date_fin" in updates:
+        _validate_absence_dates(next_date_debut, next_date_fin)
+
     next_status = updates.get("statut") or absence.statut
     if next_status in {"en_attente", "approuvee"}:
         _ensure_no_overlapping_active_leave(
             db,
             user_id=next_member.id_utilisateur,
-            liste_id=next_liste_id,
+            scope_type=next_scope_type,
+            scope_id=next_scope_id,
             date_debut=next_date_debut,
             date_fin=next_date_fin,
             exclude_absence_id=absence.id,
@@ -491,24 +720,44 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
         )
     
     # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
+    # On cherche le rôle de l'acteur (celui qui approuve) dans la Même ressource que la demande
     actor_direct_member = db.query(Membre).filter(
         Membre.id_liste == target_membre.id_liste,
+        Membre.id_espace == target_membre.id_espace, # Gère le cas Espace ou Liste
         Membre.id_utilisateur == current_user_id,
         Membre.statut == "Actif"
     ).first()
     
     if not actor_direct_member:
-        # TODO: Gérer l'héritage parent (Workspace/Espace) en V2
-        raise HTTPException(status_code=403, detail="Seul un gestionnaire direct de la liste peut valider en V1.")
+        res_label = "l'espace" if target_membre.id_espace else "la liste"
+        raise HTTPException(status_code=403, detail=f"Seul un gestionnaire direct de {res_label} peut valider.")
 
     if target_membre.role == "Membre":
-        if actor_direct_member.role not in {"Administrateur", "Créateur"}:
+        if actor_direct_member.role == "Créateur":
+            # Si c'est le créateur, on vérifie s'il y a des admins directs DISPONIBLES
+            active_admins = db.query(Membre).filter(
+                Membre.id_liste == target_membre.id_liste,
+                Membre.id_espace == target_membre.id_espace,
+                Membre.role == "Administrateur",
+                Membre.statut == "Actif"
+            ).all()
+            
+            available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
+            
+            if available_admins:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Seul un Administrateur disponible peut valider la demande d'un Membre."
+                )
+        elif actor_direct_member.role != "Administrateur":
             raise HTTPException(status_code=403, detail="Seul un Administrateur ou le Créateur peut valider la demande d'un Membre.")
+            
     elif target_membre.role == "Administrateur":
         if actor_direct_member.role != "Créateur":
-            raise HTTPException(status_code=403, detail="Seul le Créateur de la liste peut valider la demande d'un Administrateur.")
+            raise HTTPException(status_code=403, detail="Seul le Créateur peut valider la demande d'un Administrateur.")
+            
     elif target_membre.role == "Créateur":
-        raise HTTPException(status_code=403, detail="La demande du Créateur doit être validée par la hiérarchie supérieure (Espace/Workspace).")
+        raise HTTPException(status_code=403, detail="La demande du Créateur doit être validée par la hiérarchie supérieure.")
 
     absence.statut = "approuvee"
     absence.statut_date = datetime.utcnow()
@@ -532,21 +781,41 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
     actor_direct_member = db.query(Membre).filter(
         Membre.id_liste == target_membre.id_liste,
+        Membre.id_espace == target_membre.id_espace,
         Membre.id_utilisateur == current_user_id,
         Membre.statut == "Actif"
     ).first()
     
     if not actor_direct_member:
-        raise HTTPException(status_code=403, detail="Seul un gestionnaire direct de la liste peut rejeter en V1.")
+        res_label = "l'espace" if target_membre.id_espace else "la liste"
+        raise HTTPException(status_code=403, detail=f"Seul un gestionnaire direct de {res_label} peut rejeter.")
 
     if target_membre.role == "Membre":
-        if actor_direct_member.role not in {"Administrateur", "Créateur"}:
+        if actor_direct_member.role == "Créateur":
+            # Si c'est le créateur, on vérifie s'il y a des admins directs DISPONIBLES
+            active_admins = db.query(Membre).filter(
+                Membre.id_liste == target_membre.id_liste,
+                Membre.id_espace == target_membre.id_espace,
+                Membre.role == "Administrateur",
+                Membre.statut == "Actif"
+            ).all()
+            
+            available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
+            
+            if available_admins:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Seul un Administrateur disponible peut rejeter la demande d'un Membre."
+                )
+        elif actor_direct_member.role != "Administrateur":
             raise HTTPException(status_code=403, detail="Seul un Administrateur ou le Créateur peut rejeter la demande d'un Membre.")
+            
     elif target_membre.role == "Administrateur":
         if actor_direct_member.role != "Créateur":
-            raise HTTPException(status_code=403, detail="Seul le Créateur de la liste peut rejeter la demande d'un Administrateur.")
+            raise HTTPException(status_code=403, detail="Seul le Créateur peut rejeter la demande d'un Administrateur.")
+            
     elif target_membre.role == "Créateur":
-        raise HTTPException(status_code=403, detail="La demande du Créateur ne devrait pas exister (V1).")
+        raise HTTPException(status_code=403, detail="La demande du Créateur ne peut être rejetée que par la hiérarchie supérieure.")
 
     absence.statut = "rejetee"
     absence.statut_date = datetime.utcnow()
@@ -571,20 +840,24 @@ def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> Absen
 def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence, _membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
     
-    # Règle Métier : Le demandeur peut annuler AVANT la date de début.
+    # Règle Métier : 
+    # 1. Le demandeur peut annuler à tout moment si la demande est EN ATTENTE.
+    # 2. Si la demande est APPROUVÉE, il ne peut annuler que SI elle n'a pas encore commencé.
     if actor_kind == "owner":
-        # On ne peut pas annuler si c'est déjà commencé
-        if datetime.utcnow() >= absence.date_debut:
-            raise HTTPException(
-                status_code=403,
-                detail="Une demande ne peut plus être annulée après sa date de début.",
-            )
+        if absence.statut == "approuvee":
+            # On ne peut pas annuler si c'est déjà commencé (Aujourd'hui >= Date début)
+            # "date_debut n'est pas encore là" signifie strictement futur.
+            if datetime.utcnow().date() >= absence.date_debut.date():
+                raise HTTPException(
+                    status_code=403,
+                    detail="Une demande approuvée ne peut plus être annulée une fois que la date de début est arrivée.",
+                )
         
-        # On peut annuler si c'est en attente ou approuvé
+        # On peut annuler si c'est en attente ou approuvé (avec la condition ci-dessus)
         if absence.statut not in {"en_attente", "approuvee"}:
             raise HTTPException(
                 status_code=403,
-                detail="Vous ne pouvez annuler qu'une demande en attente ou approuvée.",
+                detail=f"Vous ne pouvez pas annuler une demande avec le statut '{absence.statut}'.",
             )
     
     # Pour un manager, on autorise l'annulation de toute demande non terminée
@@ -602,19 +875,19 @@ def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     return _serialize_absence(absence)
 
 
-def get_user_availability_for_liste(
+def get_user_availability(
     db: Session, 
     *, 
-    liste_id: str, 
+    resource_id: str, 
     user_ids: list[str],
     reference_date: Optional[datetime] = None
 ) -> list[dict]:
     if not reference_date:
         reference_date = datetime.utcnow()
         
-    # On récupère tous les membres actifs de la liste pour ces utilisateurs
+    # On récupère tous les membres actifs de la ressource (workspace, espace ou liste)
     active_members = db.query(Membre).filter(
-        Membre.id_liste == liste_id,
+        ((Membre.id_liste == resource_id) | (Membre.id_espace == resource_id) | (Membre.id_workspace == resource_id)),
         Membre.id_utilisateur.in_(user_ids),
         Membre.statut == "Actif"
     ).all()

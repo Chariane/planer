@@ -8,6 +8,7 @@ import Modal from '../../../components/ui/Modal';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../../../services/api';
+import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 import { plannerToolsService } from '../../../services/plannerTools.service';
 import type { Task } from '../../../types';
 
@@ -58,7 +59,7 @@ interface ListViewProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void | Promise<void>;
   onAssignTask: (task: Task) => void;
-  onUpdateTaskStatus?: (taskId: string, status: string) => Promise<void>;
+  onUpdateTaskStatus?: (taskId: string, status: Task['status']) => Promise<void>;
   onAddChecklist?: (taskId: string, texte: string) => Promise<void>;
   onToggleChecklist?: (taskId: string, checklistId: string, currentChecked: boolean) => Promise<void>;
   onDeleteChecklist?: (taskId: string, checklistId: string) => Promise<void>;
@@ -70,6 +71,7 @@ interface ListViewProps {
   canAssignTask?: (task: Task) => boolean;
   canAttachTaskFiles?: (task: Task) => boolean;
   canManageTaskFiles?: (task: Task) => boolean;
+  focusTaskId?: string | null;
 }
 
 type TaskFile = {
@@ -382,9 +384,7 @@ function TaskDetailModal({
             {task.assignees.length > 0 ? (
               task.assignees.map(assignee => (
                 <div key={assignee.id} className="inline-flex items-center gap-2 px-3 py-1.5 bg-theme-surface-hover border border-theme-border-subtle rounded-xl shadow-sm">
-                  <div className="h-6 w-6 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center text-[10px] font-black">
-                    {assignee.name.charAt(0).toUpperCase()}
-                  </div>
+                  <MemberAvatar member={assignee} size="xs" />
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-theme-main">{assignee.name}</span>
                     <span className="text-[9px] font-black uppercase text-theme-muted opacity-40">{roleLabels[assignee.role] || assignee.role}</span>
@@ -463,19 +463,17 @@ function TaskDetailModal({
                     className="w-full rounded-2xl border border-theme-border-subtle/40 bg-theme-surface/40 p-3 text-left transition-all hover:border-secondary/30 hover:bg-theme-surface-hover"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${
-                        childTask.status === 'terminé'
+                      <div className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${childTask.status === 'terminé'
                           ? 'bg-emerald-500/10 text-emerald-500'
                           : 'bg-secondary/10 text-secondary'
-                      }`}>
+                        }`}>
                         {childTask.status === 'terminé' ? <CheckCircle size={18} /> : <FileText size={17} />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-sm font-black ${
-                          childTask.status === 'terminé'
+                        <p className={`truncate text-sm font-black ${childTask.status === 'terminé'
                             ? 'line-through text-theme-muted opacity-60'
                             : 'text-theme-main'
-                        }`}>
+                          }`}>
                           {childTask.title}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -530,6 +528,7 @@ export default function ListView({
   canAssignTask,
   canAttachTaskFiles,
   canManageTaskFiles,
+  focusTaskId = null,
 }: ListViewProps) {
   const { user } = useAuth();
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
@@ -742,7 +741,31 @@ export default function ListView({
     return acc;
   }, {} as Record<string, Task[]>);
 
-  const topLevelTasks = filteredTasks.filter(task => !task.parentTaskId);
+  // Logique de filtrage Focus Mode
+  const getTopLevelInFocus = () => {
+    const allFiltered = filteredTasks;
+    if (!focusTaskId) return allFiltered.filter(task => !task.parentTaskId);
+
+    // Si on a un focusTaskId, on veut montrer la tâche et ses parents directs pour le contexte
+    const focusedTask = allFiltered.find(t => t.id === focusTaskId);
+    if (!focusedTask) return allFiltered.filter(task => !task.parentTaskId);
+
+    // On récupère toute la lignée descendante
+    const descendants: Task[] = [];
+    const stack = [focusedTask];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      descendants.push(current);
+      const children = allFiltered.filter(t => t.parentTaskId === current.id);
+      stack.push(...children);
+    }
+
+    // On retourne uniquement l'entrée du focus (la tâche elle-même)
+    // Mais on s'assure qu'elle est traitée comme un top-level dans le rendu groupedTasks
+    return [focusedTask];
+  };
+
+  const topLevelTasks = getTopLevelInFocus();
 
   const groupedTasks = Object.keys(statusLabels).reduce((acc, status) => {
     acc[status] = topLevelTasks.filter(t => t.status === status);
@@ -830,9 +853,7 @@ export default function ListView({
 
           <div className="flex items-center -space-x-2">
             {task.assignees.slice(0, 3).map((a, i) => (
-              <div key={i} className="h-7 w-7 rounded-lg border-2 border-theme-border-subtle bg-theme-surface flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
-                {a.name.charAt(0).toUpperCase()}
-              </div>
+              <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
             ))}
           </div>
 
@@ -1147,9 +1168,7 @@ export default function ListView({
 
                           <div className="flex items-center -space-x-2">
                             {task.assignees.slice(0, 3).map((a, i) => (
-                              <div key={i} className="h-7 w-7 rounded-lg bg-theme-surface border-2 border-theme-border-subtle flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
-                                {a.name.charAt(0).toUpperCase()}
-                              </div>
+                              <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
                             ))}
                             {task.assignees.length > 3 && (
                               <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">

@@ -8,7 +8,7 @@ import type { Task } from '../../../types';
 
 type NewTaskInput = Omit<Task, 'id' | 'createdAt' | 'progression'>;
 
-function transformTask(apiTask: any): Task {
+export function transformTask(apiTask: any): Task {
   return {
     id: apiTask.id,
     title: apiTask.titre,

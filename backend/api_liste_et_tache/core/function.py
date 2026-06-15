@@ -14,8 +14,10 @@ from ..models import (
     Rapport,
     AbsenceEtConge,
 )
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from typing import Any, Optional
+from datetime import datetime
 
 # Constantes de rôles (selon les schémas existants)
 WORKSPACE_OWNER_ROLE = "Créateur"
@@ -104,6 +106,23 @@ ROLE_HIERARCHY = {
     WORKSPACE_ADMIN_ROLE: 3,
     WORKSPACE_OWNER_ROLE: 4,
 }
+
+
+def _is_user_available_now(db: Session, user_id: str) -> bool:
+    """Checks if the user has an approved absence covering the current date."""
+    now = datetime.now()
+    ref_date = now.date()
+
+    # We check if the user is currently on an approved absence in any role
+    # Note: We join on Membre to ensure the absence is linked to a valid role in the system
+    absence = db.query(AbsenceEtConge).join(Membre, AbsenceEtConge.id_membre == Membre.id).filter(
+        Membre.id_utilisateur == user_id,
+        AbsenceEtConge.statut == "approuvee",
+        func.date(AbsenceEtConge.date_debut) <= ref_date,
+        (AbsenceEtConge.date_fin == None) | (func.date(AbsenceEtConge.date_fin) >= ref_date)
+    ).first()
+
+    return absence is None
 
 # -----------------------------------------------
 # Helpers d'accès — Workspace
@@ -391,6 +410,26 @@ def validate_role_hierarchy(
 # -----------------------------------------------
 # Helpers d'accès — Espace
 # -----------------------------------------------
+
+def _get_all_descendant_espace_ids(db: Session, espace_id: str) -> list[str]:
+    """Récupère récursivement tous les IDs des sous-espaces d'un espace donné."""
+    all_ids = []
+    
+    def collect(parent_id: str):
+        children = db.query(Espace.id).filter(Espace.id_espace_parent == parent_id).all()
+        for child in children:
+            all_ids.append(child.id)
+            collect(child.id)
+            
+    collect(espace_id)
+    return all_ids
+
+
+def _get_all_descendant_lists(db: Session, espace_id: str) -> list[Liste]:
+    """Récupère toutes les listes d'un espace et de sa descendance récursive."""
+    espace_ids = [espace_id] + _get_all_descendant_espace_ids(db, espace_id)
+    return db.query(Liste).filter(Liste.id_espace.in_(espace_ids)).all()
+
 
 def _get_espace_or_404(db: Session, espace_id: str) -> Espace:
     espace = db.query(Espace).filter(Espace.id == espace_id).first()
@@ -1432,6 +1471,13 @@ def _require_direct_list_creator_grant(db: Session, liste_id: str, current_user_
     raise HTTPException(status_code=403, detail="Cette action est reservee au createur direct de la liste.")
 
 
+def _require_direct_espace_admin_grant(db: Session, espace_id: str, current_user_id: str) -> Membre:
+    membre = _get_espace_member_record(db, espace_id, current_user_id)
+    if membre and membre.statut == "Actif" and membre.role == ESPACE_ADMIN_ROLE:
+        return membre
+    raise HTTPException(status_code=403, detail="Cette action est reservee aux administrateurs directs de l'espace.")
+
+
 def _get_direct_espace_creator_record(db: Session, espace_id: str, user_id: str) -> Membre | None:
     membre = _get_espace_member_record(db, espace_id, user_id)
     if membre and membre.statut == "Actif" and membre.role == ESPACE_OWNER_ROLE:
@@ -1518,13 +1564,18 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
     - le créateur direct ne crée pas de demande dans sa propre liste en V1.
     """
     membre = _get_member_or_404(db, member_id)
-    liste_id = _get_member_scope_liste_id(db, membre)
 
     if membre.id_utilisateur == current_user_id:
-        _require_member_read_access(db, member_id, current_user_id)
+        if membre.id_liste or membre.id_tache:
+            _require_member_read_access(db, member_id, current_user_id)
+        elif membre.id_espace:
+            _require_espace_read_access(db, membre.id_espace, current_user_id)
+        else:
+            _require_member_read_access(db, member_id, current_user_id)
         return membre
 
     if membre.id_liste and membre.role == LISTE_MEMBER_ROLE:
+        liste_id = _get_member_scope_liste_id(db, membre)
         # Les admins directs ET le créateur direct peuvent voir les demandes des membres
         try:
             _require_direct_list_admin_grant(db, liste_id, current_user_id)
@@ -1534,6 +1585,7 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
 
 
     if membre.id_liste and membre.role == LISTE_ADMIN_ROLE:
+        liste_id = _get_member_scope_liste_id(db, membre)
         _require_direct_list_creator_grant(db, liste_id, current_user_id)
         return membre
 
@@ -1541,6 +1593,23 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
         raise HTTPException(
             status_code=403,
             detail="Le createur direct de la liste ne fait pas de demande dans sa propre liste en V1.",
+        )
+
+    if membre.id_espace and membre.id_liste is None and membre.role == ESPACE_MEMBER_ROLE:
+        try:
+            _require_direct_espace_admin_grant(db, membre.id_espace, current_user_id)
+        except HTTPException:
+            _require_direct_espace_creator_grant(db, membre.id_espace, current_user_id)
+        return membre
+
+    if membre.id_espace and membre.id_liste is None and membre.role == ESPACE_ADMIN_ROLE:
+        _require_direct_espace_creator_grant(db, membre.id_espace, current_user_id)
+        return membre
+
+    if membre.id_espace and membre.id_liste is None and membre.role == ESPACE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Le createur direct de l'espace ne fait pas de demande dans son propre espace.",
         )
 
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a cette demande.")
@@ -1652,7 +1721,12 @@ def _require_absence_self_or_management_access(db: Session, absence_id: str, cur
     absence = _get_absence_or_404(db, absence_id)
     membre = _get_member_or_404(db, absence.id_membre)
     if membre.id_utilisateur == current_user_id:
-        _require_member_read_access(db, membre.id, current_user_id)
+        if membre.id_liste or membre.id_tache:
+            _require_member_read_access(db, membre.id, current_user_id)
+        elif membre.id_espace:
+            _require_espace_read_access(db, membre.id_espace, current_user_id)
+        elif membre.id_workspace:
+            _require_workspace_read_access(db, membre.id_workspace, current_user_id)
         return absence, membre, "owner"
     _require_member_workflow_evaluation_access(db, membre.id, current_user_id)
     return absence, membre, "manager"

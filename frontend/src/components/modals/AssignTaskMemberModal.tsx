@@ -2,11 +2,13 @@
 import { useState, useEffect } from 'react';
 import { tacheService } from '../../services/tache.service';
 import { listeService } from '../../services/liste.service';
-import { espaceService } from '../../services/espace.service';
-import { workspaceService } from '../../services/workspace.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
+import { absenceService } from '../../services/absence.service';
+import { AvailabilityBadge } from '../ui/AvailabilityBadge';
+import { MemberAvatar } from '../ui/MemberAvatar';
+import type { UserAvailabilityOut } from '../../types';
 
 interface AssignTaskMemberModalProps {
   tacheId: string;
@@ -22,6 +24,8 @@ interface Member {
   email: string;
   role: string;
   source?: string;
+  photo_base64?: string | null;
+  username?: string;
 }
 
 export default function AssignTaskMemberModal({
@@ -36,6 +40,7 @@ export default function AssignTaskMemberModal({
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
+  const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
 
   // Charger les membres disponibles depuis la liste et ses parents.
   useEffect(() => {
@@ -65,39 +70,14 @@ export default function AssignTaskMemberModal({
         const listMembers = await listeService.getMembers(listeId);
         addCandidates(listMembers, 'Liste');
 
-        const liste = await listeService.getById(listeId);
-        let resolvedWorkspaceId = liste.id_workspace || '';
-
-        if (liste.id_espace) {
-          try {
-            const hierarchy = await espaceService.getHierarchy(liste.id_espace);
-            const spaces = Array.isArray(hierarchy) ? hierarchy : [];
-            for (const space of spaces) {
-              if (!resolvedWorkspaceId && space.id_workspace) {
-                resolvedWorkspaceId = space.id_workspace;
-              }
-              try {
-                const spaceMembers = await espaceService.getMembers(space.id);
-                addCandidates(spaceMembers, `Espace: ${space.nom || 'parent'}`);
-              } catch {
-                // Certains profils n'ont pas le droit de lister tous les parents.
-              }
-            }
-          } catch {
-            // La liste reste assignable via ses membres directs.
-          }
-        }
-
-        if (resolvedWorkspaceId) {
-          try {
-            const workspaceMembers = await workspaceService.getMembers(resolvedWorkspaceId);
-            addCandidates(workspaceMembers, 'Workspace');
-          } catch {
-            // La liste reste assignable via ses membres directs.
-          }
-        }
-
         setMembers(Array.from(byUser.values()));
+
+        // Fetch availability
+        const userIds = Array.from(byUser.keys());
+        if (userIds.length > 0) {
+          const avail = await absenceService.getAvailability(listeId, userIds);
+          setListAvailability(avail);
+        }
       } catch (err) {
         console.error('Erreur chargement membres:', err);
         setMemberError('Impossible de charger les membres');
@@ -170,22 +150,26 @@ export default function AssignTaskMemberModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Assigner des membres à la tâche" size="md">
       <div className="space-y-4">
         {memberError && (
-          <div className="text-red-500 text-sm bg-red-50 p-2 rounded">{memberError}</div>
+          <div className="text-red-500 text-sm bg-red-500/10 border border-red-500/20 p-2 rounded-lg font-medium">{memberError}</div>
         )}
 
         {/* Membres assignés */}
         {assignedMembers.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2 opacity-60">
               Membres assignés ({assignedMembers.length})
             </label>
             <div className="space-y-1">
               {assignedMembers.map(member => (
-                <div key={member.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div key={member.id} className="flex items-center justify-between p-2.5 bg-theme-surface/50 border border-theme-border-subtle rounded-xl shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <MemberAvatar member={member} size="xs" />
+                    <span className="text-sm font-bold text-theme-main">{member.name}</span>
+                    <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} showText size="sm" />
+                  </div>
                   <div>
-                    <span className="text-sm font-medium">{member.name}</span>
-                    <span className="text-xs text-gray-500 ml-2">({member.role})</span>
-                    {member.source && <span className="text-xs text-gray-400 ml-2">{member.source}</span>}
+                    <span className="text-xs text-secondary font-bold ml-2 uppercase tracking-tighter">({member.role})</span>
+                    {member.source && <span className="text-[10px] text-theme-muted ml-2 italic tracking-tight">{member.source}</span>}
                   </div>
                   <Button
                     variant="outline"
@@ -204,19 +188,19 @@ export default function AssignTaskMemberModal({
         {/* Ajouter un membre */}
         {availableMembers.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2 opacity-60">
               Ajouter un membre
             </label>
             <div className="flex gap-2">
               <select
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-secondary"
+                className="flex-1 p-2 border border-theme-border-subtle bg-theme-surface rounded-lg text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
               >
                 <option value="">Sélectionner un membre...</option>
                 {availableMembers.map(member => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} ({member.source || member.role})
+                  <option key={member.id} value={member.id} className={!listAvailability.find(a => a.id_utilisateur === member.id)?.is_available ? 'text-rose-500' : ''}>
+                    {member.name} ({member.source || member.role}) {!listAvailability.find(a => a.id_utilisateur === member.id)?.is_available ? ' [INDISPONIBLE]' : ''}
                   </option>
                 ))}
               </select>
@@ -228,13 +212,13 @@ export default function AssignTaskMemberModal({
         )}
 
         {availableMembers.length === 0 && assignedMembers.length === 0 && !loading && (
-          <div className="text-center text-gray-400 py-4">
+          <div className="text-center text-theme-muted py-6 font-medium italic opacity-60">
             Aucun membre avec le rôle Membre disponible dans la liste, les espaces parents ou le workspace parent.
           </div>
         )}
 
         {loading && (
-          <div className="text-center text-gray-400 py-2">Chargement...</div>
+          <div className="text-center text-theme-muted py-4 font-medium italic opacity-60">Chargement...</div>
         )}
 
         <div className="flex justify-end pt-4">

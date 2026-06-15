@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronRight, FolderTree, Hash,
   FileText, Plus, Edit, Trash2, ListTodo, Settings, X, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Info, Paperclip
+  CheckCircle2, AlertTriangle, Info, Paperclip, ShieldAlert, Users
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { listeService } from '../../services/liste.service';
@@ -126,7 +126,7 @@ export default function LeftSidebar() {
     });
   };
 
-  const openResourceTool = (tool: 'files' | 'reports') => {
+  const openResourceTool = (tool: 'files' | 'reports' | 'absences') => {
     const nextSearch = new URLSearchParams(location.search);
     nextSearch.set('tool', tool);
     navigate(`${location.pathname}?${nextSearch.toString()}`);
@@ -535,22 +535,51 @@ export default function LeftSidebar() {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
         </button>
       )}
+      {activeEntryType === 'list' && activeResourceRole && (
+        <button
+          type="button"
+          onClick={() => openResourceTool('absences')}
+          className="w-full flex items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left text-xs font-bold text-primary transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-theme-sm mt-1"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Absences & Congés</span>
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-40" />
+        </button>
+      )}
     </div>
   );
 
   useEffect(() => {
+    if (!workspaces.length) return;
+
     const idsToOpen = new Set<string>();
-    selectedSpacePath?.forEach(space => idsToOpen.add(space.id));
-    selectedListSpacePath?.forEach(space => idsToOpen.add(space.id));
+
+    // Chemin de l'espace actif
+    if (selectedSpacePath) {
+      selectedSpacePath.forEach(space => idsToOpen.add(space.id));
+    }
+
+    // Chemin de l'espace parent de la liste active
+    if (selectedListSpacePath) {
+      selectedListSpacePath.forEach(space => idsToOpen.add(space.id));
+    }
+
     if (idsToOpen.size === 0) return;
+
     setOpenSpaces(prev => {
       const next = { ...prev };
+      let hasChanged = false;
       idsToOpen.forEach(id => {
-        next[id] = true;
+        if (!next[id]) {
+          next[id] = true;
+          hasChanged = true;
+        }
       });
-      return next;
+      return hasChanged ? next : prev;
     });
-  }, [spaceId, listId, workspaceId, workspaces]);
+  }, [spaceId, listId, workspaceId, workspaces, selectedSpacePath, selectedListSpacePath]);
 
   useEffect(() => {
     if (workspaceId && hasWorkspaceAccess) {
@@ -1311,43 +1340,43 @@ export default function LeftSidebar() {
       )}
 
       {showTreeNavigation && (
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2.5 relative">
-          <h3 className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] pl-1 opacity-80 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-            {navigationTitle}
-          </h3>
-          {canManageSpaceListe && (
-            <div className="relative" ref={createMenuRef}>
-              <button
-                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                className="p-1 rounded-md hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-              {isCreateMenuOpen && (
-                <div className="absolute right-0 mt-1 w-44 bg-theme-surface rounded-lg shadow-2xl z-10 border border-theme-border-subtle py-1.5 animate-slide-up">
-                  <button
-                    onClick={() => openCreateSpaceModal()}
-                    className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
-                  >
-                    <FolderTree className="h-3.5 w-3.5 text-primary" />
-                    <span>Espace</span>
-                  </button>
-                  <button
-                    onClick={() => openCreateListModal(undefined, workspaceId)}
-                    className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
-                  >
-                    <ListTodo className="h-3.5 w-3.5 text-secondary" />
-                    <span>Liste (projet)</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2.5 relative">
+            <h3 className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] pl-1 opacity-80 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+              {navigationTitle}
+            </h3>
+            {canManageSpaceListe && (
+              <div className="relative" ref={createMenuRef}>
+                <button
+                  onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                  className="p-1 rounded-md hover:bg-theme-surface-hover text-theme-muted hover:text-theme-main transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                {isCreateMenuOpen && (
+                  <div className="absolute right-0 mt-1 w-44 bg-theme-surface rounded-lg shadow-2xl z-10 border border-theme-border-subtle py-1.5 animate-slide-up">
+                    <button
+                      onClick={() => openCreateSpaceModal()}
+                      className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
+                    >
+                      <FolderTree className="h-3.5 w-3.5 text-primary" />
+                      <span>Espace</span>
+                    </button>
+                    <button
+                      onClick={() => openCreateListModal(undefined, workspaceId)}
+                      className="w-full text-left px-4 py-2 text-xs text-theme-main hover:bg-theme-surface-hover flex items-center gap-2.5 transition-colors"
+                    >
+                      <ListTodo className="h-3.5 w-3.5 text-secondary" />
+                      <span>Liste (projet)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {renderTree(visibleSpaceRoots)}
         </div>
-        {renderTree(visibleSpaceRoots)}
-      </div>
       )}
 
       {/* Section Projets du workspace (listes sans espace) */}
@@ -1480,6 +1509,11 @@ export default function LeftSidebar() {
                   <ListTodo className="h-4 w-4 text-secondary" /> Créer un projet
                 </button>
               </>
+            )}
+            {contextMenu.canInvite && (
+              <button onClick={() => openInviteModal(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-theme-main hover:bg-theme-surface-hover rounded-lg transition-colors">
+                <Users className="h-4 w-4 text-primary" /> Membres & Invitations
+              </button>
             )}
             {contextMenu.space && canDeleteTargetSpace(contextMenu.space.id) && (
               <button onClick={() => handleDeleteSpace(contextMenu.space)} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">

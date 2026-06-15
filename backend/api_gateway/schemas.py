@@ -259,7 +259,7 @@ class EmailVerificationCodeRequest(BaseModel):
     def validate_code(cls, value: str) -> str:
         code = "".join(char for char in value if char.isdigit())
         if len(code) != 6:
-            raise ValueError("Le code doit contenir exactement 6 chiffres.")
+            raise ValueError("Le format du code est invalide. Celui-ci doit être composé de 6 chiffres.")
         return code
 
 

@@ -87,19 +87,23 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
       console.error('📡 Détail erreur API:', data);
       if (Array.isArray(data.detail)) {
         errorDetail = data.detail
-          .map((item: unknown) => {
-            const detailItem = item as { loc?: unknown; msg?: unknown };
-            const field = Array.isArray(detailItem.loc)
-              ? detailItem.loc.filter((part: unknown) => part !== 'body').join('.')
+          .map((item: any) => {
+            const field = Array.isArray(item.loc)
+              ? item.loc.filter((part: string) => part !== 'body').join('.')
               : '';
-            const message = typeof detailItem.msg === 'string' ? detailItem.msg : JSON.stringify(detailItem.msg || detailItem);
+            const message = typeof item.msg === 'string' ? item.msg : (item.message || JSON.stringify(item));
             return field ? `${field}: ${message}` : message;
           })
           .join('\n');
       } else if (data.detail) {
         errorDetail = typeof data.detail === 'string'
           ? data.detail
-          : JSON.stringify(data.detail);
+          : (data.detail.message || data.detail.msg || JSON.stringify(data.detail));
+      } else if (data.message || data.msg || data.error) {
+        errorDetail = data.message || data.msg || data.error;
+        if (typeof errorDetail !== 'string') {
+          errorDetail = JSON.stringify(errorDetail);
+        }
       } else {
         errorDetail = JSON.stringify(data);
       }

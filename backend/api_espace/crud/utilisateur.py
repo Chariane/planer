@@ -570,6 +570,30 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
     )
     return True
 
+def _user_has_active_membership_in_hierarchical_parents(db: Session, user_id: str, espace: Espace) -> bool:
+    """Verifie si l'utilisateur est deja membre actif d'un parent hierarchique (Workspace ou Espace parent)."""
+    # Parent Espace direct
+    if espace.id_espace_parent:
+        parent_membre = db.query(Membre).filter(
+            Membre.id_espace == espace.id_espace_parent,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif"
+        ).first()
+        if parent_membre:
+            return True
+    
+    # Workspace
+    if espace.id_workspace:
+        ws_membre = db.query(Membre).filter(
+            Membre.id_workspace == espace.id_workspace,
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif"
+        ).first()
+        if ws_membre:
+            return True
+            
+    return False
+
 def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
     """
     Invite un utilisateur a un espace.
@@ -620,7 +644,31 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             )
             db.add(membre)
         
+        # LOGIQUE AUTO-PROMOTION : Si Admin + Membre d'un parent -> Direct Actif
+        if membre_in.role == "Administrateur" and _user_has_active_membership_in_hierarchical_parents(db, target_user.id, espace):
+            membre.statut = "Actif"
+
         commit_or_raise(db, detail="Impossible de creer ou mettre a jour le membre.")
+
+        # Si auto-promu actif, on synchronise immediatement
+        if membre.statut == "Actif":
+            createur_id = (
+                db.query(Membre.id_utilisateur)
+                .filter(
+                    Membre.id_espace == espace_id,
+                    Membre.role == "Créateur",
+                    Membre.statut == "Actif",
+                )
+                .scalar()
+            )
+            sync_resource_member(
+                db,
+                resource_type="espace",
+                resource_id=espace_id,
+                user_id=target_user.id,
+                name=espace.nom,
+                creator_id=createur_id,
+            )
         
         # Token pour utilisateur existant (Contrainte 2)
         token = create_access_token(

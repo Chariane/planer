@@ -6,7 +6,11 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from ..models import Espace, Liste, Membre, Tache, Utilisateur, Workspace
+from ..core.function import (
+    _is_user_available_now,
+    commit_or_raise,
+)
+from ..models import AbsenceEtConge, Espace, Liste, Membre, Tache, Utilisateur, Workspace
 
 
 MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
@@ -173,6 +177,21 @@ def _direct_list_admin_user_ids(db: Session, liste_id: str, *, exclude_user_id: 
     return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
 
 
+def _direct_espace_admin_user_ids(db: Session, espace_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_espace == espace_id,
+            # IMPORTANT: on veut les admins direct de l'espace, donc pas ceux d'une liste dedans
+            Membre.id_liste.is_(None),
+            Membre.statut == "Actif",
+            Membre.role == "Administrateur",
+        )
+        .all()
+    )
+    return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
+
+
 def _direct_list_creator_user_ids(db: Session, liste_id: str, *, exclude_user_id: str | None = None) -> list[str]:
     members = (
         db.query(Membre)
@@ -193,6 +212,21 @@ def _direct_espace_creator_user_ids(db: Session, espace_id: str, *, exclude_user
             Membre.id_espace == espace_id,
             Membre.statut == "Actif",
             Membre.role == "Créateur",
+        )
+        .all()
+    )
+    return _unique_user_ids([member.id_utilisateur for member in members], exclude_user_id=exclude_user_id)
+
+
+def _workspace_admin_user_ids(db: Session, workspace_id: str, *, exclude_user_id: str | None = None) -> list[str]:
+    members = (
+        db.query(Membre)
+        .filter(
+            Membre.id_workspace == workspace_id,
+            Membre.id_liste.is_(None),
+            Membre.id_espace.is_(None),
+            Membre.statut == "Actif",
+            Membre.role == "Administrateur",
         )
         .all()
     )
@@ -255,6 +289,43 @@ def _inherited_list_manager_user_ids(db: Session, liste: Liste, *, exclude_user_
     return _unique_user_ids(user_ids, exclude_user_id=exclude_user_id)
 
 
+def _inherited_espace_manager_user_ids(db: Session, espace: Espace, *, exclude_user_id: str | None = None) -> list[str]:
+    user_ids: list[str | None] = []
+
+    # Parents de l'espace
+    ancestor_ids = _ancestor_espace_ids(db, espace.id_espace_parent)
+    if ancestor_ids:
+        espace_members = (
+            db.query(Membre)
+            .filter(
+                Membre.id_espace.in_(ancestor_ids),
+                Membre.statut == "Actif",
+                Membre.role.in_(MANAGEMENT_ROLES),
+            )
+            .all()
+        )
+        user_ids.extend(member.id_utilisateur for member in espace_members)
+
+    # Workspace
+    if espace.id_workspace:
+        workspace_members = (
+            db.query(Membre)
+            .filter(
+                Membre.id_workspace == espace.id_workspace,
+                Membre.statut == "Actif",
+                Membre.role.in_(MANAGEMENT_ROLES),
+            )
+            .all()
+        )
+        user_ids.extend(member.id_utilisateur for member in workspace_members)
+
+        workspace = db.query(Workspace).filter(Workspace.id == espace.id_workspace).first()
+        if workspace:
+            user_ids.append(workspace.id_utilisateur)
+
+    return _unique_user_ids(user_ids, exclude_user_id=exclude_user_id)
+
+
 def notify_report_created(db: Session, *, report_member: Membre, report_title: str, actor_user_id: str) -> None:
     author = db.query(Utilisateur).filter(Utilisateur.id == report_member.id_utilisateur).first()
     author_name = _display_user(author)
@@ -262,8 +333,7 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
     recipients: list[str] = []
     if report_member.id_liste:
         liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
-        if not liste:
-            return
+        if not liste: return
         resource_name = liste.nom or "une liste"
         message = f"{author_name} a envoyé un rapport dans la liste « {resource_name} » : {report_title}."
         if report_member.role == "Membre":
@@ -272,21 +342,37 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
                 recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
         elif report_member.role == "Administrateur":
             recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+            
     elif report_member.id_espace:
         espace = db.query(Espace).filter(Espace.id == report_member.id_espace).first()
-        if not espace:
-            return
+        if not espace: return
         resource_name = espace.nom or "un espace"
         message = f"{author_name} a envoyé un rapport dans l'espace « {resource_name} » : {report_title}."
-        if report_member.role == "Administrateur":
+        
+        if report_member.role == "Membre":
+            # 1. Les Admins directs reçoivent
+            recipients = _direct_espace_admin_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+            # 2. Si pas d'admin, le Créateur reçoit
+            if not recipients:
+                recipients = _direct_espace_creator_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+        elif report_member.role == "Administrateur":
+            # 3. Les Créateurs reçoivent les rapports des Admins
             recipients = _direct_espace_creator_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+            
     elif report_member.id_workspace:
         workspace = db.query(Workspace).filter(Workspace.id == report_member.id_workspace).first()
-        if not workspace:
-            return
+        if not workspace: return
         resource_name = workspace.nom or "un workspace"
         message = f"{author_name} a envoyé un rapport dans le workspace « {resource_name} » : {report_title}."
-        if report_member.role == "Administrateur":
+        
+        if report_member.role == "Membre":
+            # 1. Les Admins directs du workspace
+            recipients = _workspace_admin_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
+            # 2. Si pas d'admin, le Créateur reçoit
+            if not recipients:
+                recipients = _workspace_creator_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
+        elif report_member.role == "Administrateur":
+            # 3. Le Créateur reçoit les rapports des Admins
             recipients = _workspace_creator_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
     else:
         return
@@ -302,19 +388,49 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
 
 
 def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id: str, is_absence: bool) -> None:
-    liste = db.query(Liste).filter(Liste.id == absence_member.id_liste).first()
-    if not liste:
-        return
+    resource_name = "une ressource"
+    resource_type_label = "la ressource"
+    
+    liste = None
+    espace = None
+    
+    if absence_member.id_liste:
+        liste = db.query(Liste).filter(Liste.id == absence_member.id_liste).first()
+        if liste:
+            resource_name = liste.nom or "une liste"
+            resource_type_label = "la liste"
+    elif absence_member.id_espace:
+        espace = db.query(Espace).filter(Espace.id == absence_member.id_espace).first()
+        if espace:
+            resource_name = espace.nom or "un espace"
+            resource_type_label = "l'espace"
 
     author = db.query(Utilisateur).filter(Utilisateur.id == absence_member.id_utilisateur).first()
     author_name = _display_user(author)
     request_type = "d'absence" if is_absence else "de congé"
-    message = f"{author_name} a créé une demande {request_type} dans la liste « {liste.nom or 'une liste'} »."
+    message = f"{author_name} a créé une demande {request_type} dans {resource_type_label} « {resource_name} »."
 
+    recipients = []
     if absence_member.role == "Membre":
-        recipients = _direct_list_manager_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+        # Logique available Admins -> Creator
+        if absence_member.id_liste:
+            admins = _direct_list_admin_user_ids(db, absence_member.id_liste, exclude_user_id=actor_user_id)
+            creator_ids = _direct_list_creator_user_ids(db, absence_member.id_liste, exclude_user_id=actor_user_id)
+        else:
+            admins = _direct_espace_admin_user_ids(db, absence_member.id_espace, exclude_user_id=actor_user_id)
+            creator_ids = _direct_espace_creator_user_ids(db, absence_member.id_espace, exclude_user_id=actor_user_id)
+            
+        available_admins = [uid for uid in admins if _is_user_available_now(db, uid)]
+        if available_admins:
+            recipients = available_admins
+        else:
+            recipients = creator_ids
     else:
-        recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
+        # Admin requests go to hierarchy
+        if absence_member.id_liste and liste:
+            recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
+        elif absence_member.id_espace and espace:
+            recipients = _inherited_espace_manager_user_ids(db, espace, exclude_user_id=actor_user_id)
 
     for user_id in recipients:
         _create_notification(

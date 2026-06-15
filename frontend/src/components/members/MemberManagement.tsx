@@ -13,10 +13,13 @@ import { sanitizeApiErrorMessage } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { getRoleLabel, ROLES } from '../../lib/roleHierarchy';
-import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../utils/memberDisplay';
+import { getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../utils/memberDisplay';
 import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Member } from '../../types';
+import { absenceService } from '../../services/absence.service';
+import { AvailabilityBadge } from '../ui/AvailabilityBadge';
+import { MemberAvatar } from '../ui/MemberAvatar';
+import type { Member, UserAvailabilityOut } from '../../types';
 
 interface MemberManagementProps {
   workspaceId?: string;
@@ -102,6 +105,7 @@ export default function MemberManagement({
   } | null>(null);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
   const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
+  const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -146,6 +150,18 @@ export default function MemberManagement({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (members.length > 0) {
+      const userIds = members.map(m => m.id).filter(Boolean);
+      const resourceId = listeId || espaceId || workspaceId;
+      if (userIds.length > 0 && resourceId) {
+        absenceService.getAvailability(resourceId, userIds)
+          .then(data => setListAvailability(data))
+          .catch(() => { });
+      }
+    }
+  }, [members, listeId, espaceId, workspaceId]);
 
   useEffect(() => {
     loadMembers();
@@ -302,15 +318,16 @@ export default function MemberManagement({
               >
                 <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
                   <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                    <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-secondary/20 to-primary/20 border border-white/10 flex items-center justify-center overflow-hidden font-black text-secondary text-sm group-hover:shadow-[0_0_15px_rgba(var(--secondary-rgb),0.3)] transition-all">
-                      {getAvatarSrc(member.photo_base64) ? (
-                        <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
-                      ) : (
-                        getInitials(member.name)
-                      )}
-                    </div>
+                    <MemberAvatar
+                      member={member}
+                      size="md"
+                      className="group-hover:shadow-[0_0_15px_rgba(var(--secondary-rgb),0.3)] transition-all"
+                    />
                     <div className="min-w-0">
-                      <p className="font-bold text-theme-main truncate tracking-tight">{member.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                        <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id_utilisateur)} size="sm" showText />
+                        <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
+                      </div>
                       <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider mb-1">{member.email}</p>
                       <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
                         {getRoleLabel(member.role)}
@@ -322,15 +339,15 @@ export default function MemberManagement({
                     <div className="flex items-center gap-2">
                       {canChangeMemberRoles && (
                         <>
-                        {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
-                        <select
-                          value={member.role}
-                          onChange={(e) => handleChangeRole(member.id, e.target.value)}
-                          disabled={updatingMemberId === member.id}
-                          className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
-                        >
-                          {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
-                        </select>
+                          {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleChangeRole(member.id, e.target.value)}
+                            disabled={updatingMemberId === member.id}
+                            className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
+                          >
+                            {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
+                          </select>
                         </>
                       )}
                       {canRemoveMembers && (

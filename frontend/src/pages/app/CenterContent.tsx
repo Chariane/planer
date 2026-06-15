@@ -14,10 +14,11 @@ import AssignTaskMemberModal from '../../components/modals/AssignTaskMemberModal
 import AssignListMemberModal from '../../components/modals/AssignListMemberModal';
 import TaskFormModal from './modals/TaskFormModal';
 import ListView from './views/ListView';
-import { useTasks } from './hooks/useTasks';
+import { useTasks, transformTask } from './hooks/useTasks';
 import { useTaskChecklists } from './hooks/useTaskChecklists';
 import { espaceService } from '../../services/espace.service';
 import { listeService } from '../../services/liste.service';
+import { tacheService } from '../../services/tache.service';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -29,7 +30,7 @@ import { sanitizeApiErrorMessage } from '../../services/api';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
-  const { workspaceId, spaceId, listId } = useActiveResource();
+  const { workspaceId, spaceId, listId, taskId } = useActiveResource();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -92,7 +93,7 @@ export default function CenterContent() {
 
   // States
   const [activeTab, setActiveTab] = useState<'liste' | 'kanban' | 'gantt' | 'membres' | 'outils'>(availableTabs[0]);
-  const [requestedTool, setRequestedTool] = useState<'files' | 'reports'>('files');
+  const [requestedTool, setRequestedTool] = useState<'files' | 'reports' | 'absences'>('files');
   const [members, setMembers] = useState<Member[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [memberSearchTerm, setMemberSearchTerm] = useState('');
@@ -110,6 +111,7 @@ export default function CenterContent() {
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
   const [isAssignTaskModalOpen, setIsAssignTaskModalOpen] = useState(false);
   const [isAssignListModalOpen, setIsAssignListModalOpen] = useState(false);
+  const [, setIsInitialTaskLoading] = useState(false);
 
   // Hooks
   const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask, addChecklistToTask, toggleTaskChecklist, deleteTaskChecklist } = useTasks(listId);
@@ -122,9 +124,9 @@ export default function CenterContent() {
 
   useEffect(() => {
     const tool = new URLSearchParams(location.search).get('tool');
-    if (tool !== 'files' && tool !== 'reports') return;
+    if (tool !== 'files' && tool !== 'reports' && tool !== 'absences') return;
 
-    setRequestedTool(tool);
+    setRequestedTool(tool as any);
     if (listId) {
       setActiveTab('outils');
     }
@@ -156,6 +158,49 @@ export default function CenterContent() {
     };
     loadListInfo();
   }, [listId]);
+
+  // Support du lien direct vers une tâche (/tache/:id)
+  useEffect(() => {
+    const resolveTaskContext = async () => {
+      if (taskId && !listId) {
+        setIsInitialTaskLoading(true);
+        try {
+          const taskData = await tacheService.getById(taskId);
+          // Rediriger vers la liste parente pour charger le contexte complet
+          // On utilise window.location car changer listId via context nécessite une navigation
+          // mais ici CenterContent est déjà rendu.
+          // En fait, on peut simplement laisser loadTasks faire son boulot si on avait le listId.
+          // Mais useActiveResource est basé sur l'URL. 
+          // Donc on redirige l'utilisateur vers la vue liste avec le taskId pour ouvrir la modale.
+          window.location.href = `/liste/${taskData.id_liste}?taskId=${taskId}`;
+        } catch (err) {
+          console.error("Erreur résolution contexte tâche:", err);
+        } finally {
+          setIsInitialTaskLoading(false);
+        }
+      }
+    };
+    resolveTaskContext();
+  }, [taskId, listId]);
+
+  // Ouvrir automatiquement la modale de tâche si taskId est présent
+  useEffect(() => {
+    if (taskId && listId && tasks.length > 0) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && !editingTask) {
+        openEditTask(task);
+      }
+    } else if (taskId && listId && tasks.length === 0 && !loading) {
+      // Si taskId présent mais pas dans la liste (peut-être une sous-tâche ou décalage)
+      // On essaie de la charger spécifiquement
+      tacheService.getById(taskId).then(apiTask => {
+        const task = transformTask(apiTask);
+        // On l'ajoute temporairement ou on l'ouvre directement
+        setEditingTask(task);
+        setIsTaskModalOpen(true);
+      }).catch(console.error);
+    }
+  }, [taskId, listId, tasks, loading]);
 
   useEffect(() => {
     const resolveListInheritedSpaceRole = async () => {
@@ -593,7 +638,7 @@ export default function CenterContent() {
   }
 
   return (
-      <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6">
       {renderListDiscussionButton()}
       {renderListProgressSummary()}
       {renderListDescription()}
@@ -716,7 +761,7 @@ export default function CenterContent() {
               onEditTask={openEditTask}
               onDeleteTask={deleteTask}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
-              onUpdateTaskStatus={updateTaskStatus}
+              onUpdateTaskStatus={updateTaskStatus as any}
               onAddChecklist={addChecklistToTask}
               onToggleChecklist={toggleTaskChecklist}
               onDeleteChecklist={deleteTaskChecklist}
@@ -728,6 +773,7 @@ export default function CenterContent() {
               canAssignTask={() => canCreateContent}
               canAttachTaskFiles={(task) => canCreateContent || canOperateAssignedTask(task)}
               canManageTaskFiles={() => canCreateContent}
+              focusTaskId={taskId}
             />
           )}
 
@@ -775,6 +821,8 @@ export default function CenterContent() {
             onSubmit={handleTaskSubmit}
             limitedOperational={isTaskModalLimited}
             submitError={taskModalError}
+            onAssignMemberTrigger={() => { if (editingTask) { setSelectedTaskForAssignment(editingTask); setIsAssignTaskModalOpen(true); } }}
+            tasks={tasks}
           />
 
           {(isAdmin || isCreator) && (

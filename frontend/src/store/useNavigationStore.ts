@@ -46,7 +46,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
                 return state.joinedListes.some(l => l.id === id) ||
                     state.ownedWorkspaces.length > 0; // Temporarily permissive for owners while we fix serialization
             case 'tache':
-                return state.joinedTaches.some(t => t.id === id);
+                return state.joinedTaches.some(t => t.id === id) ||
+                    state.joinedListes.length > 0 ||
+                    state.ownedWorkspaces.length > 0;
             default:
                 return false;
         }

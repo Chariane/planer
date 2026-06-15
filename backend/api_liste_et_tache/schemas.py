@@ -745,6 +745,15 @@ class WorkspaceMemberUserOut(BaseModel):
     email: EmailStr
     nom: Optional[str] = None
     prenoms: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 
 class WorkspaceMemberOut(MembreOut):
@@ -757,6 +766,15 @@ class EspaceMemberUserOut(BaseModel):
     email: EmailStr
     nom: Optional[str] = None
     prenoms: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 
 class EspaceMemberOut(MembreOut):
@@ -1004,6 +1022,8 @@ class AbsenceImpactOut(BaseModel):
     overdue_tasks: List[TacheOut] = []
     high_priority_tasks: List[TacheOut] = []
     conflicting_absences: List[AbsenceConflictOut] = []
+    sole_admin_resources: List[dict] = []
+    sole_creator_resources: List[dict] = []
     risk_level: str = "faible"
     recommendation: Optional[str] = None
     risk_reasons: List[str] = []
@@ -1013,6 +1033,10 @@ class UserAvailabilityOut(BaseModel):
     is_available: bool
     current_absence: Optional[AbsenceEtCongeOut] = None
     next_absence_start: Optional[datetime] = None
+
+class UserAvailabilityRequest(BaseModel):
+    user_ids: List[str]
+    reference_date: Optional[datetime] = None
 
 # Canevas
 class CanevasBase(BaseModel):

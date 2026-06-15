@@ -11,6 +11,10 @@ import { getRoleLabel, getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { getMemberContactLabel, getMemberDisplayName, getMemberEmail, getMemberUsername } from '../../utils/memberDisplay';
 import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 import { useAuth } from '../../contexts/AuthContext';
+import { absenceService } from '../../services/absence.service';
+import { AvailabilityBadge } from '../ui/AvailabilityBadge';
+import { MemberAvatar } from '../ui/MemberAvatar';
+import type { UserAvailabilityOut } from '../../types';
 
 interface AssignListMemberModalProps {
   listeId: string;
@@ -30,6 +34,7 @@ interface Member {
   role: string;
   id_liste?: string | null;
   id_tache?: string | null;
+  photo_base64?: string | null;
 }
 
 // Rôles disponibles pour l'ajout à une liste (sans Créateur)
@@ -78,6 +83,7 @@ export default function AssignListMemberModal({
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
   const directCurrentMember = listMembers.find(member => member.id === user?.id);
   const directCurrentRole = directCurrentMember?.role || null;
   const isDirectListAdmin = directCurrentRole === ROLES.ADMIN;
@@ -218,6 +224,17 @@ export default function AssignListMemberModal({
     loadListMembers();
   }, [isOpen, listeId]);
 
+  useEffect(() => {
+    if (listMembers.length > 0 && listeId) {
+      const userIds = listMembers.map(m => m.id).filter(Boolean);
+      if (userIds.length > 0) {
+        absenceService.getAvailability(listeId, userIds)
+          .then(data => setListAvailability(data))
+          .catch(() => { });
+      }
+    }
+  }, [listMembers, listeId]);
+
   const isMemberInList = (memberId: string) => {
     return listMembers.some(m => m.id === memberId && m.id_liste === listeId);
   };
@@ -240,16 +257,16 @@ export default function AssignListMemberModal({
     try {
       const roleToAssign = parentAvailableRoles.includes(selectedRole) ? selectedRole : parentAvailableRoles[0];
       await listeService.assignMember(listeId, selectedMemberId, roleToAssign);
-      
+
       const newMember = parentMembers.find(m => m.id === selectedMemberId);
       if (newMember) {
         setListMembers(prev => [...prev, { ...newMember, role: roleToAssign, id_liste: listeId, id_tache: null }]);
       }
-      
+
       setSuccessMessage(`Membre ajouté avec le rôle ${getRoleLabel(roleToAssign)}`);
       setSelectedMemberId('');
       setSelectedRole(parentAvailableRoles[0]);
-      
+
       setTimeout(() => setSuccessMessage(null), 3000);
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -299,7 +316,7 @@ export default function AssignListMemberModal({
       setSuccessMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(roleToInvite)}`);
       setInviteEmail('');
       setInviteRole('Membre');
-      
+
       setTimeout(() => setSuccessMessage(null), 3000);
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -350,11 +367,10 @@ export default function AssignListMemberModal({
           {canUseParentMemberZone && (
             <button
               onClick={() => setActiveTab('parent')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
-                activeTab === 'parent'
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${activeTab === 'parent'
                   ? 'border-b-2 border-secondary text-secondary'
                   : 'text-theme-muted hover:text-theme-main'
-              }`}
+                }`}
             >
               <Users className="h-4 w-4" />
               Membres du workspace/espace
@@ -362,11 +378,10 @@ export default function AssignListMemberModal({
           )}
           <button
             onClick={() => setActiveTab('external')}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
-              activeTab === 'external'
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${activeTab === 'external'
                 ? 'border-b-2 border-secondary text-secondary'
                 : 'text-theme-muted hover:text-theme-main'
-            }`}
+              }`}
           >
             <Mail className="h-4 w-4" />
             Invitation externe
@@ -516,15 +531,16 @@ export default function AssignListMemberModal({
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {directListMembers.map(member => (
                 <div key={member.id} className="flex items-center justify-between p-2 bg-theme-surface-hover/50 border border-theme-border-subtle rounded-xl">
-                  <div>
+                  <div className="flex items-center gap-2">
+                    <MemberAvatar member={member} size="xs" />
                     <span className="text-sm font-medium text-theme-main">{member.name}</span>
-                    <span className="text-xs text-theme-muted ml-2">({member.email})</span>
+                    <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
+                    <span className="text-xs text-theme-muted italic">({member.email})</span>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    member.role === 'Créateur' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' :
-                    member.role === 'Administrateur' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' :
-                    'bg-secondary/10 text-secondary border border-secondary/20'
-                  }`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${member.role === 'Créateur' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' :
+                      member.role === 'Administrateur' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' :
+                        'bg-secondary/10 text-secondary border border-secondary/20'
+                    }`}>
                     {getRoleLabel(member.role)}
                   </span>
                 </div>

@@ -72,8 +72,9 @@ def _serialize_report(rapport: Rapport) -> dict:
     }
 
 
-def _direct_space_admin_has_created_direct_child(db: Session, *, espace_id: str, user_id: str) -> bool:
-    created_direct_subspace = (
+def _is_creator_of_any_direct_child_in_space(db: Session, *, espace_id: str, user_id: str) -> bool:
+    """Vérifie si l'utilisateur est Créateur d'au moins un sous-espace ou d'une liste directement rattaché à cet espace."""
+    has_subspace_creator = (
         db.query(Membre.id)
         .join(Espace, Membre.id_espace == Espace.id)
         .filter(
@@ -84,10 +85,10 @@ def _direct_space_admin_has_created_direct_child(db: Session, *, espace_id: str,
         )
         .first()
     )
-    if created_direct_subspace:
+    if has_subspace_creator:
         return True
 
-    created_direct_list = (
+    has_list_creator = (
         db.query(Membre.id)
         .join(Liste, Membre.id_liste == Liste.id)
         .filter(
@@ -98,11 +99,12 @@ def _direct_space_admin_has_created_direct_child(db: Session, *, espace_id: str,
         )
         .first()
     )
-    return bool(created_direct_list)
+    return bool(has_list_creator)
 
 
-def _direct_workspace_admin_has_created_direct_child(db: Session, *, workspace_id: str, user_id: str) -> bool:
-    created_direct_space = (
+def _is_creator_of_any_direct_child_in_workspace(db: Session, *, workspace_id: str, user_id: str) -> bool:
+    """Vérifie si l'utilisateur est Créateur d'au moins un espace ou d'une liste directement rattaché à ce workspace."""
+    has_space_creator = (
         db.query(Membre.id)
         .join(Espace, Membre.id_espace == Espace.id)
         .filter(
@@ -114,10 +116,10 @@ def _direct_workspace_admin_has_created_direct_child(db: Session, *, workspace_i
         )
         .first()
     )
-    if created_direct_space:
+    if has_space_creator:
         return True
 
-    created_direct_list = (
+    has_list_creator = (
         db.query(Membre.id)
         .join(Liste, Membre.id_liste == Liste.id)
         .filter(
@@ -128,7 +130,7 @@ def _direct_workspace_admin_has_created_direct_child(db: Session, *, workspace_i
         )
         .first()
     )
-    return bool(created_direct_list)
+    return bool(has_list_creator)
 
 
 def create_report(
@@ -179,33 +181,23 @@ def create_report(
             )
     elif espace_id:
         _require_espace_read_access(db, espace_id, current_user_id)
-        if membre.role != ESPACE_ADMIN_ROLE:
+        # Seuls les Admins qui sont Créateurs d'au moins un fils direct peuvent produire
+        if membre.role == ESPACE_ADMIN_ROLE and _is_creator_of_any_direct_child_in_space(db, espace_id=espace_id, user_id=current_user_id):
+            pass
+        else:
             raise HTTPException(
                 status_code=403,
-                detail="Seuls les administrateurs directs de cet espace peuvent produire un rapport d'espace.",
-            )
-        if not _direct_space_admin_has_created_direct_child(db, espace_id=espace_id, user_id=current_user_id):
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "Pour produire un rapport dans cet espace, vous devez etre administrateur direct "
-                    "et createur direct d'au moins une liste ou d'un sous-espace directement rattache a cet espace."
-                ),
+                detail="Seuls les administrateurs qui sont créateurs directs d'au moins une liste ou un sous-espace peuvent produire un rapport dans cet espace.",
             )
     elif workspace_id:
         _require_workspace_read_access(db, workspace_id, current_user_id)
-        if membre.role != WORKSPACE_ADMIN_ROLE:
+        # Seuls les Admins qui sont Créateurs d'au moins un fils direct peuvent produire
+        if membre.role == WORKSPACE_ADMIN_ROLE and _is_creator_of_any_direct_child_in_workspace(db, workspace_id=workspace_id, user_id=current_user_id):
+            pass
+        else:
             raise HTTPException(
                 status_code=403,
-                detail="Seuls les administrateurs directs de ce workspace peuvent produire un rapport de workspace.",
-            )
-        if not _direct_workspace_admin_has_created_direct_child(db, workspace_id=workspace_id, user_id=current_user_id):
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "Pour produire un rapport dans ce workspace, vous devez etre administrateur direct "
-                    "et createur direct d'au moins une liste ou d'un espace directement rattache a ce workspace."
-                ),
+                detail="Seuls les administrateurs qui sont créateurs directs d'au moins une liste ou un espace peuvent produire un rapport dans ce workspace.",
             )
     else:
         raise HTTPException(

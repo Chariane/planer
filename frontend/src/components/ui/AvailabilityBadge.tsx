@@ -34,14 +34,30 @@ export const AvailabilityBadge: React.FC<AvailabilityBadgeProps> = ({
         <div className="flex items-center gap-2 group relative">
             <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
+                animate={{
+                    scale: 1,
+                    opacity: 1,
+                    boxShadow: !is_available ? [
+                        '0 0 0 0px rgba(244, 63, 94, 0)',
+                        '0 0 0 4px rgba(244, 63, 94, 0.4)',
+                        '0 0 0 0px rgba(244, 63, 94, 0)'
+                    ] : 'none'
+                }}
+                transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                }}
                 className={`${getSizeClasses()} rounded-full ${getBadgeColor()} shadow-sm ring-2 ring-white dark:ring-slate-900`}
                 title={is_available ? 'Disponible' : `Absent: ${current_absence?.motif || 'Sans motif'}`}
             />
 
             {showText && (
-                <span className={`text-xs font-medium ${is_available ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {is_available ? 'Disponible' : 'Absent'}
+                <span className={`text-[10px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md ${is_available
+                    ? 'text-emerald-600 bg-emerald-500/10 border border-emerald-500/20'
+                    : 'text-rose-600 bg-rose-500/10 border border-rose-500/20 animate-pulse'
+                    }`}>
+                    {is_available ? 'Disponible' : 'Indisponible'}
                 </span>
             )}
 

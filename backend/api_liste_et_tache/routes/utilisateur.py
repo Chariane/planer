@@ -60,9 +60,8 @@ from ..crud.absence import (
     finish_leave,
     get_absence,
     get_absence_conflicts,
-    get_absence_impact,
     get_team_calendar,
-    get_user_availability_for_liste,
+    get_user_availability,
     list_accessible_absences,
     reject_leave,
     update_absence,
@@ -138,6 +137,7 @@ from ..schemas import (
     AbsenceConflictOut,
     AbsenceImpactOut,
     UserAvailabilityOut,
+    UserAvailabilityRequest,
     CanevasOut, CanevasCreate, CanevasUpdate,
     SectionOut, SectionCreate, SectionUpdate,
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
@@ -1365,21 +1365,19 @@ def absence_impact_endpoint(
     return get_absence_impact(db, absence_id=absence_id, current_user_id=current_user.id)
 
 
-@router.post("/absences/availability/liste/{liste_id}", response_model=List[UserAvailabilityOut])
+@router.post("/absences/availability/resource/{resource_id}", response_model=List[UserAvailabilityOut])
 def list_availability_endpoint(
-    liste_id: str,
-    user_ids: List[str] = Body(...),
-    reference_date: Optional[datetime] = None,
+    resource_id: str,
+    request: UserAvailabilityRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    # On délègue la vérification d'accès lecture liste
-    _require_list_read_access(db, liste_id, current_user.id)
-    return get_user_availability_for_liste(
+    # On délègue la vérification de la disponibilité à la fonction générique
+    return get_user_availability(
         db, 
-        liste_id=liste_id, 
-        user_ids=user_ids, 
-        reference_date=reference_date
+        resource_id=resource_id, 
+        user_ids=request.user_ids, 
+        reference_date=request.reference_date
     )
 
 

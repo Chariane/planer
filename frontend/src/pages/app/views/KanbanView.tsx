@@ -6,6 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { motion, AnimatePresence } from 'framer-motion';
 import { GripVertical, Calendar, AlertCircle, CheckCircle, GitBranch, ListChecks } from 'lucide-react';
 import type { Task } from '../../../types';
+import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
 const priorityLabels: Record<string, string> = {
   basse: 'Basse',
@@ -165,9 +166,7 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
           <div className="flex items-center -space-x-2">
             {task.assignees.length > 0 ? (
               task.assignees.slice(0, 3).map((a, i) => (
-                <div key={i} className="h-7 w-7 rounded-lg bg-theme-surface border-2 border-theme-border-subtle flex items-center justify-center text-[10px] font-black text-secondary shadow-sm" title={a.name}>
-                  {a.name.charAt(0).toUpperCase()}
-                </div>
+                <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
               ))
             ) : (
               <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border border-dashed border-theme-border-subtle flex items-center justify-center text-theme-muted opacity-30">

@@ -1,0 +1,14 @@
+2026-06-13 21:46:18,891 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for n67714829@gmail.com
+2026-06-13 21:46:22,138 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to n67714829@gmail.com
+2026-06-13 21:48:49,484 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for n67714829@gmail.com
+2026-06-13 21:48:51,965 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to n67714829@gmail.com
+2026-06-13 21:55:20,970 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for n67714829@gmail.com
+2026-06-13 21:55:25,962 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to n67714829@gmail.com
+2026-06-13 22:03:26,455 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for senous916@gmail.com
+2026-06-13 22:03:29,261 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to senous916@gmail.com
+2026-06-13 22:05:57,474 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for nadegeculture95@gmail.com
+2026-06-13 22:06:00,242 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to nadegeculture95@gmail.com
+2026-06-13 22:07:16,346 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for nadegeculture95@gmail.com
+2026-06-13 22:07:19,410 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to nadegeculture95@gmail.com
+2026-06-13 22:46:47,366 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for senous916@gmail.com
+2026-06-13 22:46:51,051 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to senous916@gmail.com

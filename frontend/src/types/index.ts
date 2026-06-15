@@ -243,6 +243,8 @@ export interface AbsenceImpactOut {
   overdue_tasks: Task[];
   high_priority_tasks: Task[];
   conflicting_absences: AbsenceConflictOut[];
+  sole_admin_resources?: any[];
+  sole_creator_resources?: any[];
   risk_level: 'faible' | 'moyen' | 'eleve' | string;
   recommendation?: string | null;
   risk_reasons?: string[];

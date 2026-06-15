@@ -1,0 +1,52 @@
+2026-06-13 21:39:59,308 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 21:39:59,308 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 21:39:59,308 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 21:39:59,816 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 21:41:33,303 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-13 21:41:33,304 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-13 21:41:33,854 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['nadegeculture95@gmail.com']
+2026-06-13 21:41:37,144 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['nadegeculture95@gmail.com']
+2026-06-13 21:47:21,166 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['n67714829@gmail.com']
+2026-06-13 21:47:23,322 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['n67714829@gmail.com']
+2026-06-13 22:01:23,054 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 22:01:23,055 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 22:01:23,055 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 22:01:23,351 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 22:03:36,811 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-13 22:03:36,812 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-13 22:09:28,860 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['nadegeculture95@gmail.com']
+2026-06-13 22:09:31,547 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['nadegeculture95@gmail.com']
+2026-06-13 22:20:39,304 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 22:20:39,304 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 22:20:39,304 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 22:20:40,257 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 22:21:18,851 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 22:21:18,852 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 22:21:18,852 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 22:21:19,816 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 22:21:26,804 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 22:21:26,804 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 22:21:26,804 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 22:21:27,769 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 22:35:53,221 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-13 22:35:53,222 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-13 23:30:12,677 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 23:30:12,677 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 23:30:12,677 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 23:30:12,963 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 23:34:30,267 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-13 23:34:30,280 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-13 23:57:49,570 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-13 23:57:49,570 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-13 23:57:49,570 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-13 23:57:49,888 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-13 23:59:38,077 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-13 23:59:38,078 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-15 01:33:50,443 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-15 01:33:50,446 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-15 01:33:50,447 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-15 01:33:51,678 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-15 01:37:52,182 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-15 01:37:52,199 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-15 01:37:52,209 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-15 01:37:52,210 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.

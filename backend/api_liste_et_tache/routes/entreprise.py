@@ -53,6 +53,7 @@ from ..crud.absence import (
     get_absence,
     get_absence_conflicts,
     get_team_calendar,
+    get_user_availability,
     list_accessible_absences,
     reject_leave,
     update_absence,

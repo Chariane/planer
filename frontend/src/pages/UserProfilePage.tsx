@@ -59,7 +59,7 @@ export default function UserProfilePage() {
       try {
         const [profileData, presenceData] = await Promise.all([
           authService.getUserProfile(userId),
-          messagerieService.getPresence(userId).catch(() => ({ is_online: false })),
+          messagerieService.getPresence(userId).catch(() => ({ is_online: false, last_seen: null })),
         ]);
         if (!cancelled) {
           setProfile(profileData);
