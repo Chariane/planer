@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
 # Set up logging for persistent debugging
 logging.basicConfig(
-    filename='/home/nadege/Documents/our_project/K-Planner/backend/api_workspace/email_debug.log',
+    filename=os.path.join(BASE_DIR, 'email_debug.log'),
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     force=True

@@ -12,3 +12,6 @@
 2026-06-13 22:07:19,410 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to nadegeculture95@gmail.com
 2026-06-13 22:46:47,366 - backend.api_espace.core.emails - DEBUG - DEBUG: Entering send_espace_invitation_email for senous916@gmail.com
 2026-06-13 22:46:51,051 - backend.api_espace.core.emails - DEBUG - DEBUG: send_espace_invitation_email SUCCESS to senous916@gmail.com
+2026-06-15 20:22:59,641 - uvicorn.error - INFO - Started server process [202376]
+2026-06-15 20:22:59,671 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-15 20:22:59,682 - uvicorn.error - INFO - Application startup complete.

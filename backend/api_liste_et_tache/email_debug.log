@@ -45,3 +45,8 @@
 2026-06-15 01:36:08,931 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
 2026-06-15 01:36:10,794 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scan completed: {'tasks_scanned': 6, 'overdue_tasks': 5, 'due_today_tasks': 0, 'due_tomorrow_tasks': 1, 'notifications_targets': 15, 'notifications_created': 0, 'skipped_lock': 0}
 2026-06-15 01:51:10,917 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scan completed: {'tasks_scanned': 6, 'overdue_tasks': 5, 'due_today_tasks': 0, 'due_tomorrow_tasks': 1, 'notifications_targets': 15, 'notifications_created': 0, 'skipped_lock': 0}
+2026-06-15 20:24:49,497 - uvicorn.error - INFO - Started server process [203817]
+2026-06-15 20:24:49,498 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-15 20:24:53,162 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-15 20:24:53,163 - uvicorn.error - INFO - Application startup complete.
+2026-06-15 20:24:54,940 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scan completed: {'tasks_scanned': 1, 'overdue_tasks': 1, 'due_today_tasks': 0, 'due_tomorrow_tasks': 0, 'notifications_targets': 1, 'notifications_created': 1, 'skipped_lock': 0}

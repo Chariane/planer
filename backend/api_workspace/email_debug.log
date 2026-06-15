@@ -12,3 +12,6 @@
 2026-06-14 00:03:26,899 - backend.api_workspace.core.emails - DEBUG - DEBUG: fm.send_message SUCCESS to senous916@gmail.com
 2026-06-14 00:04:17,572 - backend.api_workspace.core.emails - DEBUG - DEBUG: Entering send_workspace_invitation_email for bercame53@gmail.com
 2026-06-14 00:04:20,044 - backend.api_workspace.core.emails - DEBUG - DEBUG: fm.send_message SUCCESS to bercame53@gmail.com
+2026-06-15 20:23:46,713 - uvicorn.error - INFO - Started server process [203079]
+2026-06-15 20:23:46,713 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-15 20:23:46,714 - uvicorn.error - INFO - Application startup complete.
