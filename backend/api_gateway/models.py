@@ -643,6 +643,8 @@ class Groupe(Base):
     name: Mapped[str] = mapped_column(String(255))
     creator: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    resource_type: Mapped[Optional[str]] = mapped_column(String(50))
+    resource_id: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Relations
     messages: Mapped[List['Message']] = relationship('Message', back_populates='groupe')

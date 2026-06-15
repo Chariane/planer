@@ -63,3 +63,31 @@
 2026-06-15 20:26:20,878 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
 2026-06-15 20:26:58,921 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
 2026-06-15 20:26:58,922 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-15 20:38:13,365 - root - ERROR - Erreur inattendue lors de l'inscription: (psycopg2.errors.UndefinedColumn) ERREUR:  la colonne « resource_type » n'existe pas
+LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
+                                               ^
+
+[SQL: SELECT id FROM messagerie.groupe WHERE resource_type = %(type)s AND resource_id = %(id)s LIMIT 1]
+[parameters: {'type': 'workspace', 'id': '319360c4d683'}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2026-06-15 20:53:32,631 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-15 20:53:33,622 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-15 20:53:35,437 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['testuser2024@example.com']
+2026-06-15 20:53:39,736 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['testuser2024@example.com']
+2026-06-15 20:53:44,059 - uvicorn.error - INFO - Shutting down
+2026-06-15 20:53:44,255 - uvicorn.error - INFO - Waiting for application shutdown.
+2026-06-15 20:53:44,554 - uvicorn.error - INFO - Application shutdown complete.
+2026-06-15 20:53:44,558 - uvicorn.error - INFO - Finished server process [201145]
+2026-06-15 20:56:23,813 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-15 20:56:23,814 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-15 20:56:23,814 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-15 20:56:24,847 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-15 20:56:25,989 - uvicorn.error - INFO - Started server process [225340]
+2026-06-15 20:56:25,991 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-15 20:56:25,994 - uvicorn.error - INFO - Application startup complete.
+2026-06-15 20:57:55,103 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-15 20:57:55,104 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-15 20:57:55,435 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-15 20:57:55,600 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-15 20:57:55,647 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-15 20:57:57,868 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['nadege180905@gmail.com']

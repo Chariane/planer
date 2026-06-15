@@ -15,3 +15,10 @@
 2026-06-15 20:22:59,641 - uvicorn.error - INFO - Started server process [202376]
 2026-06-15 20:22:59,671 - uvicorn.error - INFO - Waiting for application startup.
 2026-06-15 20:22:59,682 - uvicorn.error - INFO - Application startup complete.
+2026-06-15 20:54:00,340 - uvicorn.error - INFO - Shutting down
+2026-06-15 20:54:06,288 - uvicorn.error - INFO - Waiting for application shutdown.
+2026-06-15 20:54:12,383 - uvicorn.error - INFO - Application shutdown complete.
+2026-06-15 20:54:12,399 - uvicorn.error - INFO - Finished server process [202376]
+2026-06-15 20:56:23,454 - uvicorn.error - INFO - Started server process [225886]
+2026-06-15 20:56:23,455 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-15 20:56:23,463 - uvicorn.error - INFO - Application startup complete.
