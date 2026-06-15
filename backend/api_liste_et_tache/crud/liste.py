@@ -19,7 +19,7 @@ from ..core.function import (
 from ..core.security import create_access_token, decode_invitation_token
 from ..models import Liste, Membre, Canevas, Section, Tache, Checklist, Utilisateur
 from ..schemas import WorkspaceMemberInvite
-from backend.api_messagerie.sync import (
+from backend.api_liste_et_tache.chat_client import (
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,

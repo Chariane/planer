@@ -1,6 +1,7 @@
 import { apiFetch } from './api';
 
-export const MESSAGERIE_BASE_URL = import.meta.env.VITE_MESSAGERIE_URL || 'http://localhost:8006';
+// On pointe désormais vers K-Chat (port 8000 par défaut ou variable d'env)
+export const MESSAGERIE_BASE_URL = import.meta.env.VITE_MESSAGERIE_URL || 'http://localhost:8000';
 
 export interface MessagePayload {
   message?: string | null;
@@ -25,6 +26,7 @@ export interface MessageItem {
   video?: string | null;
   created_at?: string | null;
   time?: string | null;
+  sender_username?: string | null;
 }
 
 export interface MessagerieGroup {
@@ -61,10 +63,12 @@ export interface MessagerieUnreadSummary {
 export interface PrivateConversation {
   room_id: string;
   user: MessagerieMember;
+  other_user?: any; // Format K-Chat
   last_message?: MessageItem | null;
   updated_at?: string | null;
   is_online?: boolean;
   last_seen?: string | null;
+  unread_count?: number;
 }
 
 export interface PresenceResponse {
@@ -73,68 +77,137 @@ export interface PresenceResponse {
   last_seen?: string | null;
 }
 
+// Fonction utilitaire pour extraire le user_id localement (Nécessaire pour les URLs K-Chat)
+const getCurrentUserId = (): string => {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user.id) return user.id;
+      if (user.user_id) return user.user_id;
+    }
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub || payload.id || '';
+    }
+  } catch (e) {
+    console.error("Impossible de récupérer l'ID utilisateur");
+  }
+  return '';
+};
+
+const getCurrentUsername = (): string => {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user.username) return user.username;
+      if (user.email) return user.email.split('@')[0];
+    }
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.username) return payload.username;
+      if (payload.email) return payload.email.split('@')[0];
+    }
+  } catch (e) {
+    console.error("Impossible de récupérer le nom d'utilisateur");
+  }
+  return 'Utilisateur';
+};
+
 const wsBaseUrl = () => MESSAGERIE_BASE_URL.replace(/^http/, 'ws');
 
 export const messagerieService = {
-  listGroups: () =>
-    apiFetch(MESSAGERIE_BASE_URL, '/messagerie/groups') as Promise<{ groups: MessagerieGroup[] }>,
+  listGroups: async () => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/user-groups/${getCurrentUserId()}`);
+    return Array.isArray(res) ? { groups: res } : res;
+  },
 
-  getUnreadSummary: () =>
-    apiFetch(MESSAGERIE_BASE_URL, '/messagerie/unread-summary') as Promise<MessagerieUnreadSummary>,
+  getUnreadSummary: async () => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/unread-summary/${getCurrentUserId()}`) as any;
+    return {
+      unread_discussions_count: res?.total_unread || 0,
+      unread_group_ids: [],
+      has_private_unread: (res?.private_unread || 0) > 0,
+    } as MessagerieUnreadSummary;
+  },
 
-  getGroupMembers: (groupId: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/members`) as Promise<{ members: MessagerieMember[] }>,
+  getGroupMembers: async (groupId: string) => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/group-members/${groupId}`);
+    return Array.isArray(res) ? { members: res } : res;
+  },
 
-  getGroupMessages: (groupId: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/messages`) as Promise<{ messages: MessageItem[] }>,
+  getGroupMessages: async (groupId: string) => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/group-messages/${groupId}`);
+    return Array.isArray(res) ? { messages: res } : res;
+  },
 
-  updateGroupClosedState: (groupId: string, isClosed: boolean) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/closed`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_closed: isClosed }),
-    }) as Promise<MessagerieGroup>,
+  updateGroupClosedState: async (groupId: string, isClosed: boolean) => {
+    console.warn("Fermeture de groupe non implémentée côté K-Chat");
+    return { id: groupId, is_closed: isClosed } as MessagerieGroup;
+  },
 
-  sendGroupMessage: (groupId: string, payload: MessagePayload) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/groups/${groupId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }) as Promise<MessageItem>,
+  sendGroupMessage: async (groupId: string, payload: MessagePayload) => {
+    console.warn("L'envoi REST n'est pas géré par K-Chat (utilise le WebSocket)");
+    return { id: "temp", ...payload } as unknown as MessageItem;
+  },
 
-  getPrivateMessages: (otherUserId: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/private/${otherUserId}/messages`) as Promise<{ messages: MessageItem[] }>,
+  getPrivateMessages: async (otherUserId: string) => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/messages/${getCurrentUserId()}/${otherUserId}`);
+    return Array.isArray(res) ? { messages: res } : res;
+  },
 
-  listPrivateConversations: () =>
-    apiFetch(MESSAGERIE_BASE_URL, '/messagerie/private/conversations') as Promise<{ conversations: PrivateConversation[] }>,
+  listPrivateConversations: async () => {
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/conversations/${getCurrentUserId()}`) as any;
+    if (res && res.conversations) {
+      // Mapping K-Chat vers K-Planner
+      const mapped = res.conversations.map((conv: any) => ({
+        room_id: conv.room_id,
+        user: conv.other_user || {},
+        last_message: conv.last_message,
+        updated_at: conv.updated_at,
+        unread_count: conv.unread_count
+      }));
+      return { conversations: mapped };
+    }
+    return { conversations: [] };
+  },
 
-  sendPrivateMessage: (receiverId: string, payload: MessagePayload) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/private/${receiverId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }) as Promise<MessageItem>,
+  sendPrivateMessage: async (receiverId: string, payload: MessagePayload) => {
+    console.warn("L'envoi REST n'est pas géré par K-Chat (utilise le WebSocket)");
+    return { id: "temp", ...payload } as unknown as MessageItem;
+  },
 
-  updateMessage: (messageId: string, message: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/messages/${messageId}`, {
+  updateMessage: async (messageId: string, message: string) => {
+    return apiFetch(MESSAGERIE_BASE_URL, `/chat/message/${messageId}`, {
       method: 'PATCH',
       body: JSON.stringify({ message }),
-    }) as Promise<MessageItem>,
+    }) as Promise<MessageItem>;
+  },
 
-  deleteMessage: (messageId: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/messages/${messageId}`, {
+  deleteMessage: async (messageId: string) => {
+    await apiFetch(MESSAGERIE_BASE_URL, `/chat/message/${messageId}`, {
       method: 'DELETE',
-    }) as Promise<void>,
+    });
+  },
 
-  getPresence: (userId: string) =>
-    apiFetch(MESSAGERIE_BASE_URL, `/messagerie/presence/${userId}`) as Promise<PresenceResponse>,
+  getPresence: async (userId: string) => {
+    return apiFetch(MESSAGERIE_BASE_URL, `/chat/presence/${userId}`) as Promise<PresenceResponse>;
+  },
 
   groupSocketUrl: (groupId: string) => {
     const token = localStorage.getItem('access_token') || '';
     const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/messagerie/ws/groups/${groupId}?${query.toString()}`;
+    // URL K-Chat : /group/ws/group/{group_id}/{username}
+    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}?${query.toString()}`;
   },
 
   privateSocketUrl: (receiverId: string) => {
     const token = localStorage.getItem('access_token') || '';
     const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/messagerie/ws/private/${receiverId}?${query.toString()}`;
+    // URL K-Chat : /chat/ws/private/{sender}/{receiver}
+    return `${wsBaseUrl()}/chat/ws/private/${getCurrentUserId()}/${receiverId}?${query.toString()}`;
   },
 };

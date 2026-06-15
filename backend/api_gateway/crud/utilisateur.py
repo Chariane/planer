@@ -8,7 +8,7 @@ from ..models import Espace, Liste, Membre, Motdepasseoublie, PlanerEntreprise, 
 from ..core.function import commit_or_raise
 from ..core.security import SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
-from backend.api_messagerie.sync import ensure_resource_group, sync_resource_member
+from backend.api_gateway.chat_client import ensure_resource_group, sync_resource_member
 
 
 ENTREPRISE_REGISTRATION_FIELDS = {

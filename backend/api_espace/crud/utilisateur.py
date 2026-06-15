@@ -13,7 +13,7 @@ from ..schemas import (
     WorkspaceMemberInvite,
 )
 from datetime import timedelta
-from backend.api_messagerie.sync import (
+from backend.api_espace.chat_client import (
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,

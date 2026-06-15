@@ -10,7 +10,7 @@ from ..models import (
 )
 from ..core.security import create_access_token, decode_invitation_token
 from ..schemas import WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate, WorkspaceMemberInvite
-from backend.api_messagerie.sync import (
+from backend.api_workspace.chat_client import (
     ensure_resource_group,
     remove_resource_member,
     sync_resource_member,
