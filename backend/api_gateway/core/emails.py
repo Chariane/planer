@@ -17,24 +17,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# -----------------------------
+# Utilitaires de configuration
+# -----------------------------
+
 def _clean_env_val(key: str, default: str = "") -> str:
+    """Nettoie une valeur d'environnement (supprime quotes et espaces)."""
     val = config_data.get(key, default)
     if val is None:
         return default
     return str(val).strip().strip("'").strip('"').strip()
 
-front_base_url = _clean_env_val("FRONT_BASE_URL")
-front_account_verification_url = _clean_env_val("FRONT_ACCOUNT_VERIFICATION_URL")
-front_password_reset_url = _clean_env_val("FRONT_PASSWORD_RESET_URL")
 
 def _as_bool(value, default: bool = False) -> bool:
+    """Convertit une valeur en booléen de manière robuste."""
     if isinstance(value, bool):
         return value
     if value is None:
         return default
     return str(value).strip().strip("'").strip('"').lower() in {"1", "true", "yes", "on"}
 
+
 def _get_mail_config() -> ConnectionConfig:
+    """Crée la configuration mail à la demande (lazy) pour éviter un crash au démarrage."""
     return ConnectionConfig(
         MAIL_USERNAME=_clean_env_val("MAIL_USERNAME"),
         MAIL_PASSWORD=_clean_env_val("MAIL_PASSWORD"),
@@ -46,6 +52,20 @@ def _get_mail_config() -> ConnectionConfig:
         USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS"), default=True),
         VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"), default=True),
     )
+
+
+# -----------------------------
+# Variables frontend
+# -----------------------------
+
+front_base_url = _clean_env_val("FRONT_BASE_URL")
+front_account_verification_url = _clean_env_val("FRONT_ACCOUNT_VERIFICATION_URL")
+front_password_reset_url = _clean_env_val("FRONT_PASSWORD_RESET_URL")
+
+
+# -----------------------------
+# Template HTML commun
+# -----------------------------
 
 def get_html_template(title, body_content, button_text=None, button_url=None):
     button_html = ""
@@ -92,11 +112,28 @@ def get_html_template(title, body_content, button_text=None, button_url=None):
     </html>
     """
 
-async def send_verification_email(username: str, email: EmailSchema, code: str):
-    logger.debug(f"DEBUG: Entering send_verification_email for {email}")
+
+# -----------------------------
+# Utilitaire d'extraction des destinataires
+# -----------------------------
+
+def _extract_recipients(email) -> list:
+    """Extrait une liste de destinataires à partir d'un EmailSchema ou d'une chaîne."""
+    if isinstance(email, str):
+        return [email]
     recipients = email.email if hasattr(email, 'email') else [email]
     if isinstance(recipients, list) and len(recipients) > 0 and isinstance(recipients[0], list):
         recipients = recipients[0]
+    return recipients
+
+
+# -----------------------------
+# Fonctions d'envoi d'emails
+# -----------------------------
+
+async def send_verification_email(username: str, email: EmailSchema, code: str):
+    logger.debug(f"Entering send_verification_email for {email}")
+    recipients = _extract_recipients(email)
 
     body = f"""
         <p>Bonjour <strong>{username}</strong>,</p>
@@ -118,16 +155,15 @@ async def send_verification_email(username: str, email: EmailSchema, code: str):
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.debug(f"DEBUG: send_verification_email SUCCESS to {recipients}")
+        logger.debug(f"send_verification_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"DEBUG: send_verification_email ERROR to {recipients}: {e}")
+        logger.error(f"send_verification_email ERROR to {recipients}: {e}")
     return code
 
+
 async def resend_verification_email(username: str, email: EmailSchema, code: str):
-    logger.debug(f"DEBUG: Entering resend_verification_email for {email}")
-    recipients = email.email if hasattr(email, 'email') else [email]
-    if isinstance(recipients, list) and len(recipients) > 0 and isinstance(recipients[0], list):
-        recipients = recipients[0]
+    logger.debug(f"Entering resend_verification_email for {email}")
+    recipients = _extract_recipients(email)
 
     body = f"""
         <p>Bonjour <strong>{username}</strong>,</p>
@@ -148,16 +184,15 @@ async def resend_verification_email(username: str, email: EmailSchema, code: str
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.debug(f"DEBUG: resend_verification_email SUCCESS to {recipients}")
+        logger.debug(f"resend_verification_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"DEBUG: resend_verification_email ERROR to {recipients}: {e}")
+        logger.error(f"resend_verification_email ERROR to {recipients}: {e}")
     return code
 
+
 async def send_reset_password_email(username: str, email: EmailSchema, token: str):
-    logger.debug(f"DEBUG: Entering send_reset_password_email for {email}")
-    recipients = email.email if hasattr(email, 'email') else [email]
-    if isinstance(recipients, list) and len(recipients) > 0 and isinstance(recipients[0], list):
-        recipients = recipients[0]
+    logger.debug(f"Entering send_reset_password_email for {email}")
+    recipients = _extract_recipients(email)
 
     body = f"""
         <p>Bonjour <strong>{username}</strong>,</p>
@@ -180,7 +215,7 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.debug(f"DEBUG: send_reset_password_email SUCCESS to {recipients}")
+        logger.debug(f"send_reset_password_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"DEBUG: send_reset_password_email ERROR to {recipients}: {e}")
+        logger.error(f"send_reset_password_email ERROR to {recipients}: {e}")
     return token

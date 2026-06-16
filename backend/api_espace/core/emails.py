@@ -4,9 +4,8 @@ from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from .security import config_data
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # Set up logging for persistent debugging
 logging.basicConfig(
@@ -17,34 +16,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# -----------------------------
+# Utilitaires de configuration
+# -----------------------------
+
 def _clean_env_val(key: str, default: str = "") -> str:
+    """Nettoie une valeur d'environnement (supprime quotes et espaces)."""
     val = config_data.get(key, default)
     if val is None:
         return default
     return str(val).strip().strip("'").strip('"').strip()
 
-def _as_bool(value) -> bool:
+
+def _as_bool(value, default: bool = False) -> bool:
+    """Convertit une valeur en booléen de manière robuste."""
     if isinstance(value, bool):
         return value
     if value is None:
-        return False
+        return default
     return str(value).strip().strip("'").strip('"').lower() in {"1", "true", "yes", "on"}
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=_clean_env_val("MAIL_USERNAME"),
-    MAIL_PASSWORD=_clean_env_val("MAIL_PASSWORD"),
-    MAIL_FROM=_clean_env_val("MAIL_FROM"),
-    MAIL_PORT=int(_clean_env_val("MAIL_PORT", "587")),
-    MAIL_SERVER=_clean_env_val("MAIL_SERVER"),
-    MAIL_STARTTLS=_as_bool(config_data.get("MAIL_STARTTLS")),
-    MAIL_SSL_TLS=_as_bool(config_data.get("MAIL_SSL_TLS")),
-    USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS")),
-    VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"))
-)
+
+def _get_mail_config() -> ConnectionConfig:
+    """Crée la configuration mail à la demande (lazy) pour éviter un crash au démarrage."""
+    return ConnectionConfig(
+        MAIL_USERNAME=_clean_env_val("MAIL_USERNAME"),
+        MAIL_PASSWORD=_clean_env_val("MAIL_PASSWORD"),
+        MAIL_FROM=_clean_env_val("MAIL_FROM"),
+        MAIL_PORT=int(_clean_env_val("MAIL_PORT", "587")),
+        MAIL_SERVER=_clean_env_val("MAIL_SERVER"),
+        MAIL_STARTTLS=_as_bool(config_data.get("MAIL_STARTTLS")),
+        MAIL_SSL_TLS=_as_bool(config_data.get("MAIL_SSL_TLS")),
+        USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS"), default=True),
+        VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"), default=True),
+    )
+
+
+# -----------------------------
+# Variables frontend
+# -----------------------------
 
 front_base_url = _clean_env_val("FRONT_BASE_URL")
-back_base_url = _clean_env_val("BACK_BASE_URL", "http://localhost:8001")
 front_register_url = _clean_env_val("FRONT_REGISTER_URL", "/register")
+back_base_url = _clean_env_val("BACK_BASE_URL", "http://localhost:8001")
+
+
+# -----------------------------
+# Template HTML commun
+# -----------------------------
 
 def get_html_template(title, body_content, button_text=None, button_url=None):
     button_html = ""
@@ -91,6 +111,11 @@ def get_html_template(title, body_content, button_text=None, button_url=None):
     </html>
     """
 
+
+# -----------------------------
+# Fonctions d'envoi d'emails
+# -----------------------------
+
 async def send_espace_invitation_email(
     inviter_username: str,
     invited_username: str,
@@ -100,7 +125,7 @@ async def send_espace_invitation_email(
     token: str,
     is_guest: bool = False,
 ):
-    logger.debug(f"DEBUG: Entering send_espace_invitation_email for {email}")
+    logger.debug(f"Entering send_espace_invitation_email for {email}")
     if is_guest:
         invitation_link = f"{front_base_url}{front_register_url}?invitation_token={token}"
     else:
@@ -121,10 +146,10 @@ async def send_espace_invitation_email(
     )
 
     try:
-        fm = FastMail(conf)
+        fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.debug(f"DEBUG: send_espace_invitation_email SUCCESS to {email}")
+        logger.debug(f"send_espace_invitation_email SUCCESS to {email}")
     except Exception as e:
-        logger.error(f"DEBUG: send_espace_invitation_email ERROR to {email}: {e}")
+        logger.error(f"send_espace_invitation_email ERROR to {email}: {e}")
 
     return token
