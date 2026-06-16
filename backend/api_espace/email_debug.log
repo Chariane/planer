@@ -39,3 +39,17 @@ asyncio.exceptions.CancelledError
 2026-06-16 13:33:54,219 - uvicorn.error - INFO - Started server process [91078]
 2026-06-16 13:33:54,220 - uvicorn.error - INFO - Waiting for application startup.
 2026-06-16 13:33:54,220 - uvicorn.error - INFO - Application startup complete.
+2026-06-16 13:56:13,048 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 13:56:13,102 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 13:56:23,815 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 13:56:24,218 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 13:57:55,255 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 13:57:55,329 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 14:16:03,698 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 14:16:03,960 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 14:16:21,690 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 14:16:21,814 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 14:18:19,637 - backend.api_espace.core.emails - DEBUG - Entering send_espace_invitation_email for christiannsera207@gmail.com
+2026-06-16 14:18:24,497 - backend.api_espace.core.emails - DEBUG - send_espace_invitation_email SUCCESS to christiannsera207@gmail.com
+2026-06-16 14:18:58,296 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 14:19:00,545 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42

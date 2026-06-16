@@ -80,16 +80,17 @@ export interface PresenceResponse {
 // Fonction utilitaire pour extraire le user_id localement (Nécessaire pour les URLs K-Chat)
 const getCurrentUserId = (): string => {
   try {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.sub) return payload.sub;
+      if (payload.id) return payload.id;
+    }
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const user = JSON.parse(userStr);
       if (user.id) return user.id;
       if (user.user_id) return user.user_id;
-    }
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.sub || payload.id || '';
     }
   } catch (e) {
     console.error("Impossible de récupérer l'ID utilisateur");
@@ -99,17 +100,17 @@ const getCurrentUserId = (): string => {
 
 const getCurrentUsername = (): string => {
   try {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user.username) return user.username;
-      if (user.email) return user.email.split('@')[0];
-    }
     const token = localStorage.getItem('access_token');
     if (token) {
       const payload = JSON.parse(atob(token.split('.')[1]));
       if (payload.username) return payload.username;
       if (payload.email) return payload.email.split('@')[0];
+    }
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user.username) return user.username;
+      if (user.email) return user.email.split('@')[0];
     }
   } catch (e) {
     console.error("Impossible de récupérer le nom d'utilisateur");

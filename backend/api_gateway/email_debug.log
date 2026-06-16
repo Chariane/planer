@@ -110,3 +110,9 @@ LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
 2026-06-16 13:43:15,590 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
 2026-06-16 13:43:15,993 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['christiannsera207@gmail.com']
 2026-06-16 13:43:19,103 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['christiannsera207@gmail.com']
+2026-06-16 14:10:05,377 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 14:10:05,767 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 14:10:06,017 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['bercame53@gmail.com']
+2026-06-16 14:10:11,071 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['bercame53@gmail.com']
+2026-06-16 14:12:46,425 - backend.api_gateway.core.emails - DEBUG - Entering resend_verification_email for email=['bercame53@gmail.com']
+2026-06-16 14:12:48,868 - backend.api_gateway.core.emails - DEBUG - resend_verification_email SUCCESS to ['bercame53@gmail.com']

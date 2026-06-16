@@ -64,3 +64,9 @@
 2026-06-16 13:34:48,803 - uvicorn.error - INFO - Waiting for application startup.
 2026-06-16 13:34:51,968 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
 2026-06-16 13:34:51,968 - uvicorn.error - INFO - Application startup complete.
+2026-06-16 13:57:02,838 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 13:57:02,865 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 13:57:26,379 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 13:57:27,036 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 14:16:43,417 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 14:16:43,756 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
