@@ -22,3 +22,20 @@
 2026-06-15 20:56:23,454 - uvicorn.error - INFO - Started server process [225886]
 2026-06-15 20:56:23,455 - uvicorn.error - INFO - Waiting for application startup.
 2026-06-15 20:56:23,463 - uvicorn.error - INFO - Application startup complete.
+2026-06-16 13:26:26,874 - uvicorn.error - INFO - Started server process [85682]
+2026-06-16 13:26:26,913 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-16 13:26:26,914 - uvicorn.error - INFO - Application startup complete.
+2026-06-16 13:33:17,198 - uvicorn.error - INFO - Shutting down
+2026-06-16 13:33:17,298 - uvicorn.error - INFO - Finished server process [85682]
+2026-06-16 13:33:17,678 - uvicorn.error - ERROR - Traceback (most recent call last):
+  File "/home/otcbot/.local/lib/python3.10/site-packages/starlette/routing.py", line 701, in lifespan
+    await receive()
+  File "/usr/lib/python3/dist-packages/uvicorn/lifespan/on.py", line 135, in receive
+    return await self.receive_queue.get()
+  File "/usr/lib/python3.10/asyncio/queues.py", line 159, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+2026-06-16 13:33:54,219 - uvicorn.error - INFO - Started server process [91078]
+2026-06-16 13:33:54,220 - uvicorn.error - INFO - Waiting for application startup.
+2026-06-16 13:33:54,220 - uvicorn.error - INFO - Application startup complete.
