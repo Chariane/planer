@@ -91,3 +91,5 @@ LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
 2026-06-15 20:57:55,600 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
 2026-06-15 20:57:55,647 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering send_verification_email for email=['nadege180905@gmail.com']
 2026-06-15 20:57:57,868 - backend.api_gateway.core.emails - DEBUG - DEBUG: send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-15 21:05:35,230 - backend.api_gateway.core.emails - DEBUG - DEBUG: Entering resend_verification_email for email=['nadege180905@gmail.com']
+2026-06-15 21:05:37,462 - backend.api_gateway.core.emails - DEBUG - DEBUG: resend_verification_email SUCCESS to ['nadege180905@gmail.com']

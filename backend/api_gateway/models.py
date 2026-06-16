@@ -619,17 +619,22 @@ class Notification(Base):
 class Room(Base):
     __tablename__ = 'room'
     __table_args__ = (
+        CheckConstraint('member1 <> member2', name='room_members_distinct_check'),
+        CheckConstraint('member1 < member2', name='room_members_order_check'),
+        UniqueConstraint('member1', 'member2', name='room_members_unique'),
         PrimaryKeyConstraint('id', name='room_pkey'),
         {'schema': 'messagerie'}
     )
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
-    member1: Mapped[str] = mapped_column(String(255))
-    member2: Mapped[str] = mapped_column(String(255))
+    member1: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='RESTRICT'))
+    member2: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='RESTRICT'))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
     messages: Mapped[List['Message']] = relationship('Message', back_populates='room')
+    utilisateur_member1: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member1])
+    utilisateur_member2: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member2])
 
 
 class Groupe(Base):
@@ -641,55 +646,67 @@ class Groupe(Base):
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
     name: Mapped[str] = mapped_column(String(255))
-    creator: Mapped[str] = mapped_column(String(255))
+    creator: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='RESTRICT'))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
-    resource_type: Mapped[Optional[str]] = mapped_column(String(50))
-    resource_id: Mapped[Optional[str]] = mapped_column(String(50))
+    description: Mapped[Optional[str]] = mapped_column(String(500))
+    photo_url: Mapped[Optional[str]] = mapped_column(String(512))
+    updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
     messages: Mapped[List['Message']] = relationship('Message', back_populates='groupe')
     members: Mapped[List['GroupeMembers']] = relationship('GroupeMembers', back_populates='groupe')
+    utilisateur_creator: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[creator])
 
 
 class Message(Base):
     __tablename__ = 'message'
     __table_args__ = (
+        CheckConstraint("((id_room IS NOT NULL) AND (id_groupe IS NULL)) OR ((id_room IS NULL) AND (id_groupe IS NOT NULL))", name='message_target_check'),
         PrimaryKeyConstraint('id', name='message_pkey'),
         {'schema': 'messagerie'}
     )
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
-    sender: Mapped[str] = mapped_column(String(255))
-    id_room: Mapped[str] = mapped_column(String(12), ForeignKey('messagerie.room.id', ondelete='RESTRICT'))
+    sender: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='RESTRICT'))
     type: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'text'::character varying"))
-    seen: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
-    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
-    date_modif: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
-    date_sup: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     message: Mapped[Optional[str]] = mapped_column(Text)
     audio: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     file: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     image: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     video: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    date_modif: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    date_sup: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
+    seen: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
+    id_room: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.room.id', ondelete='RESTRICT'))
     id_groupe: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.groupe.id', ondelete='SET NULL'))
+    reply_to_id: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.message.id', ondelete='SET NULL'))
+    is_pinned: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
+    is_edited: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
 
     # Relations
-    room: Mapped['Room'] = relationship('Room', back_populates='messages')
+    room: Mapped[Optional['Room']] = relationship('Room', back_populates='messages')
     groupe: Mapped[Optional['Groupe']] = relationship('Groupe', back_populates='messages')
+    utilisateur_sender: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[sender])
+    reply_to: Mapped[Optional['Message']] = relationship('Message', remote_side=[id])
 
 
 class GroupeMembers(Base):
     __tablename__ = 'groupe_members'
     __table_args__ = (
+        CheckConstraint("role::text = ANY (ARRAY['admin'::character varying, 'member'::character varying, 'guest'::character varying]::text[])", name='groupe_members_role_check'),
         PrimaryKeyConstraint('id_groupe', 'member', name='groupe_members_pkey'),
         {'schema': 'messagerie'}
     )
 
     id_groupe: Mapped[str] = mapped_column(String(12), ForeignKey('messagerie.groupe.id', ondelete='CASCADE'), primary_key=True)
-    member: Mapped[str] = mapped_column(String(255), primary_key=True)
+    member: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'), primary_key=True)
+    role: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'member'::character varying"))
+    joined_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
     groupe: Mapped['Groupe'] = relationship('Groupe', back_populates='members')
+    utilisateur_member: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member])
 
 
 class NotificationMessagerie(Base):
@@ -702,13 +719,108 @@ class NotificationMessagerie(Base):
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
     id_utilisateur: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'))
     type: Mapped[str] = mapped_column(String(50))
-    est_lu: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
-    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     id_groupe: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.groupe.id', ondelete='SET NULL'))
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    est_lu: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
 
     # Relations
     utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
     groupe: Mapped[Optional['Groupe']] = relationship('Groupe', foreign_keys=[id_groupe])
+
+
+class Attachment(Base):
+    __tablename__ = 'attachment'
+    __table_args__ = (
+        PrimaryKeyConstraint('id', name='attachment_pkey'),
+        {'schema': 'messagerie'}
+    )
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
+    id_message: Mapped[str] = mapped_column(String(12), ForeignKey('messagerie.message.id', ondelete='CASCADE'))
+    file_url: Mapped[str] = mapped_column(String(512))
+    file_type: Mapped[Optional[str]] = mapped_column(String(100))
+    file_size: Mapped[Optional[int]] = mapped_column(Integer)
+    original_name: Mapped[Optional[str]] = mapped_column(String(255))
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+
+    # Relations
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+
+
+class MessageReadReceipt(Base):
+    __tablename__ = 'message_read_receipt'
+    __table_args__ = (
+        CheckConstraint("status::text = ANY (ARRAY['delivered'::character varying, 'read'::character varying]::text[])", name='message_read_receipt_status_check'),
+        PrimaryKeyConstraint('id_message', 'id_utilisateur', name='message_read_receipt_pkey'),
+        {'schema': 'messagerie'}
+    )
+
+    id_message: Mapped[str] = mapped_column(String(12), ForeignKey('messagerie.message.id', ondelete='CASCADE'), primary_key=True)
+    id_utilisateur: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'), primary_key=True)
+    status: Mapped[Optional[str]] = mapped_column(String(20), server_default=text("'delivered'::character varying"))
+    status_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+
+    # Relations
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
+
+
+class MessageReaction(Base):
+    __tablename__ = 'message_reaction'
+    __table_args__ = (
+        UniqueConstraint('id_message', 'id_utilisateur', 'emoji', name='message_reaction_id_message_id_utilisateur_emoji_key'),
+        PrimaryKeyConstraint('id', name='message_reaction_pkey'),
+        {'schema': 'messagerie'}
+    )
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
+    id_message: Mapped[str] = mapped_column(String(12), ForeignKey('messagerie.message.id', ondelete='CASCADE'))
+    id_utilisateur: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'))
+    emoji: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+
+    # Relations
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
+
+
+class UserPresence(Base):
+    __tablename__ = 'user_presence'
+    __table_args__ = (
+        PrimaryKeyConstraint('id_utilisateur', name='user_presence_pkey'),
+        {'schema': 'messagerie'}
+    )
+
+    id_utilisateur: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'), primary_key=True)
+    is_online: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
+    last_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    do_not_disturb: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
+    custom_status: Mapped[Optional[str]] = mapped_column(String(255))
+
+    # Relations
+    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
+
+
+class Contact(Base):
+    __tablename__ = 'contact'
+    __table_args__ = (
+        CheckConstraint('requester_id <> addressee_id', name='contact_distinct_users_check'),
+        CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'accepted'::character varying, 'blocked'::character varying]::text[])", name='contact_status_check'),
+        UniqueConstraint('requester_id', 'addressee_id', name='contact_request_unique'),
+        PrimaryKeyConstraint('id', name='contact_pkey'),
+        {'schema': 'messagerie'}
+    )
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
+    requester_id: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'))
+    addressee_id: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='CASCADE'))
+    status: Mapped[str] = mapped_column(String(20), server_default=text("'pending'::character varying"))
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+
+    # Relations
+    requester: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[requester_id])
+    addressee: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[addressee_id])
 
 
 #######################################

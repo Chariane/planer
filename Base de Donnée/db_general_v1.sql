@@ -420,37 +420,58 @@ CREATE TABLE boutique.footer_settings (
 
 CREATE TABLE messagerie.room (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
-    member1 VARCHAR(255) NOT NULL,
-    member2 VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    member1 VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE RESTRICT,
+    member2 VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT room_members_distinct_check CHECK (member1 <> member2),
+    CONSTRAINT room_members_order_check CHECK (member1 < member2),
+    CONSTRAINT room_members_unique UNIQUE (member1, member2)
 );
 
-CREATE TABLE messagerie.groupe(
+CREATE TABLE messagerie.groupe (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    creator VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    creator VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Champs professionnels (migration 001)
+    description VARCHAR(500),
+    photo_url   VARCHAR(512),
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE messagerie.message (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
-    sender VARCHAR(255) NOT NULL,
+    sender VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE RESTRICT,
     type VARCHAR(20) DEFAULT 'text',
     message TEXT,
+    -- Colonnes médias legacy (remplacées progressivement par messagerie.attachment)
     audio BYTEA,
-    file BYTEA,
+    file  BYTEA,
     image BYTEA,
     video BYTEA,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     date_modif TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    date_sup TIMESTAMP,
+    date_sup   TIMESTAMP,
     seen BOOLEAN DEFAULT FALSE,
-    id_room VARCHAR(12) NOT NULL REFERENCES messagerie.room(id) ON DELETE RESTRICT,
-    id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL
-
+    id_room   VARCHAR(12) REFERENCES messagerie.room(id) ON DELETE RESTRICT,
+    id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL,
+    -- Champs professionnels (migration 001)
+    reply_to_id VARCHAR(12) REFERENCES messagerie.message(id) ON DELETE SET NULL,
+    is_pinned   BOOLEAN DEFAULT FALSE,
+    is_edited   BOOLEAN DEFAULT FALSE,
+    CONSTRAINT message_target_check CHECK (
+        (id_room IS NOT NULL AND id_groupe IS NULL)
+        OR
+        (id_room IS NULL AND id_groupe IS NOT NULL)
+    )
 );
+
 CREATE TABLE messagerie.groupe_members (
     id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE CASCADE,
-    member VARCHAR(255) NOT NULL,
+    member    VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    -- Champs professionnels (migration 001)
+    role      VARCHAR(20) DEFAULT 'member' CHECK (role IN ('admin', 'member', 'guest')),
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id_groupe, member)
 );
 
@@ -462,6 +483,65 @@ CREATE TABLE messagerie.notification (
     id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     est_lu BOOLEAN DEFAULT FALSE
+);
+
+-- Table pièces jointes (migration 001)
+-- Les fichiers sont stockés sur disque (ou S3), on conserve uniquement l'URL.
+-- Remplace le stockage BYTEA directement dans la table message.
+CREATE TABLE messagerie.attachment (
+    id            VARCHAR(12)  NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
+    id_message    VARCHAR(12)  NOT NULL REFERENCES messagerie.message(id) ON DELETE CASCADE,
+    file_url      VARCHAR(512) NOT NULL,
+    file_type     VARCHAR(100),
+    file_size     INTEGER,
+    original_name VARCHAR(255),
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table accusés de lecture par utilisateur (migration 001)
+-- Gère "Vu à 14h23" — indispensable pour les groupes.
+CREATE TABLE messagerie.message_read_receipt (
+    id_message     VARCHAR(12) NOT NULL REFERENCES messagerie.message(id) ON DELETE CASCADE,
+    id_utilisateur VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    status         VARCHAR(20) DEFAULT 'delivered' CHECK (status IN ('delivered', 'read')),
+    status_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_message, id_utilisateur)
+);
+
+-- Table réactions emoji sur les messages (migration 001)
+-- Comme Slack/WhatsApp : 👍, ❤️, 😂... Un utilisateur ne peut poser le même emoji qu'une fois.
+CREATE TABLE messagerie.message_reaction (
+    id             VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
+    id_message     VARCHAR(12) NOT NULL REFERENCES messagerie.message(id) ON DELETE CASCADE,
+    id_utilisateur VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    emoji          VARCHAR(20) NOT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (id_message, id_utilisateur, emoji)
+);
+
+-- Table présence utilisateur (migration 001)
+-- Statut "En ligne", "Vu le...", "Ne pas déranger".
+-- Mise à jour automatiquement à chaque connexion/déconnexion WebSocket.
+CREATE TABLE messagerie.user_presence (
+    id_utilisateur VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE PRIMARY KEY,
+    is_online      BOOLEAN DEFAULT FALSE,
+    last_seen      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    do_not_disturb BOOLEAN DEFAULT FALSE,
+    custom_status  VARCHAR(255)
+);
+
+-- Table contact utilisateur (amis/relations)
+-- Permet de n'autoriser les messages privés qu'aux contacts approuvés.
+CREATE TABLE messagerie.contact (
+    id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
+    requester_id VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    addressee_id VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT contact_distinct_users_check CHECK (requester_id <> addressee_id),
+    CONSTRAINT contact_status_check CHECK (status IN ('pending', 'accepted', 'blocked')),
+    CONSTRAINT contact_request_unique UNIQUE (requester_id, addressee_id)
 );
 
 -- =============================
@@ -1249,6 +1329,22 @@ CREATE INDEX idx_order_items_entreprise_id ON boutique.order_items(id_entreprise
 CREATE INDEX idx_order_items_product_id ON boutique.order_items(id_product);
 CREATE INDEX idx_utilisateur_email ON public.utilisateur(email);
 CREATE INDEX idx_utilisateur_username ON public.utilisateur(username);
+CREATE INDEX idx_messagerie_room_member1 ON messagerie.room(member1);
+CREATE INDEX idx_messagerie_room_member2 ON messagerie.room(member2);
+CREATE INDEX idx_messagerie_groupe_creator ON messagerie.groupe(creator);
+CREATE INDEX idx_messagerie_message_sender ON messagerie.message(sender);
+CREATE INDEX idx_messagerie_message_room_created ON messagerie.message(id_room, created_at);
+CREATE INDEX idx_messagerie_message_groupe_created ON messagerie.message(id_groupe, created_at);
+CREATE INDEX idx_messagerie_groupe_members_member ON messagerie.groupe_members(member);
+CREATE INDEX idx_messagerie_notification_utilisateur ON messagerie.notification(id_utilisateur, est_lu);
+-- Index migration 001
+CREATE INDEX idx_messagerie_attachment_message ON messagerie.attachment(id_message);
+CREATE INDEX idx_messagerie_read_receipt_user ON messagerie.message_read_receipt(id_utilisateur);
+CREATE INDEX idx_messagerie_reaction_message ON messagerie.message_reaction(id_message);
+CREATE INDEX idx_messagerie_message_reply_to ON messagerie.message(reply_to_id);
+CREATE INDEX idx_messagerie_groupe_members_role ON messagerie.groupe_members(role);
+CREATE INDEX idx_contact_requester ON messagerie.contact(requester_id, status);
+CREATE INDEX idx_contact_addressee ON messagerie.contact(addressee_id, status);
 CREATE INDEX idx_publication_utilisateur ON public.publication(id_utilisateur);
 CREATE INDEX idx_commentaire_publication ON public.commentaire(id_publication);
 
