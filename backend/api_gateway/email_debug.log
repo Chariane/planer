@@ -116,3 +116,8 @@ LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
 2026-06-16 14:10:11,071 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['bercame53@gmail.com']
 2026-06-16 14:12:46,425 - backend.api_gateway.core.emails - DEBUG - Entering resend_verification_email for email=['bercame53@gmail.com']
 2026-06-16 14:12:48,868 - backend.api_gateway.core.emails - DEBUG - resend_verification_email SUCCESS to ['bercame53@gmail.com']
+2026-06-16 15:13:47,298 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 15:14:42,130 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 15:14:42,351 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 15:14:42,692 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 15:14:42,881 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
