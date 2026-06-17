@@ -433,10 +433,12 @@ CREATE TABLE messagerie.groupe (
     name VARCHAR(255) NOT NULL,
     creator VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    -- Champs professionnels (migration 001)
+    is_closed BOOLEAN DEFAULT FALSE,
     description VARCHAR(500),
-    photo_url   VARCHAR(512),
-    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    photo_url VARCHAR(512),
+    resource_type VARCHAR(50),
+    resource_id VARCHAR(50),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE messagerie.message (
@@ -455,10 +457,6 @@ CREATE TABLE messagerie.message (
     seen BOOLEAN DEFAULT FALSE,
     id_room   VARCHAR(12) REFERENCES messagerie.room(id) ON DELETE RESTRICT,
     id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL,
-    -- Champs professionnels (migration 001)
-    reply_to_id VARCHAR(12) REFERENCES messagerie.message(id) ON DELETE SET NULL,
-    is_pinned   BOOLEAN DEFAULT FALSE,
-    is_edited   BOOLEAN DEFAULT FALSE,
     CONSTRAINT message_target_check CHECK (
         (id_room IS NOT NULL AND id_groupe IS NULL)
         OR
@@ -468,9 +466,8 @@ CREATE TABLE messagerie.message (
 
 CREATE TABLE messagerie.groupe_members (
     id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE CASCADE,
-    member    VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
-    -- Champs professionnels (migration 001)
-    role      VARCHAR(20) DEFAULT 'member' CHECK (role IN ('admin', 'member', 'guest')),
+    member VARCHAR(12) NOT NULL REFERENCES public.utilisateur(id) ON DELETE CASCADE,
+    role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('admin', 'member', 'guest')),
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id_groupe, member)
 );
@@ -1163,6 +1160,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
+
 CREATE OR REPLACE FUNCTION planer.fn_trg_sync_premium_abonnement()
 RETURNS trigger AS
 $$
@@ -1341,8 +1340,6 @@ CREATE INDEX idx_messagerie_notification_utilisateur ON messagerie.notification(
 CREATE INDEX idx_messagerie_attachment_message ON messagerie.attachment(id_message);
 CREATE INDEX idx_messagerie_read_receipt_user ON messagerie.message_read_receipt(id_utilisateur);
 CREATE INDEX idx_messagerie_reaction_message ON messagerie.message_reaction(id_message);
-CREATE INDEX idx_messagerie_message_reply_to ON messagerie.message(reply_to_id);
-CREATE INDEX idx_messagerie_groupe_members_role ON messagerie.groupe_members(role);
 CREATE INDEX idx_contact_requester ON messagerie.contact(requester_id, status);
 CREATE INDEX idx_contact_addressee ON messagerie.contact(addressee_id, status);
 CREATE INDEX idx_publication_utilisateur ON public.publication(id_utilisateur);

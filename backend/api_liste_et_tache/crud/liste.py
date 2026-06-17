@@ -356,6 +356,7 @@ def assign_member_to_liste(
                 )
                 .scalar()
             ),
+            role=role,  # ✅ Ajout du rôle
         )
         try:
             db.commit()
@@ -390,6 +391,7 @@ def assign_member_to_liste(
             )
             .scalar()
         ),
+        role=role,  # ✅ Ajout du rôle
     )
     try:
         db.commit()
@@ -605,6 +607,7 @@ def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) ->
                 )
                 .scalar()
             ),
+            role=invited_role,  # ✅ Ajout du rôle
         )
         commit_or_raise(db, detail="Impossible d'activer votre statut de membre.", refresh_instance=existing_member)
         return existing_member
@@ -631,6 +634,7 @@ def accept_liste_invitation(db: Session, user_id: str, invitation_token: str) ->
             )
             .scalar()
         ),
+        role=invited_role,  # ✅ Ajout du rôle
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhésion à la liste.", refresh_instance=new_member)
     

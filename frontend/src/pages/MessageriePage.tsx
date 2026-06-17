@@ -650,9 +650,15 @@ export default function MessageriePage() {
           setMessages(prev => prev.filter(item => item.id !== payload.message_id));
           return;
         }
-        if (!payload.id || payload.id_groupe !== activeGroupId) return;
-        const nextMessage = payload as MessageItem;
-        setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+        // ✅ Vérifier que c'est bien un message avec du contenu
+        if (payload.id && payload.id_groupe === activeGroupId) {
+          const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
+          if (!hasContent) {
+            return;
+          }
+          const nextMessage = payload as MessageItem;
+          setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+        }
       } catch {
         setIsRealtime(false);
       }
@@ -687,9 +693,14 @@ export default function MessageriePage() {
           setMessages(prev => prev.filter(item => item.id !== payload.message_id));
           return;
         }
-        if (!payload.id) return;
-        const nextMessage = payload as MessageItem;
-        setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+        if (payload.id) {
+          const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
+          if (!hasContent) {
+            return;
+          }
+          const nextMessage = payload as MessageItem;
+          setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+        }
       } catch {
         setIsRealtime(false);
       }
@@ -821,7 +832,14 @@ export default function MessageriePage() {
       socket.addEventListener('open', handleOpen, { once: true });
     });
 
+  // ✅ sendPayload avec vérification de contenu
   const sendPayload = useCallback(async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
+    // ✅ Vérifier que le payload a du contenu
+    const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
+    if (!hasContent) {
+      return;
+    }
+
     if (!privateUserId && activeGroupIsReadOnly) {
       throw new Error("Cette discussion est fermée. Vous avez uniquement le droit de lecture.");
     }
@@ -882,15 +900,19 @@ export default function MessageriePage() {
     setCallElapsedSeconds(0);
   }, [stopCallTimer]);
 
+  // ✅ postCallHistory avec vérification du message
   const postCallHistory = useCallback((statusLabel: 'terminé' | 'manqué' | 'refusé', durationSeconds = 0) => {
     const kindLabel = callKind === 'video' ? 'vidéo' : 'audio';
     const durationText = statusLabel === 'terminé' ? ` • durée ${formatDuration(durationSeconds)}` : '';
-    void sendPayload({
-      type: 'text',
-      message: `📞 Appel ${kindLabel} ${statusLabel}${durationText}`,
-    }).catch(err => {
-      console.error("Impossible d'ajouter l'historique d'appel", err);
-    });
+    const message = `📞 Appel ${kindLabel} ${statusLabel}${durationText}`;
+    if (message.trim()) {
+      void sendPayload({
+        type: 'text',
+        message: message,
+      }).catch(err => {
+        console.error("Impossible d'ajouter l'historique d'appel", err);
+      });
+    }
   }, [callKind, sendPayload]);
 
   const attachMediaStreams = useCallback(() => {
@@ -1254,17 +1276,24 @@ export default function MessageriePage() {
     }
   };
 
+  // ✅ sendMessage avec vérification du contenu
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if ((!activeGroupId && !privateUserId) || (!draft.trim() && !pendingAttachment) || sending) return;
+    if ((!activeGroupId && !privateUserId) || sending) return;
     if (activeGroupIsReadOnly) {
       setError("Cette discussion est fermée. Vous pouvez lire les messages, mais vous ne pouvez pas écrire.");
       return;
     }
 
     const text = draft.trim();
-    setDraft('');
     const attachment = pendingAttachment;
+
+    // ✅ Ne rien faire si pas de contenu
+    if (!text && !attachment) {
+      return;
+    }
+
+    setDraft('');
     setPendingAttachment(null);
     setSending(true);
     setError(null);
@@ -1276,7 +1305,7 @@ export default function MessageriePage() {
           message: text || null,
           [attachment.kind]: attachment.base64,
         });
-      } else {
+      } else if (text) {
         await sendPayload({ message: text, type: 'text' });
       }
     } catch (err: unknown) {
@@ -1826,6 +1855,11 @@ export default function MessageriePage() {
                           const sender = isPrivateMode && message.sender === privateProfile?.id
                             ? privateMember
                             : memberById.get(message.sender);
+                          
+                          // ✅ Récupérer la photo depuis le message ou depuis le membre
+                          const senderPhoto = message.sender_photo_base64 || sender?.photo_base64;
+                          const senderWithPhoto = sender ? { ...sender, photo_base64: senderPhoto } : null;
+                          
                           const senderLabel = isMine ? 'Vous' : displayMember(sender || { id: message.sender, role: 'Membre' });
                           const senderProfilePath = isMine ? '/profile' : sender?.id ? `/users/${sender.id}` : null;
                           return (
@@ -1844,7 +1878,7 @@ export default function MessageriePage() {
                                       title={isMine ? 'Voir mon profil' : 'Voir le profil'}
                                     >
                                       <UserAvatar
-                                        member={sender}
+                                        member={senderWithPhoto}
                                         label={senderLabel}
                                         className="h-6 w-6 rounded-full text-[10px]"
                                       />
@@ -1855,7 +1889,7 @@ export default function MessageriePage() {
                                   ) : (
                                     <>
                                       <UserAvatar
-                                        member={sender}
+                                        member={senderWithPhoto}
                                         label={senderLabel}
                                         className="h-6 w-6 rounded-full text-[10px]"
                                       />
@@ -2097,7 +2131,6 @@ export default function MessageriePage() {
                                 {member.role}
                               </span>
                             </div>
-                            <p className="truncate text-[11px] text-theme-muted">{member.email || 'Email non renseigné'}</p>
                           </div>
                         </Link>
                       </div>

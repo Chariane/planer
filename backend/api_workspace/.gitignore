@@ -4,3 +4,4 @@ __pycache__/
 core/__pycache__/
 crud/__pycache__/
 routes/__pycache__/
+email_debug.log

@@ -27,6 +27,7 @@ export interface MessageItem {
   created_at?: string | null;
   time?: string | null;
   sender_username?: string | null;
+  sender_photo_base64?: string | null;
 }
 
 export interface MessagerieGroup {
@@ -63,7 +64,7 @@ export interface MessagerieUnreadSummary {
 export interface PrivateConversation {
   room_id: string;
   user: MessagerieMember;
-  other_user?: any; // Format K-Chat
+  other_user?: any;
   last_message?: MessageItem | null;
   updated_at?: string | null;
   is_online?: boolean;
@@ -77,7 +78,7 @@ export interface PresenceResponse {
   last_seen?: string | null;
 }
 
-// Fonction utilitaire pour extraire le user_id localement (Nécessaire pour les URLs K-Chat)
+// Fonction utilitaire pour extraire le user_id localement
 const getCurrentUserId = (): string => {
   try {
     const token = localStorage.getItem('access_token');
@@ -145,9 +146,13 @@ export const messagerieService = {
     return Array.isArray(res) ? { messages: res } : res;
   },
 
+  // ✅ CORRIGÉ : Appel réel à K-MESSENGER
   updateGroupClosedState: async (groupId: string, isClosed: boolean) => {
-    console.warn("Fermeture de groupe non implémentée côté K-Chat");
-    return { id: groupId, is_closed: isClosed } as MessagerieGroup;
+    const actor = getCurrentUserId();
+    return apiFetch(MESSAGERIE_BASE_URL, `/group/group/${groupId}/toggle-closed`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_closed: isClosed, actor }),
+    }) as Promise<MessagerieGroup>;
   },
 
   sendGroupMessage: async (groupId: string, payload: MessagePayload) => {
@@ -163,7 +168,6 @@ export const messagerieService = {
   listPrivateConversations: async () => {
     const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/conversations/${getCurrentUserId()}`) as any;
     if (res && res.conversations) {
-      // Mapping K-Chat vers K-Planner
       const mapped = res.conversations.map((conv: any) => ({
         room_id: conv.room_id,
         user: conv.other_user || {},
@@ -201,14 +205,12 @@ export const messagerieService = {
   groupSocketUrl: (groupId: string) => {
     const token = localStorage.getItem('access_token') || '';
     const query = new URLSearchParams({ token });
-    // URL K-Chat : /group/ws/group/{group_id}/{username}
     return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}?${query.toString()}`;
   },
 
   privateSocketUrl: (receiverId: string) => {
     const token = localStorage.getItem('access_token') || '';
     const query = new URLSearchParams({ token });
-    // URL K-Chat : /chat/ws/private/{sender}/{receiver}
     return `${wsBaseUrl()}/chat/ws/private/${getCurrentUserId()}/${receiverId}?${query.toString()}`;
   },
 };

@@ -488,6 +488,7 @@ def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -
             user_id=membre.id_utilisateur,
             name=espace.nom if espace else None,
             creator_id=createur_id,
+            role=membre.role,  # ✅ Ajout du rôle
         )
     commit_or_raise(
         db,
@@ -537,6 +538,7 @@ def update_espace_member(
             user_id=user_id,
             name=espace.nom if espace else None,
             creator_id=createur_id,
+            role=membre.role,  # ✅ Ajout du rôle
         )
     elif "statut" in update_data:
         remove_resource_member(
@@ -668,6 +670,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 user_id=target_user.id,
                 name=espace.nom,
                 creator_id=createur_id,
+                role=target_user.role,  # ✅ Ajout du rôle
             )
         
         # Token pour utilisateur existant (Contrainte 2)
@@ -797,6 +800,7 @@ def accept_espace_invitation(
             user_id=user_id,
             name=espace.nom,
             creator_id=createur_id,
+            role=invited_role,  # ✅ Ajout du rôle
         )
         commit_or_raise(
             db,
@@ -829,6 +833,7 @@ def accept_espace_invitation(
         user_id=user_id,
         name=espace.nom,
         creator_id=createur_id,
+        role=invited_role,  # ✅ Ajout du rôle
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
     

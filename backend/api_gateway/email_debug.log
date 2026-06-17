@@ -84,3 +84,55 @@ LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
 2026-06-17 10:26:17,667 - root - INFO - ✅ Groupe de discussion créé avec succès: 2d432b693f99
 2026-06-17 10:26:17,674 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['senous916@gmail.com']
 2026-06-17 10:26:20,055 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['senous916@gmail.com']
+email_debug.log2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 16:53:30,637 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 17:01:39,821 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 17:01:39,821 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 17:01:39,821 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 17:01:40,165 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 17:06:38,841 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 17:06:38,842 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 17:06:38,842 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 17:06:39,378 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 17:07:24,499 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 17:07:24,499 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 17:07:24,940 - root - INFO - 📤 Création du groupe pour workspace/794210aa7278 avec creator=aee36bb97b50
+2026-06-17 17:07:24,946 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 17:07:25,268 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-17 17:07:25,271 - root - WARNING - ⚠️ K-Messenger a retourné une erreur 500: Internal Server Error
+2026-06-17 17:07:25,272 - root - WARNING - ⚠️ Le groupe de discussion n'a pas pu être créé, mais l'inscription continue
+2026-06-17 17:07:25,285 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 17:07:28,912 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 17:12:33,603 - root - INFO - 📤 Création du groupe pour workspace/09e14de622cc avec creator=cd4bd3c7cc56
+2026-06-17 17:12:33,607 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 17:12:33,648 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 210
+2026-06-17 17:12:33,651 - root - INFO - ✅ Groupe créé avec succès: a9d2e9f3a1e6
+2026-06-17 17:12:33,651 - root - INFO - ✅ Groupe de discussion créé avec succès: a9d2e9f3a1e6
+2026-06-17 17:12:33,664 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 17:12:36,329 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 17:19:24,636 - root - INFO - 📤 Création du groupe pour workspace/bbb4c096d348 avec creator=1de79b9a05a6
+2026-06-17 17:19:24,639 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 17:19:24,665 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 211
+2026-06-17 17:19:24,669 - root - INFO - ✅ Groupe créé avec succès: 5b098dc0bbff
+2026-06-17 17:19:24,671 - root - INFO - ✅ Groupe de discussion créé avec succès: 5b098dc0bbff
+2026-06-17 17:19:24,739 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 17:19:24,779 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/group/039f5d67dd7a/add-member HTTP/1.1" 200 16
+2026-06-17 17:19:24,781 - backend.api_gateway.chat_client - INFO - ✅ Membre 1de79b9a05a6 ajouté au groupe 039f5d67dd7a avec rôle administrator
+2026-06-17 17:19:24,804 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadegetovihouande@gmail.com']
+2026-06-17 17:19:27,985 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadegetovihouande@gmail.com']
+2026-06-17 17:20:17,160 - root - INFO - 📤 Création du groupe pour workspace/8c37bbdf9020 avec creator=d6984972925d
+2026-06-17 17:20:17,166 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 17:20:17,194 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 211
+2026-06-17 17:20:17,195 - root - INFO - ✅ Groupe créé avec succès: acd5df509659
+2026-06-17 17:20:17,195 - root - INFO - ✅ Groupe de discussion créé avec succès: acd5df509659
+2026-06-17 17:20:17,211 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['senous916@gmail.com']
+2026-06-17 17:20:20,677 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['senous916@gmail.com']
+2026-06-17 17:48:29,390 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 17:48:29,392 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 17:48:29,392 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 17:48:29,942 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 17:53:02,330 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 17:53:09,079 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 17:53:09,080 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround

@@ -342,6 +342,7 @@ def update_member_role(
             user_id=user_id,
             name=workspace.nom if workspace else None,
             creator_id=workspace.id_utilisateur if workspace else None,
+            role=membre.role,  # ✅ Ajout du rôle
         )
     elif "statut" in update_data:
         remove_resource_member(
@@ -541,6 +542,7 @@ def accept_workspace_invitation(
             user_id=user_id,
             name=workspace.nom,
             creator_id=workspace.id_utilisateur,
+            role=existing_member.role,  # ✅ Ajout du rôle
         )
         commit_or_raise(
             db,
@@ -564,6 +566,7 @@ def accept_workspace_invitation(
         user_id=user_id,
         name=workspace.nom,
         creator_id=workspace.id_utilisateur,
+        role=invited_role,  # ✅ Ajout du rôle
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion au workspace.", refresh_instance=new_member)
     

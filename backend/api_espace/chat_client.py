@@ -30,20 +30,40 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         logger.error(f"Error creating K-Chat group: {e}")
     return None
 
-def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str):
+def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member"):
+    """
+    Synchronise un membre vers K-Messenger.
+    
+    Args:
+        role: Rôle K-Planner ("Créateur", "Administrateur", "Membre", "Invité")
+              → Converti en rôle K-Messenger ("admin", "member", "guest")
+    """
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
         ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id])
         return
+    
+    # ✅ Conversion des rôles K-Planner → K-Messenger
+    if role in ["Créateur", "Administrateur"]:
+        messenger_role = "admin"  # ✅ Changé de "administrator" à "admin"
+    elif role == "Invité":
+        messenger_role = "guest"
+    else:
+        messenger_role = "member"
+    
     try:
-        requests.post(
+        response = requests.post(
             f"{K_CHAT_URL}/group/group/{group_id}/add-member",
-            json={"user_id": user_id, "actor": creator_id},
+            json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
             timeout=5
         )
+        if response.status_code == 200:
+            logger.info(f"✅ Membre {user_id} ajouté au groupe {group_id} avec rôle {messenger_role} (source: {role})")
+        else:
+            logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
     except Exception as e:
         logger.error(f"Error adding member to K-Chat group: {e}")
-
+        
 def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None):
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:

@@ -104,6 +104,15 @@ class Utilisateur(Base):
     Workspace: Mapped[List['Workspace']] = relationship('Workspace', back_populates='utilisateur')
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='utilisateur')
     paiements_abonnement: Mapped[List['PaiementAbonnement']] = relationship('PaiementAbonnement', back_populates='utilisateur')
+    # Messagerie relations
+    messagerie_rooms_member1: Mapped[List['Room']] = relationship('Room', foreign_keys='Room.member1', back_populates='utilisateur_member1')
+    messagerie_rooms_member2: Mapped[List['Room']] = relationship('Room', foreign_keys='Room.member2', back_populates='utilisateur_member2')
+    messagerie_groupes_crees: Mapped[List['Groupe']] = relationship('Groupe', foreign_keys='Groupe.creator', back_populates='utilisateur_creator')
+    messagerie_messages_envoyes: Mapped[List['Message']] = relationship('Message', foreign_keys='Message.sender', back_populates='utilisateur_sender')
+    messagerie_groupes_membre: Mapped[List['GroupeMembers']] = relationship('GroupeMembers', foreign_keys='GroupeMembers.member', back_populates='utilisateur_member')
+    user_presence: Mapped[Optional['UserPresence']] = relationship('UserPresence', foreign_keys='UserPresence.id_utilisateur', back_populates='utilisateur', uselist=False)
+    contacts_demandes: Mapped[List['Contact']] = relationship('Contact', foreign_keys='Contact.requester_id', back_populates='requester')
+    contacts_recus: Mapped[List['Contact']] = relationship('Contact', foreign_keys='Contact.addressee_id', back_populates='addressee')
 
 
 class Motivation(Base):
@@ -487,6 +496,7 @@ class HistoriqueConnexion(Base):
     # Relations
     utilisateur: Mapped[Optional['Utilisateur']] = relationship('Utilisateur', back_populates='historique_connexions')
 
+
 class Information(Base):
     __tablename__ = 'information'
     __table_args__ = (
@@ -532,6 +542,7 @@ class Publicite(Base):
     # Relations
     utilisateur: Mapped[Optional['Utilisateur']] = relationship('Utilisateur', back_populates='publicite')
 
+
 class PolitiqueUtilisation(Base):
     __tablename__ = 'politique_utilisation'
     __table_args__ = (
@@ -572,6 +583,7 @@ class AcceptationPolitique(Base):
     utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur')
     politique: Mapped['PolitiqueUtilisation'] = relationship('PolitiqueUtilisation', back_populates='acceptations')
 
+
 class Notification(Base):
     __tablename__ = 'notification'
     __table_args__ = (
@@ -608,7 +620,7 @@ class Notification(Base):
     evenement: Mapped[Optional['Evenement']] = relationship('Evenement', foreign_keys=[id_evenement])
     commentaire: Mapped[Optional['Commentaire']] = relationship('Commentaire', foreign_keys=[id_commentaire])
     reponsecommentaire: Mapped[Optional['Reponsecommentaire']] = relationship('Reponsecommentaire', foreign_keys=[id_reponsecommentaire])
-    message_rel: Mapped[Optional['Message']] = relationship('Message', foreign_keys=[id_message])
+    message: Mapped[Optional['Message']] = relationship('Message', foreign_keys=[id_message])
     groupe: Mapped[Optional['Groupe']] = relationship('Groupe', foreign_keys=[id_groupe])
     reaction: Mapped[Optional['Reaction']] = relationship('Reaction', foreign_keys=[id_reaction])
     historique_connexion: Mapped[Optional['HistoriqueConnexion']] = relationship('HistoriqueConnexion', foreign_keys=[id_historique_connexion])
@@ -616,7 +628,10 @@ class Notification(Base):
     suivi_utilisateur: Mapped[Optional['SuiviUtilisateur']] = relationship('SuiviUtilisateur', foreign_keys=[id_suivi_utilisateur])
 
 
-# Classes pour les schémas messagerie
+# ============================================================================
+# CLASSES DU SCHÉMA MESSAGERIE (100% conforme à la requête SQL)
+# ============================================================================
+
 class Room(Base):
     __tablename__ = 'room'
     __table_args__ = (
@@ -624,6 +639,8 @@ class Room(Base):
         CheckConstraint('member1 < member2', name='room_members_order_check'),
         UniqueConstraint('member1', 'member2', name='room_members_unique'),
         PrimaryKeyConstraint('id', name='room_pkey'),
+        Index('idx_messagerie_room_member1', 'member1'),
+        Index('idx_messagerie_room_member2', 'member2'),
         {'schema': 'messagerie'}
     )
 
@@ -634,14 +651,16 @@ class Room(Base):
 
     # Relations
     messages: Mapped[List['Message']] = relationship('Message', back_populates='room')
-    utilisateur_member1: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member1])
-    utilisateur_member2: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member2])
+    utilisateur_member1: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member1], back_populates='messagerie_rooms_member1')
+    utilisateur_member2: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member2], back_populates='messagerie_rooms_member2')
 
 
 class Groupe(Base):
     __tablename__ = 'groupe'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='groupe_pkey'),
+        Index('idx_messagerie_groupe_creator', 'creator'),
+        Index('idx_messagerie_groupe_resource', 'resource_type', 'resource_id'),
         {'schema': 'messagerie'}
     )
 
@@ -649,14 +668,18 @@ class Groupe(Base):
     name: Mapped[str] = mapped_column(String(255))
     creator: Mapped[str] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='RESTRICT'))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    is_closed: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
     description: Mapped[Optional[str]] = mapped_column(String(500))
     photo_url: Mapped[Optional[str]] = mapped_column(String(512))
+    resource_type: Mapped[Optional[str]] = mapped_column(String(50))
+    resource_id: Mapped[Optional[str]] = mapped_column(String(50))
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
     messages: Mapped[List['Message']] = relationship('Message', back_populates='groupe')
     members: Mapped[List['GroupeMembers']] = relationship('GroupeMembers', back_populates='groupe')
-    utilisateur_creator: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[creator])
+    utilisateur_creator: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[creator], back_populates='messagerie_groupes_crees')
+    notifications: Mapped[List['NotificationMessagerie']] = relationship('NotificationMessagerie', back_populates='groupe')
 
 
 class Message(Base):
@@ -664,6 +687,9 @@ class Message(Base):
     __table_args__ = (
         CheckConstraint("((id_room IS NOT NULL) AND (id_groupe IS NULL)) OR ((id_room IS NULL) AND (id_groupe IS NOT NULL))", name='message_target_check'),
         PrimaryKeyConstraint('id', name='message_pkey'),
+        Index('idx_messagerie_message_sender', 'sender'),
+        Index('idx_messagerie_message_room_created', 'id_room', 'created_at'),
+        Index('idx_messagerie_message_groupe_created', 'id_groupe', 'created_at'),
         {'schema': 'messagerie'}
     )
 
@@ -681,15 +707,14 @@ class Message(Base):
     seen: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
     id_room: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.room.id', ondelete='RESTRICT'))
     id_groupe: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.groupe.id', ondelete='SET NULL'))
-    reply_to_id: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('messagerie.message.id', ondelete='SET NULL'))
-    is_pinned: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
-    is_edited: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
 
-    # Relations
+    # Relations (❌ reply_to_id, is_pinned, is_edited SUPPRIMÉS)
     room: Mapped[Optional['Room']] = relationship('Room', back_populates='messages')
     groupe: Mapped[Optional['Groupe']] = relationship('Groupe', back_populates='messages')
-    utilisateur_sender: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[sender])
-    reply_to: Mapped[Optional['Message']] = relationship('Message', remote_side=[id])
+    utilisateur_sender: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[sender], back_populates='messagerie_messages_envoyes')
+    attachments: Mapped[List['Attachment']] = relationship('Attachment', back_populates='message')
+    reactions: Mapped[List['MessageReaction']] = relationship('MessageReaction', back_populates='message')
+    read_receipts: Mapped[List['MessageReadReceipt']] = relationship('MessageReadReceipt', back_populates='message')
 
 
 class GroupeMembers(Base):
@@ -697,6 +722,8 @@ class GroupeMembers(Base):
     __table_args__ = (
         CheckConstraint("role::text = ANY (ARRAY['admin'::character varying, 'member'::character varying, 'guest'::character varying]::text[])", name='groupe_members_role_check'),
         PrimaryKeyConstraint('id_groupe', 'member', name='groupe_members_pkey'),
+        Index('idx_messagerie_groupe_members_member', 'member'),
+        Index('idx_messagerie_groupe_members_role', 'role'),
         {'schema': 'messagerie'}
     )
 
@@ -707,13 +734,14 @@ class GroupeMembers(Base):
 
     # Relations
     groupe: Mapped['Groupe'] = relationship('Groupe', back_populates='members')
-    utilisateur_member: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member])
+    utilisateur_member: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[member], back_populates='messagerie_groupes_membre')
 
 
 class NotificationMessagerie(Base):
     __tablename__ = 'notification'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='notification_messagerie_pkey'),
+        Index('idx_messagerie_notification_utilisateur', 'id_utilisateur', 'est_lu'),
         {'schema': 'messagerie'}
     )
 
@@ -725,14 +753,15 @@ class NotificationMessagerie(Base):
     est_lu: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('false'))
 
     # Relations
-    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
-    groupe: Mapped[Optional['Groupe']] = relationship('Groupe', foreign_keys=[id_groupe])
+    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur], back_populates='notification_messagerie')
+    groupe: Mapped[Optional['Groupe']] = relationship('Groupe', foreign_keys=[id_groupe], back_populates='notifications')
 
 
 class Attachment(Base):
     __tablename__ = 'attachment'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='attachment_pkey'),
+        Index('idx_attachment_message', 'id_message'),
         {'schema': 'messagerie'}
     )
 
@@ -745,7 +774,7 @@ class Attachment(Base):
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
-    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message], back_populates='attachments')
 
 
 class MessageReadReceipt(Base):
@@ -753,6 +782,7 @@ class MessageReadReceipt(Base):
     __table_args__ = (
         CheckConstraint("status::text = ANY (ARRAY['delivered'::character varying, 'read'::character varying]::text[])", name='message_read_receipt_status_check'),
         PrimaryKeyConstraint('id_message', 'id_utilisateur', name='message_read_receipt_pkey'),
+        Index('idx_messagerie_read_receipt_user', 'id_utilisateur'),
         {'schema': 'messagerie'}
     )
 
@@ -762,7 +792,7 @@ class MessageReadReceipt(Base):
     status_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
-    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message], back_populates='read_receipts')
     utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
 
 
@@ -771,6 +801,7 @@ class MessageReaction(Base):
     __table_args__ = (
         UniqueConstraint('id_message', 'id_utilisateur', 'emoji', name='message_reaction_id_message_id_utilisateur_emoji_key'),
         PrimaryKeyConstraint('id', name='message_reaction_pkey'),
+        Index('idx_messagerie_reaction_message', 'id_message'),
         {'schema': 'messagerie'}
     )
 
@@ -781,7 +812,7 @@ class MessageReaction(Base):
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
-    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message])
+    message: Mapped['Message'] = relationship('Message', foreign_keys=[id_message], back_populates='reactions')
     utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
 
 
@@ -799,7 +830,7 @@ class UserPresence(Base):
     custom_status: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Relations
-    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur])
+    utilisateur: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[id_utilisateur], back_populates='user_presence')
 
 
 class Contact(Base):
@@ -809,6 +840,8 @@ class Contact(Base):
         CheckConstraint("status::text = ANY (ARRAY['pending'::character varying, 'accepted'::character varying, 'blocked'::character varying]::text[])", name='contact_status_check'),
         UniqueConstraint('requester_id', 'addressee_id', name='contact_request_unique'),
         PrimaryKeyConstraint('id', name='contact_pkey'),
+        Index('idx_contact_requester', 'requester_id', 'status'),
+        Index('idx_contact_addressee', 'addressee_id', 'status'),
         {'schema': 'messagerie'}
     )
 
@@ -820,8 +853,8 @@ class Contact(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
 
     # Relations
-    requester: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[requester_id])
-    addressee: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[addressee_id])
+    requester: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[requester_id], back_populates='contacts_demandes')
+    addressee: Mapped['Utilisateur'] = relationship('Utilisateur', foreign_keys=[addressee_id], back_populates='contacts_recus')
 
 
 #######################################
@@ -1668,6 +1701,10 @@ class Membre(Base):
         Index('idx_membre_tache', 'id_tache'),
         Index('idx_membre_role', 'role'),
         Index('idx_membre_statut', 'statut'),
+        Index('idx_membre_workspace_unique', 'id_utilisateur', 'id_workspace', unique=True, postgresql_where=text('id_workspace IS NOT NULL')),
+        Index('idx_membre_espace_unique', 'id_utilisateur', 'id_espace', unique=True, postgresql_where=text('id_espace IS NOT NULL')),
+        Index('idx_membre_liste_unique', 'id_utilisateur', 'id_liste', unique=True, postgresql_where=text('id_liste IS NOT NULL')),
+        Index('idx_membre_tache_unique', 'id_utilisateur', 'id_tache', unique=True, postgresql_where=text('id_tache IS NOT NULL')),
         {'schema': 'planer'}
     )
 
@@ -1733,12 +1770,6 @@ class Rapport(Base):
     periode_fin: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     id_membre: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.membre.id', ondelete='SET NULL'))
-    owner_user_id: Mapped[Optional[str]] = mapped_column(String(12))
-    owner_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255))
-    author_role: Mapped[Optional[str]] = mapped_column(String(30))
-    id_liste: Mapped[Optional[str]] = mapped_column(String(12))
-    id_espace: Mapped[Optional[str]] = mapped_column(String(12))
-    id_workspace: Mapped[Optional[str]] = mapped_column(String(12))
 
     # Relations
     membres: Mapped[Optional['Membre']] = relationship('Membre', back_populates='rapports')
@@ -1773,7 +1804,7 @@ class AbsenceEtConge(Base):
     __tablename__ = 'absence_et_conge'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='absence_et_conge_pkey'),
-        CheckConstraint("statut::text = ANY (ARRAY['en_attente'::character varying, 'approuvee'::character varying, 'rejetee'::character varying, 'annulee'::character varying, 'terminee'::character varying]::text[])", name='absence_et_conge_statut_check'),
+        CheckConstraint("statut::text = ANY (ARRAY['En attente'::character varying, 'Accepté'::character varying, 'Refusé'::character varying, 'Effectué'::character varying]::text[])", name='absence_et_conge_statut_check'),
         CheckConstraint("date_fin IS NULL OR date_fin >= date_debut", name='absence_et_conge_date_fin_check'),
         CheckConstraint("duree_demandee_en_jours IS NULL OR duree_demandee_en_jours >= 0", name='absence_et_conge_duree_check'),
         Index('idx_absence_et_conge_membre', 'id_membre'),
@@ -1786,21 +1817,17 @@ class AbsenceEtConge(Base):
     is_absence: Mapped[bool] = mapped_column(Boolean, server_default=text('true'))
     date_debut: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     date_fin: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    statut: Mapped[str] = mapped_column(String(50), server_default=text("'en_attente'::character varying"))
+    statut: Mapped[str] = mapped_column(String(50), server_default=text("'Effectué'::character varying"))
     statut_date: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     motif: Mapped[Optional[str]] = mapped_column(String(255))
     is_conge_planifie: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     duree_demandee_en_jours: Mapped[Optional[int]] = mapped_column(Integer)
     conge_interrompu_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    decision_commentaire: Mapped[Optional[str]] = mapped_column(String(255))
-    decision_by: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
-    decision_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     id_membre: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.membre.id', ondelete='SET NULL'))
     
     # Relations
     membres: Mapped[Optional['Membre']] = relationship('Membre', back_populates='absences_et_conges')
-    decisionnaire: Mapped[Optional['Utilisateur']] = relationship('Utilisateur', foreign_keys=[decision_by])
 
 
 class Tache(Base):
@@ -1827,7 +1854,6 @@ class Tache(Base):
     ordre_affichage: Mapped[Optional[int]] = mapped_column(SmallInteger)
     id_liste: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.liste.id', ondelete='SET NULL'))
     id_tache_parent: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.tache.id', ondelete='CASCADE'))
-    id_createur: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     
     # Relations
     liste: Mapped[Optional['Liste']] = relationship('Liste', back_populates='taches')
@@ -1835,22 +1861,6 @@ class Tache(Base):
     sous_taches: Mapped[List['Tache']] = relationship('Tache', back_populates='parent')
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='tache')
     checklists: Mapped[List['Checklist']] = relationship('Checklist', back_populates='tache')
-
-    @property
-    def content_mode(self) -> str:
-        if self.checklists:
-            return "checklist"
-        if self.sous_taches:
-            return "subtasks"
-        return "leaf"
-
-    @property
-    def can_add_checklist(self) -> bool:
-        return self.content_mode != "subtasks"
-
-    @property
-    def can_add_subtask(self) -> bool:
-        return self.content_mode != "checklist"
 
 
 class Canevas(Base):
@@ -1909,7 +1919,6 @@ class Checklist(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     id_section: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.section.id', ondelete='SET NULL'))
     id_tache: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('planer.tache.id', ondelete='SET NULL'))
-    id_createur: Mapped[Optional[str]] = mapped_column(String(12), ForeignKey('public.utilisateur.id', ondelete='SET NULL'))
     
     # Relations
     section: Mapped[Optional['Section']] = relationship('Section', back_populates='checklists')
