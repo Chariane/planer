@@ -1,0 +1,86 @@
+2026-06-16 19:01:03,377 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-16 19:01:03,378 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-16 19:01:03,378 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-16 19:01:03,759 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-16 19:02:03,795 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-16 19:02:03,797 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-16 19:02:04,253 - root - ERROR - Erreur inattendue lors de l'inscription: (psycopg2.errors.UndefinedColumn) column "resource_type" does not exist
+LINE 1: SELECT id FROM messagerie.groupe WHERE resource_type = 'work...
+                                               ^
+
+[SQL: SELECT id FROM messagerie.groupe WHERE resource_type = %(type)s AND resource_id = %(id)s LIMIT 1]
+[parameters: {'type': 'workspace', 'id': '83064a71f9f7'}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2026-06-16 19:06:16,270 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 19:06:16,560 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-16 19:06:16,616 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadegetovihouande@gmail.com']
+2026-06-16 19:06:20,132 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadegetovihouande@gmail.com']
+2026-06-16 21:37:06,846 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 21:37:06,855 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 21:37:06,857 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-16 21:37:06,859 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 00:52:17,100 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 00:52:17,111 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 00:52:17,113 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 00:52:17,114 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:40:57,477 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 09:40:57,478 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 09:40:57,478 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 09:40:57,773 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 09:43:33,271 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:43:33,296 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:43:33,297 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:43:33,301 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:43:57,563 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 09:43:57,564 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 09:47:06,389 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 09:47:06,456 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-17 09:47:06,496 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 09:47:09,236 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 09:48:49,838 - backend.api_gateway.core.emails - DEBUG - Entering resend_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 09:48:52,332 - backend.api_gateway.core.emails - DEBUG - resend_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 09:54:36,449 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 09:54:36,458 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-17 09:54:36,476 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 09:54:38,970 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 09:55:54,873 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 09:55:55,173 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-17 09:55:55,206 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 09:55:57,826 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 09:58:05,140 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 09:58:05,436 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 500 21
+2026-06-17 09:58:05,455 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 09:58:08,389 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 10:12:50,785 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 10:12:50,788 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 10:12:50,788 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 10:12:51,278 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 10:13:17,045 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 10:13:17,045 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 10:13:17,045 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 10:13:17,549 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 10:14:36,260 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 10:14:36,260 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 10:14:36,728 - root - INFO - 📤 Création du groupe pour workspace/3110f921aeec avec creator=1b7ec716df03
+2026-06-17 10:14:36,732 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:14:36,978 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 210
+2026-06-17 10:14:36,979 - root - INFO - ✅ Groupe créé avec succès: 5fff866255bc
+2026-06-17 10:14:36,979 - root - INFO - ✅ Groupe de discussion créé avec succès: 5fff866255bc
+2026-06-17 10:14:36,997 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadege180905@gmail.com']
+2026-06-17 10:14:40,039 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadege180905@gmail.com']
+2026-06-17 10:24:28,624 - root - INFO - 📤 Création du groupe pour workspace/d1918a63e1d6 avec creator=9afef4586f84
+2026-06-17 10:24:28,627 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:24:28,655 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 210
+2026-06-17 10:24:28,657 - root - INFO - ✅ Groupe créé avec succès: 42abbbfaf49e
+2026-06-17 10:24:28,657 - root - INFO - ✅ Groupe de discussion créé avec succès: 42abbbfaf49e
+2026-06-17 10:24:28,675 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:24:28,711 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/group/1bdee1d6552e/add-member HTTP/1.1" 200 16
+2026-06-17 10:24:28,736 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['nadegetovihouande@gmail.com']
+2026-06-17 10:24:31,204 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['nadegetovihouande@gmail.com']
+2026-06-17 10:26:17,638 - root - INFO - 📤 Création du groupe pour workspace/e27805ffbe95 avec creator=aacbf85a8a3a
+2026-06-17 10:26:17,640 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:26:17,664 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 211
+2026-06-17 10:26:17,666 - root - INFO - ✅ Groupe créé avec succès: 2d432b693f99
+2026-06-17 10:26:17,667 - root - INFO - ✅ Groupe de discussion créé avec succès: 2d432b693f99
+2026-06-17 10:26:17,674 - backend.api_gateway.core.emails - DEBUG - Entering send_verification_email for email=['senous916@gmail.com']
+2026-06-17 10:26:20,055 - backend.api_gateway.core.emails - DEBUG - send_verification_email SUCCESS to ['senous916@gmail.com']

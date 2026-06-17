@@ -1,0 +1,5 @@
+2026-06-16 21:39:47,187 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 21:39:47,220 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-17 01:22:24,070 - backend.api_espace.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 10:23:24,094 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:23:24,132 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 211

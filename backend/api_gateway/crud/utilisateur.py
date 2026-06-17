@@ -100,6 +100,10 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
                 id_utilisateur=new_user.id,
             ))
 
+        # ✅ COMMIT de l'utilisateur AVANT de créer le workspace et le groupe
+        db.commit()
+        db.refresh(new_user)
+
         # 4. Creation du workspace par defaut (Contrainte 9)
         default_workspace = Workspace(
             nom=_build_default_workspace_name(user_data),
@@ -116,16 +120,31 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
             role="Créateur",
             statut="Actif",
         ))
-        ensure_resource_group(
-            db,
-            resource_type="workspace",
-            resource_id=default_workspace.id,
-            name=default_workspace.nom,
-            creator_id=new_user.id,
-            members=[new_user.id],
-        )
 
-        # 6. Traitement de l'invitation (Contrainte 2, 4, 5)
+        # ✅ COMMIT du workspace et du membre AVANT l'appel à K-Messenger
+        db.commit()
+        db.refresh(default_workspace)
+
+        # 6. Creation du groupe de discussion dans K-Messenger
+        # L'utilisateur existe maintenant en base, K-Messenger peut le trouver
+        try:
+            group_id = ensure_resource_group(
+                db,
+                resource_type="workspace",
+                resource_id=default_workspace.id,
+                name=default_workspace.nom,
+                creator_id=new_user.id,
+                members=[new_user.id],
+            )
+            if group_id:
+                logging.info(f"✅ Groupe de discussion créé avec succès: {group_id}")
+            else:
+                logging.warning("⚠️ Le groupe de discussion n'a pas pu être créé, mais l'inscription continue")
+        except Exception as e:
+            logging.warning(f"⚠️ Erreur lors de la création du groupe: {e}")
+            # L'inscription continue même si le groupe échoue
+
+        # 7. Traitement de l'invitation (Contrainte 2, 4, 5)
         if payload:
             target_role = payload.get("role")
             target_workspace_id = payload.get("workspace_id")

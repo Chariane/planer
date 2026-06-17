@@ -1,0 +1,33 @@
+2026-06-16 19:01:21,121 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-16 21:40:06,253 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 21:40:06,288 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-16 21:40:49,927 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-16 21:40:49,953 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 42
+2026-06-17 00:54:15,755 - python_multipart.multipart - DEBUG - Calling on_part_begin with no data
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_field with data[57:76]
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_value with data[78:121]
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_end with no data
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_field with data[123:135]
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_value with data[137:150]
+2026-06-17 00:54:15,757 - python_multipart.multipart - DEBUG - Calling on_header_end with no data
+2026-06-17 00:54:15,758 - python_multipart.multipart - DEBUG - Calling on_headers_finished with no data
+2026-06-17 00:54:15,758 - python_multipart.multipart - DEBUG - Calling on_part_data with data[154:23517]
+2026-06-17 00:54:15,758 - python_multipart.multipart - DEBUG - Calling on_part_end with no data
+2026-06-17 00:54:15,758 - python_multipart.multipart - DEBUG - Calling on_end with no data
+2026-06-17 00:54:22,117 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-17 01:22:24,064 - backend.api_liste_et_tache.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 09:42:01,617 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-17 09:44:48,692 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for nadege180905@gmail.com
+2026-06-17 09:44:51,982 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to nadege180905@gmail.com
+2026-06-17 09:46:22,339 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for nadege180905@gmail.com
+2026-06-17 09:46:24,871 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to nadege180905@gmail.com
+2026-06-17 10:23:32,212 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:23:32,240 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/create-group HTTP/1.1" 200 209
+2026-06-17 10:23:58,534 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for nadegetovihouande@gmail.com
+2026-06-17 10:24:01,689 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to nadegetovihouande@gmail.com
+2026-06-17 10:25:37,515 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for senous916@gmail.com
+2026-06-17 10:25:40,019 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to senous916@gmail.com
+2026-06-17 10:27:39,537 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for senous916@gmail.com
+2026-06-17 10:27:42,590 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to senous916@gmail.com
+2026-06-17 10:27:56,794 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-17 10:27:56,833 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/group/1bdee1d6552e/add-member HTTP/1.1" 200 16

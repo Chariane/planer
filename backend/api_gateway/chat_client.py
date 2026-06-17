@@ -15,20 +15,64 @@ def _get_group_id_by_resource(db, resource_type: str, resource_id: str):
     return row[0] if row else None
 
 def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
+    """
+    Crée un groupe de discussion dans K-Messenger pour une ressource (workspace, espace, liste).
+    
+    Args:
+        db: Session SQLAlchemy
+        resource_type: Type de ressource ('workspace', 'espace', 'liste')
+        resource_id: ID de la ressource
+        name: Nom du groupe
+        creator_id: ID du créateur (doit exister dans public.utilisateur)
+        members: Liste des membres à ajouter
+    
+    Returns:
+        group_id: ID du groupe créé ou existant, None si erreur
+    """
+    # Vérifier si un groupe existe déjà pour cette ressource
     existing_group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if existing_group_id:
+        logging.info(f"🔍 Groupe existant trouvé: {existing_group_id} pour {resource_type}/{resource_id}")
         return existing_group_id
+    
+    # Préparer les membres
+    members_list = members or []
+    if creator_id not in members_list:
+        members_list = [creator_id] + members_list
+    
     try:
+        logging.info(f"📤 Création du groupe pour {resource_type}/{resource_id} avec creator={creator_id}")
+        
         response = requests.post(
             f"{K_CHAT_URL}/group/create-group",
-            json={"name": name, "creator": creator_id, "members": members or [], "resource_type": resource_type, "resource_id": resource_id},
+            json={
+                "name": name,
+                "creator": creator_id,
+                "members": members_list,
+                "resource_type": resource_type,
+                "resource_id": resource_id
+            },
             timeout=5
         )
+        
         if response.status_code == 200:
-            return response.json().get("group_id")
+            data = response.json()
+            group_id = data.get("group_id")
+            logging.info(f"✅ Groupe créé avec succès: {group_id}")
+            return group_id
+        else:
+            logging.warning(f"⚠️ K-Messenger a retourné une erreur {response.status_code}: {response.text}")
+            return None
+            
+    except requests.exceptions.ConnectionError:
+        logging.error("❌ Impossible de contacter K-Messenger. Le service est-il démarré sur le port 8000 ?")
+        return None
+    except requests.exceptions.Timeout:
+        logging.error("❌ Timeout lors de l'appel à K-Messenger")
+        return None
     except Exception as e:
-        logger.error(f"Error creating K-Chat group: {e}")
-    return None
+        logging.error(f"❌ Erreur lors de la création du groupe: {e}")
+        return None
 
 def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str):
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
