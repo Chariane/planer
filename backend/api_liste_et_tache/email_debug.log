@@ -804,3 +804,14 @@ email_debug.log2026-06-17 16:54:03,333 - backend.api_liste_et_tache.core.deadlin
 2026-06-18 11:27:17,237 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
 2026-06-18 11:27:17,253 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/group/039f5d67dd7a/add-member HTTP/1.1" 200 16
 2026-06-18 11:27:17,254 - backend.api_liste_et_tache.chat_client - INFO - ✅ Membre 1de79b9a05a6 ajouté au groupe 039f5d67dd7a via ensure_chat_group_for_user
+2026-06-18 11:32:56,477 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-18 11:33:00,388 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-18 11:33:16,493 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-18 11:33:20,777 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-18 15:47:42,846 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.
+2026-06-18 16:24:38,034 - backend.api_liste_et_tache.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 16:48:23,474 - backend.api_liste_et_tache.core.emails - DEBUG - Entering send_liste_invitation_email for nadegetovihouande@gmail.com
+2026-06-18 16:48:26,342 - backend.api_liste_et_tache.core.emails - DEBUG - send_liste_invitation_email SUCCESS to nadegetovihouande@gmail.com
+2026-06-18 16:49:09,528 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
+2026-06-18 16:49:09,568 - urllib3.connectionpool - DEBUG - http://localhost:8000 "POST /group/group/039f5d67dd7a/add-member HTTP/1.1" 200 16
+2026-06-18 16:49:09,577 - backend.api_liste_et_tache.chat_client - INFO - ✅ Membre 1de79b9a05a6 ajouté au groupe 039f5d67dd7a avec rôle admin (source: liste:32c455bec2e8)

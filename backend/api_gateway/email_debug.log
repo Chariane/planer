@@ -212,3 +212,17 @@ email_debug.log2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded l
 2026-06-18 11:24:02,338 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
 2026-06-18 11:24:02,347 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
 2026-06-18 11:24:02,348 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 15:47:02,544 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-18 15:47:02,545 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-18 15:47:02,545 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-18 15:47:03,057 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-18 15:49:20,444 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 15:49:20,677 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 15:49:20,678 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 15:49:20,678 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 15:54:37,417 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-18 15:54:37,421 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-18 16:40:50,122 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 16:40:50,143 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 16:40:50,145 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 16:40:50,146 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
