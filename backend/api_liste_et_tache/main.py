@@ -15,12 +15,14 @@ if __package__ in {None, ""}:
     from backend.api_liste_et_tache.routes.utilisateur import router as utilisateur_router
     from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
     from backend.api_liste_et_tache.routes.dashboard import router as dashboard_router
+    from backend.api_liste_et_tache.routes.chat import router as chat_router
     from backend.api_liste_et_tache.core.database import engine
     from backend.api_liste_et_tache.core.deadline_scheduler import deadline_reminder_scheduler
 else:
     from .routes.utilisateur import router as utilisateur_router
     from .routes.entreprise import router as entreprise_router
     from .routes.dashboard import router as dashboard_router
+    from .routes.chat import router as chat_router
     from .core.database import engine
     from .core.deadline_scheduler import deadline_reminder_scheduler
 
@@ -39,7 +41,6 @@ def ensure_runtime_columns() -> None:
         conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_by varchar(12)"))
         conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_at timestamp"))
         
-        # Correction de la contrainte de statut pour absences (V1)
         conn.execute(text("ALTER TABLE planer.absence_et_conge DROP CONSTRAINT IF EXISTS absence_et_conge_statut_check"))
         conn.execute(text("""
             UPDATE planer.absence_et_conge
@@ -97,7 +98,7 @@ app = FastAPI(
 # Configuration CORS (à adapter selon tes besoins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Origine explicite pour allow_credentials=True
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,6 +107,7 @@ app.add_middleware(
 app.include_router(utilisateur_router)
 app.include_router(entreprise_router)
 app.include_router(dashboard_router)
+app.include_router(chat_router)
 
 # Monter le dossier des uploads pour servir les fichiers statiques
 uploads_dir = Path(__file__).resolve().parent / "uploads"

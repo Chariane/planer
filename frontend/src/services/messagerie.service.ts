@@ -121,6 +121,23 @@ const getCurrentUsername = (): string => {
 
 const wsBaseUrl = () => MESSAGERIE_BASE_URL.replace(/^http/, 'ws');
 
+// ✅ NOUVEAU : Garantir un groupe via K-Planner
+export const ensureChatGroup = async (resourceType: string, resourceId: string): Promise<{ success: boolean; group_id: string }> => {
+  // Choisir le bon microservice selon le type
+  const baseUrlMap: Record<string, string> = {
+    workspace: import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003',
+    espace: import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001',
+    liste: import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004',
+  };
+  
+  const baseUrl = baseUrlMap[resourceType];
+  if (!baseUrl) {
+    throw new Error(`Type de ressource inconnu: ${resourceType}`);
+  }
+  
+  return apiFetch(baseUrl, `/chat/ensure/${resourceType}/${resourceId}`);
+};
+
 export const messagerieService = {
   listGroups: async () => {
     const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/user-groups/${getCurrentUserId()}`);
@@ -146,7 +163,6 @@ export const messagerieService = {
     return Array.isArray(res) ? { messages: res } : res;
   },
 
-  // ✅ CORRIGÉ : Appel réel à K-MESSENGER
   updateGroupClosedState: async (groupId: string, isClosed: boolean) => {
     const actor = getCurrentUserId();
     return apiFetch(MESSAGERIE_BASE_URL, `/group/group/${groupId}/toggle-closed`, {

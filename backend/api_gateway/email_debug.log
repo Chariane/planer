@@ -190,3 +190,25 @@ email_debug.log2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded l
 2026-06-17 20:43:59,009 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
 2026-06-17 20:56:48,808 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
 2026-06-17 20:56:48,809 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-18 08:56:36,606 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-18 08:56:36,606 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-18 08:56:36,606 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-18 08:56:37,000 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-18 09:02:46,591 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:02:46,615 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:02:46,616 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:02:46,617 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:02:54,142 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-18 09:02:54,143 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-18 09:57:01,309 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:57:01,332 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:57:01,334 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 09:57:01,335 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 10:41:01,490 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 10:41:01,491 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 10:41:01,492 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 10:41:01,492 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 11:24:02,324 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 11:24:02,338 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 11:24:02,347 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-18 11:24:02,348 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.

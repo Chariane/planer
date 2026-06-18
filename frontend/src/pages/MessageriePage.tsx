@@ -44,6 +44,7 @@ import { authService } from '../services/auth.service';
 import type { PublicUserProfile } from '../services/auth.service';
 import {
   messagerieService,
+  ensureChatGroup,  // ✅ AJOUT
   type MessageItem,
   type MessagerieGroup,
   type MessagerieMember,
@@ -486,21 +487,35 @@ export default function MessageriePage() {
     setActiveGroupState(group);
   }, [activeGroupId, groups]);
 
+  // ✅ loadGroups MODIFIÉE avec ensureChatGroup
   const loadGroups = useCallback(async () => {
     setLoadingGroups(true);
     setError(null);
     try {
+      // ✅ Si un resource_type est demandé, garantir le groupe via K-Planner
+      if (desiredResourceType && desiredResourceId) {
+        try {
+          await ensureChatGroup(desiredResourceType, desiredResourceId);
+        } catch (ensureError) {
+          console.warn('Erreur lors de la synchronisation du groupe:', ensureError);
+          // On continue, l'utilisateur pourra réessayer
+        }
+      }
+      
       const [groupsResponse, privateResponse] = await Promise.all([
         messagerieService.listGroups(),
         messagerieService.listPrivateConversations(),
       ]);
+      
       const nextGroups = groupsResponse.groups || [];
       const requestedGroup = nextGroups.find(group =>
         group.resource_type === desiredResourceType && group.resource_id === desiredResourceId
       );
+      
       setGroups(nextGroups);
       setPrivateConversations(privateResponse.conversations || []);
       setActiveGroupId(current => privateUserId ? current : requestedGroup?.id || current || nextGroups[0]?.id || null);
+      
       messagerieService.getUnreadSummary()
         .then(summary => setUnreadSummary({ ...emptyUnreadSummary, ...summary }))
         .catch(() => setUnreadSummary(emptyUnreadSummary));
@@ -606,18 +621,37 @@ export default function MessageriePage() {
     loadPrivateThread(privateUserId);
   }, [loadPrivateThread, privateUserId]);
 
+  // ✅ WEBSOCKET GROUPE - CORRIGÉ
   useEffect(() => {
     if (privateUserId) return;
     if (!activeGroupId) return;
+    
+    // ✅ NE PAS RECRÉER LE SOCKET S'IL EST DÉJÀ OUVERT
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+    
     socketRef.current?.close();
     setIsRealtime(false);
 
     const socket = new WebSocket(messagerieService.groupSocketUrl(activeGroupId));
     socketRef.current = socket;
 
-    socket.onopen = () => setIsRealtime(true);
-    socket.onclose = () => setIsRealtime(false);
-    socket.onerror = () => setIsRealtime(false);
+    socket.onopen = () => {
+      console.log('🔌 WebSocket groupe connecté:', activeGroupId);
+      setIsRealtime(true);
+    };
+    
+    socket.onclose = () => {
+      console.log('🔌 WebSocket groupe déconnecté:', activeGroupId);
+      setIsRealtime(false);
+    };
+    
+    socket.onerror = (err) => {
+      console.error('❌ Erreur WebSocket groupe:', err);
+      setIsRealtime(false);
+    };
+    
     socket.onmessage = event => {
       try {
         const payload = JSON.parse(event.data) as Partial<MessageItem> & {
@@ -626,11 +660,14 @@ export default function MessageriePage() {
           message_id?: string;
           group?: Partial<MessagerieGroup> & { id: string };
           error?: string;
+          type?: string;
         };
+        
         if (payload.error) {
           setError(getErrorMessage(payload.error, 'Action impossible dans cette discussion.'));
           return;
         }
+        
         if (payload.event === 'group_state_updated' && payload.group?.id) {
           setGroups(prev => prev.map(group => {
             if (group.id !== payload.group!.id) return group;
@@ -638,7 +675,9 @@ export default function MessageriePage() {
             const canManage = Boolean(group.can_manage);
             return {
               ...group,
+              ...payload.group,
               is_closed: isClosed,
+              can_manage: canManage,
               can_write: !isClosed || canManage,
             };
           }));
@@ -660,74 +699,145 @@ export default function MessageriePage() {
           }
           return;
         }
+        
         if (typeof payload.type === 'string' && payload.type.startsWith('call_')) {
           callSignalHandlerRef.current(payload as CallSignalPayload);
           return;
         }
+        
         if (payload.event === 'message_updated' && payload.updated_message) {
-          setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
+          setMessages(prev => prev.map(item => 
+            item.id === payload.updated_message!.id ? payload.updated_message! : item
+          ));
           return;
         }
+        
         if (payload.event === 'message_deleted' && payload.message_id) {
           setMessages(prev => prev.filter(item => item.id !== payload.message_id));
           return;
         }
-        if (payload.id && payload.id_groupe === activeGroupId) {
+        
+        // ✅ TRAITEMENT DES NOUVEAUX MESSAGES - CORRIGÉ
+        if (payload.id) {
           const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
-          if (!hasContent) {
+          if (!hasContent && payload.type !== 'system') {
             return;
           }
-          const nextMessage = payload as MessageItem;
-          setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+          
+          // ✅ FORCER l'ajout du message si c'est le groupe actif
+          const isGroupMessage = payload.id_groupe === activeGroupId;
+          const isSystemMessage = payload.type === 'system';
+          
+          // ✅ Si le message n'a pas id_groupe mais qu'il vient du WebSocket du groupe actif, on l'accepte
+          if (isGroupMessage || isSystemMessage || !payload.id_groupe) {
+            const nextMessage = payload as MessageItem;
+            
+            // ✅ Ajouter id_groupe si manquant
+            if (!nextMessage.id_groupe) {
+              nextMessage.id_groupe = activeGroupId;
+            }
+            
+            setMessages(prev => {
+              // ✅ Éviter les doublons
+              if (prev.some(item => item.id === nextMessage.id)) {
+                return prev;
+              }
+              return [...prev, nextMessage];
+            });
+          }
         }
-      } catch {
+      } catch (err) {
+        console.error('❌ Erreur de traitement WebSocket:', err);
         setIsRealtime(false);
       }
     };
 
-    return () => socket.close();
+    return () => {
+      console.log('🔌 Fermeture du WebSocket groupe:', activeGroupId);
+      socket.close();
+    };
   }, [activeGroupId, privateUserId]);
 
+  // ✅ WEBSOCKET PRIVÉ - CORRIGÉ
   useEffect(() => {
     if (!privateUserId) return;
+    
+    // ✅ NE PAS RECRÉER LE SOCKET S'IL EST DÉJÀ OUVERT
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+    
     socketRef.current?.close();
     setIsRealtime(false);
 
     const socket = new WebSocket(messagerieService.privateSocketUrl(privateUserId));
     socketRef.current = socket;
 
-    socket.onopen = () => setIsRealtime(true);
-    socket.onclose = () => setIsRealtime(false);
-    socket.onerror = () => setIsRealtime(false);
+    socket.onopen = () => {
+      console.log('🔌 WebSocket privé connecté:', privateUserId);
+      setIsRealtime(true);
+    };
+    
+    socket.onclose = () => {
+      console.log('🔌 WebSocket privé déconnecté:', privateUserId);
+      setIsRealtime(false);
+    };
+    
+    socket.onerror = (err) => {
+      console.error('❌ Erreur WebSocket privé:', err);
+      setIsRealtime(false);
+    };
+    
     socket.onmessage = event => {
       try {
-        const payload = JSON.parse(event.data) as Partial<MessageItem> & { event?: string; updated_message?: MessageItem; message_id?: string };
+        const payload = JSON.parse(event.data) as Partial<MessageItem> & { 
+          event?: string; 
+          updated_message?: MessageItem; 
+          message_id?: string;
+          type?: string;
+        };
+        
         if (typeof payload.type === 'string' && payload.type.startsWith('call_')) {
           callSignalHandlerRef.current(payload as CallSignalPayload);
           return;
         }
+        
         if (payload.event === 'message_updated' && payload.updated_message) {
-          setMessages(prev => prev.map(item => item.id === payload.updated_message!.id ? payload.updated_message! : item));
+          setMessages(prev => prev.map(item => 
+            item.id === payload.updated_message!.id ? payload.updated_message! : item
+          ));
           return;
         }
+        
         if (payload.event === 'message_deleted' && payload.message_id) {
           setMessages(prev => prev.filter(item => item.id !== payload.message_id));
           return;
         }
+        
+        // ✅ TRAITEMENT DES NOUVEAUX MESSAGES PRIVÉS
         if (payload.id) {
           const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
-          if (!hasContent) {
+          if (!hasContent && payload.type !== 'system') {
             return;
           }
           const nextMessage = payload as MessageItem;
-          setMessages(prev => prev.some(item => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+          setMessages(prev => {
+            if (prev.some(item => item.id === nextMessage.id)) {
+              return prev;
+            }
+            return [...prev, nextMessage];
+          });
         }
-      } catch {
+      } catch (err) {
+        console.error('❌ Erreur de traitement WebSocket privé:', err);
         setIsRealtime(false);
       }
     };
 
-    return () => socket.close();
+    return () => {
+      console.log('🔌 Fermeture du WebSocket privé:', privateUserId);
+      socket.close();
+    };
   }, [privateUserId]);
 
   useEffect(() => {
@@ -1334,80 +1444,27 @@ export default function MessageriePage() {
   };
 
   // ✅ FONCTION CORRIGÉE - Avec guard contre les appels multiples
-const toggleGroupClosedState = async () => {
-  if (groupStateLoading) return;
-  
-  const currentGroup = groups.find(g => g.id === activeGroupId);
-  if (!currentGroup || !canManageActiveGroup) return;
-  
-  const nextClosedState = !currentGroup.is_closed;
-  
-  setGroupStateLoading(true);
-  setError(null);
-  
-  const groupId = currentGroup.id;
-  const currentClosedState = currentGroup.is_closed || false;
-  
-  // Mise à jour optimiste
-  setActiveGroupState(prev => {
-    if (!prev || prev.id !== groupId) return prev;
-    return {
-      ...prev,
-      is_closed: nextClosedState,
-      can_write: !nextClosedState || !!prev.can_manage,
-    };
-  });
-  
-  setGroups(prev => prev.map(group => {
-    if (group.id !== groupId) return group;
-    return {
-      ...group,
-      is_closed: nextClosedState,
-      can_write: !nextClosedState || !!group.can_manage,
-    };
-  }));
-  
-  try {
-    const response = await messagerieService.updateGroupClosedState(groupId, nextClosedState);
+  const toggleGroupClosedState = async () => {
+    if (groupStateLoading) return;
     
-    // ✅ La réponse peut être { group: ... } ou directement le groupe
-    const updatedGroup = (response as any).group || response;
+    const currentGroup = groups.find(g => g.id === activeGroupId);
+    if (!currentGroup || !canManageActiveGroup) return;
     
-    const isClosed = Boolean(updatedGroup.is_closed);
-    const canManage = Boolean(updatedGroup.can_manage ?? currentGroup.can_manage);
+    const nextClosedState = !currentGroup.is_closed;
     
-    const finalGroup = {
-      ...currentGroup,
-      ...updatedGroup,
-      is_closed: isClosed,
-      can_manage: canManage,
-      can_write: !isClosed || canManage,
-    };
+    setGroupStateLoading(true);
+    setError(null);
     
-    // Mettre à jour activeGroupState
-    setActiveGroupState(prev => {
-      if (!prev || prev.id !== groupId) return prev;
-      return finalGroup;
-    });
+    const groupId = currentGroup.id;
+    const currentClosedState = currentGroup.is_closed || false;
     
-    // Mettre à jour groups
-    setGroups(prev => prev.map(group => {
-      if (group.id !== groupId) return group;
-      return finalGroup;
-    }));
-    
-    if (nextClosedState) {
-      setPendingAttachment(null);
-      setDraft('');
-    }
-    
-  } catch (err: unknown) {
+    // Mise à jour optimiste
     setActiveGroupState(prev => {
       if (!prev || prev.id !== groupId) return prev;
       return {
         ...prev,
-        is_closed: currentClosedState,
-        can_write: !currentClosedState || !!prev.can_manage,
+        is_closed: nextClosedState,
+        can_write: !nextClosedState || !!prev.can_manage,
       };
     });
     
@@ -1415,16 +1472,69 @@ const toggleGroupClosedState = async () => {
       if (group.id !== groupId) return group;
       return {
         ...group,
-        is_closed: currentClosedState,
-        can_write: !currentClosedState || !!group.can_manage,
+        is_closed: nextClosedState,
+        can_write: !nextClosedState || !!group.can_manage,
       };
     }));
     
-    setError(getErrorMessage(err, "Impossible de modifier l'état de cette discussion."));
-  } finally {
-    setGroupStateLoading(false);
-  }
-};
+    try {
+      const response = await messagerieService.updateGroupClosedState(groupId, nextClosedState);
+      
+      // ✅ La réponse peut être { group: ... } ou directement le groupe
+      const updatedGroup = (response as any).group || response;
+      
+      const isClosed = Boolean(updatedGroup.is_closed);
+      const canManage = Boolean(updatedGroup.can_manage ?? currentGroup.can_manage);
+      
+      const finalGroup = {
+        ...currentGroup,
+        ...updatedGroup,
+        is_closed: isClosed,
+        can_manage: canManage,
+        can_write: !isClosed || canManage,
+      };
+      
+      // Mettre à jour activeGroupState
+      setActiveGroupState(prev => {
+        if (!prev || prev.id !== groupId) return prev;
+        return finalGroup;
+      });
+      
+      // Mettre à jour groups
+      setGroups(prev => prev.map(group => {
+        if (group.id !== groupId) return group;
+        return finalGroup;
+      }));
+      
+      if (nextClosedState) {
+        setPendingAttachment(null);
+        setDraft('');
+      }
+      
+    } catch (err: unknown) {
+      setActiveGroupState(prev => {
+        if (!prev || prev.id !== groupId) return prev;
+        return {
+          ...prev,
+          is_closed: currentClosedState,
+          can_write: !currentClosedState || !!prev.can_manage,
+        };
+      });
+      
+      setGroups(prev => prev.map(group => {
+        if (group.id !== groupId) return group;
+        return {
+          ...group,
+          is_closed: currentClosedState,
+          can_write: !currentClosedState || !!group.can_manage,
+        };
+      }));
+      
+      setError(getErrorMessage(err, "Impossible de modifier l'état de cette discussion."));
+    } finally {
+      setGroupStateLoading(false);
+    }
+  };
 
   return (
     <div className="h-full min-h-0 overflow-y-auto xl:overflow-hidden bg-theme-page transition-colors duration-300">

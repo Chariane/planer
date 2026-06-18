@@ -542,7 +542,8 @@ def accept_workspace_invitation(
             user_id=user_id,
             name=workspace.nom,
             creator_id=workspace.id_utilisateur,
-            role=existing_member.role,  # ✅ Ajout du rôle
+            role=existing_member.role, 
+            cascade=True # ✅ Ajout du rôle
         )
         commit_or_raise(
             db,
@@ -567,6 +568,7 @@ def accept_workspace_invitation(
         name=workspace.nom,
         creator_id=workspace.id_utilisateur,
         role=invited_role,  # ✅ Ajout du rôle
+        cascade=True
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion au workspace.", refresh_instance=new_member)
     

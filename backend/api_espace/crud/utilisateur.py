@@ -488,7 +488,8 @@ def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -
             user_id=membre.id_utilisateur,
             name=espace.nom if espace else None,
             creator_id=createur_id,
-            role=membre.role,  # ✅ Ajout du rôle
+            role=membre.role,
+            cascade=True  # ✅ Ajout du rôle
         )
     commit_or_raise(
         db,
@@ -539,6 +540,7 @@ def update_espace_member(
             name=espace.nom if espace else None,
             creator_id=createur_id,
             role=membre.role,  # ✅ Ajout du rôle
+            cascade=True  # ✅ Ajout du rôle
         )
     elif "statut" in update_data:
         remove_resource_member(

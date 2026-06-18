@@ -13,12 +13,14 @@ if __package__ in {None, ""}:
     from backend.api_workspace.routes.entreprise import router as entreprise_router
     from backend.api_workspace.routes.plans import router as plans_router
     from backend.api_workspace.routes.utilisateur import router as utilisateur_router
+    from backend.api_workspace.routes.chat import router as chat_router
 else:
     from .routes.admin import router as admin_router
     from .routes.abonnement import router as abonnement_router
     from .routes.entreprise import router as entreprise_router
     from .routes.plans import router as plans_router
     from .routes.utilisateur import router as utilisateur_router
+    from .routes.chat import router as chat_router
 
 
 app = FastAPI(
@@ -30,7 +32,7 @@ app = FastAPI(
 # Configuration CORS (à adapter selon tes besoins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Origine explicite pour allow_credentials=True
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,6 +43,7 @@ app.include_router(entreprise_router)
 app.include_router(admin_router)
 app.include_router(abonnement_router)
 app.include_router(plans_router)
+app.include_router(chat_router)
 
 @app.get("/")
 def root():
