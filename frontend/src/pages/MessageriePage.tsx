@@ -454,8 +454,9 @@ export default function MessageriePage() {
   const callInitiatedByMeRef = useRef(false);
   const callWasActiveRef = useRef(false);
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; stream: MediaStream }>>([]);
-
-  const activeGroup = groups.find(group => group.id === activeGroupId) || null;
+  
+  const [activeGroupState, setActiveGroupState] = useState<MessagerieGroup | null>(null);
+  const activeGroup = activeGroupState;
   const desiredResourceType = searchParams.get('resource_type');
   const desiredResourceId = searchParams.get('resource_id');
   const desiredPrivateUserId = searchParams.get('private_user_id');
@@ -475,6 +476,15 @@ export default function MessageriePage() {
     : activeGroup
       ? `${resourceLabel(activeGroup)} • ${members.length || activeGroup.member_count} participant${(members.length || activeGroup.member_count) > 1 ? 's' : ''}`
       : '';
+
+  useEffect(() => {
+    if (!activeGroupId) {
+      setActiveGroupState(null);
+      return;
+    }
+    const group = groups.find(g => g.id === activeGroupId) || null;
+    setActiveGroupState(group);
+  }, [activeGroupId, groups]);
 
   const loadGroups = useCallback(async () => {
     setLoadingGroups(true);
@@ -632,9 +642,21 @@ export default function MessageriePage() {
               can_write: !isClosed || canManage,
             };
           }));
-          if (payload.group.id === activeGroupId && payload.group.is_closed) {
-            setPendingAttachment(null);
-            setDraft('');
+          if (payload.group.id === activeGroupId) {
+            setActiveGroupState(prev => {
+              if (!prev || prev.id !== payload.group!.id) return prev;
+              const isClosed = Boolean(payload.group!.is_closed);
+              return {
+                ...prev,
+                ...payload.group,
+                is_closed: isClosed,
+                can_write: !isClosed || prev.can_manage,
+              };
+            });
+            if (payload.group.is_closed) {
+              setPendingAttachment(null);
+              setDraft('');
+            }
           }
           return;
         }
@@ -650,7 +672,6 @@ export default function MessageriePage() {
           setMessages(prev => prev.filter(item => item.id !== payload.message_id));
           return;
         }
-        // ✅ Vérifier que c'est bien un message avec du contenu
         if (payload.id && payload.id_groupe === activeGroupId) {
           const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
           if (!hasContent) {
@@ -832,9 +853,7 @@ export default function MessageriePage() {
       socket.addEventListener('open', handleOpen, { once: true });
     });
 
-  // ✅ sendPayload avec vérification de contenu
   const sendPayload = useCallback(async (payload: Parameters<typeof messagerieService.sendGroupMessage>[1]) => {
-    // ✅ Vérifier que le payload a du contenu
     const hasContent = payload.message || payload.audio || payload.image || payload.video || payload.file;
     if (!hasContent) {
       return;
@@ -900,7 +919,6 @@ export default function MessageriePage() {
     setCallElapsedSeconds(0);
   }, [stopCallTimer]);
 
-  // ✅ postCallHistory avec vérification du message
   const postCallHistory = useCallback((statusLabel: 'terminé' | 'manqué' | 'refusé', durationSeconds = 0) => {
     const kindLabel = callKind === 'video' ? 'vidéo' : 'audio';
     const durationText = statusLabel === 'terminé' ? ` • durée ${formatDuration(durationSeconds)}` : '';
@@ -1276,7 +1294,6 @@ export default function MessageriePage() {
     }
   };
 
-  // ✅ sendMessage avec vérification du contenu
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     if ((!activeGroupId && !privateUserId) || sending) return;
@@ -1288,7 +1305,6 @@ export default function MessageriePage() {
     const text = draft.trim();
     const attachment = pendingAttachment;
 
-    // ✅ Ne rien faire si pas de contenu
     if (!text && !attachment) {
       return;
     }
@@ -1317,35 +1333,98 @@ export default function MessageriePage() {
     }
   };
 
-  const toggleGroupClosedState = async () => {
-    if (!activeGroup || !canManageActiveGroup || groupStateLoading) return;
-    const nextClosedState = !activeGroup.is_closed;
-    setGroupStateLoading(true);
-    setError(null);
-    try {
-      const updatedGroup = await messagerieService.updateGroupClosedState(activeGroup.id, nextClosedState);
-      setGroups(prev => prev.map(group => {
-        if (group.id !== activeGroup.id) return group;
-        const isClosed = Boolean(updatedGroup.is_closed);
-        const canManage = Boolean(updatedGroup.can_manage ?? group.can_manage);
-        return {
-          ...group,
-          ...updatedGroup,
-          is_closed: isClosed,
-          can_manage: canManage,
-          can_write: !isClosed || canManage,
-        };
-      }));
-      if (nextClosedState) {
-        setPendingAttachment(null);
-        setDraft('');
-      }
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "Impossible de modifier l'état de cette discussion."));
-    } finally {
-      setGroupStateLoading(false);
+  // ✅ FONCTION CORRIGÉE - Avec guard contre les appels multiples
+const toggleGroupClosedState = async () => {
+  if (groupStateLoading) return;
+  
+  const currentGroup = groups.find(g => g.id === activeGroupId);
+  if (!currentGroup || !canManageActiveGroup) return;
+  
+  const nextClosedState = !currentGroup.is_closed;
+  
+  setGroupStateLoading(true);
+  setError(null);
+  
+  const groupId = currentGroup.id;
+  const currentClosedState = currentGroup.is_closed || false;
+  
+  // Mise à jour optimiste
+  setActiveGroupState(prev => {
+    if (!prev || prev.id !== groupId) return prev;
+    return {
+      ...prev,
+      is_closed: nextClosedState,
+      can_write: !nextClosedState || !!prev.can_manage,
+    };
+  });
+  
+  setGroups(prev => prev.map(group => {
+    if (group.id !== groupId) return group;
+    return {
+      ...group,
+      is_closed: nextClosedState,
+      can_write: !nextClosedState || !!group.can_manage,
+    };
+  }));
+  
+  try {
+    const response = await messagerieService.updateGroupClosedState(groupId, nextClosedState);
+    
+    // ✅ La réponse peut être { group: ... } ou directement le groupe
+    const updatedGroup = (response as any).group || response;
+    
+    const isClosed = Boolean(updatedGroup.is_closed);
+    const canManage = Boolean(updatedGroup.can_manage ?? currentGroup.can_manage);
+    
+    const finalGroup = {
+      ...currentGroup,
+      ...updatedGroup,
+      is_closed: isClosed,
+      can_manage: canManage,
+      can_write: !isClosed || canManage,
+    };
+    
+    // Mettre à jour activeGroupState
+    setActiveGroupState(prev => {
+      if (!prev || prev.id !== groupId) return prev;
+      return finalGroup;
+    });
+    
+    // Mettre à jour groups
+    setGroups(prev => prev.map(group => {
+      if (group.id !== groupId) return group;
+      return finalGroup;
+    }));
+    
+    if (nextClosedState) {
+      setPendingAttachment(null);
+      setDraft('');
     }
-  };
+    
+  } catch (err: unknown) {
+    setActiveGroupState(prev => {
+      if (!prev || prev.id !== groupId) return prev;
+      return {
+        ...prev,
+        is_closed: currentClosedState,
+        can_write: !currentClosedState || !!prev.can_manage,
+      };
+    });
+    
+    setGroups(prev => prev.map(group => {
+      if (group.id !== groupId) return group;
+      return {
+        ...group,
+        is_closed: currentClosedState,
+        can_write: !currentClosedState || !!group.can_manage,
+      };
+    }));
+    
+    setError(getErrorMessage(err, "Impossible de modifier l'état de cette discussion."));
+  } finally {
+    setGroupStateLoading(false);
+  }
+};
 
   return (
     <div className="h-full min-h-0 overflow-y-auto xl:overflow-hidden bg-theme-page transition-colors duration-300">
@@ -1856,7 +1935,6 @@ export default function MessageriePage() {
                             ? privateMember
                             : memberById.get(message.sender);
                           
-                          // ✅ Récupérer la photo depuis le message ou depuis le membre
                           const senderPhoto = message.sender_photo_base64 || sender?.photo_base64;
                           const senderWithPhoto = sender ? { ...sender, photo_base64: senderPhoto } : null;
                           

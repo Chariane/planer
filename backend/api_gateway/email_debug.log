@@ -136,3 +136,57 @@ email_debug.log2026-06-17 16:53:30,111 - passlib.utils.compat - DEBUG - loaded l
 2026-06-17 17:53:02,330 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
 2026-06-17 17:53:09,079 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
 2026-06-17 17:53:09,080 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 19:31:15,324 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 19:31:15,339 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 19:31:15,347 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 19:31:15,348 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 19:41:12,237 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 19:41:12,243 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 19:41:12,243 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 19:41:12,809 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:03:51,862 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:03:51,873 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:03:51,875 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:03:51,876 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:04:01,118 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 20:04:01,120 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 20:27:33,909 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:27:33,909 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:27:33,910 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:27:34,389 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:28:32,604 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:28:32,604 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:28:32,604 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:28:33,189 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:32:24,978 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:32:24,978 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:32:24,979 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:32:25,578 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:32:48,465 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:32:48,465 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:32:48,465 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:32:49,046 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:34:48,502 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:34:48,502 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:34:48,502 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:34:48,992 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:35:41,390 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:35:41,399 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:35:41,404 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:35:41,406 - backend.api_gateway.core.security - ERROR - Erreur JWT: Signature has expired.
+2026-06-17 20:35:47,409 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 20:35:47,409 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround
+2026-06-17 20:43:40,720 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:43:40,720 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:43:40,720 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:43:41,387 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:43:44,812 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:43:44,812 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:43:44,812 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:43:45,463 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:43:58,469 - passlib.utils.compat - DEBUG - loaded lazy attr 'SafeConfigParser': <class 'configparser.ConfigParser'>
+2026-06-17 20:43:58,469 - passlib.utils.compat - DEBUG - loaded lazy attr 'NativeStringIO': <class '_io.StringIO'>
+2026-06-17 20:43:58,469 - passlib.utils.compat - DEBUG - loaded lazy attr 'BytesIO': <class '_io.BytesIO'>
+2026-06-17 20:43:59,009 - passlib.registry - DEBUG - registered 'bcrypt' handler: <class 'passlib.handlers.bcrypt.bcrypt'>
+2026-06-17 20:56:48,808 - passlib.handlers.bcrypt - DEBUG - detected 'bcrypt' backend, version '3.2.0'
+2026-06-17 20:56:48,809 - passlib.handlers.bcrypt - DEBUG - 'bcrypt' backend lacks $2$ support, enabling workaround

@@ -619,6 +619,8 @@ def get_me_resources(
     return get_user_navigation_data(db, current_user.id)
 
 
+# /backend/api_gateway/routes/auth.py
+
 @router.put("/me", response_model=UtilisateurOut)
 def update_me(
     user_update: UtilisateurUpdate,
@@ -631,12 +633,19 @@ def update_me(
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
 
     update_data = user_update.model_dump(exclude_unset=True)
-    ensure_unique_user_identity_fields(
-        db,
-        email=update_data.get("email"),
-        username=update_data.get("username"),
-        current_user_id=current_user.id,
-    )
+    
+    # ✅ BLOQUER email et username
+    if "email" in update_data:
+        raise HTTPException(
+            status_code=400, 
+            detail="La modification de l'adresse email est interdite."
+        )
+    if "username" in update_data:
+        raise HTTPException(
+            status_code=400, 
+            detail="La modification du nom d'utilisateur est interdite."
+        )
+    
     validate_self_password_update(update_data)
 
     # Gestion du changement de mot de passe
@@ -648,21 +657,21 @@ def update_me(
         del update_data["current_password"]
         del update_data["new_password"]
 
-    email_changed = email_has_changed(db_user, update_data)
-    if email_changed:
-        update_data.update(build_email_verification_metadata())
+    # ✅ Nettoyer date_nais si c'est une chaîne vide
+    if "date_nais" in update_data:
+        if update_data["date_nais"] == "" or update_data["date_nais"] is None:
+            update_data["date_nais"] = None
 
     # Mise à jour des autres champs
-    updated_user = update_utilisateur(db, current_user.id, update_data)
-
-    if email_changed:
-        background_tasks.add_task(
-            send_verification_email,
-            updated_user.username,
-            EmailSchema(email=[updated_user.email]),
-            updated_user.code_verification_email,
+    try:
+        updated_user = update_utilisateur(db, current_user.id, update_data)
+        return updated_user
+    except Exception as e:
+        # ✅ Message d'erreur professionnel
+        raise HTTPException(
+            status_code=400,
+            detail="Une erreur est survenue lors de la mise à jour de votre profil. Veuillez vérifier les champs saisis."
         )
-    return updated_user
 
 
 @router.post("/logout")

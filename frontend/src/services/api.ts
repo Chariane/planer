@@ -1,4 +1,8 @@
 // frontend/src/services/api.ts
+
+/**
+ * Nettoie et traduit les messages d'erreur pour l'utilisateur final
+ */
 export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
   const rawMessage = error instanceof Error
     ? error.message
@@ -12,6 +16,31 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
     .replace(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?[^\s)]*/gi, 'le serveur')
     .replace(/(?:localhost|127\.0\.0\.1)(?::\d+)?/gi, 'le serveur');
 
+  // ✅ Messages d'erreur Pydantic traduits
+  const pydanticErrorMap: Record<string, string> = {
+    'date_from_datetime_parsing': 'La date de naissance est invalide. Veuillez sélectionner une date valide.',
+    'Input should be a valid date': 'La date de naissance est invalide.',
+    'value is not a valid date': 'La date de naissance est invalide.',
+    'input is too short': 'La date de naissance est incomplète.',
+    'field required': 'Ce champ est requis.',
+    'value_error.missing': 'Ce champ est requis.',
+    'type_error.date': 'La date de naissance est invalide.',
+    'La modification de l\'email est interdite': 'La modification de l\'adresse email est interdite.',
+    'La modification du nom d\'utilisateur est interdite': 'La modification du nom d\'utilisateur est interdite.',
+    'Mot de passe actuel incorrect': 'Votre mot de passe actuel est incorrect.',
+    'Identifiants incorrects': 'Email ou mot de passe incorrect.',
+    'Utilisateur inactif': 'Votre compte est désactivé. Veuillez contacter le support.',
+    'Email déjà utilisé': 'Cette adresse email est déjà utilisée.',
+    'Nom d\'utilisateur déjà pris': 'Ce nom d\'utilisateur est déjà pris.',
+  };
+
+  // Vérifier si le message correspond à une erreur Pydantic connue
+  for (const [key, value] of Object.entries(pydanticErrorMap)) {
+    if (rawMessage.includes(key) || withoutLocalUrls.includes(key)) {
+      return value;
+    }
+  }
+
   if (/failed to fetch|networkerror|load failed/i.test(withoutLocalUrls)) {
     return 'Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez.';
   }
@@ -20,7 +49,14 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
     return 'La requête a pris trop de temps. Réessayez dans un instant.';
   }
 
-  return withoutLocalUrls;
+  // Si le message est encore technique, on le simplifie
+  const cleanMessage = withoutLocalUrls
+    .replace(/^Error: /i, '')
+    .replace(/^Erreur: /i, '')
+    .replace(/^Validation error: /i, '')
+    .trim();
+
+  return cleanMessage || fallback;
 }
 
 export async function apiFetch(baseUrl: string, endpoint: string, options?: RequestInit) {
@@ -85,13 +121,25 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     if (!response.ok) {
       let errorDetail = `Erreur HTTP ${response.status}`;
       console.error('📡 Détail erreur API:', data);
+      
       if (Array.isArray(data.detail)) {
+        // ✅ Pydantic validation errors - messages clairs
         errorDetail = data.detail
           .map((item: any) => {
             const field = Array.isArray(item.loc)
               ? item.loc.filter((part: string) => part !== 'body').join('.')
               : '';
-            const message = typeof item.msg === 'string' ? item.msg : (item.message || JSON.stringify(item));
+            
+            // ✅ Traduire les erreurs Pydantic
+            let message = typeof item.msg === 'string' ? item.msg : (item.message || JSON.stringify(item));
+            
+            // Mapping des messages Pydantic
+            if (message.includes('date_from_datetime_parsing') || message.includes('input is too short')) {
+              message = 'La date de naissance est invalide. Veuillez sélectionner une date valide.';
+            } else if (message.includes('Input should be a valid date') || message.includes('value is not a valid date')) {
+              message = 'La date de naissance est invalide.';
+            }
+            
             return field ? `${field}: ${message}` : message;
           })
           .join('\n');

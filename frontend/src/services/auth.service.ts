@@ -5,12 +5,10 @@ const AUTH_BASE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';
 export interface ProfileUpdatePayload {
   nom?: string;
   prenoms?: string;
-  email?: string;
-  username?: string;
   telephone?: string;
   biographie?: string;
   genre?: string;
-  date_nais?: string;
+  date_nais?: string | null;
   pays?: string;
   ville?: string;
 }
@@ -43,7 +41,19 @@ export const authService = {
   resetPassword: (email: string, code: string, new_password: string) => apiFetch(AUTH_BASE_URL, '/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, new_password }) }),
   changePassword: (current_password: string, new_password: string) => apiFetch(AUTH_BASE_URL, '/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   getMe: () => apiFetch(AUTH_BASE_URL, '/auth/me'),
-  updateMe: (data: ProfileUpdatePayload) => apiFetch(AUTH_BASE_URL, '/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
+  updateMe: (data: ProfileUpdatePayload) => {
+    // ✅ Filtrer les champs vides avant l'envoi
+    const cleanedData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== '' && value !== null && value !== undefined) {
+        cleanedData[key] = value;
+      }
+    }
+    return apiFetch(AUTH_BASE_URL, '/auth/me', { 
+      method: 'PUT', 
+      body: JSON.stringify(cleanedData) 
+    });
+  },
   getMyProfilePhoto: () => apiFetch(AUTH_BASE_URL, '/auth/me/photo'),
   updateMyProfilePhoto: (photo_base64: string | null) => apiFetch(AUTH_BASE_URL, '/auth/me/photo', { method: 'PUT', body: JSON.stringify({ photo_base64 }) }),
   getUserProfilePhoto: (userId: string) => apiFetch(AUTH_BASE_URL, `/auth/users/${userId}/photo`),

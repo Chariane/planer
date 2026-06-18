@@ -52,3 +52,4 @@ email_debug.log2026-06-17 16:54:03,333 - backend.api_liste_et_tache.core.deadlin
 2026-06-17 17:54:16,343 - backend.api_liste_et_tache.chat_client - INFO - ✅ Membre 1de79b9a05a6 ajouté au groupe 039f5d67dd7a avec rôle admin (source: Administrateur)
 2026-06-17 18:43:14,389 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): localhost:8000
 2026-06-17 18:43:14,474 - urllib3.connectionpool - DEBUG - http://localhost:8000 "DELETE /group/group/039f5d67dd7a/remove-member HTTP/1.1" 200 16
+2026-06-17 19:41:43,024 - backend.api_liste_et_tache.core.deadline_scheduler - INFO - Deadline reminder scheduler started every 900 seconds.

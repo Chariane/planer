@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Camera, Check, Copy, Edit2, Eye, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X, Briefcase, Calendar, Globe, GraduationCap, ChevronRight, Hash, User } from 'lucide-react';
+import { Camera, Check, Copy, Edit2, Eye, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X, Briefcase, Calendar, Globe, GraduationCap, ChevronRight, Hash, User, Lock, ChevronDown } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,9 +11,8 @@ import Modal from '../components/ui/Modal';
 import { sanitizeApiErrorMessage } from '../services/api';
 import { cn } from '../lib/utils';
 
+// ✅ SUPPRIMER username et email du formulaire d'édition
 const emptyProfileForm = {
-  username: '',
-  email: '',
   nom: '',
   prenoms: '',
   telephone: '',
@@ -91,8 +90,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setEditForm({
-      username: user?.username || '',
-      email: user?.email || '',
+      // ✅ username et email ne sont PAS dans le formulaire
       nom: user?.nom || '',
       prenoms: user?.prenoms || '',
       telephone: user?.telephone || '',
@@ -122,25 +120,41 @@ export default function ProfilePage() {
 
   const showMessage = (text: string) => {
     setMessage(text);
-    setTimeout(() => setMessage(''), 3000);
+    setTimeout(() => setMessage(''), 4000);
   };
 
   const showError = (text: string) => {
     setError(text);
-    setTimeout(() => setError(''), 3500);
+    setTimeout(() => setError(''), 4500);
   };
 
   const updateField = (field: keyof ProfileForm, value: string) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
 
+  // ✅ Fonction corrigée : ne pas envoyer date_nais vide
   const handleEditSubmit = async () => {
     try {
-      await updateProfile(editForm);
+      // ✅ Préparer les données avant l'envoi
+      const payload = { ...editForm };
+      
+      // ✅ Si date_nais est vide, on ne l'envoie pas (sera ignoré par le backend)
+      if (!payload.date_nais || payload.date_nais === '') {
+        delete payload.date_nais;
+      }
+      
+      // ✅ Supprimer les autres champs vides
+      for (const [key, value] of Object.entries(payload)) {
+        if (value === '' || value === null || value === undefined) {
+          delete payload[key as keyof ProfileForm];
+        }
+      }
+      
+      await updateProfile(payload);
       setIsEditing(false);
-      showMessage('Profil mis à jour avec succès');
+      showMessage('✅ Profil mis à jour avec succès');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, 'Erreur lors de la mise à jour'));
+      showError(getErrorMessage(err, '❌ Erreur lors de la mise à jour du profil. Veuillez réessayer.'));
     }
   };
 
@@ -162,16 +176,16 @@ export default function ProfilePage() {
         const photoDataUrl = String(reader.result);
         const savedPhotoBase64 = await updateProfilePhoto(photoDataUrl);
         setPhotoPreview(buildPhotoSrc(savedPhotoBase64) || photoDataUrl);
-        showMessage('Photo de profil mise à jour');
+        showMessage('✅ Photo de profil mise à jour');
       } catch (err: unknown) {
-        showError(getErrorMessage(err, 'Impossible de mettre à jour la photo'));
+        showError(getErrorMessage(err, '❌ Impossible de mettre à jour la photo'));
       } finally {
         setPhotoLoading(false);
       }
     };
     reader.onerror = () => {
       setPhotoLoading(false);
-      showError('Impossible de lire cette image.');
+      showError('❌ Impossible de lire cette image.');
     };
     reader.readAsDataURL(file);
   };
@@ -181,22 +195,21 @@ export default function ProfilePage() {
     try {
       await updateProfilePhoto(null);
       setPhotoPreview(null);
-      showMessage('Photo de profil retirée');
+      showMessage('✅ Photo de profil retirée');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, 'Impossible de retirer la photo'));
+      showError(getErrorMessage(err, '❌ Impossible de retirer la photo'));
     } finally {
       setPhotoLoading(false);
     }
   };
 
-  // ... (rest of logic like 2FA/Password hidden for brevity in planning but will be in full write)
   const handleSetup2FA = async () => {
     try {
       const data = await setup2FA();
       setTwoFASetup(data);
       setIs2FAModalOpen(true);
     } catch {
-      showError('Erreur lors de la préparation 2FA');
+      showError('❌ Erreur lors de la préparation 2FA');
     }
   };
 
@@ -206,9 +219,9 @@ export default function ProfilePage() {
       setIs2FAModalOpen(false);
       setTwoFASetup(null);
       setTwoFACode('');
-      showMessage('2FA activée avec succès');
+      showMessage('✅ 2FA activée avec succès');
     } catch {
-      showError('Code 2FA invalide');
+      showError('❌ Code 2FA invalide');
     }
   };
 
@@ -220,9 +233,9 @@ export default function ProfilePage() {
     try {
       await disable2FA(disablePassword);
       setDisablePassword('');
-      showMessage('2FA désactivée avec succès');
+      showMessage('✅ 2FA désactivée avec succès');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, 'Erreur lors de la désactivation'));
+      showError(getErrorMessage(err, '❌ Erreur lors de la désactivation'));
     }
   };
 
@@ -234,9 +247,9 @@ export default function ProfilePage() {
     try {
       await changePassword(passwordForm.current, passwordForm.new);
       setPasswordForm({ current: '', new: '', confirm: '' });
-      showMessage('Mot de passe modifié avec succès');
+      showMessage('✅ Mot de passe modifié avec succès');
     } catch {
-      showError('Mot de passe actuel incorrect');
+      showError('❌ Mot de passe actuel incorrect');
     }
   };
 
@@ -447,16 +460,57 @@ export default function ProfilePage() {
                         >
                            <GlassCard className="p-8" hover={false}>
                               <div className="space-y-8">
+                                 {/* ✅ Informations de lecture seule : Email & Username */}
+                                 <div className="grid gap-6 sm:grid-cols-2 bg-theme-surface/30 rounded-2xl p-4 border border-theme-border-subtle">
+                                    <div>
+                                       <label className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
+                                          <Lock className="h-3 w-3" /> Email
+                                       </label>
+                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">{user?.email}</p>
+                                       <p className="mt-0.5 text-[10px] text-theme-muted">Non modifiable</p>
+                                    </div>
+                                    <div>
+                                       <label className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
+                                          <Lock className="h-3 w-3" /> Nom d'utilisateur
+                                       </label>
+                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">@{user?.username}</p>
+                                       <p className="mt-0.5 text-[10px] text-theme-muted">Non modifiable</p>
+                                    </div>
+                                 </div>
+
+                                 {/* ✅ Champs modifiables avec le champ Genre en select */}
                                  <div className="grid gap-6 sm:grid-cols-2">
-                                    <PremiumInput label="Nom d'utilisateur" value={editForm.username} onChange={(v) => updateField('username', v)} icon={<Hash />} />
-                                    <PremiumInput label="Email Professionnel" value={editForm.email} onChange={(v) => updateField('email', v)} icon={<Mail />} />
                                     <PremiumInput label="Nom" value={editForm.nom} onChange={(v) => updateField('nom', v)} />
                                     <PremiumInput label="Prénoms" value={editForm.prenoms} onChange={(v) => updateField('prenoms', v)} />
                                     <PremiumInput label="Téléphone" value={editForm.telephone} onChange={(v) => updateField('telephone', v)} icon={<Phone />} />
                                     <PremiumInput label="Date de naissance" type="date" value={editForm.date_nais} onChange={(v) => updateField('date_nais', v)} icon={<Calendar />} />
+                                    
+                                    {/* ✅ Champ Genre en select */}
+                                    <div className="space-y-2">
+                                      <label className="text-xs font-black text-theme-muted ml-1 uppercase tracking-widest opacity-80">Genre</label>
+                                      <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted transition-colors group-focus-within:text-primary">
+                                          <User className="h-4 w-4" />
+                                        </div>
+                                        <select
+                                          value={editForm.genre}
+                                          onChange={(e) => updateField('genre', e.target.value)}
+                                          className="w-full rounded-2xl border border-theme-border-subtle bg-theme-surface/50 py-3 pl-11 pr-10 text-sm font-bold text-theme-main shadow-inner outline-none transition-all appearance-none focus:border-primary/50 focus:bg-white focus:ring-4 focus:ring-primary/5 dark:focus:bg-slate-900"
+                                        >
+                                          <option value="">Sélectionnez votre genre</option>
+                                          <option value="Homme">Homme</option>
+                                          <option value="Femme">Femme</option>
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-theme-muted">
+                                          <ChevronDown className="h-4 w-4" />
+                                        </div>
+                                      </div>
+                                    </div>
+
                                     <PremiumInput label="Ville" value={editForm.ville} onChange={(v) => updateField('ville', v)} icon={<MapPin />} />
                                     <PremiumInput label="Pays" value={editForm.pays} onChange={(v) => updateField('pays', v)} icon={<Globe />} />
                                  </div>
+
                                  <div className="space-y-2">
                                     <label className="text-sm font-black text-theme-main ml-1 uppercase tracking-widest opacity-80">Biographie</label>
                                     <textarea 
