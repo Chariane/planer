@@ -335,7 +335,7 @@ export default function AssignListMemberModal({
   };
 
   const availableParentMembers = parentMembers.filter(m => !isMemberInList(m.id));
-  const directListMembers = listMembers.filter(member => member.id_liste === listeId);
+  const directListMembers = listMembers.filter(member => member.id_liste === listeId && member.role !== ROLES.GUEST);
 
   const handleClose = () => {
     setActiveTab(isDirectListAdmin ? 'external' : 'parent');

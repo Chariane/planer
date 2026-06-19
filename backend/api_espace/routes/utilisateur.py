@@ -13,6 +13,7 @@ from ..core.function import (
     _require_espace_delete_access,
     _require_espace_invitation_access,
     _require_espace_member_management_access,
+    _require_espace_owner_access,
     _require_workspace_management_access,
     _require_workspace_descendant_read_access,
     _require_workspace_espace_navigation_access,
@@ -419,13 +420,12 @@ def remove_espace_member_endpoint(
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
-    _require_espace_member_management_access(
-        db,
-        espace_id,
-        espace.id_workspace,
-        current_user.id,
-        user_id,
-    )
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Vous ne pouvez pas vous retirer via la gestion des membres.",
+        )
+    _require_espace_owner_access(db, espace_id, current_user.id)
 
     if not remove_espace_member(db, espace_id, user_id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")

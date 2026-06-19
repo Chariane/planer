@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { absenceService } from '../../services/absence.service';
 import { AvailabilityBadge } from '../ui/AvailabilityBadge';
 import { MemberAvatar } from '../ui/MemberAvatar';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Member, UserAvailabilityOut } from '../../types';
 
 interface MemberManagementProps {
@@ -89,6 +90,7 @@ export default function MemberManagement({
   currentUserRole,
   searchQuery = ''
 }: MemberManagementProps) {
+  const { user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -118,9 +120,14 @@ export default function MemberManagement({
     resourceType: resourceType,
   });
 
+  const currentDirectMember = members.find(member => member.id === user?.id);
   const isDirectListAdmin = !!listeId && directListRole === ADMIN_ROLE;
+  const isInheritedSpaceAdmin = !!espaceId
+    && currentUserRole === ROLES.ADMIN
+    && currentDirectMember?.role !== ROLES.ADMIN
+    && currentDirectMember?.role !== ROLES.CREATOR;
   const canChangeMemberRoles = canManageMembers && !isDirectListAdmin;
-  const canRemoveMembers = canManageMembers;
+  const canRemoveMember = (member: Member) => isCreator && member.id !== user?.id && member.role !== ROLES.CREATOR;
 
   const loadMembers = async () => {
     setLoading(true);
@@ -190,6 +197,15 @@ export default function MemberManagement({
 
   const handleRemoveMember = async (userId: string) => {
     const targetMember = members.find(m => m.id === userId);
+    if (!targetMember || !canRemoveMember(targetMember)) {
+      showMessage(
+        targetMember?.id === user?.id
+          ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
+          : 'Seul le créateur direct de la ressource peut retirer un membre.',
+        'error',
+      );
+      return;
+    }
     if (isAdmin && targetMember && (targetMember.role === ROLES.ADMIN || targetMember.role === ROLES.CREATOR)) {
       showMessage('Action non autorisée sur un administrateur', 'error');
       return;
@@ -216,6 +232,13 @@ export default function MemberManagement({
   };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
+    if (isInheritedSpaceAdmin && newRole === ROLES.GUEST) {
+      showMessage(
+        "Un administrateur par héritage peut ajuster les rôles de travail, mais ne peut pas transformer un membre de cet espace en invité.",
+        'error',
+      );
+      return;
+    }
     setUpdatingMemberId(userId);
     setRoleActionNotice(null);
     const targetMember = members.find(m => m.id === userId);
@@ -229,7 +252,9 @@ export default function MemberManagement({
       const message = sanitizeApiErrorMessage(err, 'Erreur modification rôle');
       const lowerMessage = message.toLowerCase();
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
-        const friendlyMessage = `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`;
+        const friendlyMessage = isCreator
+          ? `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`
+          : `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Seul le créateur peut retirer son rôle direct de cette ressource.`;
         setRoleActionNotice(friendlyMessage);
         showMessage(friendlyMessage, 'info');
       } else {
@@ -240,13 +265,22 @@ export default function MemberManagement({
     }
   };
 
-  const displayRoles = listeId ? ((isCreator || isAdmin) ? ['Membre', 'Administrateur'] : ['Membre']) : MANAGABLE_ROLES;
+  const displayRoles = listeId
+    ? ((isCreator || isAdmin) ? ['Membre', 'Administrateur'] : ['Membre'])
+    : isInheritedSpaceAdmin
+      ? ['Membre', 'Administrateur']
+      : MANAGABLE_ROLES;
 
-  const filteredMembers = members.filter(member =>
+  const visibleMembers = members.filter(member => member.role !== ROLES.GUEST);
+  const directGuests = members.filter(member => member.role === ROLES.GUEST);
+  const matchesSearch = (member: Member) => (
     !searchQuery ||
     member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredMembers = visibleMembers.filter(matchesSearch);
+  const filteredGuests = directGuests.filter(matchesSearch);
+  const hasFilteredPeople = filteredMembers.length > 0 || filteredGuests.length > 0;
 
   if (loading) {
     return (
@@ -291,7 +325,7 @@ export default function MemberManagement({
         </div>
       )}
 
-      {filteredMembers.length === 0 ? (
+      {!hasFilteredPeople ? (
         <GlassCard className="py-20 border-dashed flex flex-col items-center justify-center opacity-40">
           <div className="p-4 rounded-full bg-theme-surface border border-white/10 mb-4 shadow-inner">
             <Users className="h-10 w-10 text-theme-muted" />
@@ -306,66 +340,97 @@ export default function MemberManagement({
           )}
         </GlassCard>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <AnimatePresence mode="popLayout">
-            {filteredMembers.map((member, i) => (
-              <motion.div
-                key={member.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
-                  <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                    <MemberAvatar
-                      member={member}
-                      size="md"
-                      className="group-hover:shadow-[0_0_15px_rgba(var(--secondary-rgb),0.3)] transition-all"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                        <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id_utilisateur)} size="sm" showText />
-                        <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
-                      </div>
-                      <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider mb-1">{member.email}</p>
-                      <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
-                        {getRoleLabel(member.role)}
-                      </span>
-                    </div>
-                  </Link>
+        <div className="space-y-8">
+          {filteredMembers.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AnimatePresence mode="popLayout">
+                {filteredMembers.map((member, i) => (
+                  <motion.div
+                    key={member.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ delay: i * 0.05 }}
+                  >
+                    <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
+                      <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                        <MemberAvatar
+                          member={member}
+                          size="md"
+                          className="group-hover:shadow-[0_0_15px_rgba(var(--secondary-rgb),0.3)] transition-all"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                            <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
+                            <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
+                          </div>
+                          <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider mb-1">{member.email}</p>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
+                            {getRoleLabel(member.role)}
+                          </span>
+                        </div>
+                      </Link>
 
-                  {member.role !== ROLES.CREATOR && (
-                    <div className="flex items-center gap-2">
-                      {canChangeMemberRoles && (
-                        <>
-                          {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
-                          <select
-                            value={member.role}
-                            onChange={(e) => handleChangeRole(member.id, e.target.value)}
-                            disabled={updatingMemberId === member.id}
-                            className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
-                          >
-                            {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
-                          </select>
-                        </>
+                      {member.role !== ROLES.CREATOR && (
+                        <div className="flex items-center gap-2">
+                          {canChangeMemberRoles && (
+                            <>
+                              {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
+                              <select
+                                value={member.role}
+                                onChange={(e) => handleChangeRole(member.id, e.target.value)}
+                                disabled={updatingMemberId === member.id}
+                                className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
+                              >
+                                {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
+                              </select>
+                            </>
+                          )}
+                          {canRemoveMember(member) && (
+                            <button
+                              onClick={() => handleRemoveMember(member.id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                              title="Retirer de cette ressource"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="hidden xl:inline">Retirer</span>
+                            </button>
+                          )}
+                        </div>
                       )}
-                      {canRemoveMembers && (
-                        <button
-                          onClick={() => handleRemoveMember(member.id)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                          title="Retirer de cette ressource"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="hidden xl:inline">Retirer</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </GlassCard>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                    </GlassCard>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {filteredGuests.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-theme-muted">Invités directs</p>
+                <span className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                  {filteredGuests.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filteredGuests.map(member => (
+                  <GlassCard key={member.id} className="p-4 flex items-center justify-between gap-4 border-dashed opacity-85">
+                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      <MemberAvatar member={member} size="md" />
+                      <div className="min-w-0">
+                        <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
+                        <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider">{member.email}</p>
+                      </div>
+                    </Link>
+                    <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
+                      {getRoleLabel(member.role)}
+                    </span>
+                  </GlassCard>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

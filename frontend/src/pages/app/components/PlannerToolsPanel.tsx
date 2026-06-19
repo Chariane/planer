@@ -151,14 +151,22 @@ export default function PlannerToolsPanel({
       return creator ? [creator] : [];
     })()
     : [];
-  // const isGuest = effectiveRole === ROLES.GUEST;
+  const isGuestAccess = effectiveRole === ROLES.GUEST || isDirectMemberRecord?.role === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
+  const isListInheritedOnlyManager = !!listeId && isManager && !isDirectMemberRecord;
   const hasReportScope = !!(listeId || espaceId || workspaceId);
   const canViewFiles = !!(listeId || espaceId || workspaceId);
+  const canViewListReports = !!listeId && !!isDirectMemberRecord && !isGuestAccess;
+  const canViewSpaceOrWorkspaceReports = !listeId && !isGuestAccess && (isDirectResourceCreator || isDirectResourceAdmin);
 
-  const canViewReports = hasReportScope && (!!isDirectMemberRecord || isManager);
-  const hasVisibleTool = canViewFiles || canViewReports || !!listeId;
+  const canViewReports = hasReportScope && !isListInheritedOnlyManager && (canViewListReports || canViewSpaceOrWorkspaceReports);
+  const canViewAbsences = !isGuestAccess && !isListInheritedOnlyManager && (
+    listeId || espaceId
+      ? !!isDirectMemberRecord
+      : !!workspaceId && (isDirectResourceAdmin || isDirectResourceCreator)
+  );
+  const hasVisibleTool = canViewFiles || canViewReports || canViewAbsences;
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
     : espaceId
@@ -173,9 +181,10 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
-  const canCreateAbsence = (!!listeId || !!espaceId)
-    && !!isDirectMemberRecord
-    && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role);
+  const canCreateAbsence = !!isDirectMemberRecord && (
+    (!!listeId || !!espaceId) && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role)
+    || (!!workspaceId && !listeId && !espaceId && isDirectResourceAdmin)
+  );
   const canViewOwnAbsenceRequests = !isDirectResourceCreator;
 
   const canAddFiles = isManager;
@@ -197,16 +206,16 @@ export default function PlannerToolsPanel({
     if (initialTool === 'reports' && canViewReports) {
       setActiveTool(initialTool);
     }
-    if (initialTool === 'absences' && listeId) {
+    if (initialTool === 'absences' && canViewAbsences) {
       setActiveTool(initialTool);
     }
-  }, [initialTool, canViewFiles, canViewReports, listeId]);
+  }, [initialTool, canViewFiles, canViewReports, canViewAbsences]);
 
   useEffect(() => {
     if (activeTool === 'reports' && !canViewReports) {
       if (canViewFiles) {
         setActiveTool('files');
-      } else if (listeId || espaceId) {
+      } else if (canViewAbsences) {
         setActiveTool('absences');
       }
       return;
@@ -214,17 +223,20 @@ export default function PlannerToolsPanel({
     if (activeTool === 'files' && !canViewFiles) {
       if (canViewReports) {
         setActiveTool('reports');
-      } else if (listeId || espaceId) {
+      } else if (canViewAbsences) {
         setActiveTool('absences');
       }
     }
-  }, [activeTool, canViewFiles, canViewReports, listeId, espaceId]);
-
-  useEffect(() => {
-    if (!listeId && !espaceId && activeTool === 'absences') {
+    if (activeTool === 'absences' && !canViewAbsences) {
       setActiveTool(canViewFiles ? 'files' : 'reports');
     }
-  }, [listeId, espaceId, activeTool, canViewFiles]);
+  }, [activeTool, canViewFiles, canViewReports, canViewAbsences]);
+
+  useEffect(() => {
+    if (!canViewAbsences && activeTool === 'absences') {
+      setActiveTool(canViewFiles ? 'files' : 'reports');
+    }
+  }, [canViewAbsences, activeTool, canViewFiles]);
 
   useEffect(() => {
     if (activeTool !== 'absences') return;
@@ -1581,7 +1593,7 @@ export default function PlannerToolsPanel({
             </button>
           )}
 
-          {(listeId || espaceId) && (
+          {canViewAbsences && (
             <button
               onClick={() => setActiveTool('absences')}
               className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-xl font-black transition-all duration-300 relative group overflow-hidden ${activeTool === 'absences' ? 'text-secondary bg-secondary/5 shadow-inner' : 'text-theme-muted hover:text-theme-main hover:bg-theme-surface-hover/50'

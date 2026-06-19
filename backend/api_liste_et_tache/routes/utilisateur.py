@@ -13,6 +13,7 @@ from ..core.database import get_db
 from ..crud.canevas_enhanced import get_enhanced_canevas
 from ..core.security import get_current_user, decode_invitation_token, config_data
 from ..core.function import (
+    LISTE_OWNER_ROLE,
     LISTE_MEMBER_ROLE,
     _get_workspace_or_404,
     _require_attachment_target_read_access,
@@ -321,6 +322,11 @@ def unassign_liste_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
+    if utilisateur_id == current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Vous ne pouvez pas vous retirer via la gestion des membres.",
+        )
     _require_list_member_management_access(db, liste_id, current_user.id)
     target_member = _get_liste_member_record(db, liste_id, utilisateur_id)
     if not target_member:
@@ -328,6 +334,11 @@ def unassign_liste_endpoint(
     _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
         db, liste_id, current_user.id
     )
+    if actor_role != LISTE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul le createur de la ressource peut retirer un membre.",
+        )
     _validate_list_member_management_permissions(
         liste_id=liste_id,
         actor_role=actor_role,

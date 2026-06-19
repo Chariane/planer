@@ -380,12 +380,12 @@ def remove_workspace_member_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
     """Supprime ou retire un membre d'un workspace."""
-    _require_workspace_member_management_access(
-        db,
-        workspace_id,
-        current_user.id,
-        user_id,
-    )
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Vous ne pouvez pas vous retirer via la gestion des membres.",
+        )
+    _require_workspace_owner_access(db, workspace_id, current_user.id)
 
     success = remove_member_from_workspace(db, workspace_id, user_id)
     if not success:

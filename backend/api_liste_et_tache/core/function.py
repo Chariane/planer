@@ -1499,6 +1499,13 @@ def _require_workspace_creator_grant(db: Session, workspace_id: str, current_use
     raise HTTPException(status_code=403, detail="Ce rapport est reserve au createur du workspace.")
 
 
+def _require_direct_workspace_admin_grant(db: Session, workspace_id: str, current_user_id: str) -> Membre:
+    membre = _get_active_workspace_membership(db, workspace_id, current_user_id)
+    if membre and membre.statut == "Actif" and membre.role == WORKSPACE_ADMIN_ROLE:
+        return membre
+    raise HTTPException(status_code=403, detail="Cette action est reservee aux administrateurs directs du workspace.")
+
+
 def _report_scope_and_author(db: Session, rapport: Rapport) -> tuple[str, str, str | None, str | None]:
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
     liste_id = getattr(rapport, "id_liste", None) or (membre.id_liste if membre else None)
@@ -1610,6 +1617,16 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
         raise HTTPException(
             status_code=403,
             detail="Le createur direct de l'espace ne fait pas de demande dans son propre espace.",
+        )
+
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_ADMIN_ROLE:
+        _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
+        return membre
+
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_OWNER_ROLE:
+        raise HTTPException(
+            status_code=403,
+            detail="Le createur direct du workspace ne fait pas de demande dans son propre workspace.",
         )
 
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a cette demande.")

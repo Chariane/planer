@@ -144,7 +144,7 @@ export default function AssignTaskMemberModal({
     }
   };
 
-  const availableMembers = members.filter(m => !assignedMembers.some(a => a.id === m.id));
+  const availableMembers = members.filter(m => m.role !== 'Invité' && !assignedMembers.some(a => a.id === m.id));
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Assigner des membres à la tâche" size="md">

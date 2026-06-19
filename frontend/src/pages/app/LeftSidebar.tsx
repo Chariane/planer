@@ -495,12 +495,21 @@ export default function LeftSidebar() {
       ])
       : workspaceRole || currentWorkspace?.current_user_role || null;
   const canViewResourceFilesShortcut = Boolean(activeResourceRole);
-  const canViewResourceReportsShortcut = activeEntryType === 'list'
+  const isActiveGuestAccess = activeResourceRole === ROLES.GUEST;
+  const canViewResourceReportsShortcut = !isActiveGuestAccess && (activeEntryType === 'list'
     ? activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN || activeDirectResourceRole === ROLES.MEMBER
-    : activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN;
+    : activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN);
+  const canViewResourceAbsencesShortcut = !isActiveGuestAccess
+    && (
+      activeEntryType === 'list'
+        ? Boolean(activeDirectResourceRole) && activeDirectResourceRole !== ROLES.GUEST
+        : activeEntryType === 'workspace'
+          ? activeDirectResourceRole === ROLES.CREATOR || activeDirectResourceRole === ROLES.ADMIN
+          : false
+    );
   const showResourceToolsShortcut = hasWorkspaceAccess
     && (activeEntryType === 'workspace' || activeEntryType === 'space' || activeEntryType === 'list')
-    && (canViewResourceFilesShortcut || canViewResourceReportsShortcut);
+    && (canViewResourceFilesShortcut || canViewResourceReportsShortcut || canViewResourceAbsencesShortcut);
   const navigationTitle = activeEntryType === 'space'
     ? 'Espace actif'
     : activeEntryType === 'list'
@@ -535,7 +544,7 @@ export default function LeftSidebar() {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-theme-muted/50" />
         </button>
       )}
-      {activeEntryType === 'list' && activeResourceRole && (
+      {canViewResourceAbsencesShortcut && (
         <button
           type="button"
           onClick={() => openResourceTool('absences')}

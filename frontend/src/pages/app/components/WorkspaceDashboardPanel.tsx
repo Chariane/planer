@@ -11,6 +11,7 @@ import { listeService } from '../../../services/liste.service';
 import { workspaceService } from '../../../services/workspace.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { useAuth } from '../../../contexts/AuthContext';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
@@ -78,6 +79,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 };
 
 export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashboardPanelProps) {
+  const { user } = useAuth();
   const [workspaceName, setWorkspaceName] = useState('');
   const [workspaceDescription, setWorkspaceDescription] = useState('');
   const [stats, setStats] = useState({
@@ -106,9 +108,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const canInviteMembers = isAdmin || isCreator;
   const canManageMemberRoles = isAdmin || isCreator;
   const canRemoveMember = (member: Member) => {
-    if (member.role === 'Créateur') return false;
-    if (isCreator) return true;
-    return isAdmin && member.role !== 'Administrateur';
+    return isCreator && member.id !== user?.id && member.role !== 'Créateur';
   };
   const roleManagementOptions = useMemo(
     () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
@@ -149,7 +149,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           role: m.role,
           photo_base64: getMemberPhotoBase64(m),
         }));
-        membersCount = formattedMembers.length;
+        membersCount = formattedMembers.filter(member => member.role !== 'Invité').length;
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
       }
@@ -207,7 +207,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       const lowerMessage = message.toLowerCase();
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
         showMessage(
-          `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de ce workspace avec le bouton Retirer.`,
+          isCreator
+            ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de ce workspace avec le bouton Retirer.`
+            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de ce workspace.`,
           'info'
         );
       } else {
@@ -222,6 +224,16 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const handleRemoveMember = async () => {
     const member = confirmData.member;
     if (!member) return;
+    if (!canRemoveMember(member)) {
+      showMessage(
+        member.id === user?.id
+          ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
+          : 'Seul le créateur du workspace peut retirer un membre.',
+        'error',
+      );
+      setConfirmData({ isOpen: false, member: null });
+      return;
+    }
     try {
       await workspaceService.removeMember(workspaceId, member.id);
       setConfirmData({ isOpen: false, member: null });
@@ -240,6 +252,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       </div>
     );
   }
+
+  const activeMembers = members.filter(member => member.role !== 'Invité');
+  const guestMembers = members.filter(member => member.role === 'Invité');
 
   return (
     <motion.div
@@ -341,9 +356,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             )}
           </div>
 
-          {members.length > 0 ? (
+          {activeMembers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {members.map((member, i) => (
+              {activeMembers.map((member, i) => (
                 <motion.div
                   key={member.id}
                   initial={{ opacity: 0, x: -10 }}
@@ -413,8 +428,41 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
               <div className="p-6 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle/30">
                 <Users size={40} className="opacity-10 text-theme-muted" />
               </div>
-              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">Équipe non listée</p>
+              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">Aucun membre actif</p>
             </GlassCard>
+          )}
+
+          {guestMembers.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-theme-muted">Invités directs</p>
+                <span className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                  {guestMembers.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {guestMembers.map(member => (
+                  <GlassCard key={member.id} className="p-5 flex items-center justify-between gap-4 border-dashed opacity-85">
+                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      <div className="h-12 w-12 rounded-2xl bg-theme-surface-hover border border-theme-border-subtle/30 flex items-center justify-center overflow-hidden font-black text-theme-muted text-base">
+                        {getAvatarSrc(member.photo_base64) ? (
+                          <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
+                        ) : (
+                          getInitials(member.name)
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-theme-main truncate tracking-tight text-base">{member.name}</p>
+                        <p className="text-[10px] text-theme-muted font-bold truncate opacity-40 uppercase mt-0.5">{member.email}</p>
+                      </div>
+                    </Link>
+                    <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                      {getRoleLabel(member.role)}
+                    </span>
+                  </GlassCard>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

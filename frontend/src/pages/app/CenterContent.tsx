@@ -84,7 +84,7 @@ export default function CenterContent() {
   // Définir les onglets disponibles selon le rôle
   const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres' | 'outils')[] => {
     if (isGuest) {
-      return ['liste', 'kanban', 'gantt', 'outils'];
+      return ['liste', 'kanban', 'gantt', 'membres', 'outils'];
     }
     return ['liste', 'kanban', 'gantt', 'membres', 'outils'];
   };
@@ -562,12 +562,7 @@ export default function CenterContent() {
   // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
   const isListGuest = effectiveRole === ROLES.GUEST;
 
-  if (isListGuest && activeTab === 'membres') {
-    // Rediriger vers l'onglet liste si l'invité essaie d'accéder aux membres
-    setActiveTab('liste');
-  }
-
-  // Vue invité (lecture seule) - mais ils peuvent voir les vues liste, kanban, gantt
+  // Vue invité (lecture seule) - vues projet et membres consultables, outils limités aux fichiers.
   if (isGuest || isListGuest) {
     return (
       <div className="p-4 sm:p-6">
@@ -585,9 +580,9 @@ export default function CenterContent() {
         {renderListProgressSummary()}
         {renderListDescription()}
 
-        {/* Onglets pour les invités (sans l'onglet membres) */}
+        {/* Onglets pour les invités */}
         <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
-          {availableTabs.filter(tab => tab !== 'membres').map(tab => (
+          {availableTabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -597,10 +592,12 @@ export default function CenterContent() {
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
               {tab === 'kanban' && <KanbanSquare className="w-4 h-4" />}
               {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
+              {tab === 'membres' && <Users className="w-4 h-4" />}
               {tab === 'outils' && <Wrench className="w-4 h-4" />}
               {tab === 'liste' && 'Vue liste'}
               {tab === 'kanban' && 'Vue Kanban'}
               {tab === 'gantt' && 'Diagramme de Gantt'}
+              {tab === 'membres' && 'Membres'}
               {tab === 'outils' && 'Outils'}
             </button>
           ))}
@@ -622,6 +619,15 @@ export default function CenterContent() {
 
         {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => { }} />}
         {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+        {activeTab === 'membres' && (
+          <MemberManagement
+            listeId={listId}
+            espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+            workspaceId={currentListWorkspaceId || workspaceId || undefined}
+            currentUserRole={ROLES.GUEST}
+            searchQuery={memberSearchTerm}
+          />
+        )}
         {activeTab === 'outils' && (
           <PlannerToolsPanel
             workspaceId={currentListWorkspaceId || workspaceId}
@@ -698,7 +704,9 @@ export default function CenterContent() {
             </select>
             <select value={taskFilters.membre_id} onChange={e => setTaskFilters(prev => ({ ...prev, membre_id: e.target.value }))} className="border border-theme-border-subtle bg-theme-surface rounded-lg px-2 py-2 text-sm text-theme-main outline-none">
               <option value="">Tous membres</option>
-              {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+              {members
+                .filter(member => member.role !== ROLES.GUEST)
+                .map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
             </select>
             <div className="flex items-center gap-2 px-2 border border-theme-border-subtle rounded-lg bg-theme-surface">
               <input

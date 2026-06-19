@@ -102,6 +102,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
       }
+      const activeMembers = formattedMembers.filter(member => member.role !== 'Invité');
       setMembers(formattedMembers);
 
       let tasks: any[] = [];
@@ -124,7 +125,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         : 0;
 
       setStats({
-        membersCount: formattedMembers.length,
+        membersCount: activeMembers.length,
         tasksCount: projectTasks.length,
         pendingTasksCount,
         inProgressTasksCount,
@@ -178,6 +179,8 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   }
 
   const availableRoles = getAvailableRoles();
+  const activeMembers = members.filter(member => member.role !== 'Invité');
+  const guestMembers = members.filter(member => member.role === 'Invité');
   const statusGradient = (() => {
     if (stats.tasksCount === 0) return '#e5e7eb';
     const done = (stats.doneTasksCount / stats.tasksCount) * 100;
@@ -299,9 +302,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           <Users className="h-5 w-5" />
           Membres de la liste
         </h3>
-        {members.length > 0 ? (
+        {activeMembers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {members.map(member => (
+            {activeMembers.map(member => (
               <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
                 <Link to={`/users/${member.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-90">
                   <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
@@ -329,12 +332,43 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           <GlassCard className="p-4">
             <div className="text-center text-gray-400 py-4">
               <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun membre pour le moment</p>
-              <p className="text-sm mt-1">Invitez des membres pour collaborer sur cette liste</p>
+              <p>Aucun membre actif pour le moment</p>
+              <p className="text-sm mt-1">Les invités éventuels sont affichés à part.</p>
             </div>
           </GlassCard>
         )}
       </div>
+
+      {guestMembers.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Invités directs
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {guestMembers.map(member => (
+              <GlassCard key={member.id} className="p-3 flex items-center justify-between border-dashed opacity-85">
+                <Link to={`/users/${member.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-90">
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-sm">
+                    {getAvatarSrc(member.photo_base64) ? (
+                      <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
+                    ) : (
+                      getInitials(member.name)
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{member.name}</p>
+                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  </div>
+                </Link>
+                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                  Invité
+                </span>
+              </GlassCard>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">

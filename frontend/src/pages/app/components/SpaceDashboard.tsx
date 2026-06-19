@@ -11,6 +11,7 @@ import { listeService } from '../../../services/liste.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useNavigationStore } from '../../../store/useNavigationStore';
 import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
@@ -82,6 +83,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
 };
 
 export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashboardProps) {
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     subSpacesCount: 0,
     listsCount: 0,
@@ -129,9 +131,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || isWorkspaceCreator;
   const canManageMemberRoles = canInviteMembers;
   const canRemoveMember = (member: Member) => {
-    if (member.role === ROLES.CREATOR) return false;
-    if (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR) return true;
-    return canManageMemberRoles && member.role !== ROLES.ADMIN;
+    return (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR)
+      && member.id !== user?.id
+      && member.role !== ROLES.CREATOR;
   };
 
   const getRoleManagementOptions = () => {
@@ -208,7 +210,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           role: m.role,
           photo_base64: getMemberPhotoBase64(m),
         }));
-        membersCount = formattedMembers.length;
+        membersCount = formattedMembers.filter(member => member.role !== ROLES.GUEST).length;
       } catch { /* Suppress */ }
 
       setMembers(formattedMembers);
@@ -264,7 +266,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       const lowerMessage = message.toLowerCase();
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
         showMessage(
-          `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de cet espace avec le bouton Retirer.`,
+          (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR)
+            ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de cet espace avec le bouton Retirer.`
+            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de cet espace.`,
           'info'
         );
       } else {
@@ -279,6 +283,16 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const handleRemoveMember = async () => {
     const member = confirmData.member;
     if (!member) return;
+    if (!canRemoveMember(member)) {
+      showMessage(
+        member.id === user?.id
+          ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
+          : "Seul le créateur de la ressource peut retirer un membre.",
+        'error',
+      );
+      setConfirmData({ isOpen: false, member: null });
+      return;
+    }
     try {
       await espaceService.removeMember(spaceId, member.id);
       setConfirmData({ isOpen: false, member: null });
@@ -297,6 +311,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       </div>
     );
   }
+
+  const activeMembers = members.filter(member => member.role !== ROLES.GUEST);
+  const guestMembers = members.filter(member => member.role === ROLES.GUEST);
 
   return (
     <motion.div
@@ -394,9 +411,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             )}
           </div>
 
-          {members.length > 0 ? (
+          {activeMembers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {members.map((member, i) => (
+              {activeMembers.map((member, i) => (
                 <motion.div key={member.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
                   <GlassCard className="p-5 flex items-center justify-between gap-4 group hover:bg-theme-surface-hover/30 transition-all border-theme-border-subtle/30">
                     <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
@@ -460,8 +477,41 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               <div className="p-6 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle/30">
                 <Users size={40} className="opacity-10 text-theme-muted" />
               </div>
-              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">L'équipe est vide</p>
+              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">Aucun membre actif</p>
             </GlassCard>
+          )}
+
+          {guestMembers.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-theme-muted">Invités directs</p>
+                <span className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                  {guestMembers.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {guestMembers.map(member => (
+                  <GlassCard key={member.id} className="p-5 flex items-center justify-between gap-4 border-dashed opacity-85">
+                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      <div className="h-12 w-12 rounded-2xl bg-theme-surface-hover border border-theme-border-subtle/30 flex items-center justify-center overflow-hidden font-black text-theme-muted text-base">
+                        {getAvatarSrc(member.photo_base64) ? (
+                          <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
+                        ) : (
+                          getInitials(member.name)
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-theme-main truncate tracking-tight text-base">{member.name}</p>
+                        <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
+                      </div>
+                    </Link>
+                    <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                      {getRoleLabel(member.role)}
+                    </span>
+                  </GlassCard>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

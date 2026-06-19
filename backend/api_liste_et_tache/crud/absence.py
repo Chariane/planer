@@ -129,16 +129,18 @@ def _get_absence_scope_for_member(db: Session, membre: Membre) -> tuple[str, str
         return "liste", _get_member_scope_liste_id(db, membre)
     if membre.id_espace and membre.id_liste is None and membre.id_tache is None:
         return "espace", membre.id_espace
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.id_tache is None:
+        return "workspace", membre.id_workspace
     raise HTTPException(
         status_code=400,
-        detail="La demande doit être rattachée à un rôle direct dans une liste ou dans un espace.",
+        detail="La demande doit être rattachée à un rôle direct dans une liste, un espace ou un workspace.",
     )
 
 
 def _require_self_leave_request_access(db: Session, *, membre: Membre, current_user_id: str) -> tuple[str, str]:
     """
     Vérifie que l'utilisateur peut créer une demande pour lui-même.
-    Retourne le scope direct de la demande : ("liste", id) ou ("espace", id).
+    Retourne le scope direct de la demande : ("liste", id), ("espace", id) ou ("workspace", id).
     """
     if membre.id_utilisateur != current_user_id:
         raise HTTPException(
@@ -146,10 +148,10 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
             detail="Vous ne pouvez créer une demande d'absence ou de congé que pour vous-même.",
         )
 
-    if not membre.id_liste and not membre.id_espace:
+    if not membre.id_liste and not membre.id_espace and not membre.id_workspace:
         raise HTTPException(
             status_code=400,
-            detail="La demande doit être rattachée à votre rôle direct dans la liste ou dans l'espace.",
+            detail="La demande doit être rattachée à votre rôle direct dans la liste, l'espace ou le workspace.",
         )
 
     if membre.role == "Créateur":
@@ -162,6 +164,18 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
         raise HTTPException(
             status_code=403,
             detail="Les invités peuvent consulter la liste, mais ne peuvent pas créer de demande d'absence ou de congé.",
+        )
+
+    if (
+        membre.id_workspace
+        and membre.id_espace is None
+        and membre.id_liste is None
+        and membre.id_tache is None
+        and membre.role != "Administrateur"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Dans un workspace, seuls les administrateurs directs peuvent créer une demande d'absence ou de congé.",
         )
 
     return _get_absence_scope_for_member(db, membre)
