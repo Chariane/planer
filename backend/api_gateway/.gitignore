@@ -4,4 +4,4 @@ __pycache__/
 core/__pycache__/
 crud/__pycache__/
 routes/__pycache__/
-chat_debug.log
+email_debug.log
