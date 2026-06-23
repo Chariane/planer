@@ -538,7 +538,7 @@ def update_espace_member(
             resource_id=espace_id,
             user_id=user_id,
             name=espace.nom if espace else None,
-            creator_id=createur_id,
+            creator_id=str(createur_id) if createur_id else None,
             role=membre.role,  # ✅ Ajout du rôle
             cascade=True  # ✅ Ajout du rôle
         )

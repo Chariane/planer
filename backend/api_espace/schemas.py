@@ -685,7 +685,9 @@ class TacheOut(TacheBase):
     created_at: datetime
     id_liste: Optional[str] = None
     id_tache_parent: Optional[str] = None
+    progression: float = 0.0
     model_config = ConfigDict(from_attributes=True)
+
 
 class TacheDelete(BaseModel):
     id: str

@@ -1,6 +1,7 @@
 // frontend/src/pages/app/views/ListView.tsx
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -88,15 +89,44 @@ const getShortFileType = (file: File): string => {
   return (extension || mimeSubtype || 'fichier').slice(0, 20);
 };
 
+// ✅ Fonction pour récupérer le nom du créateur d'une tâche
+const getTaskCreator = (task: Task): { name: string; id: string } | null => {
+  // ✅ Priorité : utiliser le champ createur s'il existe
+  if (task.createur) {
+    const prenoms = task.createur.prenoms?.trim() || '';
+    const nom = task.createur.nom?.trim() || '';
+    let name = task.createur.username;
+    if (prenoms && nom) name = `${prenoms} ${nom}`;
+    else if (prenoms) name = prenoms;
+    else if (nom) name = nom;
+    return { name, id: task.createur.id };
+  }
+  
+  // Fallback : chercher le membre avec le rôle "Créateur" dans les assignees
+  const creator = task.assignees?.find(a => a.role === 'Créateur');
+  if (creator) {
+    return { name: creator.name, id: creator.id };
+  }
+  return null;
+};
+
+// ✅ Fonction pour récupérer le nom du propriétaire d'un fichier
+const getOwnerName = (file: TaskFile): string | null => {
+  const ownerName = file.meta_donnees?.owner_name;
+  const ownerUsername = file.meta_donnees?.owner_username;
+  if (ownerName && ownerName.trim()) return ownerName;
+  if (ownerUsername) return ownerUsername;
+  return null;
+};
+
+// ✅ Composant de section de fichiers - SEUL LE PROPRIÉTAIRE PEUT SUPPRIMER
 function TaskFilesSection({
   task,
   canAttach,
-  canManage,
   showReadOnlyNotice = true,
 }: {
   task: Task;
   canAttach: boolean;
-  canManage: boolean;
   showReadOnlyNotice?: boolean;
 }) {
   const { user } = useAuth();
@@ -140,6 +170,9 @@ function TaskFilesSection({
         type_fichier: getShortFileType(file),
         meta_donnees: {
           mime_type: uploaded?.content_type || file.type || null,
+          owner_user_id: user?.id,
+          owner_username: user?.username,
+          owner_name: `${user?.prenoms || ''} ${user?.nom || ''}`.trim() || user?.username,
         },
         target_type: 'tache',
         target_id: task.id,
@@ -153,9 +186,18 @@ function TaskFilesSection({
     }
   };
 
-  const handleDelete = async (file: TaskFile) => {
+  // ✅ RÈGLE : Seul le propriétaire du fichier peut le supprimer
+  const canDeleteFile = (file: TaskFile): boolean => {
     const ownerId = file.meta_donnees?.owner_user_id;
-    if (!canManage && ownerId !== user?.id) return;
+    return ownerId === user?.id;
+  };
+
+  const handleDelete = async (file: TaskFile) => {
+    if (!canDeleteFile(file)) {
+      setError("Vous n'êtes pas autorisé à supprimer ce fichier. Seul son propriétaire peut le faire.");
+      return;
+    }
+
     setError(null);
     try {
       await plannerToolsService.deleteFile(file.id);
@@ -225,7 +267,9 @@ function TaskFilesSection({
         <div className="grid gap-2">
           {files.map(file => {
             const ownerId = file.meta_donnees?.owner_user_id;
-            const canDelete = canManage || ownerId === user?.id;
+            const isOwner = ownerId === user?.id;
+            const ownerName = getOwnerName(file);
+
             return (
               <div key={file.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/60 px-3 py-2">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
@@ -246,9 +290,19 @@ function TaskFilesSection({
                   )}
                   <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-theme-muted opacity-50">
                     {file.type_fichier || 'fichier'}
+                    {isOwner && (
+                      <span className="ml-2 text-[8px] font-black text-primary/60 uppercase tracking-widest">
+                        • Vous
+                      </span>
+                    )}
+                    {ownerName && !isOwner && (
+                      <span className="ml-2 text-[8px] font-black text-theme-muted/60 uppercase tracking-widest">
+                        • Envoyé par {ownerName}
+                      </span>
+                    )}
                   </p>
                 </div>
-                {canDelete && (
+                {isOwner && (
                   <button
                     onClick={() => setFileToDelete(file)}
                     className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
@@ -302,6 +356,7 @@ function TaskDetailModal({
   const taskChecklists = task.checklists || [];
   const childTasks = tasks.filter(item => item.parentTaskId === task.id);
   const contentMode = task.contentMode || (taskChecklists.length > 0 ? 'checklist' : childTasks.length > 0 ? 'subtasks' : 'leaf');
+  const creator = getTaskCreator(task);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Détails de la tâche`} size="lg">
@@ -318,7 +373,7 @@ function TaskDetailModal({
           </button>
         )}
 
-        {/* Titre */}
+        {/* Titre avec créateur */}
         <div className="space-y-1">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Titre de la mission</label>
           <div className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
@@ -328,6 +383,16 @@ function TaskDetailModal({
               </span>
               <p className="text-lg font-bold text-theme-main leading-tight">{task.title}</p>
             </div>
+            {/* ✅ Affichage du créateur avec lien vers le profil */}
+            {creator && (
+              <Link 
+                to={`/users/${creator.id}`}
+                className="mt-2 flex items-center gap-2 text-xs text-theme-muted hover:text-primary transition-colors"
+              >
+                <User size={14} className="opacity-50" />
+                <span>Créé par <span className="font-bold hover:underline">{creator.name}</span></span>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -455,6 +520,7 @@ function TaskDetailModal({
             <div className="space-y-2">
               {childTasks.map(childTask => {
                 const childProgress = getTaskProgress(childTask);
+                const childCreator = getTaskCreator(childTask);
                 return (
                   <button
                     key={childTask.id}
@@ -476,6 +542,16 @@ function TaskDetailModal({
                           }`}>
                           {childTask.title}
                         </p>
+                        {/* ✅ Affichage du créateur sur la sous-tâche avec lien */}
+                        {childCreator && (
+                          <Link 
+                            to={`/users/${childCreator.id}`}
+                            className="mt-0.5 flex items-center gap-1 text-[9px] text-theme-muted hover:text-primary transition-colors"
+                          >
+                            <span className="opacity-50">Créé par</span>
+                            <span className="font-bold hover:underline">{childCreator.name}</span>
+                          </Link>
+                        )}
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span className={`rounded-lg px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${priorityColors[childTask.priority]}`}>
                             {priorityLabels[childTask.priority]}
@@ -499,7 +575,6 @@ function TaskDetailModal({
         <TaskFilesSection
           task={task}
           canAttach={false}
-          canManage={false}
           showReadOnlyNotice={false}
         />
 
@@ -741,31 +816,9 @@ export default function ListView({
     return acc;
   }, {} as Record<string, Task[]>);
 
-  // Logique de filtrage Focus Mode
-  const getTopLevelInFocus = () => {
-    const allFiltered = filteredTasks;
-    if (!focusTaskId) return allFiltered.filter(task => !task.parentTaskId);
-
-    // Si on a un focusTaskId, on veut montrer la tâche et ses parents directs pour le contexte
-    const focusedTask = allFiltered.find(t => t.id === focusTaskId);
-    if (!focusedTask) return allFiltered.filter(task => !task.parentTaskId);
-
-    // On récupère toute la lignée descendante
-    const descendants: Task[] = [];
-    const stack = [focusedTask];
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      descendants.push(current);
-      const children = allFiltered.filter(t => t.parentTaskId === current.id);
-      stack.push(...children);
-    }
-
-    // On retourne uniquement l'entrée du focus (la tâche elle-même)
-    // Mais on s'assure qu'elle est traitée comme un top-level dans le rendu groupedTasks
-    return [focusedTask];
-  };
-
-  const topLevelTasks = getTopLevelInFocus();
+  const topLevelTasks = focusTaskId
+    ? filteredTasks.filter(task => task.id === focusTaskId)
+    : filteredTasks.filter(task => !task.parentTaskId);
 
   const groupedTasks = Object.keys(statusLabels).reduce((acc, status) => {
     acc[status] = topLevelTasks.filter(t => t.status === status);
@@ -780,7 +833,6 @@ export default function ListView({
     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
     const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
-    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canDeleteCurrentTask;
     const checklistSummary = taskChecklists.length > 0
       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
       : '0';
@@ -793,6 +845,7 @@ export default function ListView({
     const structureSummary = isSubtaskMode
       ? `${childTasks.length} sous-tâche${childTasks.length > 1 ? 's' : ''}`
       : `Checklists ${checklistSummary}`;
+    const creator = getTaskCreator(task);
 
     return (
       <div key={task.id} className="space-y-2">
@@ -838,6 +891,16 @@ export default function ListView({
                 {task.title}
               </h4>
             </div>
+            {/* ✅ Affichage du créateur sur la sous-tâche avec lien */}
+            {creator && (
+              <Link 
+                to={`/users/${creator.id}`}
+                className="mb-1 flex items-center gap-1 text-[9px] text-theme-muted hover:text-primary transition-colors"
+              >
+                <span className="opacity-50">Créé par</span>
+                <span className="font-bold hover:underline">{creator.name}</span>
+              </Link>
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
                 {priorityLabels[task.priority]}
@@ -969,7 +1032,7 @@ export default function ListView({
                         <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
                           {checklist.texte}
                         </span>
-                        {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
+                        {canDeleteCurrentTask && onDeleteChecklist && (
                           <button
                             onClick={() => requestDeleteChecklist(task.id, checklist.id, checklist.texte)}
                             disabled={actionLoading === `delete-checklist-${checklist.id}`}
@@ -1026,7 +1089,6 @@ export default function ListView({
                 <TaskFilesSection
                   task={task}
                   canAttach={canAttachCurrentTaskFiles}
-                  canManage={canManageCurrentTaskFiles}
                 />
               </div>
             </motion.div>
@@ -1088,7 +1150,6 @@ export default function ListView({
                     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
                     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
                     const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
-                    const canManageCurrentTaskFiles = canManageTaskFiles ? canManageTaskFiles(task) : canDeleteCurrentTask;
                     const childTasks = tasksByParent[task.id] || [];
                     const progress = getTaskProgress(task);
                     const checklistSummary = taskChecklists.length > 0
@@ -1102,6 +1163,7 @@ export default function ListView({
                     const structureSummary = isSubtaskMode
                       ? `${childTasks.length} sous-tâche${childTasks.length > 1 ? 's' : ''}`
                       : `Checklists ${checklistSummary}`;
+                    const creator = getTaskCreator(task);
 
                     return (
                       <motion.div
@@ -1129,7 +1191,6 @@ export default function ListView({
                             {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
                           </button>
 
-
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1145,6 +1206,17 @@ export default function ListView({
                             <h4 className={`text-sm font-bold tracking-tight mb-1 group-hover:text-theme-main transition-colors ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
                               {task.title}
                             </h4>
+                            {/* ✅ Affichage du créateur avec lien */}
+                            {creator && (
+                              <Link 
+                                to={`/users/${creator.id}`}
+                                className="mb-1 flex items-center gap-1 text-[10px] text-theme-muted hover:text-primary transition-colors"
+                              >
+                                <User size={12} className="opacity-50" />
+                                <span className="opacity-50">Créé par</span>
+                                <span className="font-bold hover:underline">{creator.name}</span>
+                              </Link>
+                            )}
                             <div className="flex flex-wrap items-center gap-3">
                               <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
                                 {contentModeLabels[contentMode] || 'Libre'}
@@ -1299,7 +1371,7 @@ export default function ListView({
                                         <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
                                           {checklist.texte}
                                         </span>
-                                        {(canDeleteCurrentTask || checklist.creatorId === user?.id) && onDeleteChecklist && (
+                                        {canDeleteCurrentTask && onDeleteChecklist && (
                                           <button
                                             onClick={() => requestDeleteChecklist(task.id, checklist.id, checklist.texte)}
                                             disabled={actionLoading === `delete-checklist-${checklist.id}`}
@@ -1360,7 +1432,6 @@ export default function ListView({
                                 <TaskFilesSection
                                   task={task}
                                   canAttach={canAttachCurrentTaskFiles}
-                                  canManage={canManageCurrentTaskFiles}
                                 />
                               </div>
                             </motion.div>

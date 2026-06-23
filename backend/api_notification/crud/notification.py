@@ -60,7 +60,7 @@ def create_notification(db: Session, payload: NotificationCreate) -> dict:
     row = db.execute(
         text(
             f"""
-            INSERT INTO notification.notification (id_utilisateur, type, message, est_lu, est_globale)
+            INSERT INTO notification (id_utilisateur, type, message, est_lu, est_globale)
             VALUES (:user_id, :type, :message, false, :est_globale)
             RETURNING {NOTIFICATION_FIELDS}
             """
@@ -97,7 +97,7 @@ def list_notifications(
         text(
             f"""
             SELECT {NOTIFICATION_FIELDS}
-            FROM notification.notification
+            FROM notification
             WHERE {where_clause}
             ORDER BY date_creation DESC NULLS LAST
             LIMIT :limit
@@ -117,7 +117,7 @@ def unread_count(db: Session, *, user_id: str) -> int:
             text(
                 """
                 SELECT COUNT(*) AS count
-                FROM notification.notification
+                FROM notification
                 WHERE id_utilisateur = :user_id
                   AND COALESCE(est_lu, false) IS FALSE
                 """
@@ -132,7 +132,7 @@ def mark_notification_read(db: Session, *, notification_id: str, user_id: str) -
     row = db.execute(
         text(
             f"""
-            UPDATE notification.notification
+            UPDATE notification
             SET est_lu = true,
                 date_lecture = :now,
                 date_modif = :now
@@ -158,7 +158,7 @@ def mark_all_read(db: Session, *, user_id: str) -> int:
     result = db.execute(
         text(
             """
-            UPDATE notification.notification
+            UPDATE notification
             SET est_lu = true,
                 date_lecture = :now,
                 date_modif = :now
@@ -179,7 +179,7 @@ def delete_notification(db: Session, *, notification_id: str, user_id: str) -> N
     result = db.execute(
         text(
             """
-            DELETE FROM notification.notification
+            DELETE FROM notification
             WHERE id = :notification_id
               AND id_utilisateur = :user_id
             """

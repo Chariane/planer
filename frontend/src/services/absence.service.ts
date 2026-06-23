@@ -91,8 +91,9 @@ export const absenceService = {
 
     getImpact: (id: string): Promise<AbsenceImpactOut> => apiFetch(LIST_BASE_URL, `/listes/absences/${id}/impact`),
 
-    getAvailability: (listeId: string, userIds: string[], referenceDate?: string): Promise<UserAvailabilityOut[]> =>
-        apiFetch(LIST_BASE_URL, `/listes/absences/availability/liste/${listeId}`, {
+    // ✅ Correction : utiliser le bon endpoint
+    getAvailability: (resourceId: string, userIds: string[], referenceDate?: string): Promise<UserAvailabilityOut[]> =>
+        apiFetch(LIST_BASE_URL, `/listes/absences/availability/resource/${resourceId}`, {
             method: 'POST',
             body: JSON.stringify({ user_ids: userIds, reference_date: referenceDate })
         }),

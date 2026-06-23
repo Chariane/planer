@@ -38,6 +38,8 @@ FILE_METADATA_RESERVED_KEYS = {
     "anchor_type",
     "anchor_id",
     "owner_user_id",
+    "owner_username",
+    "owner_name",
     "uploaded_at",
 }
 
@@ -51,6 +53,8 @@ def _build_file_metadata(
     base_meta: Optional[dict[str, Any]],
     target_context: dict[str, Any],
     owner_user_id: str,
+    owner_username: Optional[str] = None,
+    owner_name: Optional[str] = None,
 ) -> dict[str, Any]:
     metadata = dict(base_meta or {})
     metadata.update(
@@ -60,6 +64,8 @@ def _build_file_metadata(
             "anchor_type": target_context["anchor_type"],
             "anchor_id": target_context["anchor_id"],
             "owner_user_id": owner_user_id,
+            "owner_username": owner_username,
+            "owner_name": owner_name,
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -83,6 +89,11 @@ def create_file_attachment(
     target_context = _resolve_file_target_context(db, target_type, target_id)
     _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
 
+    # Récupérer les infos de l'utilisateur
+    user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
+    owner_username = user.username if user else None
+    owner_name = f"{user.prenoms or ''} {user.nom or ''}".strip() or user.username if user else None
+
     direct_membership = _get_direct_target_membership(
         db,
         current_user_id,
@@ -98,6 +109,8 @@ def create_file_attachment(
             base_meta=meta_donnees,
             target_context=target_context,
             owner_user_id=current_user_id,
+            owner_username=owner_username,
+            owner_name=owner_name,
         ),
         id_membre=direct_membership.id if direct_membership else None,
     )
@@ -155,17 +168,22 @@ def list_accessible_files(
         owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
         owner_name = "inconnu"
         
-        # Résolution du nom via id_membre ou owner_user_id
-        if fichier.membres and fichier.membres.utilisateur:
-            owner_name = f"{fichier.membres.utilisateur.nom or ''} {fichier.membres.utilisateur.prenoms or ''}".strip() or fichier.membres.utilisateur.username
-        elif fichier.membres and not fichier.membres.utilisateur:
-            owner_name = "Utilisateur supprimé"
-        elif owner_user_id:
-            user = db.query(Utilisateur).filter(Utilisateur.id == owner_user_id).first()
-            if user:
-                owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
-            else:
+        # Récupérer le nom depuis meta_donnees
+        if fichier.meta_donnees:
+            owner_name = fichier.meta_donnees.get("owner_name") or "inconnu"
+        
+        # Fallback via id_membre ou owner_user_id
+        if owner_name == "inconnu":
+            if fichier.membres and fichier.membres.utilisateur:
+                owner_name = f"{fichier.membres.utilisateur.nom or ''} {fichier.membres.utilisateur.prenoms or ''}".strip() or fichier.membres.utilisateur.username
+            elif fichier.membres and not fichier.membres.utilisateur:
                 owner_name = "Utilisateur supprimé"
+            elif owner_user_id:
+                user = db.query(Utilisateur).filter(Utilisateur.id == owner_user_id).first()
+                if user:
+                    owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+                else:
+                    owner_name = "Utilisateur supprimé"
         
         # On attache le nom à l'objet pour le schéma Pydantic
         setattr(fichier, 'owner_name', owner_name)
@@ -215,22 +233,62 @@ def update_file_attachment(
 
 def delete_file_attachment(db: Session, *, file_id: str, current_user_id: str) -> None:
     fichier = _get_fichier_or_404(db, file_id)
-    target_type, target_id = _extract_file_target(fichier)
-
-    is_owner = False
+    
+    # Récupérer le propriétaire du fichier
     owner_user_id = (fichier.meta_donnees or {}).get("owner_user_id")
+    
+    # ✅ RÈGLE 1 : Le propriétaire du fichier peut supprimer son fichier
     if owner_user_id == current_user_id:
-        is_owner = True
-    elif fichier.membres and fichier.membres.id_utilisateur == current_user_id:
-        is_owner = True
-
-    if not is_owner:
-        if not target_type or not target_id:
-            raise HTTPException(status_code=403, detail="Ce fichier n'est pas correctement rattache a une ressource.")
-        _require_attachment_target_management_access(db, target_type, target_id, current_user_id)
-
-    db.delete(fichier)
-    commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+        db.delete(fichier)
+        commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+        return
+    
+    # ✅ RÈGLE 2 : Le créateur direct de la ressource peut supprimer n'importe quel fichier
+    target_type, target_id = _extract_file_target(fichier)
+    
+    if target_type and target_id:
+        # Vérifier si l'utilisateur est le créateur direct de la ressource cible
+        if target_type == ResourceType.WORKSPACE:
+            membership = _get_direct_target_membership(db, current_user_id, ResourceType.WORKSPACE, target_id)
+            if membership and membership.role == "Créateur":
+                db.delete(fichier)
+                commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+                return
+                
+        elif target_type == ResourceType.ESPACE:
+            membership = _get_direct_target_membership(db, current_user_id, ResourceType.ESPACE, target_id)
+            if membership and membership.role == "Créateur":
+                db.delete(fichier)
+                commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+                return
+                
+        elif target_type == ResourceType.LISTE:
+            membership = _get_direct_target_membership(db, current_user_id, ResourceType.LISTE, target_id)
+            if membership and membership.role == "Créateur":
+                db.delete(fichier)
+                commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+                return
+        
+        # Pour les autres types (tache, canevas, section, checklist)
+        # On remonte jusqu'à la ressource parente (liste, espace ou workspace)
+        else:
+            # Résoudre le contexte de la ressource cible
+            target_context = _resolve_file_target_context(db, target_type, target_id)
+            anchor_type = target_context.get("anchor_type")
+            anchor_id = target_context.get("anchor_id")
+            
+            if anchor_type and anchor_id:
+                membership = _get_direct_target_membership(db, current_user_id, anchor_type, anchor_id)
+                if membership and membership.role == "Créateur":
+                    db.delete(fichier)
+                    commit_or_raise(db, detail="Impossible de supprimer ce fichier.")
+                    return
+    
+    # ❌ Si l'utilisateur n'est ni propriétaire ni créateur direct, on refuse
+    raise HTTPException(
+        status_code=403, 
+        detail="Vous n'êtes pas autorisé à supprimer ce fichier. Seul son propriétaire ou le créateur de la ressource peut le faire."
+    )
 
 
 def create_file_share_token(

@@ -30,7 +30,7 @@ def _already_notified_today(db: Session, *, user_id: str, message: str, type_: s
         text(
             """
             SELECT 1
-            FROM notification.notification
+            FROM notification
             WHERE id_utilisateur = :user_id
               AND type = :type
               AND message = :message
@@ -61,50 +61,54 @@ def _create_notification(
         return False
     if dedupe_today and _already_notified_today(db, user_id=user_id, message=message, type_=type_):
         return False
-    db.execute(
-        text(
-            """
-            WITH inserted AS (
-                INSERT INTO notification.notification (id_utilisateur, type, message, est_lu, est_globale)
-                VALUES (:user_id, :type, :message, false, false)
-                RETURNING
-                    id,
-                    type,
-                    COALESCE(message, 'Notification indisponible') AS message,
-                    COALESCE(est_lu, false) AS est_lu,
-                    COALESCE(est_globale, false) AS est_globale,
-                    date_creation,
-                    date_modif,
-                    date_lecture,
-                    id_utilisateur
-            )
-            SELECT pg_notify(
-                'kplanner_notifications',
-                json_build_object(
-                    'event', 'notification.created',
-                    'notification', json_build_object(
-                        'id', id,
-                        'type', type,
-                        'message', message,
-                        'est_lu', est_lu,
-                        'est_globale', est_globale,
-                        'date_creation', date_creation,
-                        'date_modif', date_modif,
-                        'date_lecture', date_lecture,
-                        'id_utilisateur', id_utilisateur
-                    )
-                )::text
-            )
-            FROM inserted
-            """
-        ),
-        {
-            "user_id": user_id,
-            "type": type_,
-            "message": message,
-        },
-    )
-    return True
+    try:
+        db.execute(
+            text(
+                """
+                WITH inserted AS (
+                    INSERT INTO notification (id_utilisateur, type, message, est_lu, est_globale)
+                    VALUES (:user_id, :type, :message, false, false)
+                    RETURNING
+                        id,
+                        type,
+                        COALESCE(message, 'Notification indisponible') AS message,
+                        COALESCE(est_lu, false) AS est_lu,
+                        COALESCE(est_globale, false) AS est_globale,
+                        date_creation,
+                        date_modif,
+                        date_lecture,
+                        id_utilisateur
+                )
+                SELECT pg_notify(
+                    'kplanner_notifications',
+                    json_build_object(
+                        'event', 'notification.created',
+                        'notification', json_build_object(
+                            'id', id,
+                            'type', type,
+                            'message', message,
+                            'est_lu', est_lu,
+                            'est_globale', est_globale,
+                            'date_creation', date_creation,
+                            'date_modif', date_modif,
+                            'date_lecture', date_lecture,
+                            'id_utilisateur', id_utilisateur
+                        )
+                    )::text
+                )
+                FROM inserted
+                """
+            ),
+            {
+                "user_id": str(user_id) if user_id else None,
+                "type": type_,
+                "message": message,
+            },
+        )
+        return True
+    except Exception as exc:
+        logger.error("Erreur lors de la création de la notification locale : %s", exc)
+        return False
 
 
 def commit_notification_events(db: Session) -> None:
@@ -331,53 +335,126 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
     author_name = _display_user(author)
 
     recipients: list[str] = []
+    
     if report_member.id_liste:
         liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
-        if not liste: return
+        if not liste:
+            return
+        
         resource_name = liste.nom or "une liste"
         message = f"{author_name} a envoyé un rapport dans la liste « {resource_name} » : {report_title}."
+        
         if report_member.role == "Membre":
-            recipients = _direct_list_admin_user_ids(db, liste.id, exclude_user_id=actor_user_id)
-            if not recipients:
-                recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+            # ✅ Récupérer les admins directs de la liste
+            admins = db.query(Membre).filter(
+                Membre.id_liste == liste.id,
+                Membre.statut == "Actif",
+                Membre.role == "Administrateur"
+            ).all()
+            
+            # ✅ Filtrer les admins disponibles (pas en congé)
+            from ..core.function import _is_user_available_now
+            disponibles = [
+                admin for admin in admins 
+                if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)
+            ]
+            
+            if disponibles:
+                recipients = [admin.id_utilisateur for admin in disponibles]
+            else:
+                # ✅ Fallback : créateur de la liste
+                createurs = db.query(Membre).filter(
+                    Membre.id_liste == liste.id,
+                    Membre.statut == "Actif",
+                    Membre.role == "Créateur"
+                ).all()
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+                
         elif report_member.role == "Administrateur":
-            recipients = _direct_list_creator_user_ids(db, liste.id, exclude_user_id=actor_user_id)
+            # ✅ L'admin direct envoie au créateur
+            createurs = db.query(Membre).filter(
+                Membre.id_liste == liste.id,
+                Membre.statut == "Actif",
+                Membre.role == "Créateur"
+            ).all()
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+        else:
+            return
             
     elif report_member.id_espace:
         espace = db.query(Espace).filter(Espace.id == report_member.id_espace).first()
-        if not espace: return
+        if not espace:
+            return
         resource_name = espace.nom or "un espace"
         message = f"{author_name} a envoyé un rapport dans l'espace « {resource_name} » : {report_title}."
         
         if report_member.role == "Membre":
-            # 1. Les Admins directs reçoivent
-            recipients = _direct_espace_admin_user_ids(db, espace.id, exclude_user_id=actor_user_id)
-            # 2. Si pas d'admin, le Créateur reçoit
-            if not recipients:
-                recipients = _direct_espace_creator_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+            admins = db.query(Membre).filter(
+                Membre.id_espace == espace.id,
+                Membre.statut == "Actif",
+                Membre.role == "Administrateur"
+            ).all()
+            from ..core.function import _is_user_available_now
+            disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
+            if disponibles:
+                recipients = [admin.id_utilisateur for admin in disponibles]
+            else:
+                createurs = db.query(Membre).filter(
+                    Membre.id_espace == espace.id,
+                    Membre.statut == "Actif",
+                    Membre.role == "Créateur"
+                ).all()
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
         elif report_member.role == "Administrateur":
-            # 3. Les Créateurs reçoivent les rapports des Admins
-            recipients = _direct_espace_creator_user_ids(db, espace.id, exclude_user_id=actor_user_id)
+            createurs = db.query(Membre).filter(
+                Membre.id_espace == espace.id,
+                Membre.statut == "Actif",
+                Membre.role == "Créateur"
+            ).all()
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+        else:
+            return
             
     elif report_member.id_workspace:
         workspace = db.query(Workspace).filter(Workspace.id == report_member.id_workspace).first()
-        if not workspace: return
+        if not workspace:
+            return
         resource_name = workspace.nom or "un workspace"
         message = f"{author_name} a envoyé un rapport dans le workspace « {resource_name} » : {report_title}."
         
         if report_member.role == "Membre":
-            # 1. Les Admins directs du workspace
-            recipients = _workspace_admin_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
-            # 2. Si pas d'admin, le Créateur reçoit
-            if not recipients:
-                recipients = _workspace_creator_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
+            admins = db.query(Membre).filter(
+                Membre.id_workspace == workspace.id,
+                Membre.statut == "Actif",
+                Membre.role == "Administrateur"
+            ).all()
+            from ..core.function import _is_user_available_now
+            disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
+            if disponibles:
+                recipients = [admin.id_utilisateur for admin in disponibles]
+            else:
+                createurs = db.query(Membre).filter(
+                    Membre.id_workspace == workspace.id,
+                    Membre.statut == "Actif",
+                    Membre.role == "Créateur"
+                ).all()
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
         elif report_member.role == "Administrateur":
-            # 3. Le Créateur reçoit les rapports des Admins
-            recipients = _workspace_creator_user_ids(db, workspace.id, exclude_user_id=actor_user_id)
+            createurs = db.query(Membre).filter(
+                Membre.id_workspace == workspace.id,
+                Membre.statut == "Actif",
+                Membre.role == "Créateur"
+            ).all()
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+        else:
+            return
     else:
         return
 
+    # ✅ Envoyer les notifications
     for user_id in recipients:
+        if user_id == actor_user_id:
+            continue
         _create_notification(
             db,
             user_id=user_id,

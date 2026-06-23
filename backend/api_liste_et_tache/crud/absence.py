@@ -62,10 +62,20 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "en_attent
     )
 
 
-def _serialize_absence(absence: AbsenceEtConge) -> dict:
+def _get_decision_by_name(db: Session, decision_by: Optional[str]) -> Optional[str]:
+    """Récupère le nom de l'utilisateur qui a pris la décision."""
+    if not decision_by:
+        return None
+    user = db.query(Utilisateur).filter(Utilisateur.id == decision_by).first()
+    if user:
+        return f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
+    return "Utilisateur supprimé"
+
+
+def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
     owner_name = "Utilisateur supprimé"
     author_role = "Membre"
-    decision_by_name = None
+    
     if absence.membres:
         author_role = absence.membres.role
         if absence.membres.utilisateur:
@@ -74,18 +84,8 @@ def _serialize_absence(absence: AbsenceEtConge) -> dict:
         else:
             owner_name = "Utilisateur supprimé"
 
-    decision_by_name = None
-    decisionnaire = getattr(absence, "decisionnaire", None)
-    if decisionnaire:
-        decision_by_name = f"{decisionnaire.nom or ''} {decisionnaire.prenoms or ''}".strip() or decisionnaire.username or decisionnaire.email
-    elif absence.decision_by:
-        # Fallback if relationship not loaded but ID exists
-        session = object_session(absence)
-        decision_user = session.query(Utilisateur).filter(Utilisateur.id == absence.decision_by).first() if session else None
-        if decision_user:
-            decision_by_name = f"{decision_user.nom or ''} {decision_user.prenoms or ''}".strip() or decision_user.username or decision_user.email
-        else:
-            decision_by_name = "Utilisateur supprimé"
+    # Récupérer le nom du décisionnaire via une requête
+    decision_by_name = _get_decision_by_name(db, absence.decision_by)
         
     return {
         "id": absence.id,
@@ -613,8 +613,7 @@ def list_accessible_absences(
     query = (
         db.query(AbsenceEtConge)
         .options(
-            joinedload(AbsenceEtConge.membres).joinedload(Membre.utilisateur),
-            joinedload(AbsenceEtConge.decisionnaire)
+            joinedload(AbsenceEtConge.membres).joinedload(Membre.utilisateur)
         )
         .order_by(AbsenceEtConge.date_debut.desc())
     )
@@ -650,7 +649,7 @@ def list_accessible_absences(
         except HTTPException:
             continue
             
-        payload = _serialize_absence(absence)
+        payload = _serialize_absence(db, absence)
         payload["liste_id"] = membre.id_liste
         payload["espace_id"] = membre.id_espace
         payload["workspace_id"] = membre.id_workspace
@@ -834,7 +833,7 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     absence.statut = "rejetee"
     absence.statut_date = datetime.utcnow()
     absence.decision_commentaire = motif_rejet
-    absence.decision_by = current_user_id
+    absence.decision_by = current_user_id    
     absence.decision_at = absence.statut_date
         
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
@@ -886,7 +885,7 @@ def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence.statut_date = datetime.utcnow()
     
     commit_or_raise(db, detail="Impossible d'annuler cette demande.", refresh_instance=absence)
-    return _serialize_absence(absence)
+    return _serialize_absence(db, absence)
 
 
 def get_user_availability(
@@ -910,11 +909,6 @@ def get_user_availability(
     member_ids = list(member_map.keys())
     
     # On cherche les absences approuvées qui couvrent la date de référence
-    # Pour garantir que l'on reste absent TOUTE la journée de fin, 
-    # on compare les dates brutes (sans l'heure) si possible, 
-    # ou on s'assure que d'un point de vue logique, le jour j (debut) à j (fin) est couvert.
-    
-    # On normalise reference_date pour la comparaison
     ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
     
     absences = db.query(AbsenceEtConge).filter(
@@ -930,15 +924,13 @@ def get_user_availability(
         if a_start and ref_date >= a_start and (not a_end or ref_date <= a_end):
             absent_map[member_map[a.id_membre]] = a
     
-    absent_user_ids = absent_map
-    
     results = []
     for uid in user_ids:
-        absence = absent_user_ids.get(uid)
+        absence = absent_map.get(uid)
         results.append({
             "id_utilisateur": uid,
             "is_available": absence is None,
-            "current_absence": _serialize_absence(absence) if absence else None
+            "current_absence": _serialize_absence(db, absence) if absence else None
         })
     return results
 

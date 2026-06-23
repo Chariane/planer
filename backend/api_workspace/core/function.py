@@ -1,3 +1,5 @@
+# backend/api_workspace/core/function.py
+import base64
 from datetime import datetime
 from typing import Any, List, Optional, Set, Tuple
 from fastapi import HTTPException
@@ -848,6 +850,7 @@ def _serialize_member(membre: Membre) -> dict:
                 "email": utilisateur.email,
                 "nom": utilisateur.nom,
                 "prenoms": utilisateur.prenoms,
+                "photo_base64": base64.b64encode(utilisateur.photo).decode("ascii") if utilisateur.photo else None,
             }
             if utilisateur
             else None

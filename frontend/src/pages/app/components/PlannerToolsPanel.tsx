@@ -1514,17 +1514,17 @@ export default function PlannerToolsPanel({
           <head>
             <title>Rapport - ${safeTitle}</title>
             <style>
-              body {font - family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
-              .header {border - bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
-              .title {font - size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
-              .meta {font - size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-              .section {margin - bottom: 30px; }
-              .section-title {font - size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
-              .content {font - size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
+              body {font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
+              .header {border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+              .title {font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
+              .meta {font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+              .section {margin-bottom: 30px; }
+              .section-title {font-size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+              .content {font-size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
               .content.warning {background: #fff1f2; border-left-color: #f43f5e; color: #9f1239; }
               .content.note {background: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; }
-              .footer {margin - top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
-              .signature {font - weight: 700; color: #059669; }
+              .footer {margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
+              .signature {font-weight: 700; color: #059669; }
             </style>
           </head>
           <body>
@@ -1727,7 +1727,8 @@ export default function PlannerToolsPanel({
                       <div className="flex items-center gap-1">
                         <button onClick={() => window.open(getFileFullUrl(file.url_fichier), '_blank')} className="p-2 text-theme-muted hover:text-secondary hover:bg-secondary/10 rounded-xl transition-all" title="Visualiser"><Eye size={18} /></button>
                         <button onClick={() => handleDownload(file)} className="p-2 text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl transition-all" title="Télécharger"><Download size={18} /></button>
-                        {(file.owner_user_id === currentUserId || isManager) && (
+                        {/* ✅ CORRECTION : Le propriétaire OU le créateur direct de la ressource peuvent supprimer */}
+                        {(file.owner_user_id === currentUserId || isDirectResourceCreator) && (
                           <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" title="Supprimer"><Trash2 size={18} /></button>
                         )}
                       </div>

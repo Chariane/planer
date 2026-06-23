@@ -114,19 +114,30 @@ export default function MemberManagement({
   };
 
   const resourceType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
-  const { role: directListRole } = useResourceRole(listeId, 'liste');
   const { canManageMembers, canInviteMembers, isAdmin, isCreator } = usePermissions({
     userRole: currentUserRole,
     resourceType: resourceType,
   });
 
+  // ✅ Détection de l'admin direct via les membres chargés (plus fiable)
+  const isDirectEspaceAdmin = !!espaceId && members.some(
+    m => m.id === user?.id && m.role === ADMIN_ROLE
+  );
+  const isDirectListAdmin = !!listeId && members.some(
+    m => m.id === user?.id && m.role === ADMIN_ROLE
+  );
+  const isDirectAdmin = isDirectListAdmin || isDirectEspaceAdmin;
+
   const currentDirectMember = members.find(member => member.id === user?.id);
-  const isDirectListAdmin = !!listeId && directListRole === ADMIN_ROLE;
   const isInheritedSpaceAdmin = !!espaceId
     && currentUserRole === ROLES.ADMIN
     && currentDirectMember?.role !== ROLES.ADMIN
     && currentDirectMember?.role !== ROLES.CREATOR;
-  const canChangeMemberRoles = canManageMembers && !isDirectListAdmin;
+
+  // ✅ canChangeMemberRoles : Un Admin direct (liste ou espace) ne peut PAS modifier les rôles
+  const canChangeMemberRoles = canManageMembers && !isDirectAdmin;
+
+  // ✅ canRemoveMember : Seul le Créateur peut retirer un membre
   const canRemoveMember = (member: Member) => isCreator && member.id !== user?.id && member.role !== ROLES.CREATOR;
 
   const loadMembers = async () => {
@@ -143,13 +154,17 @@ export default function MemberManagement({
         return;
       }
 
-      setMembers(data.map((m: any) => ({
-        id: m.id_utilisateur || m.utilisateur?.id || m.id,
-        name: getMemberDisplayName(m),
-        email: getMemberContactLabel(m),
-        role: m.role,
-        photo_base64: getMemberPhotoBase64(m),
-      })));
+      // ✅ Transformation correcte des membres avec photo
+      setMembers(data.map((m: any) => {
+        const utilisateur = m.utilisateur || m;
+        return {
+          id: m.id_utilisateur || utilisateur?.id || m.id,
+          name: getMemberDisplayName(m),
+          email: getMemberContactLabel(m),
+          role: m.role,
+          photo_base64: utilisateur?.photo_base64 || m.photo_base64 || null,
+        };
+      }));
     } catch (err) {
       console.error('Erreur chargement membres', err);
       showMessage('Erreur lors du chargement des membres', 'error');
@@ -265,11 +280,54 @@ export default function MemberManagement({
     }
   };
 
-  const displayRoles = listeId
-    ? ((isCreator || isAdmin) ? ['Membre', 'Administrateur'] : ['Membre'])
-    : isInheritedSpaceAdmin
-      ? ['Membre', 'Administrateur']
-      : MANAGABLE_ROLES;
+  // ✅ getManageableRoles : Détermine les rôles disponibles pour la modification
+  const getManageableRoles = (memberRole: string) => {
+    // 🔒 Un Admin direct (liste ou espace) ne peut modifier aucun rôle
+    if (isDirectAdmin) return [memberRole];
+
+    if (listeId) {
+      const base = (isCreator || isAdmin) ? [ROLES.MEMBER, ROLES.ADMIN] : [ROLES.MEMBER];
+      return base.includes(memberRole as any) ? base : [memberRole, ...base];
+    }
+
+    // ✅ Admin hérité d'espace : Membre → Admin uniquement
+    if (isInheritedSpaceAdmin) {
+      if (memberRole === ROLES.MEMBER) return [ROLES.MEMBER, ROLES.ADMIN];
+      return [memberRole];
+    }
+
+    // ✅ Admin direct d'espace (pas hérité) : ne peut rien modifier
+    if (espaceId && isAdmin && !isCreator) {
+      return [memberRole];
+    }
+
+    return MANAGABLE_ROLES;
+  };
+
+  // ✅ invitationRoles : Détermine les rôles disponibles pour l'invitation
+  const getInvitationRoles = () => {
+    // 🔒 Admin direct d'espace : ne peut pas inviter avec Administrateur
+    if (isDirectAdmin && espaceId) {
+      return [ROLES.MEMBER, ROLES.GUEST];
+    }
+    // ✅ Admin hérité ou Créateur : peut inviter avec tous les rôles
+    if (isInheritedSpaceAdmin || isCreator) {
+      return MANAGABLE_ROLES;
+    }
+    // Membre/Invité : ne peuvent inviter que Membre ou Invité
+    return [ROLES.MEMBER, ROLES.GUEST];
+  };
+
+  // ✅ canEditMemberRoleInList : Détermine si l'utilisateur peut modifier le rôle d'un membre
+  const canEditMemberRoleInList = (member: Member) => {
+    // 🔒 Un Admin direct (liste ou espace) ne peut modifier aucun rôle
+    if (isDirectAdmin) return false;
+
+    if (member.role === ROLES.CREATOR) return false;
+    if (isInheritedSpaceAdmin) return member.role === ROLES.MEMBER;
+    if (isAdmin && !isCreator) return member.role !== ROLES.ADMIN;
+    return canChangeMemberRoles;
+  };
 
   const visibleMembers = members.filter(member => member.role !== ROLES.GUEST);
   const directGuests = members.filter(member => member.role === ROLES.GUEST);
@@ -354,6 +412,7 @@ export default function MemberManagement({
                   >
                     <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
                       <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                        {/* ✅ MemberAvatar gère déjà la photo et le fallback sur l'initiale */}
                         <MemberAvatar
                           member={member}
                           size="md"
@@ -373,7 +432,7 @@ export default function MemberManagement({
 
                       {member.role !== ROLES.CREATOR && (
                         <div className="flex items-center gap-2">
-                          {canChangeMemberRoles && (
+                          {canEditMemberRoleInList(member) && (
                             <>
                               {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
                               <select
@@ -382,7 +441,11 @@ export default function MemberManagement({
                                 disabled={updatingMemberId === member.id}
                                 className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
                               >
-                                {displayRoles.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
+                                {getManageableRoles(member.role).map(r => (
+                                  <option key={r} value={r} className="bg-theme-surface text-theme-main">
+                                    {getRoleLabel(r)}
+                                  </option>
+                                ))}
                               </select>
                             </>
                           )}
@@ -417,6 +480,7 @@ export default function MemberManagement({
                 {filteredGuests.map(member => (
                   <GlassCard key={member.id} className="p-4 flex items-center justify-between gap-4 border-dashed opacity-85">
                     <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      {/* ✅ MemberAvatar gère la photo et l'initiale */}
                       <MemberAvatar member={member} size="md" />
                       <div className="min-w-0">
                         <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
@@ -457,7 +521,9 @@ export default function MemberManagement({
               onChange={e => setInviteRole(e.target.value)}
               className="w-full bg-theme-surface/50 border border-white/10 rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-bold appearance-none cursor-pointer"
             >
-              {MANAGABLE_ROLES.map(r => <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>)}
+              {getInvitationRoles().map(r => (
+                <option key={r} value={r} className="bg-theme-surface text-theme-main">{getRoleLabel(r)}</option>
+              ))}
             </select>
           </div>
           <div className="flex gap-3 pt-4">

@@ -35,19 +35,14 @@ def _member_owner_name(membre: Membre) -> str:
 
 
 def _serialize_report(rapport: Rapport) -> dict:
-    owner_name = rapport.owner_name_snapshot or "inconnu"
-    if rapport.membres and rapport.membres.utilisateur:
-        owner_name = _member_owner_name(rapport.membres)
-    elif rapport.membres and not rapport.membres.utilisateur:
-        owner_name = "Utilisateur supprimé"
+    owner_name = "inconnu"
 
-    owner_user_id = rapport.owner_user_id or (rapport.membres.id_utilisateur if rapport.membres else None)
-    author_role = rapport.author_role or (rapport.membres.role if rapport.membres else None)
-    liste_id = rapport.id_liste or (rapport.membres.id_liste if rapport.membres else None)
-    espace_id = rapport.id_espace or (rapport.membres.id_espace if rapport.membres else None)
-    workspace_id = rapport.id_workspace or (rapport.membres.id_workspace if rapport.membres else None)
-    scope_type = ResourceType.LISTE if liste_id else ResourceType.ESPACE if espace_id else ResourceType.WORKSPACE if workspace_id else None
-    scope_id = liste_id or espace_id or workspace_id
+    if rapport.membres:
+        if rapport.membres.utilisateur:
+            user = rapport.membres.utilisateur
+            owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email or "Utilisateur"
+        else:
+            owner_name = "Utilisateur supprimé"
 
     return {
         "id": rapport.id,
@@ -61,14 +56,6 @@ def _serialize_report(rapport: Rapport) -> dict:
         "created_at": rapport.created_at,
         "id_membre": rapport.id_membre,
         "owner_name": owner_name,
-        "owner_user_id": owner_user_id,
-        "author_role": author_role,
-        "id_liste": liste_id,
-        "liste_id": liste_id,
-        "id_espace": espace_id,
-        "id_workspace": workspace_id,
-        "scope_type": scope_type,
-        "scope_id": scope_id,
     }
 
 
@@ -214,12 +201,6 @@ def create_report(
         periode_debut=periode_debut,
         periode_fin=periode_fin,
         id_membre=id_membre,
-        owner_user_id=current_user_id,
-        owner_name_snapshot=_member_owner_name(membre),
-        author_role=membre.role,
-        id_liste=liste_id,
-        id_espace=espace_id,
-        id_workspace=workspace_id,
     )
     db.add(rapport)
     commit_or_raise(
@@ -261,6 +242,7 @@ def list_accessible_reports(
 
     reports = query.limit(max(limit, 1) * 6).all()
     results: list[dict] = []
+    
     for rapport in reports:
         membre = None
         try:
@@ -268,32 +250,57 @@ def list_accessible_reports(
         except HTTPException:
             continue
 
-        member_liste_id = rapport.id_liste or (membre.id_liste if membre else None)
-        member_espace_id = rapport.id_espace or (membre.id_espace if membre else None)
-        member_workspace_id = rapport.id_workspace or (membre.id_workspace if membre else None)
+        if not membre:
+            continue
 
+        member_liste_id = membre.id_liste
+        member_espace_id = membre.id_espace
+        member_workspace_id = membre.id_workspace
+
+        # ✅ Si un liste_id est spécifié, filtrer par liste
         if liste_id:
             if member_liste_id != liste_id:
                 continue
+        # ✅ Si un espace_id est spécifié, filtrer par espace
         elif espace_id:
-            if member_espace_id != espace_id or member_liste_id or member_workspace_id:
+            if member_espace_id != espace_id:
                 continue
+        # ✅ Si un workspace_id est spécifié, filtrer par workspace
         elif workspace_id:
-            if member_workspace_id != workspace_id or member_liste_id or member_espace_id:
+            if member_workspace_id != workspace_id:
+                continue
+        # ✅ Si AUCUN scope spécifié, l'utilisateur voit les rapports des ressources où il a accès
+        else:
+            # Vérifier l'accès à la ressource du rapport
+            if member_liste_id:
+                try:
+                    from ..core.function import _require_list_read_access
+                    _require_list_read_access(db, member_liste_id, current_user_id)
+                except HTTPException:
+                    continue
+            elif member_espace_id:
+                try:
+                    from ..core.function import _require_espace_descendant_read_access
+                    _require_espace_descendant_read_access(db, member_espace_id, current_user_id)
+                except HTTPException:
+                    continue
+            elif member_workspace_id:
+                try:
+                    from ..core.function import _require_workspace_descendant_read_access
+                    _require_workspace_descendant_read_access(db, member_workspace_id, current_user_id)
+                except HTTPException:
+                    continue
+            else:
                 continue
 
         if not member_liste_id and not member_espace_id and not member_workspace_id:
             continue
 
         payload = _serialize_report(rapport)
-        payload["liste_id"] = member_liste_id
-        payload["id_liste"] = member_liste_id
-        payload["id_espace"] = member_espace_id
-        payload["id_workspace"] = member_workspace_id
-        payload["owner_user_id"] = payload.get("owner_user_id") or (membre.id_utilisateur if membre else None)
         results.append(payload)
         if len(results) >= limit:
             break
+            
     return results
 
 

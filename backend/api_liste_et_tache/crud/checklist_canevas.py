@@ -194,7 +194,6 @@ def create_checklist(
     is_checked: bool = False,
     id_section: Optional[str] = None,
     id_tache: Optional[str] = None,
-    id_createur: Optional[str] = None,
 ) -> Checklist:
     if id_tache:
         from ..crud.tache import ensure_task_can_receive_checklist
@@ -212,7 +211,6 @@ def create_checklist(
         is_checked=is_checked, 
         id_section=id_section, 
         id_tache=id_tache,
-        id_createur=id_createur,
         created_at=now,
         updated_at=now
     )

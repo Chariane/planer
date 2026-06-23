@@ -27,61 +27,9 @@ else:
     from .core.deadline_scheduler import deadline_reminder_scheduler
 
 
-def ensure_runtime_columns() -> None:
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE planer.tache ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.checklist ADD COLUMN IF NOT EXISTS id_createur varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS owner_user_id varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS owner_name_snapshot varchar(255)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS author_role varchar(30)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_liste varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_espace varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.rapport ADD COLUMN IF NOT EXISTS id_workspace varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_commentaire varchar(255)"))
-        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_by varchar(12)"))
-        conn.execute(text("ALTER TABLE planer.absence_et_conge ADD COLUMN IF NOT EXISTS decision_at timestamp"))
-        
-        conn.execute(text("ALTER TABLE planer.absence_et_conge DROP CONSTRAINT IF EXISTS absence_et_conge_statut_check"))
-        conn.execute(text("""
-            UPDATE planer.absence_et_conge
-            SET statut = CASE
-                WHEN statut IS NULL OR TRIM(statut) = '' THEN 'en_attente'
-                WHEN LOWER(TRIM(statut)) IN ('en_attente', 'en attente', 'pending') THEN 'en_attente'
-                WHEN LOWER(TRIM(statut)) IN ('approuvee', 'approuvée', 'accepte', 'accepté', 'acceptée', 'accepted', 'validee', 'validée', 'validé') THEN 'approuvee'
-                WHEN LOWER(TRIM(statut)) IN ('rejetee', 'rejetée', 'refusee', 'refusée', 'refuse', 'refusé', 'rejected') THEN 'rejetee'
-                WHEN LOWER(TRIM(statut)) IN ('annulee', 'annulée', 'cancelled', 'canceled') THEN 'annulee'
-                WHEN LOWER(TRIM(statut)) IN ('terminee', 'terminée', 'effectue', 'effectué', 'done') THEN 'terminee'
-                ELSE 'en_attente'
-            END
-        """))
-        conn.execute(text("""
-            ALTER TABLE planer.absence_et_conge ADD CONSTRAINT absence_et_conge_statut_check 
-            CHECK (statut = ANY (ARRAY['en_attente', 'approuvee', 'rejetee', 'annulee', 'terminee']))
-        """))
-        conn.execute(text("""
-            UPDATE planer.rapport AS r
-            SET
-                owner_user_id = COALESCE(r.owner_user_id, m.id_utilisateur),
-                author_role = COALESCE(r.author_role, m.role),
-                id_liste = COALESCE(r.id_liste, m.id_liste),
-                id_espace = COALESCE(r.id_espace, m.id_espace),
-                id_workspace = COALESCE(r.id_workspace, m.id_workspace),
-                owner_name_snapshot = COALESCE(
-                    r.owner_name_snapshot,
-                    NULLIF(TRIM(CONCAT(COALESCE(u.nom, ''), ' ', COALESCE(u.prenoms, ''))), ''),
-                    u.username,
-                    u.email,
-                    'Utilisateur supprimé'
-                )
-            FROM planer.membre AS m
-            LEFT JOIN public.utilisateur AS u ON u.id = m.id_utilisateur
-            WHERE r.id_membre = m.id
-        """))
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_runtime_columns()
     deadline_reminder_scheduler.start()
     try:
         yield

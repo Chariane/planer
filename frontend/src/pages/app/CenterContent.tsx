@@ -777,7 +777,7 @@ export default function CenterContent() {
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
               canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
-              canDeleteTask={(task) => canCreateContent || task.creatorId === user?.id}
+              canDeleteTask={(task) => canCreateContent}
               canAssignTask={() => canCreateContent}
               canAttachTaskFiles={(task) => canCreateContent || canOperateAssignedTask(task)}
               canManageTaskFiles={() => canCreateContent}

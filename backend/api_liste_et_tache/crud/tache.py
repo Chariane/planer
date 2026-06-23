@@ -102,6 +102,8 @@ def _recompute_liste_task_progressions(db: Session, liste_id: str) -> Dict[str, 
     return progressions
 
 
+# backend/api_liste_et_tache/crud/tache.py
+
 def get_taches_for_liste(
     db: Session, 
     liste_id: str,
@@ -126,7 +128,6 @@ def get_taches_for_liste(
     if priorite:
         query = query.filter(Tache.priorite == priorite)
     if membre_id:
-        # On fait une jointure pour filtrer par utilisateur assigné
         query = query.join(Tache.membres).filter(Membre.id_utilisateur == membre_id)
         
     # Tri dynamique
@@ -138,8 +139,26 @@ def get_taches_for_liste(
         
     progressions = _recompute_liste_task_progressions(db, liste_id)
     taches = query.all()
+    
     for tache in taches:
         tache.progression = progressions.get(tache.id, 0.0)
+        tache.content_mode = get_task_content_mode(db, tache.id)
+        tache.can_add_checklist = not has_task_subtasks(db, tache.id)
+        tache.can_add_subtask = not has_task_checklists(db, tache.id)
+        
+        # ✅ Récupérer le créateur de la tâche
+        createur_membre = db.query(Membre).filter(
+            Membre.id_tache == tache.id,
+            Membre.role == "Créateur",
+            Membre.statut == "Actif"
+        ).first()
+        
+        if createur_membre and createur_membre.utilisateur:
+            # Ajouter le créateur comme attribut dynamique
+            setattr(tache, 'createur', createur_membre.utilisateur)
+        else:
+            setattr(tache, 'createur', None)
+    
     return taches
 
 
@@ -343,7 +362,7 @@ def create_tache(
     ordre_affichage: Optional[int] = 0,
     id_liste: Optional[str] = None,
     id_tache_parent: Optional[str] = None,
-    id_createur: Optional[str] = None,
+    creator_user_id: Optional[str] = None,
 ) -> Tache:
     id_liste, parent = _resolve_parent_scope(db, id_tache_parent=id_tache_parent, id_liste=id_liste)
     if parent:
@@ -371,9 +390,20 @@ def create_tache(
         ordre_affichage=ordre_affichage,
         id_liste=id_liste,
         id_tache_parent=id_tache_parent,
-        id_createur=id_createur,
     )
     db.add(tache)
+    
+    # Ajouter le créateur comme membre de la tâche avec rôle Créateur
+    if creator_user_id:
+        db.flush()  # Pour obtenir l'ID de la tâche
+        membre = Membre(
+            id_utilisateur=creator_user_id,
+            id_tache=tache.id,
+            role="Créateur",
+            statut="Actif"
+        )
+        db.add(membre)
+    
     try:
         db.commit()
         db.refresh(tache)
@@ -517,10 +547,11 @@ def _get_espace_ancestor_ids(db: Session, espace_id: Optional[str]) -> list[str]
 
 
 def _user_is_task_assignable_from_list_scope(db: Session, *, tache: Tache, utilisateur_id: str) -> bool:
-    """Un exécutant de tâche doit être Membre de la liste ou d'un parent espace/workspace."""
+    """Un exécutant de tâche doit être Membre DIRECT de la liste."""
     if not tache.liste:
         return False
 
+    # ✅ UNIQUEMENT les membres directs de la liste
     list_member = db.query(Membre).filter(
         Membre.id_liste == tache.id_liste,
         Membre.id_utilisateur == utilisateur_id,
@@ -529,28 +560,6 @@ def _user_is_task_assignable_from_list_scope(db: Session, *, tache: Tache, utili
     ).first()
     if list_member:
         return True
-
-    espace_ids = _get_espace_ancestor_ids(db, tache.liste.id_espace)
-    if espace_ids:
-        espace_member = db.query(Membre).filter(
-            Membre.id_espace.in_(espace_ids),
-            Membre.id_utilisateur == utilisateur_id,
-            Membre.statut == "Actif",
-            Membre.role == "Membre",
-        ).first()
-        if espace_member:
-            return True
-
-    workspace_id = _get_liste_parent_workspace_id(tache.liste)
-    if workspace_id:
-        workspace_member = db.query(Membre).filter(
-            Membre.id_workspace == workspace_id,
-            Membre.id_utilisateur == utilisateur_id,
-            Membre.statut == "Actif",
-            Membre.role == "Membre",
-        ).first()
-        if workspace_member:
-            return True
 
     return False
 
@@ -565,8 +574,7 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
         raise HTTPException(
             status_code=403,
             detail=(
-                "Seuls les utilisateurs avec le role Membre dans la liste, "
-                "un espace parent ou le workspace parent peuvent etre assignes a une tache."
+                "Seuls les utilisateurs avec le role Membre dans la liste peuvent etre assignes a une tache."
             ),
         )
 
@@ -646,6 +654,17 @@ def get_taches_kanban(db: Session, liste_id: str) -> dict:
         tache.progression = progressions.get(tache.id, 0.0)
         current_status = tache.statut if tache.statut in kanban else "en attente"
         kanban[current_status].append(tache)
+        
+        # ✅ Ajouter le créateur
+        createur_membre = db.query(Membre).filter(
+            Membre.id_tache == tache.id,
+            Membre.role == "Créateur",
+            Membre.statut == "Actif"
+        ).first()
+        if createur_membre and createur_membre.utilisateur:
+            setattr(tache, 'createur', createur_membre.utilisateur)
+        else:
+            setattr(tache, 'createur', None)
         
     return kanban
 

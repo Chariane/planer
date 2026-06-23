@@ -9,11 +9,15 @@ K_CHAT_URL = os.getenv("K_CHAT_URL", "http://localhost:8000")
 
 
 def _get_group_id_by_resource(db, resource_type: str, resource_id: str):
-    row = db.execute(
-        text("SELECT id FROM messagerie.groupe WHERE resource_type = :type AND resource_id = :id LIMIT 1"),
-        {"type": resource_type, "id": resource_id},
-    ).first()
-    return row[0] if row else None
+    try:
+        row = db.execute(
+            text("SELECT id FROM messagerie.groupe WHERE resource_type = :type AND resource_id = :id LIMIT 1"),
+            {"type": resource_type, "id": str(resource_id)},
+        ).first()
+        return row[0] if row else None
+    except Exception as exc:
+        logger.error("Erreur lors de la récupération du groupe de discussion : %s", exc)
+        return None
 
 
 def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
@@ -78,7 +82,7 @@ def remove_resource_member(db, resource_type: str, resource_id: str, user_id: st
         return
     try:
         if not actor_id:
-            row = db.execute(text("SELECT creator FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id}).first()
+            row = db.execute(text("SELECT creator FROM messagerie.groupe WHERE id = :group_id"), {"group_id": str(group_id)}).first()
             actor_id = row[0] if row else user_id
         requests.delete(
             f"{K_CHAT_URL}/group/group/{group_id}/remove-member",
@@ -137,10 +141,14 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
     # Ajouter l'utilisateur au groupe
     if group_id:
         # Vérifier si l'utilisateur est déjà membre
-        row = db.execute(
-            text("SELECT 1 FROM messagerie.groupe_members WHERE id_groupe = :group_id AND member = :user_id"),
-            {"group_id": group_id, "user_id": user_id}
-        ).first()
+        try:
+            row = db.execute(
+                text("SELECT 1 FROM messagerie.groupe_members WHERE id_groupe = :group_id AND member = :user_id"),
+                {"group_id": str(group_id), "user_id": str(user_id)}
+            ).first()
+        except Exception as exc:
+            logger.error("Erreur lors de la vérification des membres du groupe : %s", exc)
+            row = None
         
         if not row:
             messenger_role = _convert_role_to_messenger(role)

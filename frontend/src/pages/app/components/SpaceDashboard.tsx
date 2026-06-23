@@ -25,7 +25,6 @@ interface SpaceDashboardProps {
 
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
 const ADMIN_DIRECT_ROLE_OPTIONS = ['Invité', 'Membre'];
-const ADMIN_INHERITED_ROLE_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -123,7 +122,42 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || (isEspaceCreator ? ROLES.CREATOR : null)
     || (isEspaceAdmin ? ROLES.ADMIN : null)
     || (isEspaceGuest ? ROLES.GUEST : null);
-  const isDirectSpaceAdmin = isEspaceAdmin || getDirectSpaceRole(spaceId) === ROLES.ADMIN;
+  const isInheritedSpaceAdmin = !!spaceId
+    && (isWorkspaceAdmin || isWorkspaceCreator)
+    && !isEspaceAdmin
+    && !isEspaceCreator;
+
+  // Rôles autorisés pour la modale d'INVITATION
+  const getAvailableInvitationRoles = () => {
+    if (isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator || isEspaceAdmin) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    return [];
+  };
+
+  // Rôles autorisés pour le CHANGEMENT DE RÔLE (Membre existant)
+  const getManageableRolesForMember = (memberRole: string) => {
+    if (isWorkspaceCreator || isEspaceCreator) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    if (isInheritedSpaceAdmin) {
+      // Pour les membres directs existants : SEULEMENT Membre -> Admin
+      if (memberRole === ROLES.MEMBER) return [ROLES.MEMBER, ROLES.ADMIN];
+      return [memberRole];
+    }
+    if (isEspaceAdmin) {
+      return ADMIN_DIRECT_ROLE_OPTIONS;
+    }
+    return [memberRole];
+  };
+
+  const canEditMemberRole = (member: Member) => {
+    if (member.role === ROLES.CREATOR) return false;
+    if (isWorkspaceCreator || isEspaceCreator) return member.id !== user?.id;
+    if (isInheritedSpaceAdmin) return member.role === ROLES.MEMBER;
+    if (isEspaceAdmin) return member.role !== ROLES.ADMIN;
+    return false;
+  };
 
   const canInviteMembers = effectiveSpaceRole === ROLES.ADMIN
     || effectiveSpaceRole === ROLES.CREATOR
@@ -136,32 +170,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       && member.role !== ROLES.CREATOR;
   };
 
-  const getRoleManagementOptions = () => {
-    if (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR) {
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    if (isWorkspaceAdmin || effectiveSpaceRole === ROLES.ADMIN) {
-      return isDirectSpaceAdmin ? ADMIN_DIRECT_ROLE_OPTIONS : ADMIN_INHERITED_ROLE_OPTIONS;
-    }
-    return [];
-  };
-
-  const getAvailableRoles = () => {
-    if (isWorkspaceCreator || isWorkspaceAdmin || effectiveSpaceRole === ROLES.CREATOR) {
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    if (effectiveSpaceRole === ROLES.ADMIN) {
-      if (isDirectSpaceAdmin) return ADMIN_DIRECT_ROLE_OPTIONS;
-      return ADMIN_INHERITED_ROLE_OPTIONS;
-    }
-    return [];
-  };
-
-  const roleManagementOptions = useMemo(
-    () => getRoleManagementOptions(),
-    [isWorkspaceCreator, isWorkspaceAdmin, effectiveSpaceRole, isDirectSpaceAdmin],
-  );
-  const availableRoles = useMemo(() => getAvailableRoles(), [isWorkspaceCreator, isWorkspaceAdmin, effectiveSpaceRole, isDirectSpaceAdmin]);
+  const availableRoles = useMemo(() => getAvailableInvitationRoles(), [isWorkspaceCreator, isWorkspaceAdmin, isEspaceCreator, isEspaceAdmin]);
 
   useEffect(() => {
     if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
@@ -254,8 +263,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
-    if (!canManageMemberRoles || member.role === ROLES.CREATOR || nextRole === member.role) return;
-    if (!roleManagementOptions.includes(nextRole)) return;
+    if (member.role === ROLES.CREATOR || nextRole === member.role) return;
+    if (!canEditMemberRole(member)) return;
     setUpdatingMemberId(member.id);
     try {
       await espaceService.updateMemberRole(spaceId, member.id, nextRole);
@@ -357,7 +366,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             <MessageCircle size={18} className="mr-3" />
             Ouvrir la discussion
           </Link>
-          {canInviteMembers && availableRoles.length > 0 && (
+          {(isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator || isEspaceAdmin) && (
             <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
               <UserPlus size={18} className="mr-3" />
               Inviter un membre
@@ -429,7 +438,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                         <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
                       </div>
                     </Link>
-                    {canManageMemberRoles && member.role !== ROLES.CREATOR && roleManagementOptions.includes(member.role) ? (
+                    {canEditMemberRole(member) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
                         <select
@@ -438,7 +447,11 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                           disabled={updatingMemberId === member.id}
                           className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-theme-surface-hover"
                         >
-                          {roleManagementOptions.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
+                          {getManageableRolesForMember(member.role).map(r => (
+                            <option key={r} value={r} className="bg-theme-page text-theme-main">
+                              {getRoleLabel(r)}
+                            </option>
+                          ))}
                         </select>
                         {canRemoveMember(member) && (
                           <button

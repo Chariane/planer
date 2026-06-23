@@ -1,3 +1,5 @@
+# backend/api_espace/core/function.py
+import base64
 from datetime import datetime
 from typing import Any, Optional
 from fastapi import HTTPException
@@ -326,6 +328,7 @@ def _serialize_member(membre):
                 "email": utilisateur.email,
                 "nom": utilisateur.nom,
                 "prenoms": utilisateur.prenoms,
+                "photo_base64": base64.b64encode(utilisateur.photo).decode("ascii") if utilisateur and utilisateur.photo else None,
             }
             if utilisateur
             else None
@@ -491,6 +494,19 @@ def _get_espace_management_grant(
     Retourne:
     (actor_member, role, source_type, source_id)
     """
+    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
+    if (
+        espace_member
+        and espace_member.statut == "Actif"
+        and espace_member.role in ESPACE_MANAGEMENT_ROLES
+    ):
+        return (
+            espace_member,
+            espace_member.role,
+            "espace",
+            espace_id,
+        )
+
     if not workspace_id:
         espace = db.query(Espace).filter(Espace.id == espace_id).first()
         if espace:
@@ -508,19 +524,6 @@ def _get_espace_management_grant(
                 "workspace",
                 workspace_id,
             )
-
-    espace_member = _get_espace_member_record(db, espace_id, current_user_id)
-    if (
-        espace_member
-        and espace_member.statut == "Actif"
-        and espace_member.role in ESPACE_MANAGEMENT_ROLES
-    ):
-        return (
-            espace_member,
-            espace_member.role,
-            "espace",
-            espace_id,
-        )
 
     espace = _get_espace_or_404(db, espace_id)
     parent_id = espace.id_espace_parent
@@ -589,19 +592,34 @@ def _validate_espace_member_management_permissions(
             detail="Seul le créateur peut modifier ce membre.",
         )
 
-    # REGLE 2 : Un Admin direct ne peut pas promouvoir quelqu'un administrateur
-    # sur sa ressource directe. Par héritage, il peut déléguer Admin dans les descendants.
-    if actor_role == ESPACE_ADMIN_ROLE and new_role:
+    # REGLE 2 : Gestion des rôles autorisés (Expert Edition)
+    if new_role:
         is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace.id
-        allowed_new_roles = (
-            {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
-            if is_descendant_delegation
-            else {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
-        )
+        
+        if is_descendant_delegation:
+            # UN GESTIONNAIRE PAR HÉRITAGE : peut SEULEMENT promouvoir un Membre en Administrateur
+            # Note: On autorise si le rôle ne change pas (ex: update statut)
+            if target_member.role == ESPACE_MEMBER_ROLE and new_role == ESPACE_ADMIN_ROLE:
+                allowed_new_roles = {ESPACE_ADMIN_ROLE}
+            elif target_member.role == new_role:
+                allowed_new_roles = {new_role}
+            else:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un gestionnaire par héritage ne peut que promouvoir un membre direct en administrateur.",
+                )
+        else:
+            # UN ADMIN DIRECT : ne peut donner que Invité ou Membre
+            if actor_role == ESPACE_ADMIN_ROLE:
+                allowed_new_roles = {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
+            else:
+                # LE CRÉATEUR DIRECT : peut tout donner
+                allowed_new_roles = {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
+
         if new_role not in allowed_new_roles:
             raise HTTPException(
                 status_code=403,
-                detail="En tant qu'administrateur, vous ne pouvez pas promouvoir un membre à ce rôle.",
+                detail="Vous n'avez pas l'autorisation d'attribuer ce rôle.",
             )
 
     # REGLE 3 : Seul un manager (Admin/Créateur) peut accéder à cette fonction

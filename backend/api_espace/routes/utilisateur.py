@@ -404,10 +404,20 @@ def update_espace_member_endpoint(
         membre_in.role,
     )
 
-    updated = update_espace_member(db, espace_id, user_id, membre_in)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Membre non trouve")
-    return _serialize_member(updated)
+    try:
+        updated = update_espace_member(db, espace_id, user_id, membre_in)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Membre non trouve")
+        return _serialize_member(updated)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error in update_espace_member_endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Erreur interne lors de la mise à jour : {str(e)}"
+        )
 
 # Supprimer un membre d'un espace ou retirer son accès si l'utilisateur est admin
 @router.delete("/espaces/{espace_id}/members/{user_id}/remove_member_espace", status_code=status.HTTP_204_NO_CONTENT)

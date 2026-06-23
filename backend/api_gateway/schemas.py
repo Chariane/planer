@@ -735,7 +735,9 @@ class TacheOut(TacheBase):
     created_at: datetime
     id_liste: Optional[str] = None
     id_tache_parent: Optional[str] = None
+    progression: float = 0.0
     model_config = ConfigDict(from_attributes=True)
+
 
 class TacheDelete(BaseModel):
     id: str
@@ -766,12 +768,23 @@ class MembreOut(MembreBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# backend/api_espace/schemas.py
+
 class WorkspaceMemberUserOut(BaseModel):
     id: str
     username: str
     email: EmailStr
     nom: Optional[str] = None
     prenoms: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 
 class WorkspaceMemberOut(MembreOut):
@@ -784,6 +797,15 @@ class EspaceMemberUserOut(BaseModel):
     email: EmailStr
     nom: Optional[str] = None
     prenoms: Optional[str] = None
+    photo: Optional[bytes] = Field(default=None, exclude=True)
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def photo_base64(self) -> Optional[str]:
+        if not self.photo:
+            return None
+        return base64.b64encode(self.photo).decode("ascii")
 
 
 class EspaceMemberOut(MembreOut):

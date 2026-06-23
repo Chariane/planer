@@ -1,3 +1,5 @@
+# backend/api_liste_et_tache/core/function.py
+import base64
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from .database import get_db
@@ -1021,6 +1023,10 @@ def commit_or_raise(
         raise HTTPException(status_code=status_code, detail=f"{detail} Error: {str(exc.orig)}") from exc
 
 
+# -----------------------------------------------
+# Sérialiseurs
+# -----------------------------------------------
+
 def _serialize_member(membre):
     """Sérialise un membre pour les réponses API."""
     utilisateur = membre.utilisateur
@@ -1041,6 +1047,7 @@ def _serialize_member(membre):
                 "email": utilisateur.email,
                 "nom": utilisateur.nom,
                 "prenoms": utilisateur.prenoms,
+                "photo_base64": base64.b64encode(utilisateur.photo).decode("ascii") if utilisateur and utilisateur.photo else None,
             }
             if utilisateur
             else None

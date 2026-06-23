@@ -17,12 +17,14 @@ interface UsePermissionsProps {
   userRole?: string | null;
   resourceType?: 'workspace' | 'espace' | 'liste' | 'tache';
   isRootResource?: boolean;
+  isDirectAdmin?: boolean;  // ✅ NOUVEAU : indique si l'utilisateur est admin direct
 }
 
 export function usePermissions({ 
   userRole, 
   resourceType = 'workspace',
-  isRootResource = false 
+  isRootResource = false,
+  isDirectAdmin = false,  // ✅ NOUVEAU
 }: UsePermissionsProps) {
   const role = userRole as RoleType | undefined;
 
@@ -32,17 +34,23 @@ export function usePermissions({
     const isMember = role === ROLES.MEMBER;
     const isGuest = role === ROLES.GUEST;
 
+    // ============================================
+    // ✅ RÈGLE : Sur une liste, un Admin direct ne peut pas gérer les membres
+    // ============================================
+    const canManageMembersOnListe = isCreator;  // ✅ Seul le Créateur
+    const canInviteMembersOnListe = isCreator;  // ✅ Seul le Créateur
+
     // Permissions spécifiques aux listes
     if (resourceType === 'liste') {
       return {
         canRead: isCreator || isAdmin || isMember || isGuest,
-        canCreateContent: isCreator || isAdmin,     // Seul Créateur/Admin peuvent créer des tâches
-        canManageMembers: isCreator || isAdmin,
-        canInviteMembers: isCreator || isAdmin,
+        canCreateContent: isCreator || isAdmin,
+        canManageMembers: canManageMembersOnListe,  // ✅ Changé
+        canInviteMembers: canInviteMembersOnListe,  // ✅ Changé
         canDelete: isCreator || (isAdmin && !isRootResource),
         canEdit: isCreator || isAdmin,
-        canManageTache: isCreator || isAdmin,       // Gérer toutes les tâches
-        canManageOwnTache: isMember,                // Membre peut gérer ses propres tâches
+        canManageTache: isCreator || isAdmin,
+        canManageOwnTache: isMember,
         canShowContextMenu: isCreator || isAdmin,
         canManageListe: isCreator || isAdmin,
         isCreator,
@@ -59,16 +67,17 @@ export function usePermissions({
       };
     }
 
-    // Permissions pour workspace et espace
-    const canInvite = (resourceType === 'espace' || resourceType === 'workspace') 
-      ? (isCreator || isAdmin)
-      : (isCreator || isAdmin);
+    // ============================================
+    // ✅ RÈGLE : Sur un espace ou workspace, un Admin direct ne peut pas gérer les membres
+    // ============================================
+    const canManageMembersOnResource = isCreator;  // ✅ Seul le Créateur
+    const canInviteMembersOnResource = isCreator || isAdmin;  // ✅ Les Admins peuvent inviter
 
     return {
       canRead: !!role,
       canCreateContent: isCreator || isAdmin || isMember,
-      canManageMembers: isCreator || isAdmin,
-      canInviteMembers: canInvite,
+      canManageMembers: canManageMembersOnResource,  // ✅ Changé
+      canInviteMembers: canInviteMembersOnResource,  // ✅ Inchangé
       canDelete: isCreator || (isAdmin && !isRootResource),
       canEdit: isCreator || isAdmin || isMember,
       canShowContextMenu: isCreator || isAdmin,
@@ -124,8 +133,8 @@ export function useResourceAccess({
     canConfigure: isCreator || isAdmin,
     canShowContextMenu: isCreator || isAdmin,
     canDelete: isCreator,
-    canManageMembers: isCreator || isAdmin,
-    canAssignMembers: isCreator || isAdmin,
+    canManageMembers: isCreator,  // ✅ Changé
+    canAssignMembers: isCreator,  // ✅ Changé
     infoMessage: isGuest ? "⚠️ Vous êtes en mode lecture seule." : null,
   }), [userRole]);
 }

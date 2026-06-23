@@ -623,97 +623,7 @@ class ListeOut(ListeBase):
 class ListeDelete(BaseModel):
     id: str
 
-# Tache
-class TacheBase(BaseModel):
-    titre: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    date_debut: Optional[datetime] = None
-    date_fin_prevue: Optional[datetime] = None
-    statut: str = Field(default="en attente")
-    priorite: str = Field(default="moyenne")
-    ordre_affichage: Optional[int] = Field(None, ge=0)
-
-    @field_validator("statut")
-    @classmethod
-    def validate_statut(cls, v: str) -> str:
-        if v not in TACHE_STATUSES:
-            allowed = ", ".join(TACHE_STATUSES)
-            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
-        return v
-
-    @field_validator("priorite")
-    @classmethod
-    def validate_priorite(cls, v: str) -> str:
-        if v not in TACHE_PRIORITIES:
-            allowed = ", ".join(TACHE_PRIORITIES)
-            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
-        return v
-
-class TacheCreate(TacheBase):
-    id_liste: Optional[str] = None
-    id_tache_parent: Optional[str] = None
-
-class TacheUpdate(BaseModel):
-    titre: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    date_debut: Optional[datetime] = None
-    date_fin_prevue: Optional[datetime] = None
-    statut: Optional[str] = None
-    priorite: Optional[str] = None
-    ordre_affichage: Optional[int] = Field(None, ge=0)
-    id_liste: Optional[str] = None
-    id_tache_parent: Optional[str] = None
-
-    @field_validator("statut")
-    @classmethod
-    def validate_statut_update(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in TACHE_STATUSES:
-            allowed = ", ".join(TACHE_STATUSES)
-            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
-        return v
-
-    @field_validator("priorite")
-    @classmethod
-    def validate_priorite_update(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in TACHE_PRIORITIES:
-            allowed = ", ".join(TACHE_PRIORITIES)
-            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
-        return v
-
-class TacheOut(TacheBase):
-    id: str
-    statut_date: Optional[datetime] = None
-    created_at: datetime
-    id_liste: Optional[str] = None
-    id_tache_parent: Optional[str] = None
-    id_createur: Optional[str] = None
-    progression: float = 0.0
-    content_mode: str = "leaf"
-    can_add_checklist: bool = True
-    can_add_subtask: bool = True
-    model_config = ConfigDict(from_attributes=True)
-
-class TacheFullOut(TacheOut):
-    membres: List["WorkspaceMemberOut"] = []
-    checklists: List["ChecklistOut"] = []
-
-class TacheDelete(BaseModel):
-    id: str
-
-# --- VUES SPÉCIALISÉES ---
-
-class TacheKanbanOut(BaseModel):
-    columns: dict[str, List[TacheFullOut]]
-
-class TacheBulkUpdateItem(BaseModel):
-    id: str
-    statut: Optional[str] = None
-    ordre_affichage: Optional[int] = None
-
-class TacheBulkUpdate(BaseModel):
-    items: List[TacheBulkUpdateItem]
-
-# Membre
+# ✅ Membre - DÉPLACÉ ICI AVANT TacheFullOut
 class MembreBase(BaseModel):
     id_utilisateur: Optional[str] = None
     role: str = Field(default="Membre")
@@ -851,6 +761,97 @@ class WorkspaceInvitationAcceptRequest(BaseModel):
 class EspaceInvitationAcceptRequest(BaseModel):
     token: str = Field(..., min_length=10)
 
+# Tache - APRÈS avoir défini WorkspaceMemberOut et WorkspaceMemberUserOut
+class TacheBase(BaseModel):
+    titre: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    date_debut: Optional[datetime] = None
+    date_fin_prevue: Optional[datetime] = None
+    statut: str = Field(default="en attente")
+    priorite: str = Field(default="moyenne")
+    ordre_affichage: Optional[int] = Field(None, ge=0)
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut(cls, v: str) -> str:
+        if v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite(cls, v: str) -> str:
+        if v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
+
+class TacheCreate(TacheBase):
+    id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
+
+class TacheUpdate(BaseModel):
+    titre: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    date_debut: Optional[datetime] = None
+    date_fin_prevue: Optional[datetime] = None
+    statut: Optional[str] = None
+    priorite: Optional[str] = None
+    ordre_affichage: Optional[int] = Field(None, ge=0)
+    id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
+
+    @field_validator("statut")
+    @classmethod
+    def validate_statut_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_STATUSES:
+            allowed = ", ".join(TACHE_STATUSES)
+            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        return v
+
+    @field_validator("priorite")
+    @classmethod
+    def validate_priorite_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in TACHE_PRIORITIES:
+            allowed = ", ".join(TACHE_PRIORITIES)
+            raise ValueError(f"Priorite invalide. Valeurs autorisees : {allowed}")
+        return v
+
+class TacheOut(TacheBase):
+    id: str
+    statut_date: Optional[datetime] = None
+    created_at: datetime
+    id_liste: Optional[str] = None
+    id_tache_parent: Optional[str] = None
+    progression: float = 0.0
+    content_mode: str = "leaf"
+    can_add_checklist: bool = True
+    can_add_subtask: bool = True
+    model_config = ConfigDict(from_attributes=True)
+
+# ✅ TacheFullOut utilise WorkspaceMemberOut et WorkspaceMemberUserOut qui sont maintenant définis
+class TacheFullOut(TacheOut):
+    membres: List["WorkspaceMemberOut"] = []
+    checklists: List["ChecklistOut"] = []
+    createur: Optional[WorkspaceMemberUserOut] = None
+
+class TacheDelete(BaseModel):
+    id: str
+
+# --- VUES SPÉCIALISÉES ---
+
+class TacheKanbanOut(BaseModel):
+    columns: dict[str, List[TacheFullOut]]
+
+class TacheBulkUpdateItem(BaseModel):
+    id: str
+    statut: Optional[str] = None
+    ordre_affichage: Optional[int] = None
+
+class TacheBulkUpdate(BaseModel):
+    items: List[TacheBulkUpdateItem]
+
 # Fichier
 class FichierBase(BaseModel):
     nom: str = Field(..., min_length=1, max_length=255)
@@ -920,7 +921,7 @@ class RapportCreate(RapportBase):
 
 class RapportUpdate(BaseModel):
     titre: Optional[str] = Field(None, min_length=1, max_length=150)
-    realisations: Optional[str] = None
+    realisations: Optional[str] = None    
     difficultes_et_solutions: Optional[str] = None
     commentaire: Optional[str] = None
     fichier_joint: Optional[str] = None
@@ -938,7 +939,6 @@ class RapportOut(RapportBase):
     id_workspace: Optional[str] = None
     scope_type: Optional[str] = None
     scope_id: Optional[str] = None
-    owner_user_id: Optional[str] = None
     owner_name: Optional[str] = None
     author_role: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
@@ -1101,17 +1101,17 @@ class ChecklistOut(ChecklistBase):
     updated_at: Optional[datetime] = None
     id_section: Optional[str] = None
     id_tache: Optional[str] = None
-    id_createur: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class ChecklistDelete(BaseModel):
     id: str
 
+# Rebuild des modèles avec références cycliques
 TacheFullOut.model_rebuild()
 TacheKanbanOut.model_rebuild()
 EspaceTreeOut.model_rebuild()
-# Ajouter ces classes si elles n'existent pas déjà
 
+# Ajouter ces classes si elles n'existent pas déjà
 class ListeInvitationResponse(BaseModel):
     status: str  # "existing_user" or "guest_invitation"
     message: str

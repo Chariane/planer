@@ -589,8 +589,9 @@ class Notification(Base):
     __table_args__ = (
         CheckConstraint("type::text = ANY (ARRAY['info'::character varying, 'alerte'::character varying, 'warning'::character varying, 'promotion'::character varying, 'evenement'::character varying, 'systeme'::character varying]::text[])", name='notification_type_check'),
         PrimaryKeyConstraint('id', name='notification_pkey'),
-        {'schema': 'notification'}
+        {'schema': 'public'}
     )
+
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True, server_default=text("encode(gen_random_bytes(6), 'hex'::text)"))
     type: Mapped[str] = mapped_column(String(50))
@@ -1861,6 +1862,8 @@ class Tache(Base):
     sous_taches: Mapped[List['Tache']] = relationship('Tache', back_populates='parent')
     membres: Mapped[List['Membre']] = relationship('Membre', back_populates='tache')
     checklists: Mapped[List['Checklist']] = relationship('Checklist', back_populates='tache')
+
+
 
 
 class Canevas(Base):

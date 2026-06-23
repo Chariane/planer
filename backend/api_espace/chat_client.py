@@ -54,7 +54,11 @@ def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/group/{group_id}/add-member",
-            json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
+            json={
+                "user_id": str(user_id), 
+                "actor": str(creator_id) if creator_id else None, 
+                "role": messenger_role
+            },
             timeout=5
         )
         if response.status_code == 200:
@@ -72,20 +76,34 @@ def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple
     """
     children = []
     
-    if resource_type == "espace":
-        # 1. Sous-espaces
-        children.extend(_get_sub_espaces(db, resource_id))
-        # 2. Listes de l'espace
-        listes = db.execute(
-            text("""
-                SELECT id, nom, id_utilisateur 
-                FROM planer.liste 
-                WHERE id_espace = :espace_id
-            """),
-            {"espace_id": resource_id}
-        ).all()
-        for liste in listes:
-            children.append(("liste", liste[0], liste[1], liste[2]))
+    try:
+        if resource_type == "espace":
+            # 1. Sous-espaces
+            children.extend(_get_sub_espaces(db, resource_id))
+            # 2. Listes de l'espace - On récupère le créateur via la table membre
+            listes = db.execute(
+                text("""
+                    SELECT l.id, l.nom, m.id_utilisateur 
+                    FROM planer.liste l
+                    LEFT JOIN planer.membre m ON m.id_liste = l.id AND m.role = 'Créateur'
+                    WHERE l.id_espace = :espace_id
+                """),
+                {"espace_id": str(resource_id)}
+            ).all()
+            for liste in listes:
+                # Fallback sur un admin si pas de créateur trouvé (rare)
+                creator_id = liste[2]
+                if not creator_id:
+                    # Si pas de créateur direct, on peut utiliser celui de l'espace
+                    espace_creator = db.execute(
+                        text("SELECT id_utilisateur FROM planer.espace WHERE id = :espace_id"),
+                        {"espace_id": str(resource_id)}
+                    ).scalar()
+                    creator_id = espace_creator
+
+                children.append(("liste", liste[0], liste[1], creator_id))
+    except Exception as e:
+        logger.error(f"Critical error in _get_child_resources: {e}")
     
     return children
 
@@ -116,20 +134,32 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
               → Converti en rôle K-Messenger ("admin", "member", "guest")
         cascade: Si True, synchronise aussi sur toutes les ressources enfants
     """
-    messenger_role = _convert_role_to_messenger(role)
-    
-    # 1. Synchroniser sur la ressource cible
-    _sync_single_resource_member(
-        db, resource_type, resource_id, user_id, name, creator_id, messenger_role
-    )
-    
-    # 2. Si cascade=True, synchroniser sur toutes les ressources enfants
-    if cascade:
-        children = _get_child_resources(db, resource_type, resource_id)
-        for child_type, child_id, child_name, child_creator_id in children:
-            _sync_single_resource_member(
-                db, child_type, child_id, user_id, child_name, child_creator_id, messenger_role
-            )
+    try:
+        messenger_role = _convert_role_to_messenger(role)
+        
+        # 1. Synchroniser sur la ressource cible
+        _sync_single_resource_member(
+            db, resource_type, resource_id, user_id, name, creator_id, messenger_role
+        )
+        
+        # 2. Si cascade=True, synchroniser sur toutes les ressources enfants
+        if cascade:
+            children = _get_child_resources(db, resource_type, resource_id)
+            for child_type, child_id, child_name, child_creator_id in children:
+                try:
+                    _sync_single_resource_member(
+                        db, 
+                        child_type, 
+                        str(child_id), 
+                        str(user_id), 
+                        child_name, 
+                        str(child_creator_id) if child_creator_id else None, 
+                        messenger_role
+                    )
+                except Exception as loop_e:
+                    logger.error(f"Error in sync cascade loop: {loop_e}")
+    except Exception as e:
+        logger.error(f"Failed to sync resource member: {e}")
 
 
 def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, cascade: bool = False):

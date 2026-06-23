@@ -63,6 +63,8 @@ export interface CanevasData extends ApiCanevas {
   sections: CanevasSection[];
 }
 
+// frontend/src/types/index.ts
+
 export interface Task {
   id: string;
   title: string;
@@ -83,6 +85,15 @@ export interface Task {
   contentMode?: 'leaf' | 'checklist' | 'subtasks';
   canAddChecklist?: boolean;
   canAddSubtask?: boolean;
+  // ✅ NOUVEAU : créateur complet
+  createur?: {
+    id: string;
+    username: string;
+    email: string;
+    nom?: string | null;
+    prenoms?: string | null;
+    photo?: string | null;
+  } | null;
 }
 
 export interface Period {

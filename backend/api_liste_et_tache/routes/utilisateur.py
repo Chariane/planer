@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/routes/utilisateur.py
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
@@ -36,6 +37,8 @@ from ..core.function import (
     _validate_list_member_management_permissions,
     _require_workspace_descendant_read_access,
     _serialize_member,
+    get_parent_inherited_role,
+    ResourceType,
 )
 from ..crud.fichier import (
     create_file_attachment,
@@ -150,36 +153,44 @@ router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
 
 
 def _task_branch_is_owned_by_user(db: Session, tache_id: str, user_id: str) -> bool:
-    pending = [tache_id]
-    branch_ids: list[str] = []
-    visited: set[str] = set()
-
-    while pending:
-        current_id = pending.pop()
-        if current_id in visited:
-            continue
-        visited.add(current_id)
-        current = db.query(Tache).filter(Tache.id == current_id).first()
-        if not current or current.id_createur != user_id:
-            return False
-        branch_ids.append(current.id)
-        pending.extend(
-            child_id
-            for (child_id,) in db.query(Tache.id).filter(Tache.id_tache_parent == current_id).all()
-        )
-
-    if not branch_ids:
+    """
+    Vérifie si l'utilisateur est propriétaire (créateur ou administrateur) 
+    de la tâche et de toutes ses sous-tâches.
+    
+    La propriété est déterminée par héritage à travers la hiérarchie :
+    Workspace → Espace → Liste → Tache
+    
+    Un utilisateur est considéré comme propriétaire si :
+    - Il est Créateur ou Administrateur du Workspace parent
+    - Il est Créateur ou Administrateur de l'Espace parent
+    - Il est Créateur ou Administrateur de la Liste parente
+    - Il est Créateur ou Administrateur direct de la Tâche
+    """
+    # Récupérer le rôle hérité de l'utilisateur sur la tâche
+    inherited_role = get_parent_inherited_role(db, user_id, ResourceType.TACHE, tache_id)
+    
+    # Si l'utilisateur a un rôle hérité (Créateur/Admin/Membre/Invité)
+    if inherited_role:
+        role, source_type, source_id = inherited_role
+        # Les rôles Créateur et Administrateur donnent des droits de propriété
+        if role in ["Créateur", "Administrateur"]:
+            return True
+        # Si l'utilisateur est Membre ou Invité, il n'a pas les droits de propriété
         return False
-
-    foreign_checklist = (
-        db.query(Checklist.id)
-        .filter(
-            Checklist.id_tache.in_(branch_ids),
-            or_(Checklist.id_createur.is_(None), Checklist.id_createur != user_id),
-        )
-        .first()
-    )
-    return foreign_checklist is None
+    
+    # Si pas de rôle hérité, vérifier si l'utilisateur est assigné directement à la tâche
+    direct_assignment = db.query(Membre).filter(
+        Membre.id_tache == tache_id,
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif"
+    ).first()
+    
+    if direct_assignment:
+        # Si assigné avec rôle Créateur ou Administrateur, c'est un propriétaire
+        if direct_assignment.role in ["Créateur", "Administrateur"]:
+            return True
+    
+    return False
 
 
 def _can_read_liste_silently(db: Session, liste_id: str, user_id: str) -> bool:
@@ -199,14 +210,25 @@ def _validate_search_scope(
     liste_id: Optional[str] = None,
     tache_id: Optional[str] = None,
 ) -> None:
-    if workspace_id:
-        _require_workspace_descendant_read_access(db, workspace_id, user_id)
-    if espace_id:
-        _require_espace_descendant_read_access(db, espace_id, user_id)
+    # ✅ Si on a un liste_id, on vérifie l'accès à la liste directement
     if liste_id:
         _require_list_read_access(db, liste_id, user_id)
+        return
+    
+    # ✅ Si on a un espace_id, on vérifie l'accès à l'espace
+    if espace_id:
+        _require_espace_descendant_read_access(db, espace_id, user_id)
+        return
+    
+    # ✅ Si on a un workspace_id, on vérifie l'accès au workspace
+    if workspace_id:
+        _require_workspace_descendant_read_access(db, workspace_id, user_id)
+        return
+    
+    # ✅ Si on a un tache_id, on vérifie l'accès à la tâche
     if tache_id:
         _require_task_read_access(db, tache_id, user_id)
+        return
 
 
 # -----------------------------------------------------------------------------
@@ -381,7 +403,9 @@ def create_tache_endpoint(
         _require_assigned_task_operational_access(db, parent_task_id, current_user.id)
     else:
         _require_list_admin_access(db, liste_id, current_user.id)
-    return create_tache(db, **payload, id_liste=liste_id, id_createur=current_user.id)
+    
+    # ✅ Passer creator_user_id pour que le créateur soit automatiquement membre de la tâche
+    return create_tache(db, **payload, id_liste=liste_id, creator_user_id=current_user.id)
 
 @router.get("/{liste_id}/list_taches", response_model=List[TacheFullOut])
 def get_taches_endpoint(
@@ -422,6 +446,7 @@ def update_tache_endpoint(
 ):
     updates = tache_in.model_dump(exclude_unset=True)
     tache = _get_tache_or_404(db, tache_id)
+    
     try:
         _require_task_management_access(db, tache_id, current_user.id)
     except HTTPException as exc:
@@ -439,6 +464,7 @@ def update_tache_endpoint(
                 status_code=403,
                 detail="Un membre assigne peut uniquement modifier le statut de la tache.",
             ) from exc
+    
     if tache.statut == "terminé" and "statut" in updates:
         allowed_reopen_statuses = {"en cours", "bloqué", "terminé"}
         if updates["statut"] not in allowed_reopen_statuses:
@@ -446,6 +472,7 @@ def update_tache_endpoint(
                 status_code=403,
                 detail="Une tache terminee peut uniquement etre remise en cours ou bloquee.",
             )
+    
     return update_tache(db, tache_id, **updates)
 
 @router.delete("/taches/{tache_id}/delete_tache", status_code=status.HTTP_204_NO_CONTENT)
@@ -455,20 +482,22 @@ def delete_tache_endpoint(
     current_user: UtilisateurOut = Depends(get_current_user)
 ):
     tache = _get_tache_or_404(db, tache_id)
+    
     try:
         _require_list_admin_access(db, tache.id_liste, current_user.id)
     except HTTPException as exc:
         if exc.status_code != 403:
             raise
-        if tache.id_createur != current_user.id or not _task_branch_is_owned_by_user(db, tache_id, current_user.id):
+        if not _task_branch_is_owned_by_user(db, tache_id, current_user.id):
             raise HTTPException(
                 status_code=403,
                 detail=(
                     "Seuls les gestionnaires peuvent supprimer cette tâche. "
-                    "Un membre assigné peut uniquement supprimer une sous-tâche qu'il a créée "
-                    "et dont tout le contenu lui appartient."
+                    "Un membre assigné ne peut pas supprimer une tâche qu'il n'a pas créée "
+                    "et dont il n'est pas administrateur."
                 ),
             ) from exc
+    
     delete_tache(db, tache_id)
     return None
 
@@ -655,7 +684,6 @@ def create_checklist_for_tache_endpoint(
         texte=checklist_in.texte,
         is_checked=checklist_in.is_checked,
         id_tache=tache_id,
-        id_createur=current_user.id,
     )
 
 @router.get("/taches/{tache_id}/checklists", response_model=List[ChecklistOut])
@@ -697,7 +725,6 @@ def create_checklist_for_section_endpoint(
         texte=checklist_in.texte,
         is_checked=checklist_in.is_checked,
         id_section=section_id,
-        id_createur=current_user.id,
     )
 
 @router.get("/sections/{section_id}/checklists", response_model=List[ChecklistOut])
@@ -743,6 +770,7 @@ def update_checklist_endpoint(
     if not chk:
         raise HTTPException(404, "Checklist non trouvee")
     updates = checklist_in.model_dump(exclude_unset=True)
+    
     if chk.id_tache:
         try:
             _require_task_management_access(db, chk.id_tache, current_user.id)
@@ -759,6 +787,7 @@ def update_checklist_endpoint(
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
         _require_list_admin_access(db, can.id_liste, current_user.id)
+    
     return update_checklist(db, checklist_id, **updates)
 
 @router.delete("/checklists/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -770,21 +799,23 @@ def delete_checklist_endpoint(
     chk = get_checklist_by_id(db, checklist_id)
     if not chk:
         raise HTTPException(404, "Checklist non trouvee")
+    
     if chk.id_tache:
         try:
             _require_task_management_access(db, chk.id_tache, current_user.id)
         except HTTPException as exc:
             if exc.status_code != 403:
                 raise
-            if chk.id_createur != current_user.id:
+            if not _task_branch_is_owned_by_user(db, chk.id_tache, current_user.id):
                 raise HTTPException(
                     status_code=403,
-                    detail="Seuls les gestionnaires ou l'auteur de cette checklist peuvent la supprimer.",
+                    detail="Seuls les gestionnaires ou le propriétaire de cette tâche peuvent supprimer cette checklist.",
                 ) from exc
     elif chk.id_section:
         sec = get_section_by_id(db, chk.id_section)
         can = get_canevas_by_id(db, sec.id_canevas)
         _require_list_admin_access(db, can.id_liste, current_user.id)
+    
     delete_checklist(db, checklist_id)
     return None
 
@@ -1059,8 +1090,6 @@ async def upload_file_endpoint(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # On utilise le port 8004 par défaut pour ce microservice
-    # Idéalement cette URL devrait être configurée via une variable d'environnement
     base_url = config_data.get("LISTE_TACHE_URL", "http://localhost:8004").rstrip("/")
     file_url = f"{base_url}/uploads/{unique_filename}"
 
@@ -1383,7 +1412,6 @@ def list_availability_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    # On délègue la vérification de la disponibilité à la fonction générique
     return get_user_availability(
         db, 
         resource_id=resource_id, 

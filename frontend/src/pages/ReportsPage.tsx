@@ -14,9 +14,11 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { plannerToolsService } from '../services/plannerTools.service';
 import { useAuth } from '../contexts/AuthContext';
+import { useParams } from 'react-router-dom';
 
 export default function ReportsPage() {
     const { user } = useAuth();
+    const { listeId } = useParams<{ listeId: string }>();
     const [reports, setReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -27,7 +29,8 @@ export default function ReportsPage() {
         try {
             const data = await plannerToolsService.listReports({
                 limit: 50,
-                q: searchQuery || undefined
+                q: searchQuery || undefined,
+                liste_id: listeId
             });
             setReports(Array.isArray(data) ? data : []);
         } catch (error) {

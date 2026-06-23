@@ -1,10 +1,11 @@
 // frontend/src/pages/app/views/KanbanView.tsx
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DndContext, closestCenter, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GripVertical, Calendar, AlertCircle, CheckCircle, GitBranch, ListChecks } from 'lucide-react';
+import { GripVertical, Calendar, AlertCircle, CheckCircle, GitBranch, ListChecks, User } from 'lucide-react';
 import type { Task } from '../../../types';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
@@ -65,10 +66,29 @@ function isOverdue(task: Task) {
   return due.getTime() < Date.now();
 }
 
+// ✅ Fonction pour récupérer le créateur d'une tâche
+const getTaskCreator = (task: Task): { name: string; id: string } | null => {
+  if (task.createur) {
+    const prenoms = task.createur.prenoms?.trim() || '';
+    const nom = task.createur.nom?.trim() || '';
+    let name = task.createur.username;
+    if (prenoms && nom) name = `${prenoms} ${nom}`;
+    else if (prenoms) name = prenoms;
+    else if (nom) name = nom;
+    return { name, id: task.createur.id };
+  }
+  const creator = task.assignees?.find(a => a.role === 'Créateur');
+  if (creator) {
+    return { name: creator.name, id: creator.id };
+  }
+  return null;
+};
+
 function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOverlay = false }: KanbanCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const progressInfo = getTaskProgressInfo(task, childCount);
   const overdue = isOverdue(task);
+  const creator = getTaskCreator(task);
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
     disabled: isOverlay,
@@ -108,6 +128,17 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
           </p>
           <GripVertical className="h-4 w-4 text-theme-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
         </div>
+
+        {/* ✅ Affichage du créateur sur la carte Kanban */}
+        {creator && (
+          <Link 
+            to={`/users/${creator.id}`}
+            className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest text-theme-muted opacity-50 hover:text-primary hover:opacity-100 transition-colors"
+          >
+            <User size={10} className="opacity-50" />
+            Créé par {creator.name}
+          </Link>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${priorityColors[task.priority]}`}>
