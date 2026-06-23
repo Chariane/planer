@@ -137,8 +137,33 @@ export default function MemberManagement({
   // ✅ canChangeMemberRoles : Un Admin direct (liste ou espace) ne peut PAS modifier les rôles
   const canChangeMemberRoles = canManageMembers && !isDirectAdmin;
 
-  // ✅ canRemoveMember : Seul le Créateur peut retirer un membre
-  const canRemoveMember = (member: Member) => isCreator && member.id !== user?.id && member.role !== ROLES.CREATOR;
+  // ✅ canRemoveMember : 
+  // - Pour un workspace : le Créateur peut retirer n'importe quel membre (sauf lui-même)
+  // - Pour un espace : seul le Créateur peut retirer un membre
+  // - Pour une liste : seul le Créateur peut retirer un membre
+  const canRemoveMember = (member: Member) => {
+    // Ne peut pas se retirer lui-même
+    if (member.id === user?.id) return false;
+    // Ne peut pas retirer un autre Créateur
+    if (member.role === ROLES.CREATOR) return false;
+    
+    // ✅ WORKSPACE : Le Créateur peut retirer n'importe quel membre (Admin, Membre, Invité)
+    if (workspaceId) {
+      return isCreator;
+    }
+    
+    // ✅ ESPACE : Seul le Créateur peut retirer un membre
+    if (espaceId) {
+      return isCreator;
+    }
+    
+    // ✅ LISTE : Seul le Créateur peut retirer un membre
+    if (listeId) {
+      return isCreator;
+    }
+    
+    return false;
+  };
 
   const loadMembers = async () => {
     setLoading(true);
@@ -247,6 +272,12 @@ export default function MemberManagement({
   };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
+    // 🔒 Un Admin direct ne peut modifier aucun membre
+    if (isDirectAdmin) {
+      showMessage('Un administrateur direct de cette ressource ne peut pas modifier les membres.', 'error');
+      return;
+    }
+
     if (isInheritedSpaceAdmin && newRole === ROLES.GUEST) {
       showMessage(
         "Un administrateur par héritage peut ajuster les rôles de travail, mais ne peut pas transformer un membre de cet espace en invité.",
@@ -358,7 +389,7 @@ export default function MemberManagement({
           <Users className="h-5 w-5 text-secondary" />
           {listeId ? 'Membres de la liste' : espaceId ? 'Membres de l\'espace' : 'Membres du workspace'}
         </h3>
-        {!listeId && canInviteMembers && (
+        {!listeId && canInviteMembers && !isDirectAdmin && (
           <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-xl px-4 py-2 shadow-theme-md group transition-all">
             <UserPlus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
             <span className="font-bold tracking-tight">Inviter</span>
@@ -383,6 +414,18 @@ export default function MemberManagement({
         </div>
       )}
 
+      {isDirectAdmin && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+          <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              En tant qu'administrateur direct de cet espace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de l'espace peut gérer les membres.
+            </p>
+          </div>
+        </div>
+      )}
+
       {!hasFilteredPeople ? (
         <GlassCard className="py-20 border-dashed flex flex-col items-center justify-center opacity-40">
           <div className="p-4 rounded-full bg-theme-surface border border-white/10 mb-4 shadow-inner">
@@ -391,7 +434,7 @@ export default function MemberManagement({
           <p className="font-black text-theme-main uppercase tracking-widest text-xs">
             {searchQuery ? 'Aucun membre trouvé' : 'Aucun membre pour le moment'}
           </p>
-          {canInviteMembers && !searchQuery && (
+          {canInviteMembers && !searchQuery && !isDirectAdmin && (
             <p className="text-theme-muted text-[10px] mt-2 leading-relaxed max-w-[200px] text-center">
               Commencez à collaborer en invitant des membres à rejoindre votre projet.
             </p>
@@ -412,7 +455,6 @@ export default function MemberManagement({
                   >
                     <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
                       <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                        {/* ✅ MemberAvatar gère déjà la photo et le fallback sur l'initiale */}
                         <MemberAvatar
                           member={member}
                           size="md"
@@ -480,7 +522,6 @@ export default function MemberManagement({
                 {filteredGuests.map(member => (
                   <GlassCard key={member.id} className="p-4 flex items-center justify-between gap-4 border-dashed opacity-85">
                     <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                      {/* ✅ MemberAvatar gère la photo et l'initiale */}
                       <MemberAvatar member={member} size="md" />
                       <div className="min-w-0">
                         <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>

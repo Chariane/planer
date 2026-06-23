@@ -40,6 +40,18 @@ export function usePermissions({
     const canManageMembersOnListe = isCreator;  // ✅ Seul le Créateur
     const canInviteMembersOnListe = isCreator;  // ✅ Seul le Créateur
 
+    // ============================================
+    // ✅ RÈGLE : Sur un espace, un Admin direct ne peut pas gérer les membres
+    // ============================================
+    const canManageMembersOnEspace = isCreator;  // ✅ Seul le Créateur
+    const canInviteMembersOnEspace = isCreator || (isAdmin && !isDirectAdmin);  // ✅ Admin direct ne peut pas inviter avec Admin
+
+    // ============================================
+    // ✅ RÈGLE : Sur un workspace, le Créateur peut gérer tous les membres
+    // ============================================
+    const canManageMembersOnWorkspace = isCreator || isAdmin;  // ✅ Admin peut gérer les membres dans un workspace
+    const canInviteMembersOnWorkspace = isCreator || isAdmin;  // ✅ Admin peut inviter dans un workspace
+
     // Permissions spécifiques aux listes
     if (resourceType === 'liste') {
       return {
@@ -67,32 +79,125 @@ export function usePermissions({
       };
     }
 
+    // ✅ WORKSPACE : Le Créateur peut tout gérer, l'Admin peut gérer les membres
+    if (resourceType === 'workspace') {
+      return {
+        canRead: !!role,
+        canCreateContent: isCreator || isAdmin || isMember,
+        canManageMembers: canManageMembersOnWorkspace,  // ✅ Admin peut gérer les membres
+        canInviteMembers: canInviteMembersOnWorkspace,  // ✅ Admin peut inviter
+        canDelete: isCreator,
+        canEdit: isCreator || isAdmin || isMember,
+        canShowContextMenu: isCreator || isAdmin,
+        canManageListe: isCreator || isAdmin,
+        canManageTache: isCreator || isAdmin || isMember,
+        canInviteWithRole: (invitedRole: string) => {
+          if (isCreator) return true;
+          if (isAdmin) return canAdminInviteWithRole(invitedRole);
+          return false;
+        },
+        canManageTargetMember: (targetRole: string) => {
+          if (isCreator) return true;
+          if (isAdmin) return canAdminManageTarget(role || '', targetRole);
+          return false;
+        },
+        roleRank: getRoleRank(role),
+        isInheritable: isInheritableRole(role || ''),
+        isCreator,
+        isAdmin,
+        isMember,
+        isGuest,
+        roleBadgeColor: (() => {
+          if (isCreator) return 'bg-purple-100 text-purple-700';
+          if (isAdmin) return 'bg-orange-100 text-orange-700';
+          if (isMember) return 'bg-blue-100 text-blue-700';
+          return 'bg-gray-100 text-gray-600';
+        })(),
+      };
+    }
+
     // ============================================
-    // ✅ RÈGLE : Sur un espace ou workspace, un Admin direct ne peut pas gérer les membres
+    // ✅ RÈGLE : Sur un espace, un Admin direct ne peut pas gérer les membres
     // ============================================
     const canManageMembersOnResource = isCreator;  // ✅ Seul le Créateur
-    const canInviteMembersOnResource = isCreator || isAdmin;  // ✅ Les Admins peuvent inviter
 
+    // ✅ RÈGLE : Un Admin direct d'espace ne peut inviter qu'avec Membre ou Invité
+    const canInviteMembersOnResource = isCreator || (isAdmin && !isDirectAdmin);
+
+    // ✅ RÈGLE : Pour les tâches, le Créateur et l'Admin peuvent gérer
+    const canManageMembersOnTache = isCreator || isAdmin;
+    const canInviteMembersOnTache = isCreator || isAdmin;
+
+    // ============================================
+    // ✅ RÈGLE : Tâches - gestion des membres
+    // ============================================
+    if (resourceType === 'tache') {
+      return {
+        canRead: !!role,
+        canCreateContent: isCreator || isAdmin || isMember,
+        canManageMembers: canManageMembersOnTache,
+        canInviteMembers: canInviteMembersOnTache,
+        canDelete: isCreator || (isAdmin && !isRootResource),
+        canEdit: isCreator || isAdmin || isMember,
+        canShowContextMenu: isCreator || isAdmin,
+        canManageListe: isCreator || isAdmin,
+        canManageTache: isCreator || isAdmin || isMember,
+        canInviteWithRole: (invitedRole: string) => {
+          if (isCreator) return true;
+          if (isAdmin) return canAdminInviteWithRole(invitedRole);
+          return false;
+        },
+        canManageTargetMember: (targetRole: string) => {
+          if (isCreator) return true;
+          if (isAdmin) return canAdminManageTarget(role || '', targetRole);
+          return false;
+        },
+        roleRank: getRoleRank(role),
+        isInheritable: isInheritableRole(role || ''),
+        isCreator,
+        isAdmin,
+        isMember,
+        isGuest,
+        roleBadgeColor: (() => {
+          if (isCreator) return 'bg-purple-100 text-purple-700';
+          if (isAdmin) return 'bg-orange-100 text-orange-700';
+          if (isMember) return 'bg-blue-100 text-blue-700';
+          return 'bg-gray-100 text-gray-600';
+        })(),
+      };
+    }
+
+    // ✅ ESPACE (fallback)
     return {
       canRead: !!role,
       canCreateContent: isCreator || isAdmin || isMember,
       canManageMembers: canManageMembersOnResource,  // ✅ Changé
-      canInviteMembers: canInviteMembersOnResource,  // ✅ Inchangé
+      canInviteMembers: canInviteMembersOnResource,  // ✅ Changé
       canDelete: isCreator || (isAdmin && !isRootResource),
       canEdit: isCreator || isAdmin || isMember,
       canShowContextMenu: isCreator || isAdmin,
-      canManageListe: (resourceType === 'espace' || resourceType === 'workspace') 
-        ? (isCreator || isAdmin)
-        : (isCreator || isAdmin),
+      canManageListe: isCreator || isAdmin,
       canManageTache: isCreator || isAdmin || isMember,
       canInviteWithRole: (invitedRole: string) => {
         if (isCreator) return true;
-        if (isAdmin) return canAdminInviteWithRole(invitedRole);
+        if (isAdmin) {
+          // ✅ Si admin direct d'espace, ne peut pas inviter avec Administrateur
+          if (isDirectAdmin && resourceType === 'espace') {
+            return invitedRole === ROLES.MEMBER || invitedRole === ROLES.GUEST;
+          }
+          return canAdminInviteWithRole(invitedRole);
+        }
         return false;
       },
       canManageTargetMember: (targetRole: string) => {
         if (isCreator) return true;
-        if (isAdmin) return canAdminManageTarget(role || '', targetRole);
+        if (isAdmin) {
+          // ✅ Si admin direct d'espace, ne peut modifier aucun membre
+          if (isDirectAdmin && resourceType === 'espace') {
+            return false;
+          }
+          return canAdminManageTarget(role || '', targetRole);
+        }
         return false;
       },
       roleRank: getRoleRank(role),
@@ -108,7 +213,7 @@ export function usePermissions({
         return 'bg-gray-100 text-gray-600';
       })(),
     };
-  }, [role, isRootResource, resourceType]);
+  }, [role, isRootResource, resourceType, isDirectAdmin]);
 
   return permissions;
 }

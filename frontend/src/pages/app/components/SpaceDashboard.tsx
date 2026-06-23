@@ -127,31 +127,48 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     && !isEspaceAdmin
     && !isEspaceCreator;
 
-  // Rôles autorisés pour la modale d'INVITATION
+  // ✅ Détection de l'admin direct via les membres chargés
+  const isDirectEspaceAdmin = !!spaceId && members.some(
+    m => m.id === user?.id && m.role === ROLES.ADMIN
+  );
+
+  // ✅ Rôles autorisés pour la modale d'INVITATION
   const getAvailableInvitationRoles = () => {
+    if (isDirectEspaceAdmin) {
+      return ADMIN_DIRECT_ROLE_OPTIONS;
+    }
     if (isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator || isEspaceAdmin) {
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
     return [];
   };
 
-  // Rôles autorisés pour le CHANGEMENT DE RÔLE (Membre existant)
+  // ✅ Rôles autorisés pour le CHANGEMENT DE RÔLE (Membre existant)
   const getManageableRolesForMember = (memberRole: string) => {
+    if (isDirectEspaceAdmin) {
+      return [memberRole];
+    }
+    
     if (isWorkspaceCreator || isEspaceCreator) {
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
+    
     if (isInheritedSpaceAdmin) {
-      // Pour les membres directs existants : SEULEMENT Membre -> Admin
       if (memberRole === ROLES.MEMBER) return [ROLES.MEMBER, ROLES.ADMIN];
       return [memberRole];
     }
+    
     if (isEspaceAdmin) {
       return ADMIN_DIRECT_ROLE_OPTIONS;
     }
+    
     return [memberRole];
   };
 
+  // ✅ canEditMemberRole : Un Admin direct ne peut modifier AUCUN membre
   const canEditMemberRole = (member: Member) => {
+    if (isDirectEspaceAdmin) return false;
+    
     if (member.role === ROLES.CREATOR) return false;
     if (isWorkspaceCreator || isEspaceCreator) return member.id !== user?.id;
     if (isInheritedSpaceAdmin) return member.role === ROLES.MEMBER;
@@ -164,13 +181,18 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || isWorkspaceAdmin
     || isWorkspaceCreator;
   const canManageMemberRoles = canInviteMembers;
+
+  // ✅ canRemoveMember : Le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres Créateurs)
   const canRemoveMember = (member: Member) => {
-    return (isWorkspaceCreator || effectiveSpaceRole === ROLES.CREATOR)
-      && member.id !== user?.id
-      && member.role !== ROLES.CREATOR;
+    // Le créateur ne peut pas se retirer lui-même
+    if (member.id === user?.id) return false;
+    // Le créateur ne peut pas retirer un autre créateur
+    if (member.role === ROLES.CREATOR) return false;
+    // ✅ Le créateur peut retirer n'importe quel autre membre (Admin, Membre, Invité)
+    return effectiveSpaceRole === ROLES.CREATOR || isWorkspaceCreator;
   };
 
-  const availableRoles = useMemo(() => getAvailableInvitationRoles(), [isWorkspaceCreator, isWorkspaceAdmin, isEspaceCreator, isEspaceAdmin]);
+  const availableRoles = useMemo(() => getAvailableInvitationRoles(), [isDirectEspaceAdmin, isWorkspaceCreator, isWorkspaceAdmin, isEspaceCreator, isEspaceAdmin]);
 
   useEffect(() => {
     if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
@@ -412,7 +434,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               <Users className="h-6 w-6 text-secondary" />
               Équipe de l'espace
             </h3>
-            {canManageMemberRoles && (
+            {canManageMemberRoles && !isDirectEspaceAdmin && (
               <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
                 <ShieldCheck className="h-4 w-4 text-indigo-500" />
                 <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">Rangs & Privilèges</span>

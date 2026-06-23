@@ -107,9 +107,17 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
   const canInviteMembers = isAdmin || isCreator;
   const canManageMemberRoles = isAdmin || isCreator;
+  
+  // ✅ CORRECTION : Le Créateur peut retirer n'importe quel membre (sauf lui-même et le créateur)
   const canRemoveMember = (member: Member) => {
-    return isCreator && member.id !== user?.id && member.role !== 'Créateur';
+    // Le créateur ne peut pas se retirer lui-même
+    if (member.id === user?.id) return false;
+    // Le créateur ne peut pas retirer le créateur (si un autre créateur existe)
+    if (member.role === 'Créateur') return false;
+    // ✅ Le créateur peut retirer n'importe quel autre membre (Membre, Admin, Invité)
+    return isCreator;
   };
+
   const roleManagementOptions = useMemo(
     () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
     [isCreator],

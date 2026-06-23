@@ -419,7 +419,7 @@ def update_espace_member_endpoint(
             detail=f"Erreur interne lors de la mise à jour : {str(e)}"
         )
 
-# Supprimer un membre d'un espace ou retirer son accès si l'utilisateur est admin
+# ✅ Supprimer un membre d'un espace (réservé au Créateur)
 @router.delete("/espaces/{espace_id}/members/{user_id}/remove_member_espace", status_code=status.HTTP_204_NO_CONTENT)
 def remove_espace_member_endpoint(
     espace_id: str,
@@ -427,15 +427,35 @@ def remove_espace_member_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
+    """
+    ✅ Supprime un membre d'un espace.
+    ✅ SEUL LE CRÉATEUR DE L'ESPACE peut retirer un membre.
+    ✅ Un administrateur ne peut pas retirer de membre.
+    """
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         raise HTTPException(status_code=404, detail="Espace non trouve")
+    
+    # ✅ Vérification : Seul le créateur peut retirer un membre
     if user_id == current_user.id:
         raise HTTPException(
             status_code=403,
-            detail="Vous ne pouvez pas vous retirer via la gestion des membres.",
+            detail="Vous ne pouvez pas vous retirer via la gestion des membres."
         )
-    _require_espace_owner_access(db, espace_id, current_user.id)
+    
+    # ✅ Vérifier que l'utilisateur actuel est le créateur de l'espace
+    createur = db.query(Membre).filter(
+        Membre.id_espace == espace_id,
+        Membre.role == "Créateur",
+        Membre.statut == "Actif",
+        Membre.id_utilisateur == current_user.id
+    ).first()
+    
+    if not createur:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul le créateur de l'espace peut retirer un membre."
+        )
 
     if not remove_espace_member(db, espace_id, user_id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")

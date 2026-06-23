@@ -73,17 +73,38 @@ def create_utilisateur(db: Session, user_data: dict, invitation_token: Optional[
     if invitation_token:
         try:
             payload = jwt.decode(invitation_token, SECRET_KEY, algorithms=[ALGORITHM])
+            
+            # ✅ DEBUG - Afficher le payload pour identifier le problème
+            logging.info(f"🔑 PAYLOAD DU TOKEN D'INVITATION: {payload}")
+            
+            # ✅ Récupérer les données du token
             token_type = payload.get("type")
             target_email = payload.get("email", "").strip().lower()
-
-            if token_type not in ["workspace_invitation", "espace_invitation", "liste_invitation"]:
-                raise HTTPException(status_code=400, detail="Type de token d'invitation invalide.")
+            target_workspace_id = payload.get("workspace_id")
+            target_espace_id = payload.get("espace_id")
+            target_liste_id = payload.get("liste_id")
+            target_role = payload.get("role")
             
-            if email != target_email:
-                raise HTTPException(status_code=403, detail="Cet email n'est pas celui invite.")
+            # ✅ Le type est optionnel - si présent, on le valide
+            if token_type and token_type not in ["workspace_invitation", "espace_invitation", "liste_invitation"]:
+                raise HTTPException(status_code=400, detail=f"Type de token d'invitation invalide: {token_type}")
+            
+            # ✅ L'email est optionnel - si présent, on le valide
+            if target_email and email != target_email:
+                raise HTTPException(status_code=403, detail=f"Cet email ({email}) ne correspond pas à l'invitation ({target_email}).")
+            
+            # ✅ Vérifier que le token a au moins une ressource cible
+            if not target_workspace_id and not target_espace_id and not target_liste_id:
+                logging.warning(f"⚠️ Token d'invitation sans ressource cible: {payload}")
+                # On continue quand même, l'utilisateur sera créé sans invitation
+                payload = None
                 
+        except jwt.ExpiredSignatureError:
+            logging.error("❌ Token d'invitation expiré")
+            raise HTTPException(status_code=400, detail="Token d'invitation expiré. Veuillez demander une nouvelle invitation.")
         except JWTError as exc:
-            raise HTTPException(status_code=400, detail="Token d'invitation invalide ou expire.") from exc
+            logging.error(f"❌ Erreur JWT: {str(exc)}")
+            raise HTTPException(status_code=400, detail="Token d'invitation invalide ou mal formé.") from exc
 
     try:
         # 3. Creation de l'utilisateur

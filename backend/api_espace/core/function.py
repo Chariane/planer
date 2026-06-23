@@ -568,9 +568,12 @@ def _validate_espace_member_management_permissions(
     target_member: Optional[Membre],
     new_role: Optional[str] = None,
 ):
+    """Valide les permissions de gestion des membres d'un espace."""
+    
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre introuvable")
 
+    # ✅ RÈGLE 1 : Le Créateur de l'espace ne peut pas être modifié ou retiré
     if target_member.role == ESPACE_OWNER_ROLE:
         is_creator_parent = (
             actor_role == ESPACE_OWNER_ROLE
@@ -585,48 +588,49 @@ def _validate_espace_member_management_permissions(
                 detail="Le créateur de l'espace ne peut pas être modifié ou retiré.",
             )
 
-    # REGLE 1 : Un Admin ne peut pas modifier un autre Admin ou le Créateur
-    if actor_role == ESPACE_ADMIN_ROLE and target_member.role not in ESPACE_ADMIN_MANAGEABLE_ROLES:
+    # ✅ RÈGLE 2 : Un administrateur direct d'un espace ne peut modifier AUCUN membre
+    # Peu importe le rôle de l'acteur, si c'est un Admin direct sur l'espace → REFUS
+    if actor_role == ESPACE_ADMIN_ROLE and actor_source_type == "espace" and actor_source_id == espace.id:
         raise HTTPException(
             status_code=403,
-            detail="Seul le créateur peut modifier ce membre.",
+            detail="Un administrateur direct de l'espace ne peut pas modifier les membres de cet espace. Seul le créateur peut le faire.",
         )
 
-    # REGLE 2 : Gestion des rôles autorisés (Expert Edition)
-    if new_role:
-        is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace.id
-        
-        if is_descendant_delegation:
-            # UN GESTIONNAIRE PAR HÉRITAGE : peut SEULEMENT promouvoir un Membre en Administrateur
-            # Note: On autorise si le rôle ne change pas (ex: update statut)
-            if target_member.role == ESPACE_MEMBER_ROLE and new_role == ESPACE_ADMIN_ROLE:
-                allowed_new_roles = {ESPACE_ADMIN_ROLE}
-            elif target_member.role == new_role:
-                allowed_new_roles = {new_role}
-            else:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Un gestionnaire par héritage ne peut que promouvoir un membre direct en administrateur.",
-                )
-        else:
-            # UN ADMIN DIRECT : ne peut donner que Invité ou Membre
-            if actor_role == ESPACE_ADMIN_ROLE:
-                allowed_new_roles = {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
-            else:
-                # LE CRÉATEUR DIRECT : peut tout donner
-                allowed_new_roles = {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
+    # ✅ RÈGLE 3 : Un administrateur par héritage (workspace ou espace parent) 
+    # peut modifier des membres, mais avec des restrictions
+    if actor_role == ESPACE_ADMIN_ROLE:
+        # Si l'acteur n'est pas administrateur direct de l'espace (donc par héritage)
+        # Vérification que la source de gestion n'est pas l'espace lui-même
+        if actor_source_type != "espace" or actor_source_id != espace.id:
+            # Un administrateur par héritage ne peut promouvoir qu'un Membre en Administrateur
+            # ou ne peut changer que le statut
+            if new_role and new_role != target_member.role:
+                if target_member.role == ESPACE_MEMBER_ROLE and new_role == ESPACE_ADMIN_ROLE:
+                    allowed_new_roles = {ESPACE_ADMIN_ROLE}
+                elif target_member.role == new_role:
+                    allowed_new_roles = {new_role}
+                else:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Un administrateur par héritage ne peut que promouvoir un membre direct en administrateur.",
+                    )
+            return
 
-        if new_role not in allowed_new_roles:
+    # ✅ RÈGLE 4 : Le Créateur direct peut tout modifier (sauf se modifier lui-même)
+    if actor_role == ESPACE_OWNER_ROLE:
+        # Le créateur peut tout faire, sauf se modifier lui-même
+        if target_user_id == espace.id_utilisateur:
             raise HTTPException(
                 status_code=403,
-                detail="Vous n'avez pas l'autorisation d'attribuer ce rôle.",
+                detail="Le créateur ne peut pas modifier son propre rôle.",
             )
+        return
 
-    # REGLE 3 : Seul un manager (Admin/Créateur) peut accéder à cette fonction
+    # ✅ RÈGLE 5 : Seul un manager (Admin par héritage ou Créateur) peut accéder à cette fonction
     if actor_role not in ESPACE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Permissions insuffisantes pour gerer les membres de cet espace.",
+            detail="Permissions insuffisantes pour gérer les membres de cet espace.",
         )
 
 
@@ -638,24 +642,37 @@ def _validate_espace_invitation_permissions(
     actor_source_id: str,
     invited_role: str,
 ):
-    if actor_role != ESPACE_ADMIN_ROLE:
-        return
+    """Valide les permissions d'invitation dans un espace."""
 
-    is_descendant_delegation = actor_source_type == "workspace" or actor_source_id != espace_id
-    manageable_roles = (
-        {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}
-        if is_descendant_delegation
-        else {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE}
-    )
-
-    if invited_role not in manageable_roles:
+    # ✅ RÈGLE 1 : Seul un gestionnaire (Admin ou Créateur) peut inviter
+    if actor_role not in ESPACE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "Un administrateur ne peut inviter que des invites ou membres sur sa ressource directe, "
-                "et des invites, membres ou administrateurs dans ses descendants."
-            ),
+            detail="Seul un administrateur ou le créateur peut inviter des membres.",
         )
+
+    # ✅ RÈGLE 2 : Un administrateur direct d'un espace ne peut pas inviter un collaborateur avec le rôle 'Administrateur'
+    if actor_role == ESPACE_ADMIN_ROLE:
+        # Vérifier si l'acteur est administrateur direct de l'espace
+        is_direct_admin = (actor_source_type == "espace" and actor_source_id == espace_id)
+        
+        if is_direct_admin:
+            # L'admin direct ne peut inviter qu'avec les rôles Membre ou Invité
+            if invited_role not in {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un administrateur direct de l'espace ne peut inviter qu'avec les rôles 'Membre' ou 'Invité'. L'invitation avec le rôle 'Administrateur' est réservée au créateur.",
+                )
+        else:
+            # L'admin par héritage peut inviter avec plus de rôles (dans ses descendants)
+            if invited_role not in {ESPACE_GUEST_ROLE, ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE}:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+                )
+
+    # ✅ RÈGLE 3 : Le Créateur peut inviter avec n'importe quel rôle
+    # (pas de restriction supplémentaire)
 
 
 # -----------------------------------------------

@@ -489,7 +489,7 @@ def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -
             name=espace.nom if espace else None,
             creator_id=createur_id,
             role=membre.role,
-            cascade=True  # ✅ Ajout du rôle
+            cascade=True
         )
     commit_or_raise(
         db,
@@ -539,8 +539,8 @@ def update_espace_member(
             user_id=user_id,
             name=espace.nom if espace else None,
             creator_id=str(createur_id) if createur_id else None,
-            role=membre.role,  # ✅ Ajout du rôle
-            cascade=True  # ✅ Ajout du rôle
+            role=membre.role,
+            cascade=True
         )
     elif "statut" in update_data:
         remove_resource_member(
@@ -558,9 +558,28 @@ def update_espace_member(
 
 
 def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
+    """✅ Permet au Créateur de retirer n'importe quel membre (y compris les Invités)."""
     membre = get_espace_member(db, espace_id, user_id)
     if not membre:
         return False
+    
+    # ✅ Vérification : Seul le Créateur peut retirer un membre
+    espace = get_espace_by_id(db, espace_id)
+    if not espace:
+        return False
+    
+    createur = db.query(Membre).filter(
+        Membre.id_espace == espace_id,
+        Membre.role == "Créateur",
+        Membre.statut == "Actif"
+    ).first()
+    
+    if not createur or createur.id_utilisateur != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul le créateur de l'espace peut retirer un membre."
+        )
+    
     remove_resource_member(
         db,
         resource_type="espace",
@@ -573,6 +592,7 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
         detail="Impossible de supprimer ce membre de l'espace.",
     )
     return True
+
 
 def _user_has_active_membership_in_hierarchical_parents(db: Session, user_id: str, espace: Espace) -> bool:
     """Verifie si l'utilisateur est deja membre actif d'un parent hierarchique (Workspace ou Espace parent)."""
@@ -597,6 +617,7 @@ def _user_has_active_membership_in_hierarchical_parents(db: Session, user_id: st
             return True
             
     return False
+
 
 def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
     """
@@ -672,7 +693,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 user_id=target_user.id,
                 name=espace.nom,
                 creator_id=createur_id,
-                role=target_user.role,  # ✅ Ajout du rôle
+                role=target_user.role,
             )
         
         # Token pour utilisateur existant (Contrainte 2)
@@ -680,7 +701,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             data={
                 "sub": target_user.id,
                 "email": target_user.email,
-                "workspace_id": espace.id_workspace, # Ajouté pour cohérence
+                "workspace_id": espace.id_workspace,
                 "espace_id": espace_id,
                 "type": TOKEN_TYPE
             },
@@ -702,7 +723,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 "workspace_id": espace.id_workspace,
                 "espace_id": espace_id,
                 "role": membre_in.role,
-                "type": TOKEN_TYPE, # Uniformisation (Contrainte 2)
+                "type": TOKEN_TYPE,
             },
             expires_delta=timedelta(days=4),
         )
@@ -802,7 +823,7 @@ def accept_espace_invitation(
             user_id=user_id,
             name=espace.nom,
             creator_id=createur_id,
-            role=invited_role,  # ✅ Ajout du rôle
+            role=invited_role,
         )
         commit_or_raise(
             db,
@@ -835,7 +856,7 @@ def accept_espace_invitation(
         user_id=user_id,
         name=espace.nom,
         creator_id=createur_id,
-        role=invited_role,  # ✅ Ajout du rôle
+        role=invited_role,
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
     
