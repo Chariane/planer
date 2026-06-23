@@ -54,11 +54,7 @@ def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/group/{group_id}/add-member",
-            json={
-                "user_id": str(user_id), 
-                "actor": str(creator_id) if creator_id else None, 
-                "role": messenger_role
-            },
+            json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
             timeout=5
         )
         if response.status_code == 200:
@@ -67,6 +63,42 @@ def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_
             logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
     except Exception as e:
         logger.error(f"Error adding member to K-Chat group: {e}")
+
+
+def _get_creator_for_resource(db, resource_type: str, resource_id: str) -> Optional[str]:
+    """
+    Récupère le créateur d'une ressource via la table membre (rôle 'Créateur').
+    Retourne l'ID de l'utilisateur créateur ou None.
+    """
+    if resource_type == "espace":
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_espace = :espace_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"espace_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    elif resource_type == "liste":
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_liste = :liste_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"liste_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    return None
 
 
 def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple[str, str, str, str]]:
@@ -83,24 +115,14 @@ def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple
             # 2. Listes de l'espace - On récupère le créateur via la table membre
             listes = db.execute(
                 text("""
-                    SELECT l.id, l.nom, m.id_utilisateur 
+                    SELECT l.id, l.nom 
                     FROM planer.liste l
-                    LEFT JOIN planer.membre m ON m.id_liste = l.id AND m.role = 'Créateur'
                     WHERE l.id_espace = :espace_id
                 """),
-                {"espace_id": str(resource_id)}
+                {"espace_id": resource_id}
             ).all()
             for liste in listes:
-                # Fallback sur un admin si pas de créateur trouvé (rare)
-                creator_id = liste[2]
-                if not creator_id:
-                    # Si pas de créateur direct, on peut utiliser celui de l'espace
-                    espace_creator = db.execute(
-                        text("SELECT id_utilisateur FROM planer.espace WHERE id = :espace_id"),
-                        {"espace_id": str(resource_id)}
-                    ).scalar()
-                    creator_id = espace_creator
-
+                creator_id = _get_creator_for_resource(db, "liste", liste[0])
                 children.append(("liste", liste[0], liste[1], creator_id))
     except Exception as e:
         logger.error(f"Critical error in _get_child_resources: {e}")
@@ -113,14 +135,15 @@ def _get_sub_espaces(db, parent_id: str) -> List[Tuple[str, str, str, str]]:
     results = []
     espaces = db.execute(
         text("""
-            SELECT id, nom, id_utilisateur 
+            SELECT id, nom 
             FROM planer.espace 
             WHERE id_espace_parent = :parent_id
         """),
         {"parent_id": parent_id}
     ).all()
     for espace in espaces:
-        results.append(("espace", espace[0], espace[1], espace[2]))
+        creator_id = _get_creator_for_resource(db, "espace", espace[0])
+        results.append(("espace", espace[0], espace[1], creator_id))
         results.extend(_get_sub_espaces(db, espace[0]))
     return results
 
@@ -150,10 +173,10 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
                     _sync_single_resource_member(
                         db, 
                         child_type, 
-                        str(child_id), 
-                        str(user_id), 
+                        child_id, 
+                        user_id, 
                         child_name, 
-                        str(child_creator_id) if child_creator_id else None, 
+                        child_creator_id, 
                         messenger_role
                     )
                 except Exception as loop_e:
@@ -219,16 +242,12 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
         espace = get_espace_by_id(db, resource_id)
         if espace:
             resource_name = espace.nom
-            from .models import Membre
-            creator = db.query(Membre).filter(
-                Membre.id_espace == resource_id,
-                Membre.role == "Créateur"
-            ).first()
-            creator_id = creator.id_utilisateur if creator else user_id
+            creator_id = _get_creator_for_resource(db, "espace", resource_id)
     
     if not resource_name:
         resource_name = f"{resource_type}:{resource_id}"
-        creator_id = user_id
+        if not creator_id:
+            creator_id = user_id
     
     # Créer le groupe si nécessaire
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)

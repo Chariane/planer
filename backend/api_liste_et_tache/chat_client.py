@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 import requests
 from sqlalchemy import text
 
@@ -20,21 +21,60 @@ def _get_group_id_by_resource(db, resource_type: str, resource_id: str):
         return None
 
 
+def _get_creator_for_resource(db, resource_type: str, resource_id: str) -> Optional[str]:
+    """
+    Récupère le créateur d'une ressource via la table membre (rôle 'Créateur').
+    Retourne l'ID de l'utilisateur créateur ou None.
+    """
+    if resource_type == "liste":
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_liste = :liste_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"liste_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    return None
+
+
 def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
     existing_group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if existing_group_id:
         return existing_group_id
+    
+    # Si creator_id n'est pas fourni, on le récupère
+    if not creator_id:
+        creator_id = _get_creator_for_resource(db, resource_type, resource_id) or "unknown"
+    
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/create-group",
-            json={"name": name, "creator": creator_id, "members": members or [], "resource_type": resource_type, "resource_id": resource_id},
+            json={
+                "name": name,
+                "creator": creator_id,
+                "members": members or [],
+                "resource_type": resource_type,
+                "resource_id": resource_id
+            },
             timeout=5
         )
         if response.status_code == 200:
             return response.json().get("group_id")
+        else:
+            logger.warning(f"⚠️ K-Messenger erreur {response.status_code}: {response.text}")
+            return None
+    except requests.exceptions.ConnectionError:
+        logger.error("❌ Impossible de contacter K-Messenger sur le port 8000")
+        return None
     except Exception as e:
         logger.error(f"Error creating K-Chat group: {e}")
-    return None
+        return None
 
 
 def _convert_role_to_messenger(role: str) -> str:
@@ -57,6 +97,10 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
     """
     messenger_role = _convert_role_to_messenger(role)
     
+    # Si creator_id n'est pas fourni, on le récupère
+    if not creator_id:
+        creator_id = _get_creator_for_resource(db, resource_type, resource_id) or user_id
+    
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
         ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id])
@@ -72,6 +116,8 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
             logger.info(f"✅ Membre {user_id} ajouté au groupe {group_id} avec rôle {messenger_role} (source: {resource_type}:{resource_id})")
         else:
             logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
+    except requests.exceptions.ConnectionError:
+        logger.error("❌ Impossible de contacter K-Messenger pour ajouter le membre")
     except Exception as e:
         logger.error(f"Error adding member to K-Chat group: {e}")
 
@@ -89,6 +135,8 @@ def remove_resource_member(db, resource_type: str, resource_id: str, user_id: st
             json={"user_id": user_id, "actor": actor_id},
             timeout=5
         )
+    except requests.exceptions.ConnectionError:
+        logger.error("❌ Impossible de contacter K-Messenger pour retirer le membre")
     except Exception as e:
         logger.error(f"Error removing member from K-Chat group: {e}")
 
@@ -108,22 +156,18 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
     """
     # Récupérer les informations de la ressource
     resource_name = None
-    creator_id = None
+    creator_id = _get_creator_for_resource(db, resource_type, resource_id)
     
     if resource_type == "liste":
         from .crud.liste import get_liste_by_id
         liste = get_liste_by_id(db, resource_id)
         if liste:
             resource_name = liste.nom
-            from .models import Membre
-            creator = db.query(Membre).filter(
-                Membre.id_liste == resource_id,
-                Membre.role == "Créateur"
-            ).first()
-            creator_id = creator.id_utilisateur if creator else user_id
     
     if not resource_name:
         resource_name = f"{resource_type}:{resource_id}"
+    
+    if not creator_id:
         creator_id = user_id
     
     # Créer le groupe si nécessaire
@@ -162,6 +206,8 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
                     logger.info(f"✅ Membre {user_id} ajouté au groupe {group_id} via ensure_chat_group_for_user")
                 else:
                     logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
+            except requests.exceptions.ConnectionError:
+                logger.error("❌ Impossible de contacter K-Messenger pour ajouter le membre")
             except Exception as e:
                 logger.error(f"Error adding member to K-Chat group: {e}")
     

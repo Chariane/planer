@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 import requests
 from sqlalchemy import text
 
@@ -7,12 +8,57 @@ logger = logging.getLogger(__name__)
 
 K_CHAT_URL = os.getenv("K_CHAT_URL", "http://localhost:8000")
 
+
 def _get_group_id_by_resource(db, resource_type: str, resource_id: str):
     row = db.execute(
         text("SELECT id FROM messagerie.groupe WHERE resource_type = :type AND resource_id = :id LIMIT 1"),
         {"type": resource_type, "id": resource_id},
     ).first()
     return row[0] if row else None
+
+
+def _get_creator_for_resource(db, resource_type: str, resource_id: str) -> Optional[str]:
+    """
+    Récupère le créateur d'une ressource via la table membre (rôle 'Créateur').
+    Retourne l'ID de l'utilisateur créateur ou None.
+    """
+    if resource_type == "workspace":
+        row = db.execute(
+            text("SELECT id_utilisateur FROM planer.workspace WHERE id = :id"),
+            {"id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    elif resource_type == "espace":
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_espace = :espace_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"espace_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    elif resource_type == "liste":
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_liste = :liste_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"liste_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    return None
+
 
 def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
     """
@@ -32,7 +78,7 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
     # Vérifier si un groupe existe déjà pour cette ressource
     existing_group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if existing_group_id:
-        logging.info(f"🔍 Groupe existant trouvé: {existing_group_id} pour {resource_type}/{resource_id}")
+        logger.info(f"🔍 Groupe existant trouvé: {existing_group_id} pour {resource_type}/{resource_id}")
         return existing_group_id
     
     # Préparer les membres
@@ -41,7 +87,7 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         members_list = [creator_id] + members_list
     
     try:
-        logging.info(f"📤 Création du groupe pour {resource_type}/{resource_id} avec creator={creator_id}")
+        logger.info(f"📤 Création du groupe pour {resource_type}/{resource_id} avec creator={creator_id}")
         
         response = requests.post(
             f"{K_CHAT_URL}/group/create-group",
@@ -58,21 +104,32 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         if response.status_code == 200:
             data = response.json()
             group_id = data.get("group_id")
-            logging.info(f"✅ Groupe créé avec succès: {group_id}")
+            logger.info(f"✅ Groupe créé avec succès: {group_id}")
             return group_id
         else:
-            logging.warning(f"⚠️ K-Messenger a retourné une erreur {response.status_code}: {response.text}")
+            logger.warning(f"⚠️ K-Messenger a retourné une erreur {response.status_code}: {response.text}")
             return None
             
     except requests.exceptions.ConnectionError:
-        logging.error("❌ Impossible de contacter K-Messenger. Le service est-il démarré sur le port 8000 ?")
+        logger.error("❌ Impossible de contacter K-Messenger. Le service est-il démarré sur le port 8000 ?")
         return None
     except requests.exceptions.Timeout:
-        logging.error("❌ Timeout lors de l'appel à K-Messenger")
+        logger.error("❌ Timeout lors de l'appel à K-Messenger")
         return None
     except Exception as e:
-        logging.error(f"❌ Erreur lors de la création du groupe: {e}")
+        logger.error(f"❌ Erreur lors de la création du groupe: {e}")
         return None
+
+
+def _convert_role_to_messenger(role: str) -> str:
+    """Convertit un rôle K-Planner en rôle K-Messenger."""
+    if role in ["Créateur", "Administrateur"]:
+        return "admin"
+    elif role == "Invité":
+        return "guest"
+    else:
+        return "member"
+
 
 def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member"):
     """
@@ -82,18 +139,15 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
         role: Rôle K-Planner ("Créateur", "Administrateur", "Membre", "Invité")
               → Converti en rôle K-Messenger ("admin", "member", "guest")
     """
+    messenger_role = _convert_role_to_messenger(role)
+    
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
+        # Si creator_id n'est pas fourni, on le récupère
+        if not creator_id:
+            creator_id = _get_creator_for_resource(db, resource_type, resource_id) or user_id
         ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id])
         return
-    
-    # ✅ Conversion des rôles K-Planner → K-Messenger
-    if role in ["Créateur", "Administrateur"]:
-        messenger_role = "admin"  # ✅ Changé de "administrator" à "admin"
-    elif role == "Invité":
-        messenger_role = "guest"
-    else:
-        messenger_role = "member"
     
     try:
         response = requests.post(
@@ -107,6 +161,7 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
             logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
     except Exception as e:
         logger.error(f"Error adding member to K-Chat group: {e}")
+
 
 def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None):
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)

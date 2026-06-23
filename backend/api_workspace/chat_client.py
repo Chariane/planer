@@ -65,6 +65,52 @@ def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_
         logger.error(f"Error adding member to K-Chat group: {e}")
 
 
+def _get_creator_for_resource(db, resource_type: str, resource_id: str) -> Optional[str]:
+    """
+    Récupère le créateur d'une ressource via la table membre (rôle 'Créateur').
+    Retourne l'ID de l'utilisateur créateur ou None.
+    """
+    if resource_type == "workspace":
+        # Le créateur du workspace est dans la table workspace
+        row = db.execute(
+            text("SELECT id_utilisateur FROM planer.workspace WHERE id = :id"),
+            {"id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    elif resource_type == "espace":
+        # Le créateur de l'espace est dans la table membre
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_espace = :espace_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"espace_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    elif resource_type == "liste":
+        # Le créateur de la liste est dans la table membre
+        row = db.execute(
+            text("""
+                SELECT m.id_utilisateur 
+                FROM planer.membre m
+                WHERE m.id_liste = :liste_id 
+                AND m.role = 'Créateur'
+                AND m.statut = 'Actif'
+                LIMIT 1
+            """),
+            {"liste_id": resource_id}
+        ).first()
+        return row[0] if row else None
+    
+    return None
+
+
 def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple[str, str, str, str]]:
     """
     Récupère toutes les ressources enfants d'une ressource donnée.
@@ -76,27 +122,29 @@ def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple
         # 1. Espaces du workspace
         espaces = db.execute(
             text("""
-                SELECT id, nom, id_utilisateur 
+                SELECT id, nom 
                 FROM planer.espace 
                 WHERE id_workspace = :workspace_id
             """),
             {"workspace_id": resource_id}
         ).all()
         for espace in espaces:
-            children.append(("espace", espace[0], espace[1], espace[2]))
+            creator_id = _get_creator_for_resource(db, "espace", espace[0])
+            children.append(("espace", espace[0], espace[1], creator_id))
             # 2. Sous-espaces récursifs
             children.extend(_get_sub_espaces(db, espace[0]))
         # 3. Listes du workspace (sans espace parent)
         listes = db.execute(
             text("""
-                SELECT id, nom, id_utilisateur 
+                SELECT id, nom 
                 FROM planer.liste 
                 WHERE id_workspace = :workspace_id AND id_espace IS NULL
             """),
             {"workspace_id": resource_id}
         ).all()
         for liste in listes:
-            children.append(("liste", liste[0], liste[1], liste[2]))
+            creator_id = _get_creator_for_resource(db, "liste", liste[0])
+            children.append(("liste", liste[0], liste[1], creator_id))
             
     elif resource_type == "espace":
         # 1. Sous-espaces
@@ -104,14 +152,15 @@ def _get_child_resources(db, resource_type: str, resource_id: str) -> List[Tuple
         # 2. Listes de l'espace
         listes = db.execute(
             text("""
-                SELECT id, nom, id_utilisateur 
+                SELECT id, nom 
                 FROM planer.liste 
                 WHERE id_espace = :espace_id
             """),
             {"espace_id": resource_id}
         ).all()
         for liste in listes:
-            children.append(("liste", liste[0], liste[1], liste[2]))
+            creator_id = _get_creator_for_resource(db, "liste", liste[0])
+            children.append(("liste", liste[0], liste[1], creator_id))
     
     return children
 
@@ -121,14 +170,15 @@ def _get_sub_espaces(db, parent_id: str) -> List[Tuple[str, str, str, str]]:
     results = []
     espaces = db.execute(
         text("""
-            SELECT id, nom, id_utilisateur 
+            SELECT id, nom 
             FROM planer.espace 
             WHERE id_espace_parent = :parent_id
         """),
         {"parent_id": parent_id}
     ).all()
     for espace in espaces:
-        results.append(("espace", espace[0], espace[1], espace[2]))
+        creator_id = _get_creator_for_resource(db, "espace", espace[0])
+        results.append(("espace", espace[0], espace[1], creator_id))
         results.extend(_get_sub_espaces(db, espace[0]))
     return results
 
