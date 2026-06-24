@@ -432,6 +432,7 @@ def _validate_member_management_permissions(
     new_role: Optional[str] = None,
 ):
     """Valide que l'acteur peut gérer le membre cible."""
+    # ✅ Le créateur du workspace ne peut pas être modifié ou retiré
     if workspace.id_utilisateur == target_user_id:
         raise HTTPException(
             status_code=403,
@@ -441,27 +442,70 @@ def _validate_member_management_permissions(
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre introuvable")
     
-    if actor_role == Role.ADMIN and target_member.role not in Role.ADMIN_MANAGEABLE_ROLES:
-        raise HTTPException(
-            status_code=403,
-            detail="Un administrateur ne peut gérer que les membres et invités du workspace.",
-        )
+    # ✅ Si l'acteur est le Créateur, il peut tout modifier (sauf le créateur)
+    if actor_role == Role.CREATOR:
+        # Le créateur peut modifier n'importe quel membre (Admin, Membre, Invité)
+        # sauf le créateur (déjà vérifié ci-dessus)
+        return
+    
+    # ✅ Si l'acteur est un Administrateur
+    if actor_role == Role.ADMIN:
+        # L'Admin ne peut gérer que les membres et invités
+        if target_member.role not in Role.ADMIN_MANAGEABLE_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut gérer que les membres et invités du workspace.",
+            )
         
-    # Validation du nouveau rôle
-    if actor_role == Role.ADMIN and new_role and new_role not in Role.ADMIN_MANAGEABLE_ROLES:
+        # L'Admin ne peut pas promouvoir un Invité au-delà de Membre
+        if new_role and new_role not in Role.ADMIN_MANAGEABLE_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut pas promouvoir un membre à ce rôle.",
+            )
+        
+        # L'Admin ne peut pas transformer un Membre en Administrateur
+        if new_role == Role.ADMIN:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut pas promouvoir un membre au rôle d'administrateur. Seul le créateur peut le faire.",
+            )
+        
+        # L'Admin ne peut pas transformer un Invité en Administrateur
+        if target_member.role == Role.GUEST and new_role and new_role == Role.ADMIN:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut pas promouvoir un invité directement au rôle d'administrateur. Seul le créateur peut le faire.",
+            )
+    
+    # ✅ Si l'acteur n'est ni Créateur ni Admin
+    else:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut pas promouvoir un membre à ce rôle.",
+            detail="Vous n'avez pas les droits pour gérer les membres de ce workspace.",
         )
 
 
 def _validate_invitation_permissions(actor_role: str, invited_role: str):
     """Valide que l'acteur peut inviter avec le rôle spécifié."""
-    if actor_role == Role.ADMIN and invited_role not in {Role.GUEST, Role.MEMBER}:
-        raise HTTPException(
-            status_code=403,
-            detail="Un administrateur ne peut inviter que des invites ou membres dans le workspace.",
-        )
+    # ✅ Le Créateur peut inviter avec n'importe quel rôle
+    if actor_role == Role.CREATOR:
+        return
+    
+    # ✅ Un Administrateur ne peut inviter qu'avec les rôles Invité ou Membre
+    if actor_role == Role.ADMIN:
+        if invited_role not in {Role.GUEST, Role.MEMBER}:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut inviter que des invités ou membres dans le workspace.",
+            )
+        return
+    
+    # ✅ Si l'acteur n'est ni Créateur ni Admin
+    raise HTTPException(
+        status_code=403,
+        detail="Vous n'avez pas les droits pour inviter des membres dans ce workspace.",
+    )
 
 
 # ============================================================================

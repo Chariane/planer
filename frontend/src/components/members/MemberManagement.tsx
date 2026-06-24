@@ -138,7 +138,7 @@ export default function MemberManagement({
   const canChangeMemberRoles = canManageMembers && !isDirectAdmin;
 
   // ✅ canRemoveMember : 
-  // - Pour un workspace : le Créateur peut retirer n'importe quel membre (sauf lui-même)
+  // - Pour un workspace : le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres créateurs)
   // - Pour un espace : seul le Créateur peut retirer un membre
   // - Pour une liste : seul le Créateur peut retirer un membre
   const canRemoveMember = (member: Member) => {
@@ -241,7 +241,9 @@ export default function MemberManagement({
       showMessage(
         targetMember?.id === user?.id
           ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
-          : 'Seul le créateur direct de la ressource peut retirer un membre.',
+          : targetMember?.role === ROLES.CREATOR
+            ? 'Le créateur ne peut pas être retiré de cette ressource.'
+            : 'Seul le créateur direct de la ressource peut retirer un membre.',
         'error',
       );
       return;
@@ -528,9 +530,21 @@ export default function MemberManagement({
                         <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider">{member.email}</p>
                       </div>
                     </Link>
-                    <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
-                      {getRoleLabel(member.role)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
+                        {getRoleLabel(member.role)}
+                      </span>
+                      {canRemoveMember(member) && (
+                        <button
+                          onClick={() => handleRemoveMember(member.id)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                          title="Retirer de cette ressource"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="hidden xl:inline">Retirer</span>
+                        </button>
+                      )}
+                    </div>
                   </GlassCard>
                 ))}
               </div>

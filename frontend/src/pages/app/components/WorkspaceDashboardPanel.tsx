@@ -20,7 +20,9 @@ interface WorkspaceDashboardPanelProps {
   workspaceId: string;
 }
 
+// ✅ RÔLES DISPONIBLES POUR LE CRÉATEUR : peut tout modifier
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+// ✅ RÔLES DISPONIBLES POUR L'ADMIN : seulement Invité et Membre
 const ADMIN_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre'];
 
 const getRoleBadgeClass = (role: string) => {
@@ -104,28 +106,45 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     setToast({ message, type });
   };
 
-  const { isGuest, isAdmin, isCreator } = useWorkspaceRole(workspaceId);
+  // ✅ Récupération du rôle de l'utilisateur dans le workspace
+  const { isGuest, isAdmin, isCreator, role } = useWorkspaceRole(workspaceId);
+  
+  // ✅ DEBUG : Afficher le rôle dans la console
+  useEffect(() => {
+    console.log('🔍 [WorkspaceDashboardPanel] Rôle utilisateur:', { isCreator, isAdmin, isGuest, role });
+  }, [isCreator, isAdmin, isGuest, role]);
+  
   const canInviteMembers = isAdmin || isCreator;
+  
+  // ✅ Le créateur et l'admin peuvent gérer les membres, mais avec des permissions différentes
   const canManageMemberRoles = isAdmin || isCreator;
   
-  // ✅ CORRECTION : Le Créateur peut retirer n'importe quel membre (sauf lui-même et le créateur)
+  // ✅ CORRECTION : Le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres créateurs)
   const canRemoveMember = (member: Member) => {
     // Le créateur ne peut pas se retirer lui-même
     if (member.id === user?.id) return false;
-    // Le créateur ne peut pas retirer le créateur (si un autre créateur existe)
+    // Le créateur ne peut pas retirer un autre créateur
     if (member.role === 'Créateur') return false;
     // ✅ Le créateur peut retirer n'importe quel autre membre (Membre, Admin, Invité)
     return isCreator;
   };
 
-  const roleManagementOptions = useMemo(
-    () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
-    [isCreator],
-  );
-  const availableInvitationRoles = useMemo(
-    () => (isCreator ? CREATOR_ROLE_MANAGEMENT_OPTIONS : ADMIN_ROLE_MANAGEMENT_OPTIONS),
-    [isCreator],
-  );
+  // ✅ RÔLES DISPONIBLES POUR LA MODIFICATION
+  // - Si l'utilisateur est Créateur : peut tout modifier (Invité → Membre → Admin)
+  // - Si l'utilisateur est Admin : ne peut modifier que Invité → Membre
+  const roleManagementOptions = useMemo(() => {
+    if (isCreator) {
+      console.log('✅ Créateur : options complètes');
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    console.log('✅ Admin : options restreintes');
+    return ADMIN_ROLE_MANAGEMENT_OPTIONS;
+  }, [isCreator]);
+
+  const availableInvitationRoles = useMemo(() => {
+    if (isCreator) return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    return ADMIN_ROLE_MANAGEMENT_OPTIONS;
+  }, [isCreator]);
 
   useEffect(() => {
     if (!availableInvitationRoles.includes(inviteRole)) {
@@ -236,7 +255,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       showMessage(
         member.id === user?.id
           ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
-          : 'Seul le créateur du workspace peut retirer un membre.',
+          : member.role === 'Créateur'
+            ? 'Le créateur ne peut pas être retiré du workspace.'
+            : 'Seul le créateur du workspace peut retirer un membre.',
         'error',
       );
       setConfirmData({ isOpen: false, member: null });
@@ -388,6 +409,13 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                       </div>
                     </Link>
 
+                    {/*
+                      ✅ AFFICHAGE DU SELECT DE RÔLE
+                      Conditions :
+                      1. canManageMemberRoles = true (Créateur ou Admin)
+                      2. member.role !== 'Créateur' (on ne modifie pas le créateur)
+                      3. roleManagementOptions.includes(member.role) (le rôle actuel est dans les options)
+                    */}
                     {canManageMemberRoles && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
@@ -397,7 +425,11 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                           disabled={updatingMemberId === member.id}
                           className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
                         >
-                          {roleManagementOptions.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
+                          {roleManagementOptions.map(r => (
+                            <option key={r} value={r} className="bg-theme-page text-theme-main">
+                              {r}
+                            </option>
+                          ))}
                         </select>
                         {canRemoveMember(member) && (
                           <button
@@ -440,6 +472,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             </GlassCard>
           )}
 
+          {/* ✅ SECTION DES INVITÉS DIRECTS AVEC SELECT DE RÔLE */}
           {guestMembers.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -464,9 +497,54 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
                         <p className="text-[10px] text-theme-muted font-bold truncate opacity-40 uppercase mt-0.5">{member.email}</p>
                       </div>
                     </Link>
-                    <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
-                      {getRoleLabel(member.role)}
-                    </span>
+
+                    {/*
+                      ✅ AFFICHAGE DU SELECT DE RÔLE POUR LES INVITÉS
+                      Le créateur peut modifier le rôle des invités (Invité → Membre → Admin)
+                    */}
+                    {canManageMemberRoles && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
+                      <div className="flex items-center gap-3">
+                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
+                        <select
+                          value={member.role}
+                          onChange={e => handleMemberRoleChange(member, e.target.value)}
+                          disabled={updatingMemberId === member.id}
+                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
+                        >
+                          {roleManagementOptions.map(r => (
+                            <option key={r} value={r} className="bg-theme-page text-theme-main">
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de ce workspace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                          {getRoleLabel(member.role)}
+                        </span>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de ce workspace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </GlassCard>
                 ))}
               </div>
