@@ -22,8 +22,8 @@ interface WorkspaceDashboardPanelProps {
 
 // ✅ RÔLES DISPONIBLES POUR LE CRÉATEUR : peut tout modifier
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-// ✅ RÔLES DISPONIBLES POUR L'ADMIN : seulement Invité et Membre
-const ADMIN_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre'];
+// ✅ L'ADMIN N'A AUCUNE OPTION DE MODIFICATION
+const ADMIN_ROLE_MANAGEMENT_OPTIONS: string[] = [];
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -106,18 +106,12 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     setToast({ message, type });
   };
 
-  // ✅ Récupération du rôle de l'utilisateur dans le workspace
   const { isGuest, isAdmin, isCreator, role } = useWorkspaceRole(workspaceId);
-  
-  // ✅ DEBUG : Afficher le rôle dans la console
-  useEffect(() => {
-    console.log('🔍 [WorkspaceDashboardPanel] Rôle utilisateur:', { isCreator, isAdmin, isGuest, role });
-  }, [isCreator, isAdmin, isGuest, role]);
   
   const canInviteMembers = isAdmin || isCreator;
   
-  // ✅ Le créateur et l'admin peuvent gérer les membres, mais avec des permissions différentes
-  const canManageMemberRoles = isAdmin || isCreator;
+  // ✅ SEUL le Créateur peut gérer les membres (modifier les rôles)
+  const canManageMemberRoles = isCreator;
   
   // ✅ CORRECTION : Le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres créateurs)
   const canRemoveMember = (member: Member) => {
@@ -131,19 +125,19 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
   // ✅ RÔLES DISPONIBLES POUR LA MODIFICATION
   // - Si l'utilisateur est Créateur : peut tout modifier (Invité → Membre → Admin)
-  // - Si l'utilisateur est Admin : ne peut modifier que Invité → Membre
+  // - Si l'utilisateur est Admin : NE PEUT MODIFIER AUCUN RÔLE
   const roleManagementOptions = useMemo(() => {
     if (isCreator) {
-      console.log('✅ Créateur : options complètes');
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
-    console.log('✅ Admin : options restreintes');
+    // ✅ L'Admin ne voit pas de select, donc pas d'options
     return ADMIN_ROLE_MANAGEMENT_OPTIONS;
   }, [isCreator]);
 
   const availableInvitationRoles = useMemo(() => {
     if (isCreator) return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    return ADMIN_ROLE_MANAGEMENT_OPTIONS;
+    // ✅ L'Admin ne peut inviter qu'avec Invité ou Membre
+    return ['Invité', 'Membre'];
   }, [isCreator]);
 
   useEffect(() => {
@@ -222,7 +216,12 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
-    if (!canManageMemberRoles || member.role === 'Créateur' || nextRole === member.role) return;
+    // ✅ SEUL le Créateur peut modifier les rôles
+    if (!isCreator) {
+      showMessage('Seul le créateur du workspace peut modifier les rôles des membres.', 'error');
+      return;
+    }
+    if (member.role === 'Créateur' || nextRole === member.role) return;
     if (!roleManagementOptions.includes(nextRole)) return;
     setUpdatingMemberId(member.id);
     try {
@@ -385,6 +384,19 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             )}
           </div>
 
+          {/* ✅ Message pour les Admins : ils ne peuvent pas modifier les rôles */}
+          {isAdmin && !isCreator && (
+            <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+              <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
+                <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+                  En tant qu'administrateur de ce workspace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur du workspace peut gérer les rôles des membres.
+                </p>
+              </div>
+            </div>
+          )}
+
           {activeMembers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {activeMembers.map((member, i) => (
@@ -411,12 +423,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
                     {/*
                       ✅ AFFICHAGE DU SELECT DE RÔLE
-                      Conditions :
-                      1. canManageMemberRoles = true (Créateur ou Admin)
-                      2. member.role !== 'Créateur' (on ne modifie pas le créateur)
-                      3. roleManagementOptions.includes(member.role) (le rôle actuel est dans les options)
+                      SEUL le Créateur peut modifier les rôles
                     */}
-                    {canManageMemberRoles && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
+                    {isCreator && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
                         <select
@@ -472,7 +481,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             </GlassCard>
           )}
 
-          {/* ✅ SECTION DES INVITÉS DIRECTS AVEC SELECT DE RÔLE */}
+          {/* ✅ SECTION DES INVITÉS DIRECTS */}
           {guestMembers.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -500,9 +509,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
                     {/*
                       ✅ AFFICHAGE DU SELECT DE RÔLE POUR LES INVITÉS
-                      Le créateur peut modifier le rôle des invités (Invité → Membre → Admin)
+                      SEUL le créateur peut modifier le rôle des invités
                     */}
-                    {canManageMemberRoles && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
+                    {isCreator && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
                         <select

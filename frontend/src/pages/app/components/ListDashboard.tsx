@@ -1,17 +1,22 @@
 // frontend/src/pages/app/components/ListDashboard.tsx
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, Calendar, Activity, Target, X, MessageCircle } from 'lucide-react';
+import { Users, UserPlus, Calendar, Activity, Target, X, MessageCircle, ShieldCheck, Trash2, Loader2, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import Modal from '../../../components/ui/Modal';
+import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { listeService } from '../../../services/liste.service';
 import { tacheService } from '../../../services/tache.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
+import MemberManagement from '../../../components/members/MemberManagement';
 
 interface ListDashboardProps {
   listId: string;
@@ -21,27 +26,66 @@ interface ListDashboardProps {
   onMemberInvited?: () => void;
 }
 
+// ✅ RÔLES MODIFIABLES PAR LE CRÉATEUR DIRECT
+const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+
+// Toast Premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-  
+  const toneClass = type === 'success'
+    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
+    : type === 'error'
+      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
+      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
+  const iconShellClass = type === 'info'
+    ? 'bg-amber-500/15 border border-amber-500/20'
+    : 'bg-white/20 border border-white/10';
+  const closeClass = type === 'info'
+    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
+    : 'hover:bg-white/20';
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
-      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-white min-w-[200px] ${bgColor}`}>
-        <span className="text-sm flex-1">{message}</span>
-        <button onClick={onClose} className="hover:opacity-70">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+        className="fixed bottom-6 right-6 z-[100]"
+      >
+        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl min-w-[320px] backdrop-blur-xl border ${toneClass}`}>
+          <div className={`p-2 rounded-xl ${iconShellClass}`}>
+            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </div>
+          <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
+          <button onClick={onClose} className={`p-1.5 rounded-xl transition-colors ${closeClass}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
+const getRoleBadgeClass = (role: string) => {
+  if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
+  if (role === 'Créateur') return 'bg-purple-500/10 text-purple-500 border border-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.1)]';
+  if (role === 'Invité') return 'bg-theme-surface-hover text-theme-muted border border-theme-border-subtle opacity-70';
+  return 'bg-secondary/10 text-secondary border border-secondary/20 shadow-[0_0_8px_rgba(255,102,0,0.1)]';
+};
+
+const getRoleLabel = (role: string) => {
+  if (role === 'Invité') return 'Invité';
+  if (role === 'Membre') return 'Membre';
+  if (role === 'Administrateur') return 'Admin';
+  return 'Créateur';
+};
+
 export default function ListDashboard({ listId, listName, workspaceId, espaceId, onMemberInvited }: ListDashboardProps) {
+  const { user } = useAuth();
   const [listDescription, setListDescription] = useState('');
   const [stats, setStats] = useState({
     membersCount: 0,
@@ -57,6 +101,12 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Invité');
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+  const [confirmData, setConfirmData] = useState<{
+    isOpen: boolean;
+    member: Member | null;
+  }>({ isOpen: false, member: null });
+  const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
   
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
@@ -67,20 +117,145 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const { isGuest: isListeGuest, isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId || undefined);
   
-  const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator;
+  // ✅ Détection de l'admin direct via les membres chargés
+  const isDirectListAdmin = !!listId && members.some(
+    m => m.id === user?.id && m.role === ROLES.ADMIN
+  );
   
-  const getAvailableRoles = () => {
-    if (isListeCreator || isWorkspaceCreator || isWorkspaceAdmin) {
-      return ['Invité', 'Membre', 'Administrateur'];
+  // ✅ Détection de l'admin par héritage
+  const isInheritedListAdmin = !!listId
+    && (isWorkspaceAdmin || isWorkspaceCreator)
+    && !isListeAdmin
+    && !isListeCreator
+    && !isDirectListAdmin;
+
+  // ✅ DEBUG : Afficher les détections dans la console
+  useEffect(() => {
+    console.log('🔍 [ListDashboard] Détection des rôles:', {
+      listId,
+      isWorkspaceAdmin,
+      isWorkspaceCreator,
+      isListeAdmin,
+      isListeCreator,
+      isDirectListAdmin,
+      isInheritedListAdmin,
+      membres: members.map(m => ({ id: m.id, role: m.role, name: m.name }))
+    });
+  }, [isWorkspaceAdmin, isWorkspaceCreator, isListeAdmin, isListeCreator, isDirectListAdmin, isInheritedListAdmin, members]);
+
+  // ✅ canEditMemberRole : Détermine si l'utilisateur peut modifier le rôle d'un membre
+  const canEditMemberRole = (member: Member) => {
+    console.log(`🔍 [canEditMemberRole] Début pour ${member.name} (${member.role})`);
+    console.log(`   - isListeCreator: ${isListeCreator}`);
+    console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
+    console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
+    console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
+    
+    // ✅ Créateur direct : peut modifier n'importe quel membre (sauf lui-même)
+    if (isListeCreator || isWorkspaceCreator) {
+      const canEdit = member.role !== ROLES.CREATOR && member.id !== user?.id;
+      console.log(`🔍 [canEditMemberRole] Créateur: ${canEdit} pour ${member.name} (${member.role})`);
+      return canEdit;
     }
-    if (isListeAdmin) {
-      return ['Membre'];
+    
+    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+    if (isDirectListAdmin) {
+      console.log(`🔍 [canEditMemberRole] Admin direct: false pour ${member.name}`);
+      return false;
+    }
+    
+    // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
+    // ❌ Mais ne peut pas modifier un Admin direct
+    if (isInheritedListAdmin) {
+      if (member.role === ROLES.CREATOR) {
+        console.log(`🔍 [canEditMemberRole] Admin hérité: false pour ${member.name} (Créateur)`);
+        return false;
+      }
+      if (member.role === ROLES.ADMIN) {
+        console.log(`🔍 [canEditMemberRole] Admin hérité: false pour ${member.name} (Admin direct)`);
+        return false;
+      }
+      // ✅ Pour les invités et membres, l'Admin par héritage peut modifier
+      console.log(`🔍 [canEditMemberRole] Admin hérité: true pour ${member.name} (${member.role})`);
+      return true;
+    }
+    
+    console.log(`🔍 [canEditMemberRole] Aucun droit pour ${member.name}`);
+    return false;
+  };
+
+  // ✅ canRemoveMember : SEUL le Créateur peut retirer un membre
+  const canRemoveMember = (member: Member) => {
+    // Ne peut pas se retirer lui-même
+    if (member.id === user?.id) return false;
+    // Ne peut pas retirer un autre créateur
+    if (member.role === ROLES.CREATOR) return false;
+    // ✅ SEUL le Créateur peut retirer un membre
+    return isListeCreator || isWorkspaceCreator;
+  };
+
+  // ✅ getManageableRolesForMember : Détermine les rôles disponibles pour la modification
+  const getManageableRolesForMember = (memberRole: string) => {
+    console.log(`🔍 [getManageableRolesForMember] memberRole: ${memberRole}`);
+    console.log(`   - isListeCreator: ${isListeCreator}`);
+    console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
+    console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
+    console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
+    
+    // ✅ Créateur direct : peut tout modifier (Invité → Membre → Admin et inversement)
+    if (isListeCreator || isWorkspaceCreator) {
+      console.log(`🔍 [getManageableRolesForMember] Créateur: retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS}`);
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    
+    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+    if (isDirectListAdmin) {
+      console.log(`🔍 [getManageableRolesForMember] Admin direct: retourne [${memberRole}]`);
+      return [memberRole];
+    }
+    
+    // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
+    // Retourner TOUS les rôles, la vérification de promotion est faite dans handleMemberRoleChange
+    if (isInheritedListAdmin) {
+      // ❌ Ne peut pas modifier un Admin direct
+      if (memberRole === ROLES.ADMIN) {
+        console.log(`🔍 [getManageableRolesForMember] Admin hérité sur Admin: retourne [${memberRole}]`);
+        return [memberRole];
+      }
+      console.log(`🔍 [getManageableRolesForMember] Admin hérité: retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS}`);
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    
+    console.log(`🔍 [getManageableRolesForMember] Aucun droit: retourne [${memberRole}]`);
+    return [memberRole];
+  };
+
+  // ✅ getAvailableInvitationRoles : Détermine les rôles disponibles pour l'invitation
+  const getAvailableInvitationRoles = () => {
+    // ✅ Créateur direct ou Admin par héritage : peut inviter avec tous les rôles
+    if (isListeCreator || isWorkspaceCreator || isInheritedListAdmin) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    // ✅ Admin direct : ne peut inviter qu'avec Membre ou Invité
+    if (isDirectListAdmin || isListeAdmin) {
+      return ['Invité', 'Membre'];
     }
     return [];
   };
 
+  const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator || isInheritedListAdmin;
+
+  const availableRoles = getAvailableInvitationRoles();
+
+  useEffect(() => {
+    if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
+      setInviteRole(availableRoles[0]);
+    }
+  }, [availableRoles, inviteRole]);
+
   const loadData = async () => {
     setLoading(true);
+    setRoleActionNotice(null);
     try {
       try {
         const liste = await listeService.getById(listId);
@@ -99,6 +274,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           role: m.role,
           photo_base64: getMemberPhotoBase64(m),
         }));
+        console.log('📋 [loadData] Membres chargés:', formattedMembers);
       } catch (err: any) {
         console.warn('Impossible de charger les membres:', err);
       }
@@ -144,13 +320,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     loadData();
   }, [listId]);
 
-  useEffect(() => {
-    const roles = getAvailableRoles();
-    if (roles.length > 0 && !roles.includes(inviteRole)) {
-      setInviteRole(roles[0]);
-    }
-  }, [isWorkspaceCreator, isWorkspaceAdmin, isListeCreator, isListeAdmin, inviteRole]);
-
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
     try {
@@ -170,17 +339,88 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     }
   };
 
+  const handleMemberRoleChange = async (member: Member, nextRole: string) => {
+    console.log(`🔍 [handleMemberRoleChange] ${member.name} (${member.role}) → ${nextRole}`);
+    
+    if (member.role === ROLES.CREATOR || nextRole === member.role) {
+      console.log(`🔍 [handleMemberRoleChange] Pas de changement nécessaire`);
+      return;
+    }
+    if (!canEditMemberRole(member)) {
+      showMessage('Vous n\'avez pas les droits pour modifier le rôle de ce membre.', 'error');
+      return;
+    }
+    
+    // ✅ Vérification supplémentaire pour l'Admin par héritage : ne peut que promouvoir
+    if (isInheritedListAdmin) {
+      const currentRank = getRoleRank(member.role);
+      const nextRank = getRoleRank(nextRole);
+      console.log(`🔍 [handleMemberRoleChange] Admin hérité: currentRank=${currentRank}, nextRank=${nextRank}`);
+      if (nextRank < currentRank) {
+        showMessage('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.', 'error');
+        return;
+      }
+    }
+    
+    setUpdatingMemberId(member.id);
+    try {
+      await listeService.updateMemberRole(listId, member.id, nextRole);
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
+      showMessage(`Rôle de ${member.name} mis à jour`, 'success');
+    } catch (err: any) {
+      const message = sanitizeApiErrorMessage(err, "Impossible de modifier le rôle");
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
+        showMessage(
+          (isListeCreator || isWorkspaceCreator)
+            ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de cette liste avec le bouton Retirer.`
+            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de cette liste.`,
+          'info'
+        );
+      } else {
+        showMessage(message, 'error');
+      }
+      await loadData();
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    const member = confirmData.member;
+    if (!member) return;
+    if (!canRemoveMember(member)) {
+      showMessage(
+        member.id === user?.id
+          ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
+          : "Seul le créateur de la liste peut retirer un membre.",
+        'error',
+      );
+      setConfirmData({ isOpen: false, member: null });
+      return;
+    }
+    try {
+      await listeService.unassignMember(listId, member.id);
+      setConfirmData({ isOpen: false, member: null });
+      await loadData();
+      showMessage(`${member.name} a été retiré de cette liste`, 'success');
+    } catch (err) {
+      showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Chargement du tableau de bord...</div>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-secondary/60" />
+        <p className="text-theme-muted font-black uppercase tracking-widest text-[10px] animate-pulse">Chargement du tableau de bord...</p>
       </div>
     );
   }
 
-  const availableRoles = getAvailableRoles();
-  const activeMembers = members.filter(member => member.role !== 'Invité');
-  const guestMembers = members.filter(member => member.role === 'Invité');
+  const activeMembers = members.filter(member => member.role !== ROLES.GUEST);
+  const guestMembers = members.filter(member => member.role === ROLES.GUEST);
+  
   const statusGradient = (() => {
     if (stats.tasksCount === 0) return '#e5e7eb';
     const done = (stats.doneTasksCount / stats.tasksCount) * 100;
@@ -189,24 +429,49 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
   })();
 
+  // ✅ Déterminer si on affiche un message d'information
+  const showDirectAdminMessage = isDirectListAdmin && !isListeCreator && !isWorkspaceCreator;
+  const showInheritedAdminMessage = isInheritedListAdmin && !isListeCreator && !isWorkspaceCreator;
+
   return (
     <div className="space-y-6">
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {isListeGuest && !canInviteMembers && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            👁️ Vous êtes en mode <strong>lecture seule</strong> dans cette liste.
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
-            Vous pouvez consulter les informations mais ne pouvez pas inviter de nouveaux membres.
-          </p>
+        <div className="glass-card bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center gap-4 shadow-theme-sm">
+          <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+            <Info className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
+            <p className="text-xs text-theme-muted mt-1 opacity-60">Vous pouvez consulter les informations, mais les modifications sont restreintes.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles */}
+      {showDirectAdminMessage && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+          <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              En tant qu'administrateur direct de cette liste, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de la liste peut gérer les rôles des membres.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Message pour l'Admin par héritage : peut promouvoir */}
+      {showInheritedAdminMessage && (
+        <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+          <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black uppercase tracking-widest text-[10px]">Administration par héritage - Promotions uniquement</p>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              En tant qu'administrateur hérité de cette liste, vous pouvez promouvoir les membres directs (Invité → Membre/Admin, Membre → Admin). Vous ne pouvez pas rétrograder ni retirer de membres.
+            </p>
+          </div>
         </div>
       )}
 
@@ -297,78 +562,31 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         </GlassCard>
       </div>
 
+      {/* ✅ Remplacer la section des membres par MemberManagement */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Membres de la liste
-        </h3>
-        {activeMembers.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {activeMembers.map(member => (
-              <GlassCard key={member.id} className="p-3 flex items-center justify-between hover:shadow-md transition-shadow">
-                <Link to={`/users/${member.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-90">
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
-                    {getAvatarSrc(member.photo_base64) ? (
-                      <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
-                    ) : (
-                      getInitials(member.name)
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{member.name}</p>
-                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
-                  </div>
-                </Link>
-                <span className={`text-xs px-2 py-1 rounded-full ${member.role === 'Administrateur' ? 'bg-orange-100 text-orange-700' :
-                    member.role === 'Créateur' ? 'bg-purple-100 text-purple-700' :
-                      'bg-gray-100 text-gray-600'
-                  }`}>
-                  {member.role}
-                </span>
-              </GlassCard>
-            ))}
-          </div>
-        ) : (
-          <GlassCard className="p-4">
-            <div className="text-center text-gray-400 py-4">
-              <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-              <p>Aucun membre actif pour le moment</p>
-              <p className="text-sm mt-1">Les invités éventuels sont affichés à part.</p>
-            </div>
-          </GlassCard>
-        )}
-      </div>
-
-      {guestMembers.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Invités directs
+            Membres de la liste
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {guestMembers.map(member => (
-              <GlassCard key={member.id} className="p-3 flex items-center justify-between border-dashed opacity-85">
-                <Link to={`/users/${member.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-90">
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-sm">
-                    {getAvatarSrc(member.photo_base64) ? (
-                      <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
-                    ) : (
-                      getInitials(member.name)
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{member.name}</p>
-                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
-                  </div>
-                </Link>
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  Invité
-                </span>
-              </GlassCard>
-            ))}
-          </div>
+          {(isListeCreator || isWorkspaceCreator || isInheritedListAdmin) && (
+            <div className="flex items-center gap-2 bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
+              <ShieldCheck className="h-4 w-4 text-indigo-500" />
+              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">
+                {isInheritedListAdmin ? 'Admin par héritage' : 'Privilèges complets'}
+              </span>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* ✅ PASSER isInheritedAdmin à MemberManagement */}
+        <MemberManagement
+          listeId={listId}
+          currentUserRole={isListeCreator ? ROLES.CREATOR : isListeAdmin ? ROLES.ADMIN : isListeGuest ? ROLES.GUEST : null}
+          isInheritedAdmin={isInheritedListAdmin}
+          onMemberAdded={loadData}
+        />
+      </div>
 
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -428,6 +646,15 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           </div>
         </Modal>
       )}
+
+      <ConfirmModal
+        isOpen={confirmData.isOpen}
+        onClose={() => setConfirmData({ isOpen: false, member: null })}
+        onConfirm={handleRemoveMember}
+        title="Retirer de la liste"
+        message={`Voulez-vous retirer ${confirmData.member?.name || 'ce membre'} de cette liste ? Si cette personne possède un accès hérité depuis un parent, celui-ci restera actif.`}
+        confirmText="Retirer"
+      />
     </div>
   );
 }

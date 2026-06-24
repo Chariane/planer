@@ -802,51 +802,132 @@ def _validate_list_member_management_permissions(
     target_member: Membre | None,
     new_role: str | None = None,
 ) -> None:
-    # Seul un Créateur/Admin peut gérer les membres
+    """Valide les permissions de gestion des membres d'une liste."""
+    
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    # ✅ RÈGLE 1 : Le Créateur de la liste ne peut pas être modifié ou retiré
+    if target_member.role == LISTE_OWNER_ROLE:
+        is_creator_parent = (
+            actor_role == LISTE_OWNER_ROLE
+            and (
+                actor_source_type == ResourceType.WORKSPACE
+                or actor_source_type == ResourceType.ESPACE
+                or actor_source_id != liste_id
+            )
+        )
+        if not is_creator_parent:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur de la liste ne peut pas être modifié ou retiré.",
+            )
+
+    # ✅ RÈGLE 2 : Un administrateur direct d'une liste ne peut modifier AUCUN membre
+    if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur direct de la liste ne peut pas modifier les membres de cette liste. Seul le créateur peut le faire.",
+        )
+
+    # ✅ RÈGLE 3 : Un administrateur par héritage (workspace ou espace parent) 
+    # peut modifier des membres, mais avec des restrictions spécifiques
+    if actor_role == LISTE_ADMIN_ROLE:
+        # Si l'acteur n'est pas administrateur direct de la liste (donc par héritage)
+        if actor_source_type != ResourceType.LISTE or actor_source_id != liste_id:
+            # ✅ L'administrateur par héritage peut :
+            # - Invité → Membre
+            # - Invité → Admin
+            # - Membre → Admin
+            if new_role and new_role != target_member.role:
+                # ✅ Permettre toutes les promotions (Invité → Membre, Invité → Admin, Membre → Admin)
+                # mais uniquement vers des rôles supérieurs
+                if _get_role_rank(new_role) > _get_role_rank(target_member.role):
+                    return
+                else:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
+                    )
+            return
+
+    # ✅ RÈGLE 4 : Le Créateur direct peut tout modifier (sauf se modifier lui-même)
+    if actor_role == LISTE_OWNER_ROLE:
+        # Le créateur ne peut pas modifier son propre rôle
+        if target_member.role == LISTE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur ne peut pas modifier son propre rôle.",
+            )
+        return
+
+    # ✅ RÈGLE 5 : Seul un manager (Admin par héritage ou Créateur) peut accéder à cette fonction
     if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Seul un createur ou administrateur peut gerer les membres de cette liste.",
+            detail="Permissions insuffisantes pour gérer les membres de cette liste.",
         )
 
-    # Un Admin ne peut gérer que les Membres (pas les Créateurs)
-    if actor_role == LISTE_ADMIN_ROLE and target_member and target_member.role == LISTE_OWNER_ROLE:
+
+def _validate_liste_invitation_permissions(
+    *,
+    liste_id: str,
+    actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
+    invited_role: str,
+) -> None:
+    """Valide les permissions d'invitation dans une liste."""
+
+    # ✅ RÈGLE 1 : Seul un gestionnaire (Admin ou Créateur) peut inviter
+    if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
-            detail="Un administrateur ne peut pas gerer le createur de la liste.",
+            detail="Seul un administrateur ou le créateur peut inviter des membres.",
         )
 
-    # Le rôle Créateur est un rôle système : il n'est jamais attribué manuellement.
-    if new_role and new_role == LISTE_OWNER_ROLE:
-        raise HTTPException(
-            status_code=403,
-            detail="Le role Createur ne peut pas etre attribue manuellement.",
-        )
+    # ✅ RÈGLE 2 : Un administrateur direct d'une liste ne peut pas inviter avec le rôle 'Administrateur'
+    if actor_role == LISTE_ADMIN_ROLE:
+        is_direct_admin = (actor_source_type == ResourceType.LISTE and actor_source_id == liste_id)
+        
+        if is_direct_admin:
+            # ✅ Admin direct : peut inviter uniquement avec Membre ou Invité
+            if invited_role not in {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un administrateur direct de la liste ne peut inviter qu'avec les rôles 'Membre' ou 'Invité'. L'invitation avec le rôle 'Administrateur' est réservée au créateur.",
+                )
+        else:
+            # ✅ Admin par héritage : peut inviter avec tous les rôles
+            if invited_role not in {LISTE_GUEST_ROLE, LISTE_MEMBER_ROLE, LISTE_ADMIN_ROLE}:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+                )
 
-    if (
-        actor_role == LISTE_ADMIN_ROLE
-        and actor_source_type == ResourceType.LISTE
-        and actor_source_id == liste_id
-        and target_member is not None
-        and new_role
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Un administrateur direct de liste ne peut pas modifier le role d'un membre existant.",
-        )
 
-    # Le créateur direct de la liste ne peut pas se retirer/s'auto-retrograder
-    if (
-        target_member
-        and target_member.role == LISTE_OWNER_ROLE
-        and actor_role == LISTE_OWNER_ROLE
-        and actor_source_type == ResourceType.LISTE
-        and actor_source_id == liste_id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Le createur direct de la liste ne peut pas modifier ou retirer ce role depuis la liste elle-meme.",
-        )
+def _require_liste_invitation_access(
+    db: Session,
+    liste_id: str,
+    current_user_id: str,
+    invited_role: str,
+) -> tuple[Membre, str, str, str]:
+    """Vérifie l'accès d'invitation à une liste."""
+    liste = _get_liste_or_404(db, liste_id)
+    actor_member, actor_role, actor_source_type, actor_source_id = _get_list_management_grant(
+        db,
+        liste_id,
+        current_user_id,
+    )
+    
+    _validate_liste_invitation_permissions(
+        liste_id=liste_id,
+        actor_role=actor_role,
+        actor_source_type=actor_source_type,
+        actor_source_id=actor_source_id,
+        invited_role=invited_role,
+    )
+    return actor_member, actor_role
 
 
 def _require_list_member_management_access(db: Session, liste_id: str, current_user_id: str):

@@ -23,8 +23,12 @@ interface SpaceDashboardProps {
   onMemberInvited?: () => void;
 }
 
+// ✅ RÔLES MODIFIABLES PAR LE CRÉATEUR DIRECT : peut tout modifier
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-const ADMIN_DIRECT_ROLE_OPTIONS = ['Invité', 'Membre'];
+// ✅ RÔLES MODIFIABLES PAR L'ADMIN PAR HÉRITAGE : seulement promotions (Invité→Membre/Admin, Membre→Admin)
+const INHERITED_ADMIN_ROLE_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+// ✅ RÔLES MODIFIABLES PAR L'ADMIN DIRECT : NE PEUT MODIFIER AUCUN RÔLE
+const ADMIN_DIRECT_ROLE_OPTIONS: string[] = [];
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -122,6 +126,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     || (isEspaceCreator ? ROLES.CREATOR : null)
     || (isEspaceAdmin ? ROLES.ADMIN : null)
     || (isEspaceGuest ? ROLES.GUEST : null);
+  
+  // ✅ Détection de l'admin par héritage
   const isInheritedSpaceAdmin = !!spaceId
     && (isWorkspaceAdmin || isWorkspaceCreator)
     && !isEspaceAdmin
@@ -134,65 +140,117 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
 
   // ✅ Rôles autorisés pour la modale d'INVITATION
   const getAvailableInvitationRoles = () => {
-    if (isDirectEspaceAdmin) {
-      return ADMIN_DIRECT_ROLE_OPTIONS;
-    }
-    if (isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator || isEspaceAdmin) {
+    // ✅ Créateur direct : peut inviter avec tous les rôles
+    if (isEspaceCreator || isWorkspaceCreator) {
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    // ✅ Admin par héritage : peut inviter avec tous les rôles
+    if (isInheritedSpaceAdmin) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    // ✅ Admin direct : ne peut inviter qu'avec Membre ou Invité (pas Admin)
+    if (isDirectEspaceAdmin) {
+      return ['Invité', 'Membre'];
+    }
+    // ✅ Admin d'espace (non direct) : peut inviter avec Invité ou Membre
+    if (isEspaceAdmin) {
+      return ['Invité', 'Membre'];
     }
     return [];
   };
 
   // ✅ Rôles autorisés pour le CHANGEMENT DE RÔLE (Membre existant)
   const getManageableRolesForMember = (memberRole: string) => {
+    // ✅ Créateur direct : peut tout modifier
+    if (isEspaceCreator || isWorkspaceCreator) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    
+    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
     if (isDirectEspaceAdmin) {
       return [memberRole];
     }
     
-    if (isWorkspaceCreator || isEspaceCreator) {
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    
+    // ✅ Admin par héritage : peut promouvoir (Invité→Membre/Admin, Membre→Admin)
     if (isInheritedSpaceAdmin) {
-      if (memberRole === ROLES.MEMBER) return [ROLES.MEMBER, ROLES.ADMIN];
-      return [memberRole];
+      // Ne retourner que les rôles supérieurs ou égaux
+      const currentRank = getRoleRank(memberRole);
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS.filter(r => getRoleRank(r) >= currentRank);
     }
     
+    // ✅ Admin d'espace (non direct) : peut modifier Invité → Membre
     if (isEspaceAdmin) {
-      return ADMIN_DIRECT_ROLE_OPTIONS;
+      if (memberRole === ROLES.GUEST) return [ROLES.GUEST, ROLES.MEMBER];
+      if (memberRole === ROLES.MEMBER) return [ROLES.MEMBER];
+      return [memberRole];
     }
     
     return [memberRole];
   };
 
-  // ✅ canEditMemberRole : Un Admin direct ne peut modifier AUCUN membre
+  // ✅ canEditMemberRole : Détermine si l'utilisateur peut modifier le rôle d'un membre
   const canEditMemberRole = (member: Member) => {
-    if (isDirectEspaceAdmin) return false;
+    // ✅ Créateur direct : peut modifier n'importe quel membre (sauf lui-même)
+    if (isEspaceCreator || isWorkspaceCreator) {
+      return member.role !== ROLES.CREATOR && member.id !== user?.id;
+    }
     
-    if (member.role === ROLES.CREATOR) return false;
-    if (isWorkspaceCreator || isEspaceCreator) return member.id !== user?.id;
-    if (isInheritedSpaceAdmin) return member.role === ROLES.MEMBER;
-    if (isEspaceAdmin) return member.role !== ROLES.ADMIN;
+    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+    if (isDirectEspaceAdmin) {
+      return false;
+    }
+    
+    // ✅ Admin par héritage : peut promouvoir (Invité→Membre/Admin, Membre→Admin)
+    // Ne peut pas rétrograder et ne peut pas modifier le Créateur
+    if (isInheritedSpaceAdmin) {
+      // ❌ Ne peut pas modifier un Admin direct (car il ne peut pas le rétrograder)
+      if (member.role === ROLES.ADMIN) return false;
+      if (member.role === ROLES.CREATOR) return false;
+      return true;
+    }
+    
+    // ✅ Admin d'espace (non direct) : peut modifier Invité → Membre
+    if (isEspaceAdmin) {
+      return member.role === ROLES.GUEST || member.role === ROLES.MEMBER;
+    }
+    
     return false;
   };
 
   const canInviteMembers = effectiveSpaceRole === ROLES.ADMIN
     || effectiveSpaceRole === ROLES.CREATOR
     || isWorkspaceAdmin
-    || isWorkspaceCreator;
-  const canManageMemberRoles = canInviteMembers;
+    || isWorkspaceCreator
+    || isInheritedSpaceAdmin;
 
-  // ✅ canRemoveMember : Le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres Créateurs)
+  // ✅ canRemoveMember : 
+  // - Créateur direct : peut retirer n'importe quel membre (sauf lui-même et les autres Créateurs)
+  // - Admin par héritage : NE PEUT PAS retirer de membres
+  // - Admin direct : NE PEUT PAS retirer de membres
   const canRemoveMember = (member: Member) => {
-    // Le créateur ne peut pas se retirer lui-même
+    // Ne peut pas se retirer lui-même
     if (member.id === user?.id) return false;
-    // Le créateur ne peut pas retirer un autre créateur
+    // Ne peut pas retirer un autre créateur
     if (member.role === ROLES.CREATOR) return false;
-    // ✅ Le créateur peut retirer n'importe quel autre membre (Admin, Membre, Invité)
-    return effectiveSpaceRole === ROLES.CREATOR || isWorkspaceCreator;
+    
+    // ✅ SEUL le Créateur direct peut retirer des membres
+    if (isEspaceCreator || isWorkspaceCreator) {
+      return true;
+    }
+    
+    // ❌ Admin par héritage : ne peut PAS retirer de membres
+    // ❌ Admin direct : ne peut PAS retirer de membres
+    return false;
   };
 
-  const availableRoles = useMemo(() => getAvailableInvitationRoles(), [isDirectEspaceAdmin, isWorkspaceCreator, isWorkspaceAdmin, isEspaceCreator, isEspaceAdmin]);
+  const availableRoles = useMemo(() => getAvailableInvitationRoles(), [
+    isDirectEspaceAdmin, 
+    isWorkspaceCreator, 
+    isWorkspaceAdmin, 
+    isEspaceCreator, 
+    isEspaceAdmin,
+    isInheritedSpaceAdmin
+  ]);
 
   useEffect(() => {
     if (availableRoles.length > 0 && !availableRoles.includes(inviteRole)) {
@@ -286,7 +344,21 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
     if (member.role === ROLES.CREATOR || nextRole === member.role) return;
-    if (!canEditMemberRole(member)) return;
+    if (!canEditMemberRole(member)) {
+      showMessage('Vous n\'avez pas les droits pour modifier le rôle de ce membre.', 'error');
+      return;
+    }
+    
+    // ✅ Vérification supplémentaire pour l'Admin par héritage : ne peut que promouvoir
+    if (isInheritedSpaceAdmin) {
+      const currentRank = getRoleRank(member.role);
+      const nextRank = getRoleRank(nextRole);
+      if (nextRank < currentRank) {
+        showMessage('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.', 'error');
+        return;
+      }
+    }
+    
     setUpdatingMemberId(member.id);
     try {
       await espaceService.updateMemberRole(spaceId, member.id, nextRole);
@@ -346,6 +418,11 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const activeMembers = members.filter(member => member.role !== ROLES.GUEST);
   const guestMembers = members.filter(member => member.role === ROLES.GUEST);
 
+  // ✅ Déterminer si on affiche un message d'information
+  const showAdminMessage = isDirectEspaceAdmin && !isEspaceCreator && !isWorkspaceCreator;
+  const showInheritedAdminMessage = isInheritedSpaceAdmin && !isEspaceCreator && !isWorkspaceCreator;
+  const showGuestMessage = isEspaceGuest && !canInviteMembers;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -354,7 +431,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     >
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {isEspaceGuest && !canInviteMembers && (
+      {showGuestMessage && (
         <div className="glass bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
             <Info className="h-6 w-6 text-primary" />
@@ -362,6 +439,32 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           <div>
             <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
             <p className="text-xs text-theme-muted mt-1 opacity-60">Vous pouvez consulter les informations, mais les modifications sont restreintes.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles */}
+      {showAdminMessage && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+          <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              En tant qu'administrateur direct de cet espace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de l'espace peut gérer les rôles des membres.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Message pour l'Admin par héritage : peut promouvoir */}
+      {showInheritedAdminMessage && (
+        <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
+          <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black uppercase tracking-widest text-[10px]">Administration par héritage - Promotions uniquement</p>
+            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+              En tant qu'administrateur hérité de cet espace, vous pouvez promouvoir les membres directs (Invité → Membre/Admin, Membre → Admin). Vous ne pouvez pas rétrograder ni retirer de membres.
+            </p>
           </div>
         </div>
       )}
@@ -388,7 +491,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             <MessageCircle size={18} className="mr-3" />
             Ouvrir la discussion
           </Link>
-          {(isWorkspaceCreator || isWorkspaceAdmin || isEspaceCreator || isEspaceAdmin) && (
+          {(canInviteMembers) && (
             <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
               <UserPlus size={18} className="mr-3" />
               Inviter un membre
@@ -434,10 +537,12 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               <Users className="h-6 w-6 text-secondary" />
               Équipe de l'espace
             </h3>
-            {canManageMemberRoles && !isDirectEspaceAdmin && (
+            {(isEspaceCreator || isWorkspaceCreator || isInheritedSpaceAdmin) && (
               <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
                 <ShieldCheck className="h-4 w-4 text-indigo-500" />
-                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">Rangs & Privilèges</span>
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">
+                  {isInheritedSpaceAdmin ? 'Admin par héritage' : 'Privilèges complets'}
+                </span>
               </div>
             )}
           </div>
@@ -460,6 +565,14 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                         <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
                       </div>
                     </Link>
+
+                    {/*
+                      ✅ AFFICHAGE DU SELECT DE RÔLE
+                      - Créateur direct : peut tout modifier
+                      - Admin par héritage : peut promouvoir (Invité→Membre/Admin, Membre→Admin)
+                      - Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+                      - Admin par héritage : NE PEUT PAS modifier les Admins directs
+                    */}
                     {canEditMemberRole(member) ? (
                       <div className="flex items-center gap-3">
                         {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
@@ -475,6 +588,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                             </option>
                           ))}
                         </select>
+                        {/* ✅ SEUL le Créateur peut retirer des membres */}
                         {canRemoveMember(member) && (
                           <button
                             type="button"
@@ -491,6 +605,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                         <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
                           {getRoleLabel(member.role)}
                         </span>
+                        {/* ✅ SEUL le Créateur peut retirer des membres */}
                         {canRemoveMember(member) && (
                           <button
                             type="button"
@@ -540,9 +655,56 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
                         <p className="text-[10px] text-theme-muted font-bold truncate uppercase opacity-40 mt-0.5">{member.email}</p>
                       </div>
                     </Link>
-                    <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
-                      {getRoleLabel(member.role)}
-                    </span>
+
+                    {/*
+                      ✅ AFFICHAGE DU SELECT DE RÔLE POUR LES INVITÉS
+                      - Créateur direct : peut modifier Invité → Membre → Admin
+                      - Admin par héritage : peut modifier Invité → Membre → Admin
+                      - Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+                    */}
+                    {canEditMemberRole(member) ? (
+                      <div className="flex items-center gap-3">
+                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
+                        <select
+                          value={member.role}
+                          onChange={e => handleMemberRoleChange(member, e.target.value)}
+                          disabled={updatingMemberId === member.id}
+                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-theme-surface-hover"
+                        >
+                          {getManageableRolesForMember(member.role).map(r => (
+                            <option key={r} value={r} className="bg-theme-page text-theme-main">
+                              {getRoleLabel(r)}
+                            </option>
+                          ))}
+                        </select>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de cet espace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
+                          {getRoleLabel(member.role)}
+                        </span>
+                        {canRemoveMember(member) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmData({ isOpen: true, member })}
+                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            title="Retirer de cet espace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </GlassCard>
                 ))}
               </div>

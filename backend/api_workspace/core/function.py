@@ -442,48 +442,16 @@ def _validate_member_management_permissions(
     if not target_member:
         raise HTTPException(status_code=404, detail="Membre introuvable")
     
-    # ✅ Si l'acteur est le Créateur, il peut tout modifier (sauf le créateur)
-    if actor_role == Role.CREATOR:
-        # Le créateur peut modifier n'importe quel membre (Admin, Membre, Invité)
-        # sauf le créateur (déjà vérifié ci-dessus)
-        return
-    
-    # ✅ Si l'acteur est un Administrateur
-    if actor_role == Role.ADMIN:
-        # L'Admin ne peut gérer que les membres et invités
-        if target_member.role not in Role.ADMIN_MANAGEABLE_ROLES:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur ne peut gérer que les membres et invités du workspace.",
-            )
-        
-        # L'Admin ne peut pas promouvoir un Invité au-delà de Membre
-        if new_role and new_role not in Role.ADMIN_MANAGEABLE_ROLES:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur ne peut pas promouvoir un membre à ce rôle.",
-            )
-        
-        # L'Admin ne peut pas transformer un Membre en Administrateur
-        if new_role == Role.ADMIN:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur ne peut pas promouvoir un membre au rôle d'administrateur. Seul le créateur peut le faire.",
-            )
-        
-        # L'Admin ne peut pas transformer un Invité en Administrateur
-        if target_member.role == Role.GUEST and new_role and new_role == Role.ADMIN:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur ne peut pas promouvoir un invité directement au rôle d'administrateur. Seul le créateur peut le faire.",
-            )
-    
-    # ✅ Si l'acteur n'est ni Créateur ni Admin
-    else:
+    # ✅ SEUL le Créateur peut modifier les rôles
+    if actor_role != Role.CREATOR:
         raise HTTPException(
             status_code=403,
-            detail="Vous n'avez pas les droits pour gérer les membres de ce workspace.",
+            detail="Seul le créateur du workspace peut modifier les rôles des membres.",
         )
+    
+    # ✅ Le Créateur peut modifier n'importe quel membre (Admin, Membre, Invité)
+    # sauf le créateur (déjà vérifié ci-dessus)
+    return
 
 
 def _validate_invitation_permissions(actor_role: str, invited_role: str):

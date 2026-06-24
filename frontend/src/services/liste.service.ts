@@ -69,6 +69,13 @@ export const listeService = {
       method: 'DELETE'
     }),
 
+  // ✅ Cette méthode utilise assignMember pour mettre à jour le rôle
+  updateMemberRole: (listeId: string, utilisateurId: string, role: string) =>
+    apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/assign/${utilisateurId}/assign_liste`, {
+      method: 'POST',
+      body: JSON.stringify({ role })
+    }),
+
   // ========== Invitations ==========
   inviteMember: (listeId: string, identifier: string, role: string) =>
     apiFetch(LISTE_TACHE_BASE_URL, `/listes/${listeId}/invite_member_liste`, {
