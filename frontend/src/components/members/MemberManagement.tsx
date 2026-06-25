@@ -29,11 +29,19 @@ interface MemberManagementProps {
   onMemberAdded?: () => void;
   currentUserRole?: string | null;
   searchQuery?: string;
-  isInheritedAdmin?: boolean;  // ✅ NOUVEAU : pour détecter l'admin par héritage
+  isInheritedAdmin?: boolean;
 }
 
 // ✅ RÔLES MODIFIABLES PAR LE CRÉATEUR
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
+
+// ✅ RÔLES MODIFIABLES PAR L'ADMIN PAR HÉRITAGE (promotions uniquement)
+const INHERITED_ADMIN_PROMOTION_OPTIONS: Record<string, string[]> = {
+  'Invité': ['Invité', 'Membre', 'Administrateur'],      // ✅ Invité → Membre ou Admin
+  'Membre': ['Membre', 'Administrateur'],                // ✅ Membre → Admin
+  'Administrateur': ['Administrateur'],                  // ❌ Ne peut pas modifier un Admin direct
+  'Créateur': ['Créateur'],                              // ❌ Ne peut pas modifier un Créateur
+};
 
 const ADMIN_ROLE = 'Administrateur';
 
@@ -92,7 +100,7 @@ export default function MemberManagement({
   onMemberAdded,
   currentUserRole,
   searchQuery = '',
-  isInheritedAdmin = false,  // ✅ NOUVEAU
+  isInheritedAdmin = false,
 }: MemberManagementProps) {
   const { user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
@@ -133,43 +141,27 @@ export default function MemberManagement({
   const isDirectAdmin = isDirectListAdmin || isDirectEspaceAdmin;
 
   const currentDirectMember = members.find(member => member.id === user?.id);
+  
+  // ✅ Détection de l'admin par héritage pour les espaces
   const isInheritedSpaceAdmin = !!espaceId
     && (currentUserRole === ROLES.ADMIN || isInheritedAdmin)
     && currentDirectMember?.role !== ROLES.ADMIN
     && currentDirectMember?.role !== ROLES.CREATOR;
+  
+  // ✅ Détection de l'admin par héritage pour les listes
+  const isInheritedListAdmin = !!listeId && isInheritedAdmin;
 
   // ✅ canChangeMemberRoles : 
-  // - Créateur : peut modifier tous les rôles (Invité → Membre → Admin et inversement)
+  // - Créateur : peut modifier tous les rôles (Invité ↔ Membre ↔ Admin)
   // - Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
   // - Admin direct : NE PEUT MODIFIER AUCUN RÔLE
-  const canChangeMemberRoles = isCreator || isInheritedSpaceAdmin;
+  const canChangeMemberRoles = isCreator || isInheritedSpaceAdmin || isInheritedListAdmin;
 
-  // ✅ canRemoveMember : 
-  // - Pour un workspace : le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres créateurs)
-  // - Pour un espace : SEUL le Créateur peut retirer un membre
-  // - Pour une liste : SEUL le Créateur peut retirer un membre
+  // ✅ canRemoveMember : SEUL le Créateur peut retirer un membre
   const canRemoveMember = (member: Member) => {
-    // Ne peut pas se retirer lui-même
     if (member.id === user?.id) return false;
-    // Ne peut pas retirer un autre Créateur
     if (member.role === ROLES.CREATOR) return false;
-    
-    // ✅ WORKSPACE : Le Créateur peut retirer n'importe quel membre
-    if (workspaceId) {
-      return isCreator;
-    }
-    
-    // ✅ ESPACE : SEUL le Créateur peut retirer un membre
-    if (espaceId) {
-      return isCreator;
-    }
-    
-    // ✅ LISTE : SEUL le Créateur peut retirer un membre
-    if (listeId) {
-      return isCreator;
-    }
-    
-    return false;
+    return isCreator;
   };
 
   const loadMembers = async () => {
@@ -196,7 +188,6 @@ export default function MemberManagement({
           photo_base64: utilisateur?.photo_base64 || m.photo_base64 || null,
         };
       }));
-      console.log('📋 [MemberManagement] Membres chargés:', members);
     } catch (err) {
       console.error('Erreur chargement membres', err);
       showMessage('Erreur lors du chargement des membres', 'error');
@@ -255,10 +246,6 @@ export default function MemberManagement({
       );
       return;
     }
-    if (isAdmin && targetMember && (targetMember.role === ROLES.ADMIN || targetMember.role === ROLES.CREATOR)) {
-      showMessage('Action non autorisée sur un administrateur', 'error');
-      return;
-    }
 
     setConfirmData({
       userId,
@@ -280,52 +267,108 @@ export default function MemberManagement({
     setIsConfirmOpen(true);
   };
 
-  const handleChangeRole = async (userId: string, newRole: string) => {
-    console.log(`🔍 [MemberManagement handleChangeRole] userId=${userId}, newRole=${newRole}`);
-    console.log(`   - isCreator: ${isCreator}`);
-    console.log(`   - isInheritedSpaceAdmin: ${isInheritedSpaceAdmin}`);
+  // ✅ getManageableRoles : Détermine les rôles disponibles pour la modification
+  const getManageableRoles = (memberRole: string) => {
+    // 🔒 Admin direct : NE PEUT MODIFIER AUCUN RÔLE
+    if (isDirectAdmin) {
+      return [memberRole];
+    }
+
+    // ✅ Créateur : peut tout modifier
+    if (isCreator) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
     
-    // 🔒 Créateur ou Admin par héritage peuvent modifier les rôles
-    if (!isCreator && !isInheritedSpaceAdmin) {
+    // ✅ Admin par héritage : promotions uniquement (NE JAMAIS RÉTROGRADER)
+    if (isInheritedSpaceAdmin || isInheritedListAdmin) {
+      if (memberRole === ROLES.ADMIN) {
+        return [memberRole];
+      }
+      if (memberRole === ROLES.CREATOR) {
+        return [memberRole];
+      }
+      const allowedRoles = INHERITED_ADMIN_PROMOTION_OPTIONS[memberRole] || [memberRole];
+      return allowedRoles;
+    }
+
+    if (listeId) {
+      const base = (isCreator || isAdmin) ? [ROLES.MEMBER, ROLES.ADMIN] : [ROLES.MEMBER];
+      return base.includes(memberRole as any) ? base : [memberRole, ...base];
+    }
+
+    // ✅ Admin d'espace (non direct) : peut modifier Invité → Membre
+    if (espaceId && isAdmin && !isCreator) {
+      if (memberRole === ROLES.GUEST) {
+        return [ROLES.GUEST, ROLES.MEMBER];
+      }
+      if (memberRole === ROLES.MEMBER) {
+        return [ROLES.MEMBER];
+      }
+      return [memberRole];
+    }
+
+    return [memberRole];
+  };
+
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    // 🔒 Admin direct ne peut modifier aucun rôle
+    if (isDirectAdmin) {
+      showMessage('Vous êtes administrateur direct, vous ne pouvez pas modifier les rôles des membres.', 'error');
+      return;
+    }
+
+    if (!isCreator && !isInheritedSpaceAdmin && !isInheritedListAdmin) {
       showMessage('Vous n\'avez pas les droits pour modifier les rôles des membres.', 'error');
       return;
     }
 
-    // ✅ Vérification supplémentaire pour l'Admin par héritage : ne peut que promouvoir
-    if (isInheritedSpaceAdmin) {
-      const targetMember = members.find(m => m.id === userId);
-      if (targetMember) {
-        const currentRank = getRoleRank(targetMember.role);
-        const nextRank = getRoleRank(newRole);
-        console.log(`   - Admin hérité: currentRank=${currentRank}, nextRank=${nextRank}`);
-        if (nextRank < currentRank) {
-          showMessage('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.', 'error');
-          return;
-        }
-        // ❌ L'Admin par héritage ne peut pas modifier un Admin direct
-        if (targetMember.role === ROLES.ADMIN) {
-          showMessage('Un administrateur par héritage ne peut pas modifier un administrateur direct de cette ressource.', 'error');
-          return;
-        }
+    const targetMember = members.find(m => m.id === userId);
+    if (!targetMember) {
+      showMessage('Membre introuvable', 'error');
+      return;
+    }
+
+    if (targetMember.role === ROLES.CREATOR) {
+      showMessage('Le créateur de la liste ne peut pas être modifié.', 'error');
+      return;
+    }
+
+    // ✅ Vérification pour l'Admin par héritage : NE PEUT QUE PROMOUVOIR
+    if (isInheritedSpaceAdmin || isInheritedListAdmin) {
+      const currentRank = getRoleRank(targetMember.role);
+      const nextRank = getRoleRank(newRole);
+      
+      if (nextRank < currentRank) {
+        showMessage(
+          `Un administrateur par héritage ne peut que promouvoir un membre (${targetMember.role} → ${newRole} est une rétrogradation).`,
+          'error'
+        );
+        return;
+      }
+      
+      if (targetMember.role === ROLES.ADMIN) {
+        showMessage('Un administrateur par héritage ne peut pas modifier un administrateur direct de cette ressource.', 'error');
+        return;
       }
     }
 
     setUpdatingMemberId(userId);
     setRoleActionNotice(null);
-    const targetMember = members.find(m => m.id === userId);
     try {
       if (listeId) await listeService.updateMemberRole(listeId, userId, newRole);
       else if (espaceId) await espaceService.updateMemberRole(espaceId, userId, newRole);
       else if (workspaceId) await workspaceService.updateMemberRole(workspaceId, userId, newRole);
+      
       await loadMembers();
-      showMessage(`Rôle mis à jour`, 'success');
+      showMessage(`Rôle de ${targetMember.name} mis à jour : ${getRoleLabel(newRole)}`, 'success');
     } catch (err: any) {
       const message = sanitizeApiErrorMessage(err, 'Erreur modification rôle');
       const lowerMessage = message.toLowerCase();
+      
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
         const friendlyMessage = isCreator
-          ? `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`
-          : `${targetMember?.name || 'Cette personne'} possède déjà ce rôle via une ressource parent. Seul le créateur peut retirer son rôle direct de cette ressource.`;
+          ? `${targetMember.name} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`
+          : `${targetMember.name} possède déjà ce rôle via une ressource parent. Seul le créateur peut retirer son rôle direct de cette ressource.`;
         setRoleActionNotice(friendlyMessage);
         showMessage(friendlyMessage, 'info');
       } else {
@@ -336,129 +379,63 @@ export default function MemberManagement({
     }
   };
 
-  // ✅ getManageableRoles : Détermine les rôles disponibles pour la modification
-  const getManageableRoles = (memberRole: string) => {
-    console.log(`🔍 [MemberManagement getManageableRoles] memberRole=${memberRole}`);
-    console.log(`   - isCreator: ${isCreator}`);
-    console.log(`   - isInheritedSpaceAdmin: ${isInheritedSpaceAdmin}`);
-    console.log(`   - isDirectAdmin: ${isDirectAdmin}`);
-    
-    // 🔒 Admin direct ne peut modifier aucun rôle
-    if (isDirectAdmin) {
-      console.log(`   -> retourne [${memberRole}] (Admin direct)`);
-      return [memberRole];
-    }
-
-    // ✅ Créateur : peut tout modifier (Invité → Membre → Admin et inversement)
-    if (isCreator) {
-      console.log(`   -> retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS} (Créateur)`);
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    
-    // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
-    // ⚠️ IMPORTANT : Retourner TOUS les rôles mais filtrer ensuite les promotions uniquement
-    if (isInheritedSpaceAdmin) {
-      // ❌ Ne peut pas modifier un Admin direct
-      if (memberRole === ROLES.ADMIN) {
-        console.log(`   -> retourne [${memberRole}] (Admin hérité sur Admin)`);
-        return [memberRole];
-      }
-      // ✅ Retourner tous les rôles pour permettre les promotions
-      console.log(`   -> retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS} (Admin hérité)`);
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-
-    if (listeId) {
-      const base = (isCreator || isAdmin) ? [ROLES.MEMBER, ROLES.ADMIN] : [ROLES.MEMBER];
-      console.log(`   -> retourne ${base} (Liste)`);
-      return base.includes(memberRole as any) ? base : [memberRole, ...base];
-    }
-
-    // ✅ Admin d'espace (non direct) : peut modifier Invité → Membre
-    if (espaceId && isAdmin && !isCreator) {
-      if (memberRole === ROLES.GUEST) {
-        console.log(`   -> retourne [${ROLES.GUEST}, ${ROLES.MEMBER}] (Admin espace sur Invité)`);
-        return [ROLES.GUEST, ROLES.MEMBER];
-      }
-      if (memberRole === ROLES.MEMBER) {
-        console.log(`   -> retourne [${ROLES.MEMBER}] (Admin espace sur Membre)`);
-        return [ROLES.MEMBER];
-      }
-      console.log(`   -> retourne [${memberRole}] (Admin espace)`);
-      return [memberRole];
-    }
-
-    console.log(`   -> retourne [${memberRole}] (Aucun droit)`);
-    return [memberRole];
-  };
-
-  // ✅ invitationRoles : Détermine les rôles disponibles pour l'invitation
-  const getInvitationRoles = () => {
-    // 🔒 Admin direct d'espace : ne peut pas inviter avec Administrateur
-    if (isDirectAdmin && espaceId) {
-      return [ROLES.MEMBER, ROLES.GUEST];
-    }
-    // ✅ Admin hérité ou Créateur : peut inviter avec tous les rôles
-    if (isInheritedSpaceAdmin || isCreator) {
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    // Membre/Invité : ne peuvent inviter que Membre ou Invité
-    return [ROLES.MEMBER, ROLES.GUEST];
-  };
-
   // ✅ canEditMemberRoleInList : Détermine si l'utilisateur peut modifier le rôle d'un membre
   const canEditMemberRoleInList = (member: Member) => {
-    console.log(`🔍 [MemberManagement canEditMemberRoleInList] ${member.name} (${member.role})`);
-    console.log(`   - isDirectAdmin: ${isDirectAdmin}`);
-    console.log(`   - isCreator: ${isCreator}`);
-    console.log(`   - isInheritedSpaceAdmin: ${isInheritedSpaceAdmin}`);
-    
     // 🔒 Admin direct ne peut modifier aucun rôle
     if (isDirectAdmin) {
-      console.log(`   -> false (Admin direct)`);
       return false;
     }
 
     if (member.role === ROLES.CREATOR) {
-      console.log(`   -> false (Créateur)`);
       return false;
     }
     
     // ✅ Créateur : peut modifier n'importe quel membre
     if (isCreator) {
-      console.log(`   -> true (Créateur)`);
       return true;
     }
     
     // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
     // ❌ Mais ne peut pas modifier un Admin direct
-    if (isInheritedSpaceAdmin) {
+    if (isInheritedSpaceAdmin || isInheritedListAdmin) {
       if (member.role === ROLES.ADMIN) {
-        console.log(`   -> false (Admin hérité sur Admin direct)`);
         return false;
       }
-      console.log(`   -> true (Admin hérité)`);
       return true;
     }
     
     // ✅ Admin d'espace (non direct) : peut modifier Invité → Membre
     if (isAdmin && !isCreator && espaceId) {
-      const canEdit = member.role === ROLES.GUEST || member.role === ROLES.MEMBER;
-      console.log(`   -> ${canEdit} (Admin espace)`);
-      return canEdit;
+      return member.role === ROLES.GUEST || member.role === ROLES.MEMBER;
     }
     
-    console.log(`   -> false (Aucun droit)`);
     return false;
+  };
+
+  // ✅ invitationRoles : Détermine les rôles disponibles pour l'invitation
+  const getInvitationRoles = () => {
+    // 🔒 Admin direct d'espace ou liste : ne peut pas inviter avec Administrateur
+    if (isDirectAdmin) {
+      return [ROLES.MEMBER, ROLES.GUEST];
+    }
+    
+    // ✅ Admin hérité ou Créateur : peut inviter avec tous les rôles
+    if (isInheritedSpaceAdmin || isInheritedListAdmin || isCreator) {
+      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    }
+    
+    return [ROLES.MEMBER, ROLES.GUEST];
   };
 
   const visibleMembers = members.filter(member => member.role !== ROLES.GUEST);
   const directGuests = members.filter(member => member.role === ROLES.GUEST);
+  
   const matchesSearch = (member: Member) => (
     !searchQuery ||
     member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  
   const filteredMembers = visibleMembers.filter(matchesSearch);
   const filteredGuests = directGuests.filter(matchesSearch);
   const hasFilteredPeople = filteredMembers.length > 0 || filteredGuests.length > 0;
@@ -472,9 +449,8 @@ export default function MemberManagement({
     );
   }
 
-  // ✅ Déterminer si on affiche un message d'information
   const showDirectAdminMessage = isDirectAdmin && !isCreator;
-  const showInheritedAdminMessage = isInheritedSpaceAdmin && !isCreator;
+  const showInheritedAdminMessage = (isInheritedSpaceAdmin || isInheritedListAdmin) && !isCreator;
 
   return (
     <div className="space-y-6">
@@ -510,7 +486,6 @@ export default function MemberManagement({
         </div>
       )}
 
-      {/* ✅ Message pour les Admins directs : ils ne peuvent pas modifier les rôles */}
       {showDirectAdminMessage && (
         <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
@@ -523,7 +498,6 @@ export default function MemberManagement({
         </div>
       )}
 
-      {/* ✅ Message pour les Admins par héritage : peuvent promouvoir */}
       {showInheritedAdminMessage && (
         <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
@@ -552,6 +526,7 @@ export default function MemberManagement({
         </GlassCard>
       ) : (
         <div className="space-y-8">
+          {/* SECTION MEMBRES */}
           {filteredMembers.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence mode="popLayout">
@@ -584,7 +559,6 @@ export default function MemberManagement({
 
                       {member.role !== ROLES.CREATOR && (
                         <div className="flex items-center gap-2">
-                          {/* ✅ Créateur ou Admin par héritage peut modifier les rôles (sauf Admin direct) */}
                           {canEditMemberRoleInList(member) && (
                             <>
                               {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
@@ -602,7 +576,6 @@ export default function MemberManagement({
                               </select>
                             </>
                           )}
-                          {/* ✅ SEUL le Créateur peut retirer des membres */}
                           {canRemoveMember(member) && (
                             <button
                               onClick={() => handleRemoveMember(member.id)}
@@ -622,6 +595,7 @@ export default function MemberManagement({
             </div>
           )}
 
+          {/* SECTION INVITÉS */}
           {filteredGuests.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
@@ -641,10 +615,24 @@ export default function MemberManagement({
                       </div>
                     </Link>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
-                        {getRoleLabel(member.role)}
-                      </span>
-                      {/* ✅ SEUL le Créateur peut retirer des membres */}
+                      {/* ✅ AJOUT DU SÉLECTEUR DE RÔLE POUR LES INVITÉS */}
+                      {canEditMemberRoleInList(member) && (
+                        <>
+                          {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleChangeRole(member.id, e.target.value)}
+                            disabled={updatingMemberId === member.id}
+                            className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
+                          >
+                            {getManageableRoles(member.role).map(r => (
+                              <option key={r} value={r} className="bg-theme-surface text-theme-main">
+                                {getRoleLabel(r)}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                       {canRemoveMember(member) && (
                         <button
                           onClick={() => handleRemoveMember(member.id)}
