@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session, joinedload, object_session
+from sqlalchemy.orm import Session, joinedload
 
 from ..core.function import (
     _get_absence_or_404,
@@ -62,16 +62,6 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "en_attent
     )
 
 
-def _get_decision_by_name(db: Session, decision_by: Optional[str]) -> Optional[str]:
-    """Récupère le nom de l'utilisateur qui a pris la décision."""
-    if not decision_by:
-        return None
-    user = db.query(Utilisateur).filter(Utilisateur.id == decision_by).first()
-    if user:
-        return f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
-    return "Utilisateur supprimé"
-
-
 def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
     owner_name = "Utilisateur supprimé"
     author_role = "Membre"
@@ -84,9 +74,6 @@ def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
         else:
             owner_name = "Utilisateur supprimé"
 
-    # Récupérer le nom du décisionnaire via une requête
-    decision_by_name = _get_decision_by_name(db, absence.decision_by)
-        
     return {
         "id": absence.id,
         "is_absence": absence.is_absence,
@@ -98,11 +85,7 @@ def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
         "is_conge_planifie": absence.is_conge_planifie,
         "created_at": absence.created_at,
         "duree_demandee_en_jours": absence.duree_demandee_en_jours,
-        "conge_interrompu_at": absence.conge_interrompu_at,
-        "decision_commentaire": getattr(absence, "decision_commentaire", None),
-        "decision_by": absence.decision_by,
-        "decision_by_name": decision_by_name,
-        "decision_at": getattr(absence, "decision_at", None),
+        "decision_commentaire": absence.decision_commentaire,
         "id_membre": absence.id_membre,
         "owner_name": owner_name,
         "author_role": author_role
@@ -556,9 +539,8 @@ def create_leave_request(
     date_fin=None,
     statut: Optional[str] = None,
     motif: Optional[str] = None,
-    is_conge_planifie: Optional[bool] = False,
+    is_conge_planifie: Optional[bool] = None,
     duree_demandee_en_jours: Optional[int] = None,
-    conge_interrompu_at=None,
 ) -> AbsenceEtConge:
     membre = _get_member_or_404(db, id_membre)
     scope_type, scope_id = _require_self_leave_request_access(db, membre=membre, current_user_id=current_user_id)
@@ -574,6 +556,10 @@ def create_leave_request(
         date_fin=date_fin,
     )
 
+    # ✅ Déduction automatique
+    if is_conge_planifie is None:
+        is_conge_planifie = not is_absence
+
     absence = AbsenceEtConge(
         id_membre=id_membre,
         is_absence=is_absence,
@@ -584,7 +570,6 @@ def create_leave_request(
         motif=motif,
         is_conge_planifie=is_conge_planifie,
         duree_demandee_en_jours=duree_demandee_en_jours,
-        conge_interrompu_at=conge_interrompu_at,
     )
     db.add(absence)
     commit_or_raise(
@@ -733,10 +718,9 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
         )
     
     # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
-    # On cherche le rôle de l'acteur (celui qui approuve) dans la Même ressource que la demande
     actor_direct_member = db.query(Membre).filter(
         Membre.id_liste == target_membre.id_liste,
-        Membre.id_espace == target_membre.id_espace, # Gère le cas Espace ou Liste
+        Membre.id_espace == target_membre.id_espace,
         Membre.id_utilisateur == current_user_id,
         Membre.statut == "Actif"
     ).first()
@@ -747,16 +731,13 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
 
     if target_membre.role == "Membre":
         if actor_direct_member.role == "Créateur":
-            # Si c'est le créateur, on vérifie s'il y a des admins directs DISPONIBLES
             active_admins = db.query(Membre).filter(
                 Membre.id_liste == target_membre.id_liste,
                 Membre.id_espace == target_membre.id_espace,
                 Membre.role == "Administrateur",
                 Membre.statut == "Actif"
             ).all()
-            
             available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
-            
             if available_admins:
                 raise HTTPException(
                     status_code=403, 
@@ -772,11 +753,16 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
     elif target_membre.role == "Créateur":
         raise HTTPException(status_code=403, detail="La demande du Créateur doit être validée par la hiérarchie supérieure.")
 
+    # Construction du texte de décision avec le nom de l'utilisateur et la date
+    user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
+    user_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
+    decision_text = f"Approuvé par {user_name} (id: {current_user_id}) le {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}"
+    if commentaire:
+        decision_text += f" - Commentaire : {commentaire}"
+
     absence.statut = "approuvee"
     absence.statut_date = datetime.utcnow()
-    absence.decision_commentaire = commentaire
-    absence.decision_by = current_user_id
-    absence.decision_at = absence.statut_date
+    absence.decision_commentaire = decision_text
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=True)
     commit_notification_events(db)
@@ -805,16 +791,13 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
 
     if target_membre.role == "Membre":
         if actor_direct_member.role == "Créateur":
-            # Si c'est le créateur, on vérifie s'il y a des admins directs DISPONIBLES
             active_admins = db.query(Membre).filter(
                 Membre.id_liste == target_membre.id_liste,
                 Membre.id_espace == target_membre.id_espace,
                 Membre.role == "Administrateur",
                 Membre.statut == "Actif"
             ).all()
-            
             available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
-            
             if available_admins:
                 raise HTTPException(
                     status_code=403, 
@@ -830,12 +813,16 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     elif target_membre.role == "Créateur":
         raise HTTPException(status_code=403, detail="La demande du Créateur ne peut être rejetée que par la hiérarchie supérieure.")
 
+    # Construction du texte de rejet avec le nom de l'utilisateur et la date
+    user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
+    user_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
+    decision_text = f"Rejeté par {user_name} (id: {current_user_id}) le {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}"
+    if motif_rejet:
+        decision_text += f" - Motif : {motif_rejet}"
+
     absence.statut = "rejetee"
     absence.statut_date = datetime.utcnow()
-    absence.decision_commentaire = motif_rejet
-    absence.decision_by = current_user_id    
-    absence.decision_at = absence.statut_date
-        
+    absence.decision_commentaire = decision_text
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
@@ -853,27 +840,18 @@ def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> Absen
 def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence, _membre, actor_kind = _require_absence_self_or_management_access(db, absence_id, current_user_id)
     
-    # Règle Métier : 
-    # 1. Le demandeur peut annuler à tout moment si la demande est EN ATTENTE.
-    # 2. Si la demande est APPROUVÉE, il ne peut annuler que SI elle n'a pas encore commencé.
     if actor_kind == "owner":
         if absence.statut == "approuvee":
-            # On ne peut pas annuler si c'est déjà commencé (Aujourd'hui >= Date début)
-            # "date_debut n'est pas encore là" signifie strictement futur.
             if datetime.utcnow().date() >= absence.date_debut.date():
                 raise HTTPException(
                     status_code=403,
                     detail="Une demande approuvée ne peut plus être annulée une fois que la date de début est arrivée.",
                 )
-        
-        # On peut annuler si c'est en attente ou approuvé (avec la condition ci-dessus)
         if absence.statut not in {"en_attente", "approuvee"}:
             raise HTTPException(
                 status_code=403,
                 detail=f"Vous ne pouvez pas annuler une demande avec le statut '{absence.statut}'.",
             )
-    
-    # Pour un manager, on autorise l'annulation de toute demande non terminée
     elif actor_kind == "manager":
         if absence.statut == "terminee":
             raise HTTPException(
@@ -883,7 +861,6 @@ def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
 
     absence.statut = "annulee"
     absence.statut_date = datetime.utcnow()
-    
     commit_or_raise(db, detail="Impossible d'annuler cette demande.", refresh_instance=absence)
     return _serialize_absence(db, absence)
 
@@ -898,7 +875,6 @@ def get_user_availability(
     if not reference_date:
         reference_date = datetime.utcnow()
         
-    # On récupère tous les membres actifs de la ressource (workspace, espace ou liste)
     active_members = db.query(Membre).filter(
         ((Membre.id_liste == resource_id) | (Membre.id_espace == resource_id) | (Membre.id_workspace == resource_id)),
         Membre.id_utilisateur.in_(user_ids),
@@ -908,7 +884,6 @@ def get_user_availability(
     member_map = {m.id: m.id_utilisateur for m in active_members}
     member_ids = list(member_map.keys())
     
-    # On cherche les absences approuvées qui couvrent la date de référence
     ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
     
     absences = db.query(AbsenceEtConge).filter(

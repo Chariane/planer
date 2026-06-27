@@ -1063,18 +1063,19 @@ CREATE TABLE planer.absence_et_conge (
     is_absence BOOLEAN NOT NULL DEFAULT true,
     date_debut TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     date_fin TIMESTAMP,
-    statut VARCHAR(50) NOT NULL DEFAULT 'Effectué',
+    statut VARCHAR(50) NOT NULL DEFAULT 'en_attente',
     statut_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     motif VARCHAR(255),
     is_conge_planifie BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     duree_demandee_en_jours INTEGER,
-    conge_interrompu_at timestamp,
+    decision_commentaire TEXT,
     id_membre VARCHAR(12) REFERENCES planer.membre(id) ON DELETE SET NULL,
-    CONSTRAINT absence_et_conge_statut_check CHECK (statut IN ('En attente', 'Accepté', 'Refusé', 'Effectué')),
+    CONSTRAINT absence_et_conge_statut_check CHECK (statut::text = ANY (ARRAY['en_attente'::text, 'approuvee'::text, 'rejetee'::text, 'annulee'::text, 'terminee'::text])),
     CONSTRAINT absence_et_conge_date_fin_check CHECK (date_fin IS NULL OR date_fin >= date_debut),
     CONSTRAINT absence_et_conge_duree_check CHECK (duree_demandee_en_jours IS NULL OR duree_demandee_en_jours >= 0)
 );
+
 
 CREATE TABLE planer.canevas (
     id VARCHAR(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,

@@ -911,15 +911,16 @@ class RapportWorkflowAction(BaseModel):
     commentaire: Optional[str] = None
 
 # Absence Et Conge
+
 class AbsenceEtCongeBase(BaseModel):
     is_absence: bool = Field(default=True)
     date_debut: Optional[datetime] = None
     date_fin: Optional[datetime] = None
-    statut: Optional[str] = None
+    statut: Optional[str] = None   # Valeurs autorisées : 'en_attente', 'approuvee', 'rejetee', 'annulee', 'terminee'
     motif: Optional[str] = None
     is_conge_planifie: Optional[bool] = Field(default=False)
     duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    conge_interrompu_at: Optional[datetime] = None
+    decision_commentaire: Optional[str] = None   # Stocke les infos de décision (qui, quand) + commentaire
 
 class AbsenceEtCongeCreate(AbsenceEtCongeBase):
     id_membre: Optional[str] = None
@@ -932,7 +933,7 @@ class AbsenceEtCongeUpdate(BaseModel):
     motif: Optional[str] = None
     is_conge_planifie: Optional[bool] = None
     duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    conge_interrompu_at: Optional[datetime] = None
+    decision_commentaire: Optional[str] = None
     id_membre: Optional[str] = None
 
 class AbsenceEtCongeOut(AbsenceEtCongeBase):
@@ -950,6 +951,7 @@ class AbsenceEtCongeDelete(BaseModel):
 
 class AbsenceDecisionRequest(BaseModel):
     motif: Optional[str] = Field(None, max_length=255)
+    commentaire: Optional[str] = Field(None, max_length=255)
 
 
 class AbsenceCalendarOut(BaseModel):
@@ -971,6 +973,7 @@ class AbsenceConflictOut(BaseModel):
     date_fin: Optional[datetime] = None
     statut: str
     motif: Optional[str] = None
+
 
 # Canevas
 class CanevasBase(BaseModel):

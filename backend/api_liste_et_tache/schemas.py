@@ -950,16 +950,19 @@ class RapportDelete(BaseModel):
 class RapportWorkflowAction(BaseModel):
     commentaire: Optional[str] = None
 
-# Absence Et Conge
+# =============================================================================
+# SCHÉMAS POUR ABSENCE ET CONGÉ (alignés avec la base)
+# =============================================================================
+
 class AbsenceEtCongeBase(BaseModel):
     is_absence: bool = Field(default=True)
     date_debut: Optional[datetime] = None
     date_fin: Optional[datetime] = None
-    statut: Optional[str] = None
+    statut: Optional[str] = None   # Valeurs autorisées : 'en_attente', 'approuvee', 'rejetee', 'annulee', 'terminee'
     motif: Optional[str] = None
     is_conge_planifie: Optional[bool] = Field(default=False)
     duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    conge_interrompu_at: Optional[datetime] = None
+    decision_commentaire: Optional[str] = None   # Stocke les infos de décision (qui, quand) + commentaire
 
 class AbsenceEtCongeCreate(AbsenceEtCongeBase):
     id_membre: Optional[str] = None
@@ -972,7 +975,7 @@ class AbsenceEtCongeUpdate(BaseModel):
     motif: Optional[str] = None
     is_conge_planifie: Optional[bool] = None
     duree_demandee_en_jours: Optional[int] = Field(None, ge=0)
-    conge_interrompu_at: Optional[datetime] = None
+    decision_commentaire: Optional[str] = None
     id_membre: Optional[str] = None
 
 class AbsenceEtCongeOut(AbsenceEtCongeBase):
@@ -982,10 +985,6 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
     created_at: datetime
     id_membre: Optional[str] = None
     owner_name: Optional[str] = None
-    decision_commentaire: Optional[str] = None
-    decision_by: Optional[str] = None
-    decision_by_name: Optional[str] = None
-    decision_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AbsenceEtCongeDelete(BaseModel):

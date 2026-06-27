@@ -313,10 +313,10 @@ export default function CenterContent() {
           <div className="flex-1">
             <h3 className="text-base sm:text-lg font-black text-theme-main tracking-tight flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-secondary" />
-              Santé de la Liste
+              Etat du projet
             </h3>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
-              Progression globale basée sur les checklists complétées.
+              Progression globale basée sur les tâches/checklists complétées.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <div className="flex flex-col">

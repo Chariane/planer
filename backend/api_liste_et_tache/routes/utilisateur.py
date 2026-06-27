@@ -66,6 +66,7 @@ from ..crud.absence import (
     get_absence_conflicts,
     get_team_calendar,
     get_user_availability,
+    get_absence_impact,
     list_accessible_absences,
     reject_leave,
     update_absence,
@@ -1270,7 +1271,9 @@ def create_absence_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    return create_leave_request(db, current_user_id=current_user.id, **absence_in.model_dump())
+    # ✅ Exclure decision_commentaire car il n'est pas accepté par create_leave_request
+    absence_data = absence_in.model_dump(exclude={"decision_commentaire"})
+    return create_leave_request(db, current_user_id=current_user.id, **absence_data)
 
 
 @router.get("/absences", response_model=List[dict])

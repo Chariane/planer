@@ -101,8 +101,10 @@ export default function PlannerToolsPanel({
   const [absences, setAbsences] = useState<any[]>([]);
   const [absenceView, setAbsenceView] = useState<'mine' | 'pending' | 'calendar' | 'impact'>('mine');
   const [isAbsentModalOpen, setIsAbsentModalOpen] = useState(false);
+  // ✅ Ajout de is_conge_planifie dans l'état
   const [absenceForm, setAbsenceForm] = useState({
     is_absence: true,
+    is_conge_planifie: false,
     date_debut: '',
     date_fin: '',
     motif: '',
@@ -197,6 +199,12 @@ export default function PlannerToolsPanel({
   };
 
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  // ✅ Membres hérités éligibles pour être promus administrateur (seulement Membre)
+  const eligibleInheritedMembers = useMemo(
+    () => inheritedMembers.filter(member => member.role === ROLES.MEMBER),
+    [inheritedMembers]
+  );
 
   useEffect(() => {
     if (initialTool === 'files' && canViewFiles) {
@@ -747,13 +755,13 @@ export default function PlannerToolsPanel({
       await absenceService.create({
         id_membre: targetMemberId,
         is_absence: absenceForm.is_absence,
+        is_conge_planifie: absenceForm.is_conge_planifie, // ✅ Transmis
         date_debut: new Date(absenceForm.date_debut).toISOString(),
         date_fin: absenceForm.date_fin ? new Date(absenceForm.date_fin).toISOString() : undefined,
         motif: absenceForm.motif,
-        is_conge_planifie: false,
         duree_demandee_en_jours: absenceForm.duree_demandee_en_jours ? Number(absenceForm.duree_demandee_en_jours) : undefined,
       });
-      setAbsenceForm({ is_absence: true, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
+      setAbsenceForm({ is_absence: true, is_conge_planifie: false, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
       setIsAbsentModalOpen(false);
       await loadAbsences();
       showMessage('success', `Demande de ${typeLabel} envoyée pour validation.`);
@@ -1423,21 +1431,26 @@ export default function PlannerToolsPanel({
                               className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
                             >
                               <option value="">Membre par héritage</option>
-                              {inheritedMembers.map(member => (
+                              {eligibleInheritedMembers.map(member => (
                                 <option key={member.id_utilisateur} value={member.id_utilisateur}>
                                   {member.name} · {member.email}
                                 </option>
                               ))}
                             </select>
-                            <input
-                              value={adminInviteIdentifier}
-                              onChange={e => {
-                                setAdminInviteIdentifier(e.target.value);
-                                if (e.target.value.trim()) setAdminCandidateUserId('');
-                              }}
-                              placeholder="Ou email / username"
-                              className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20"
-                            />
+                            <div className="flex flex-col gap-1">
+                              <input
+                                value={adminInviteIdentifier}
+                                onChange={e => {
+                                  setAdminInviteIdentifier(e.target.value);
+                                  if (e.target.value.trim()) setAdminCandidateUserId('');
+                                }}
+                                placeholder="Email ou username"
+                                className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20"
+                              />
+                              <span className="text-[9px] text-theme-muted/60 font-medium uppercase tracking-widest ml-1">
+                                Invitation externe
+                              </span>
+                            </div>
                             <Button
                               type="button"
                               onClick={handleAddBackupAdmin}
@@ -2087,13 +2100,13 @@ export default function PlannerToolsPanel({
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Nature de la demande</label>
                   <div className="flex gap-2 p-1 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
                     <button
-                      onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: true }))}
+                      onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: true, is_conge_planifie: false }))}
                       className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${absenceForm.is_absence ? 'bg-amber-500 text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'}`}
                     >
                       Absence
                     </button>
                     <button
-                      onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: false }))}
+                      onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: false, is_conge_planifie: true }))}
                       className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!absenceForm.is_absence ? 'bg-primary text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'}`}
                     >
                       Congé
@@ -2482,7 +2495,7 @@ export default function PlannerToolsPanel({
                               className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none"
                             >
                               <option value="">Membre par héritage</option>
-                              {inheritedMembers.map(member => (
+                              {eligibleInheritedMembers.map(member => (
                                 <option key={member.id_utilisateur} value={member.id_utilisateur}>
                                   {member.name}
                                 </option>

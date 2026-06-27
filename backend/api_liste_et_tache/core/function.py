@@ -803,9 +803,23 @@ def _validate_list_member_management_permissions(
     new_role: str | None = None,
 ) -> None:
     """Valide les permissions de gestion des membres d'une liste."""
-    
-    if not target_member:
-        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    # ✅ Ajout d'un nouveau membre (target_member None)
+    if target_member is None:
+        # Seul un gestionnaire (Créateur ou Admin) peut ajouter un membre
+        if actor_role not in LISTE_MANAGEMENT_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail="Permissions insuffisantes pour ajouter un membre."
+            )
+        # Règle : un administrateur direct ne peut pas ajouter de membres (ni modifier)
+        if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de la liste ne peut pas ajouter de membres. Seul le créateur peut le faire."
+            )
+        # ✅ L'ajout est autorisé, on retourne sans vérifier les règles applicables aux membres existants
+        return
 
     # ✅ RÈGLE 1 : Le Créateur de la liste ne peut pas être modifié ou retiré
     if target_member.role == LISTE_OWNER_ROLE:
