@@ -1008,14 +1008,14 @@ export default function PlannerToolsPanel({
       .filter(Boolean)
       .filter(a => a.statut !== 'annulee')
       .map(a => ({
-      ...a,
-      owner_user_id: a.owner_user_id
-        || members.find(m => m.id === a.id_membre)?.id_utilisateur
-        || (window as any)._membershipMap?.get(a.id_membre)?.id_utilisateur
-        || null,
-      authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
-      author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
-    }));
+        ...a,
+        owner_user_id: a.owner_user_id
+          || members.find(m => m.id === a.id_membre)?.id_utilisateur
+          || (window as any)._membershipMap?.get(a.id_membre)?.id_utilisateur
+          || null,
+        authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
+        author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
+      }));
   }, [absences, members, currentUserId]);
 
   const ownAbsences = useMemo(
@@ -2411,8 +2411,23 @@ export default function PlannerToolsPanel({
                   <p className="text-[11px] text-theme-muted leading-relaxed">
                     Cette absence chevauche {impactData.overlapping_tasks.length} tâches. ({impactData.high_priority_tasks.length} prioritaires, {impactData.overdue_tasks.length} en retard).
                   </p>
+                  {(impactData.approved_absences_last_3_months !== undefined || impactData.approved_days_last_3_months !== undefined) && (
+                    <p className="mt-2 text-[11px] text-theme-muted font-bold bg-theme-surface-hover/30 p-2 rounded-lg border border-theme-border-subtle/50">
+                      Historique récent (90J) : <span className="font-black text-theme-main">{impactData.approved_absences_last_3_months || 0}</span> absence(s) approuvée(s) (<span className="font-black text-theme-main">{impactData.approved_days_last_3_months || 0}</span> jours cumulés).
+                    </p>
+                  )}
+                  {impactData.risk_reasons && impactData.risk_reasons.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <p className="text-[9px] font-black text-theme-muted uppercase tracking-widest">Facteurs de risque :</p>
+                      <ul className="list-disc pl-4 text-[10px] text-theme-muted space-y-0.5">
+                        {impactData.risk_reasons.map((reason, idx) => (
+                          <li key={idx} className="font-medium">{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {impactData.recommendation && (
-                    <p className="mt-2 text-xs font-bold text-theme-main">{impactData.recommendation}</p>
+                    <p className="mt-3 text-xs font-bold text-theme-main">{impactData.recommendation}</p>
                   )}
                 </div>
               </div>

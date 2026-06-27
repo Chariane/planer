@@ -259,6 +259,8 @@ export interface AbsenceImpactOut {
   risk_level: 'faible' | 'moyen' | 'eleve' | string;
   recommendation?: string | null;
   risk_reasons?: string[];
+  approved_absences_last_3_months?: number;
+  approved_days_last_3_months?: number;
 }
 
 export interface UserAvailabilityOut {

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -342,6 +342,29 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         exclude_absence_id=absence.id,
     )
 
+    # Statistiques d'absences/congés approuvés sur les 3 derniers mois (90 jours)
+    limit_date = datetime.utcnow() - timedelta(days=90)
+    recent_approved = (
+        db.query(AbsenceEtConge)
+        .filter(
+            AbsenceEtConge.id_membre == target_membre.id,
+            AbsenceEtConge.statut == "approuvee",
+            AbsenceEtConge.date_debut >= limit_date,
+        )
+        .all()
+    )
+
+    approved_count = len(recent_approved)
+    approved_days = 0
+    for a in recent_approved:
+        if a.duree_demandee_en_jours:
+            approved_days += a.duree_demandee_en_jours
+        elif a.date_debut:
+            end_val = a.date_fin or a.date_debut
+            # calcul naïf inclusif
+            delta = end_val - a.date_debut
+            approved_days += delta.days + 1
+
     risk_level = "faible"
     if high_priority or overdue or sole_admin_resources or sole_creator_resources:
         risk_level = "eleve"
@@ -362,6 +385,12 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     if sole_creator_resources:
         risk_reasons.append(f"Créateur direct de {len(sole_creator_resources)} ressource(s) enfant(s) sans administrateur disponible")
 
+    # Avertissements basés sur l'historique récent
+    if approved_count > 3:
+        risk_reasons.append(f"Le membre a déjà eu {approved_count} absences approuvées ces 3 derniers mois")
+    if approved_days > 15:
+        risk_reasons.append(f"Le membre cumule déjà {approved_days} jours d'absence ces 3 derniers mois")
+
     if risk_level == "eleve":
         recommendation = "Impact élevé : sécurisez les ressources enfants ou les tâches critiques avant d'approuver."
     elif risk_level == "moyen":
@@ -379,6 +408,8 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         "risk_level": risk_level,
         "recommendation": recommendation,
         "risk_reasons": risk_reasons,
+        "approved_absences_last_3_months": approved_count,
+        "approved_days_last_3_months": approved_days,
     }
 
 

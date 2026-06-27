@@ -1026,6 +1026,8 @@ class AbsenceImpactOut(BaseModel):
     risk_level: str = "faible"
     recommendation: Optional[str] = None
     risk_reasons: List[str] = []
+    approved_absences_last_3_months: Optional[int] = 0
+    approved_days_last_3_months: Optional[int] = 0
 
 class UserAvailabilityOut(BaseModel):
     id_utilisateur: str
