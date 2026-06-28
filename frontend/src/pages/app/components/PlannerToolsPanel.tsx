@@ -101,7 +101,6 @@ export default function PlannerToolsPanel({
   const [absences, setAbsences] = useState<any[]>([]);
   const [absenceView, setAbsenceView] = useState<'mine' | 'pending' | 'calendar' | 'impact'>('mine');
   const [isAbsentModalOpen, setIsAbsentModalOpen] = useState(false);
-  // ✅ Ajout de is_conge_planifie dans l'état
   const [absenceForm, setAbsenceForm] = useState({
     is_absence: true,
     is_conge_planifie: false,
@@ -183,9 +182,10 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
+  // ✅ MODIFICATION : autoriser les Membres du workspace à créer une demande
   const canCreateAbsence = !!isDirectMemberRecord && (
     (!!listeId || !!espaceId) && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role)
-    || (!!workspaceId && !listeId && !espaceId && isDirectResourceAdmin)
+    || (!!workspaceId && !listeId && !espaceId && (isDirectResourceAdmin || isDirectMemberRecord?.role === ROLES.MEMBER))
   );
   const canViewOwnAbsenceRequests = !isDirectResourceCreator;
 
@@ -200,7 +200,6 @@ export default function PlannerToolsPanel({
 
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  // ✅ Membres hérités éligibles pour être promus administrateur (seulement Membre)
   const eligibleInheritedMembers = useMemo(
     () => inheritedMembers.filter(member => member.role === ROLES.MEMBER),
     [inheritedMembers]
@@ -468,12 +467,10 @@ export default function PlannerToolsPanel({
       });
       setAbsences(Array.isArray(data) ? data : []);
 
-      // Fetch availability for all members
       const currentMembers = customMembers || members;
       const userIds = currentMembers.map(m => m.id_utilisateur).filter(Boolean);
 
       if (userIds.length > 0) {
-        // Use the most specific ID for availability service
         const resourceId = listeId || espaceId || workspaceId || '';
         const availability = await absenceService.getAvailability(resourceId, userIds);
         setListAvailability(availability);
@@ -755,7 +752,7 @@ export default function PlannerToolsPanel({
       await absenceService.create({
         id_membre: targetMemberId,
         is_absence: absenceForm.is_absence,
-        is_conge_planifie: absenceForm.is_conge_planifie, // ✅ Transmis
+        is_conge_planifie: absenceForm.is_conge_planifie,
         date_debut: new Date(absenceForm.date_debut).toISOString(),
         date_fin: absenceForm.date_fin ? new Date(absenceForm.date_fin).toISOString() : undefined,
         motif: absenceForm.motif,
@@ -808,7 +805,7 @@ export default function PlannerToolsPanel({
 
   const checkImpact = async (absence: any) => {
     setSelectedAbsenceForImpact(absence);
-    setLoading(true); // Re-use general loading or add specific if preferred
+    setLoading(true);
     try {
       const impact = await absenceService.getImpact(absence.id);
       setAbsenceImpacts(prev => ({ ...prev, [absence.id]: impact }));
@@ -820,40 +817,39 @@ export default function PlannerToolsPanel({
   };
 
   const getAuthorName = (id_membre: string | null, owner_user_id?: string | null, fallback_name?: string | null) => {
-    // 1. Current user shortcut
     if (owner_user_id === currentUserId || (id_membre && members.find(m => m.id === id_membre && m.id_utilisateur === currentUserId))) {
       return 'Moi';
     }
-
-    // 2. Try resolving by owner_user_id (most reliable for inherited roles)
     if (owner_user_id) {
       const member = members.find(m => m.id_utilisateur === owner_user_id);
       if (member) return member.name;
     }
-
-    // 3. Try resolving by id_membre (membership ID)
     if (id_membre) {
       const member = members.find(m => m.id === id_membre);
       if (member) return member.name;
-
-      // Global map fallback
       const globalMember = (window as any)._membershipMap?.get(id_membre);
       if (globalMember) return globalMember.name;
     }
-
-    // 4. Backend provided fallback name (very important for limited permissions)
     if (fallback_name && fallback_name !== 'inconnu') return fallback_name;
-
     return 'inconnu';
   };
 
   const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
     if (!absence) return null;
     const isOwn = absence.owner_user_id === currentUserId;
+
+    // ✅ MODIFICATION : condition d'approbation pour workspace
     const canApproveThis = !isOwn && (
-      absence.author_role === ROLES.MEMBER
-        ? (isDirectResourceAdmin || (!directListHasAdmin && isDirectResourceCreator))
-        : (absence.author_role === ROLES.ADMIN ? isDirectResourceCreator : false)
+      (absence.author_role === ROLES.MEMBER && (
+        (listeId && isDirectResourceAdmin) ||
+        (espaceId && isDirectResourceAdmin) ||
+        (workspaceId && isDirectResourceAdmin)
+      )) ||
+      (absence.author_role === ROLES.ADMIN && (
+        (listeId && isDirectResourceCreator) ||
+        (espaceId && isDirectResourceCreator) ||
+        (workspaceId && isDirectResourceCreator)
+      ))
     );
 
     const statusConfig: Record<string, { bg: string, text: string, border: string }> = {
@@ -1058,43 +1054,54 @@ export default function PlannerToolsPanel({
     return aStart <= bEnd && bStart <= aEnd;
   };
 
-  /*
-  const absencePhaseLabel = (absence: any) => {
-    if (absence.statut !== 'approuvee') {
-      return absence.statut === 'en_attente' ? 'En attente' : absence.statut.replace('_', ' ');
-    }
-    const today = new Date();
-    if (isDateInRange(today, absence.date_debut, absence.date_fin)) return 'En cours';
-    if (new Date(absence.date_debut) > today) return 'À venir';
-    return 'Terminée';
-  };
-  */
-
+  // ✅ MODIFICATION : pendingAbsences inclut le workspace
   const pendingAbsences = useMemo(() => {
     return accessibleAbsences.filter(absence => {
       if (!absence || absence.statut !== 'en_attente') return false;
 
-      // Un Admin voit toutes les demandes des Membres
-      if (isDirectResourceAdmin) {
-        return absence.author_role === ROLES.MEMBER;
+      // Liste
+      if (listeId) {
+        if (isDirectResourceAdmin) {
+          return absence.author_role === ROLES.MEMBER;
+        }
+        if (isDirectResourceCreator) {
+          if (absence.author_role === ROLES.ADMIN) return true;
+          const hasAvailableAdmin = listAvailability.some(a =>
+            a.is_available &&
+            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
+          );
+          return absence.author_role === ROLES.MEMBER && !hasAvailableAdmin;
+        }
       }
 
-      // Un Créateur voit :
-      // 1. Toutes les demandes des Admins
-      // 2. Les demandes des Membres SEULEMENT s'il n'y a pas d'Admin direct disponible dans la ressource
-      if (isDirectResourceCreator) {
-        if (absence.author_role === ROLES.ADMIN) return true;
+      // Espace
+      if (espaceId) {
+        if (isDirectResourceAdmin) {
+          return absence.author_role === ROLES.MEMBER;
+        }
+        if (isDirectResourceCreator) {
+          if (absence.author_role === ROLES.ADMIN) return true;
+          const hasAvailableAdmin = listAvailability.some(a =>
+            a.is_available &&
+            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
+          );
+          return absence.author_role === ROLES.MEMBER && !hasAvailableAdmin;
+        }
+      }
 
-        const hasAvailableAdmin = listAvailability.some(a =>
-          a.is_available &&
-          members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
-        );
-        if (absence.author_role === ROLES.MEMBER && !hasAvailableAdmin) return true;
+      // Workspace
+      if (workspaceId) {
+        if (isDirectResourceAdmin) {
+          return absence.author_role === ROLES.MEMBER;
+        }
+        if (isDirectResourceCreator) {
+          return absence.author_role === ROLES.ADMIN;
+        }
       }
 
       return false;
     });
-  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, directListHasAdmin]);
+  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, members, listeId, espaceId, workspaceId]);
 
   const calendarAbsences = useMemo(
     () => [...visibleAbsences]
@@ -1140,8 +1147,6 @@ export default function PlannerToolsPanel({
     flattenedTasks.forEach(task => map.set(task.id, task));
     return map;
   }, [flattenedTasks]);
-
-  // const directAdminCount = useMemo(() => directMembers.filter(member => member.role === ROLES.ADMIN).length, [directMembers]);
 
   const getTasksImpactedByAbsence = (absence: any) => {
     if (!absence) return [];
@@ -1253,7 +1258,6 @@ export default function PlannerToolsPanel({
           const isOwn = absence.owner_user_id === currentUserId;
           const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
 
-          // Backend-driven risks
           const hasSoleAdminRisk = !!absenceImpact?.sole_admin_lists?.length;
           const hasSubSpaceRisk = !!absenceImpact?.admin_subspaces?.length;
           const hasGovernanceRisk = hasSoleAdminRisk || hasSubSpaceRisk;
@@ -1740,7 +1744,6 @@ export default function PlannerToolsPanel({
                       <div className="flex items-center gap-1">
                         <button onClick={() => window.open(getFileFullUrl(file.url_fichier), '_blank')} className="p-2 text-theme-muted hover:text-secondary hover:bg-secondary/10 rounded-xl transition-all" title="Visualiser"><Eye size={18} /></button>
                         <button onClick={() => handleDownload(file)} className="p-2 text-theme-muted hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl transition-all" title="Télécharger"><Download size={18} /></button>
-                        {/* ✅ CORRECTION : Le propriétaire OU le créateur direct de la ressource peuvent supprimer */}
                         {(file.owner_user_id === currentUserId || isDirectResourceCreator) && (
                           <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" title="Supprimer"><Trash2 size={18} /></button>
                         )}

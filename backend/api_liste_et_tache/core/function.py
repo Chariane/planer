@@ -40,11 +40,11 @@ WORKSPACE_DESCENDANT_READ_ROLES = {
     WORKSPACE_OWNER_ROLE,
     WORKSPACE_ADMIN_ROLE,
     WORKSPACE_MEMBER_ROLE,
-    WORKSPACE_GUEST_ROLE,  # ✅ L'invité workspace peut lire
+    WORKSPACE_GUEST_ROLE,
 }
 WORKSPACE_DESCENDANT_MANAGEMENT_ROLES = {
     WORKSPACE_OWNER_ROLE,
-    WORKSPACE_ADMIN_ROLE,  # ✅ Seul Créateur/Admin peuvent gérer
+    WORKSPACE_ADMIN_ROLE,
 }
 
 # Rôles Espace
@@ -61,16 +61,15 @@ ESPACE_READ_ROLES = {
 }
 ESPACE_MANAGEMENT_ROLES = {ESPACE_OWNER_ROLE, ESPACE_ADMIN_ROLE}
 
-# Les invités et membres espace peuvent lire le contenu descendant.
 ESPACE_DESCENDANT_READ_ROLES = {
     ESPACE_OWNER_ROLE,
     ESPACE_ADMIN_ROLE,
     ESPACE_MEMBER_ROLE,
-    ESPACE_GUEST_ROLE,  # ✅ L'invité espace peut lire
+    ESPACE_GUEST_ROLE,
 }
 ESPACE_DESCENDANT_MANAGEMENT_ROLES = {
     ESPACE_OWNER_ROLE,
-    ESPACE_ADMIN_ROLE,  # ✅ Seul Créateur/Admin peuvent gérer
+    ESPACE_ADMIN_ROLE,
 }
 
 # Rôles Liste
@@ -115,8 +114,6 @@ def _is_user_available_now(db: Session, user_id: str) -> bool:
     now = datetime.now()
     ref_date = now.date()
 
-    # We check if the user is currently on an approved absence in any role
-    # Note: We join on Membre to ensure the absence is linked to a valid role in the system
     absence = db.query(AbsenceEtConge).join(Membre, AbsenceEtConge.id_membre == Membre.id).filter(
         Membre.id_utilisateur == user_id,
         AbsenceEtConge.statut == "approuvee",
@@ -305,13 +302,13 @@ def get_parent_inherited_role(
         if not liste:
             raise HTTPException(status_code=404, detail="Liste non trouvee.")
 
-        # 🔧 Héritage depuis le workspace parent
+        # Héritage depuis le workspace parent
         if liste.id_workspace:
             workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
             if workspace_member:
                 candidates.append((workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace))
 
-        # 🔧 Héritage depuis l'espace parent et ses ancêtres
+        # Héritage depuis l'espace parent et ses ancêtres
         parent_espace_id = liste.id_espace
         while parent_espace_id:
             parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
@@ -322,7 +319,6 @@ def get_parent_inherited_role(
             if not parent_espace:
                 break
 
-            # 🔧 Vérifier aussi le workspace de l'espace parent
             if parent_espace.id_workspace and not liste.id_workspace:
                 workspace_member = _get_active_workspace_membership(
                     db,
@@ -339,20 +335,17 @@ def get_parent_inherited_role(
         if not tache:
             raise HTTPException(status_code=404, detail="Tache non trouvee.")
 
-        # 🔧 Vérifier le rôle direct sur la liste
         liste_member = _get_liste_member_record(db, tache.id_liste, user_id)
         if liste_member and liste_member.statut == "Actif":
             candidates.append((liste_member.role, ResourceType.LISTE, tache.id_liste))
 
         liste = _get_liste_or_404(db, tache.id_liste)
         
-        # 🔧 Héritage depuis le workspace
         if liste.id_workspace:
             workspace_member = _get_active_workspace_membership(db, liste.id_workspace, user_id)
             if workspace_member:
                 candidates.append((workspace_member.role, ResourceType.WORKSPACE, liste.id_workspace))
 
-        # 🔧 Héritage depuis l'espace et ses ancêtres
         parent_espace_id = liste.id_espace
         while parent_espace_id:
             parent_member = _get_espace_member_record(db, parent_espace_id, user_id)
@@ -726,7 +719,7 @@ def _require_list_read_access(db: Session, liste_id: str, current_user_id: str):
     raise HTTPException(status_code=403, detail="Acces non autorise a cette liste")
 
 
-# 🔧 Alias pour compatibilité (utilisé dans routes/utilisateur.py)
+# 🔧 Alias pour compatibilité
 _require_list_access = _require_list_read_access
 
 
@@ -804,24 +797,21 @@ def _validate_list_member_management_permissions(
 ) -> None:
     """Valide les permissions de gestion des membres d'une liste."""
 
-    # ✅ Ajout d'un nouveau membre (target_member None)
+    # Ajout d'un nouveau membre (target_member None)
     if target_member is None:
-        # Seul un gestionnaire (Créateur ou Admin) peut ajouter un membre
         if actor_role not in LISTE_MANAGEMENT_ROLES:
             raise HTTPException(
                 status_code=403,
                 detail="Permissions insuffisantes pour ajouter un membre."
             )
-        # Règle : un administrateur direct ne peut pas ajouter de membres (ni modifier)
         if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
             raise HTTPException(
                 status_code=403,
                 detail="Un administrateur direct de la liste ne peut pas ajouter de membres. Seul le créateur peut le faire."
             )
-        # ✅ L'ajout est autorisé, on retourne sans vérifier les règles applicables aux membres existants
         return
 
-    # ✅ RÈGLE 1 : Le Créateur de la liste ne peut pas être modifié ou retiré
+    # RÈGLE 1 : Le Créateur de la liste ne peut pas être modifié ou retiré
     if target_member.role == LISTE_OWNER_ROLE:
         is_creator_parent = (
             actor_role == LISTE_OWNER_ROLE
@@ -837,25 +827,18 @@ def _validate_list_member_management_permissions(
                 detail="Le créateur de la liste ne peut pas être modifié ou retiré.",
             )
 
-    # ✅ RÈGLE 2 : Un administrateur direct d'une liste ne peut modifier AUCUN membre
+    # RÈGLE 2 : Un administrateur direct d'une liste ne peut modifier AUCUN membre
     if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
         raise HTTPException(
             status_code=403,
             detail="Un administrateur direct de la liste ne peut pas modifier les membres de cette liste. Seul le créateur peut le faire.",
         )
 
-    # ✅ RÈGLE 3 : Un administrateur par héritage (workspace ou espace parent) 
+    # RÈGLE 3 : Un administrateur par héritage (workspace ou espace parent) 
     # peut modifier des membres, mais avec des restrictions spécifiques
     if actor_role == LISTE_ADMIN_ROLE:
-        # Si l'acteur n'est pas administrateur direct de la liste (donc par héritage)
         if actor_source_type != ResourceType.LISTE or actor_source_id != liste_id:
-            # ✅ L'administrateur par héritage peut :
-            # - Invité → Membre
-            # - Invité → Admin
-            # - Membre → Admin
             if new_role and new_role != target_member.role:
-                # ✅ Permettre toutes les promotions (Invité → Membre, Invité → Admin, Membre → Admin)
-                # mais uniquement vers des rôles supérieurs
                 if _get_role_rank(new_role) > _get_role_rank(target_member.role):
                     return
                 else:
@@ -865,9 +848,8 @@ def _validate_list_member_management_permissions(
                     )
             return
 
-    # ✅ RÈGLE 4 : Le Créateur direct peut tout modifier (sauf se modifier lui-même)
+    # RÈGLE 4 : Le Créateur direct peut tout modifier (sauf se modifier lui-même)
     if actor_role == LISTE_OWNER_ROLE:
-        # Le créateur ne peut pas modifier son propre rôle
         if target_member.role == LISTE_OWNER_ROLE:
             raise HTTPException(
                 status_code=403,
@@ -875,7 +857,7 @@ def _validate_list_member_management_permissions(
             )
         return
 
-    # ✅ RÈGLE 5 : Seul un manager (Admin par héritage ou Créateur) peut accéder à cette fonction
+    # RÈGLE 5 : Seul un manager (Admin par héritage ou Créateur) peut accéder à cette fonction
     if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
@@ -893,26 +875,22 @@ def _validate_liste_invitation_permissions(
 ) -> None:
     """Valide les permissions d'invitation dans une liste."""
 
-    # ✅ RÈGLE 1 : Seul un gestionnaire (Admin ou Créateur) peut inviter
     if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
             detail="Seul un administrateur ou le créateur peut inviter des membres.",
         )
 
-    # ✅ RÈGLE 2 : Un administrateur direct d'une liste ne peut pas inviter avec le rôle 'Administrateur'
     if actor_role == LISTE_ADMIN_ROLE:
         is_direct_admin = (actor_source_type == ResourceType.LISTE and actor_source_id == liste_id)
         
         if is_direct_admin:
-            # ✅ Admin direct : peut inviter uniquement avec Membre ou Invité
             if invited_role not in {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}:
                 raise HTTPException(
                     status_code=403,
                     detail="Un administrateur direct de la liste ne peut inviter qu'avec les rôles 'Membre' ou 'Invité'. L'invitation avec le rôle 'Administrateur' est réservée au créateur.",
                 )
         else:
-            # ✅ Admin par héritage : peut inviter avec tous les rôles
             if invited_role not in {LISTE_GUEST_ROLE, LISTE_MEMBER_ROLE, LISTE_ADMIN_ROLE}:
                 raise HTTPException(
                     status_code=403,
@@ -958,7 +936,6 @@ def _require_list_delete_access(db: Session, liste_id: str, current_user_id: str
         current_user_id,
     )
 
-    # Un administrateur ne peut pas supprimer la liste racine où commence son périmètre
     if (
         actor_role == LISTE_ADMIN_ROLE
         and source_type == ResourceType.LISTE
@@ -1047,7 +1024,6 @@ def _require_task_access(db: Session, tache_id: str, current_user_id: str):
     tache = _get_tache_or_404(db, tache_id)
     liste = _get_liste_or_404(db, tache.id_liste)
     
-    # 1. Vérifier si l'utilisateur a accès à la liste (lecture)
     try:
         return _require_list_read_access(db, liste.id, current_user_id)
     except HTTPException:
@@ -1464,9 +1440,7 @@ def _require_attachment_target_management_access(
         return _require_list_management_access(db, target_id, current_user_id)
     if target_type == ResourceType.TACHE:
         return _require_task_management_access(db, target_id, current_user_id)
-    # Canevas, Section, Checklist héritent généralement de la Liste/Tâche
     if target_type in {ResourceType.CANEVAS, ResourceType.SECTION, ResourceType.CHECKLIST}:
-        # Simplification : accès gestion requis sur le parent
         return _require_attachment_target_write_access(db, target_type, target_id, current_user_id)
     
     raise HTTPException(status_code=400, detail="Type de cible de fichier invalide pour la gestion")
@@ -1670,28 +1644,33 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
     - les demandes d'un membre direct de liste vont aux admins directs ;
       s'il n'y a aucun admin direct, elles vont au créateur direct ;
     - les demandes d'un administrateur direct de liste vont au créateur direct ;
-    - le créateur direct ne crée pas de demande dans sa propre liste en V1.
+    - pour un espace : même logique ;
+    - pour un workspace : les administrateurs voient les demandes des membres,
+      le créateur voit les demandes des administrateurs ;
+    - le créateur direct ne crée pas de demande dans sa propre ressource.
     """
     membre = _get_member_or_404(db, member_id)
 
+    # Demande de l'utilisateur lui-même
     if membre.id_utilisateur == current_user_id:
         if membre.id_liste or membre.id_tache:
             _require_member_read_access(db, member_id, current_user_id)
         elif membre.id_espace:
             _require_espace_read_access(db, membre.id_espace, current_user_id)
+        elif membre.id_workspace:
+            _require_workspace_read_access(db, membre.id_workspace, current_user_id)
         else:
             _require_member_read_access(db, member_id, current_user_id)
         return membre
 
+    # --- LISTE ---
     if membre.id_liste and membre.role == LISTE_MEMBER_ROLE:
         liste_id = _get_member_scope_liste_id(db, membre)
-        # Les admins directs ET le créateur direct peuvent voir les demandes des membres
         try:
             _require_direct_list_admin_grant(db, liste_id, current_user_id)
         except HTTPException:
             _require_direct_list_creator_grant(db, liste_id, current_user_id)
         return membre
-
 
     if membre.id_liste and membre.role == LISTE_ADMIN_ROLE:
         liste_id = _get_member_scope_liste_id(db, membre)
@@ -1704,6 +1683,7 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
             detail="Le createur direct de la liste ne fait pas de demande dans sa propre liste en V1.",
         )
 
+    # --- ESPACE ---
     if membre.id_espace and membre.id_liste is None and membre.role == ESPACE_MEMBER_ROLE:
         try:
             _require_direct_espace_admin_grant(db, membre.id_espace, current_user_id)
@@ -1720,6 +1700,18 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
             status_code=403,
             detail="Le createur direct de l'espace ne fait pas de demande dans son propre espace.",
         )
+
+    # --- WORKSPACE ---
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_MEMBER_ROLE:
+        # Un administrateur du workspace peut voir les demandes des membres
+        try:
+            _require_direct_workspace_admin_grant(db, membre.id_workspace, current_user_id)
+        except HTTPException:
+            # Si aucun admin direct, le créateur peut voir (mais en V1 seul l'admin direct est autorisé)
+            # On applique la même règle que pour l'espace : le créateur ne voit que les admins, pas les membres
+            # Donc ici, seul l'admin direct peut voir les demandes des membres
+            raise HTTPException(status_code=403, detail="Seul un administrateur direct du workspace peut voir les demandes des membres.")
+        return membre
 
     if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_ADMIN_ROLE:
         _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)

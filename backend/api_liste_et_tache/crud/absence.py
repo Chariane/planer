@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/crud/absence.py
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
@@ -16,8 +17,11 @@ from ..core.function import (
     _get_all_descendant_espace_ids,
     _get_all_descendant_lists,
     commit_or_raise,
+    _require_direct_workspace_admin_grant,
+    _require_workspace_creator_grant,
+    _get_active_workspace_membership,
 )
-from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste
+from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
 
 
@@ -149,16 +153,17 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
             detail="Les invités peuvent consulter la liste, mais ne peuvent pas créer de demande d'absence ou de congé.",
         )
 
+    # Pour le workspace : autoriser les Membres également (s'ils ne sont pas rattachés à une liste/espace)
     if (
         membre.id_workspace
         and membre.id_espace is None
         and membre.id_liste is None
         and membre.id_tache is None
-        and membre.role != "Administrateur"
+        and membre.role not in ["Administrateur", "Membre"]
     ):
         raise HTTPException(
             status_code=403,
-            detail="Dans un workspace, seuls les administrateurs directs peuvent créer une demande d'absence ou de congé.",
+            detail="Dans un workspace, seuls les administrateurs et les membres directs peuvent créer une demande d'absence ou de congé.",
         )
 
     return _get_absence_scope_for_member(db, membre)
@@ -196,6 +201,13 @@ def _direct_resource_members(db: Session, *, resource_type: str, resource_id: st
     elif resource_type == "espace":
         query = query.filter(
             Membre.id_espace == resource_id,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    elif resource_type == "workspace":
+        query = query.filter(
+            Membre.id_workspace == resource_id,
+            Membre.id_espace.is_(None),
             Membre.id_liste.is_(None),
             Membre.id_tache.is_(None),
         )
@@ -242,6 +254,13 @@ def _user_direct_role_in_resource(db: Session, *, user_id: str, resource_type: s
             Membre.id_liste.is_(None),
             Membre.id_tache.is_(None),
         )
+    elif resource_type == "workspace":
+        query = query.filter(
+            Membre.id_workspace == resource_id,
+            Membre.id_espace.is_(None),
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
     else:
         return None
     membre = query.first()
@@ -270,7 +289,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             .all()
         )
 
-    if scope_type == "espace":
+    elif scope_type == "espace":
         direct_lists = db.query(Liste).filter(Liste.id_espace == scope_id).all()
         direct_subspaces = db.query(Espace).filter(Espace.id_espace_parent == scope_id).all()
         direct_children = [
@@ -281,6 +300,57 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             *[
                 {"type": "sous-espace", "id": espace.id, "nom": espace.nom, "resource_type": "espace"}
                 for espace in direct_subspaces
+            ],
+        ]
+
+        for child in direct_children:
+            child_role = _user_direct_role_in_resource(
+                db,
+                user_id=target_membre.id_utilisateur,
+                resource_type=child["resource_type"],
+                resource_id=child["id"],
+            )
+            available_admins = _available_direct_admins(
+                db,
+                resource_type=child["resource_type"],
+                resource_id=child["id"],
+                date_debut=absence.date_debut,
+                date_fin=absence.date_fin,
+                exclude_absence_id=absence.id,
+            )
+
+            if target_membre.role == "Membre" and child_role == "Administrateur":
+                other_available_admins = [
+                    admin for admin in available_admins
+                    if admin.id_utilisateur != target_membre.id_utilisateur
+                ]
+                if not other_available_admins:
+                    sole_admin_resources.append({
+                        "type": child["type"],
+                        "id": child["id"],
+                        "nom": child["nom"],
+                    })
+
+            if target_membre.role == "Administrateur" and child_role == "Créateur":
+                if not available_admins:
+                    sole_creator_resources.append({
+                        "type": child["type"],
+                        "id": child["id"],
+                        "nom": child["nom"],
+                    })
+
+    elif scope_type == "workspace":
+        # Pour un workspace, on regarde les espaces et listes directs
+        direct_espaces = db.query(Espace).filter(Espace.id_workspace == scope_id).all()
+        direct_listes = db.query(Liste).filter(Liste.id_workspace == scope_id).all()
+        direct_children = [
+            *[
+                {"type": "espace", "id": espace.id, "nom": espace.nom, "resource_type": "espace"}
+                for espace in direct_espaces
+            ],
+            *[
+                {"type": "liste", "id": liste.id, "nom": liste.nom, "resource_type": "liste"}
+                for liste in direct_listes
             ],
         ]
 
@@ -361,7 +431,6 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             approved_days += a.duree_demandee_en_jours
         elif a.date_debut:
             end_val = a.date_fin or a.date_debut
-            # calcul naïf inclusif
             delta = end_val - a.date_debut
             approved_days += delta.days + 1
 
@@ -385,7 +454,6 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     if sole_creator_resources:
         risk_reasons.append(f"Créateur direct de {len(sole_creator_resources)} ressource(s) enfant(s) sans administrateur disponible")
 
-    # Avertissements basés sur l'historique récent
     if approved_count > 3:
         risk_reasons.append(f"Le membre a déjà eu {approved_count} absences approuvées ces 3 derniers mois")
     if approved_days > 15:
@@ -466,6 +534,13 @@ def _ensure_no_overlapping_active_leave(
             Membre.id_liste.is_(None),
             Membre.id_tache.is_(None),
         )
+    elif scope_type == "workspace":
+        query = query.filter(
+            Membre.id_workspace == scope_id,
+            Membre.id_espace.is_(None),
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
     else:
         raise HTTPException(status_code=400, detail="Scope de demande invalide.")
     if exclude_absence_id:
@@ -496,12 +571,21 @@ def detect_leave_conflicts_for_member(
     siblings_query = db.query(Membre).filter(Membre.statut == "Actif")
     if scope_type == "liste":
         siblings_query = siblings_query.filter(Membre.id_liste == scope_id)
-    else:
+    elif scope_type == "espace":
         siblings_query = siblings_query.filter(
             Membre.id_espace == scope_id,
             Membre.id_liste.is_(None),
             Membre.id_tache.is_(None),
         )
+    elif scope_type == "workspace":
+        siblings_query = siblings_query.filter(
+            Membre.id_workspace == scope_id,
+            Membre.id_espace.is_(None),
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+        )
+    else:
+        return []
     sibling_member_ids = [item.id for item in siblings_query.all()]
 
     conflicts: list[AbsenceEtConge] = []
@@ -528,14 +612,10 @@ def _validate_absence_dates(date_debut: Any, date_fin: Any = None):
         raise HTTPException(status_code=400, detail="La date de début est obligatoire.")
     
     try:
-        # Conversion si nécessaire
         start_date = date_debut if isinstance(date_debut, datetime) else datetime.fromisoformat(str(date_debut).replace('Z', '+00:00'))
-        
-        # Vérification de l'année (réaliste)
         if start_date.year < 2000 or start_date.year > 2100:
             raise HTTPException(status_code=400, detail=f"L'année {start_date.year} n'est pas valide. Veuillez saisir une année entre 2000 et 2100.")
 
-        # Empêcher les dates dans le passé
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         check_start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
         if check_start < today:
@@ -546,10 +626,8 @@ def _validate_absence_dates(date_debut: Any, date_fin: Any = None):
         
         if date_fin:
             end_date = date_fin if isinstance(date_fin, datetime) else datetime.fromisoformat(str(date_fin).replace('Z', '+00:00'))
-            
             if end_date.year < 2000 or end_date.year > 2100:
                 raise HTTPException(status_code=400, detail=f"L'année {end_date.year} n'est pas valide.")
-            
             if end_date < start_date:
                 raise HTTPException(
                     status_code=400, 
@@ -587,7 +665,6 @@ def create_leave_request(
         date_fin=date_fin,
     )
 
-    # ✅ Déduction automatique
     if is_conge_planifie is None:
         is_conge_planifie = not is_absence
 
@@ -649,7 +726,6 @@ def list_accessible_absences(
     for absence in absences:
         membre = _get_member_or_404(db, absence.id_membre)
         
-        # Filtre exclusif et direct
         if liste_id:
             if membre.id_liste != liste_id:
                 continue
@@ -712,7 +788,6 @@ def update_absence(
     next_date_debut = updates.get("date_debut") or absence.date_debut
     next_date_fin = updates.get("date_fin") if "date_fin" in updates else absence.date_fin
     
-    # Validation des dates si elles changent
     if "date_debut" in updates or "date_fin" in updates:
         _validate_absence_dates(next_date_debut, next_date_fin)
 
@@ -749,25 +824,46 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
         )
     
     # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
-    actor_direct_member = db.query(Membre).filter(
-        Membre.id_liste == target_membre.id_liste,
-        Membre.id_espace == target_membre.id_espace,
-        Membre.id_utilisateur == current_user_id,
-        Membre.statut == "Actif"
-    ).first()
-    
+    # Trouver le rôle direct de l'acteur sur la même ressource que le demandeur
+    actor_direct_member = None
+    if target_membre.id_liste:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_liste == target_membre.id_liste,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+    elif target_membre.id_espace:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_espace == target_membre.id_espace,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+    elif target_membre.id_workspace:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_workspace == target_membre.id_workspace,
+            Membre.id_espace.is_(None),
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+
     if not actor_direct_member:
-        res_label = "l'espace" if target_membre.id_espace else "la liste"
+        res_label = "le workspace" if target_membre.id_workspace else ("l'espace" if target_membre.id_espace else "la liste")
         raise HTTPException(status_code=403, detail=f"Seul un gestionnaire direct de {res_label} peut valider.")
 
+    # Règles selon le rôle du demandeur
     if target_membre.role == "Membre":
         if actor_direct_member.role == "Créateur":
-            active_admins = db.query(Membre).filter(
-                Membre.id_liste == target_membre.id_liste,
-                Membre.id_espace == target_membre.id_espace,
-                Membre.role == "Administrateur",
-                Membre.statut == "Actif"
-            ).all()
+            # Vérifier s'il existe un administrateur direct disponible
+            active_admins = _direct_resource_members(
+                db,
+                resource_type="liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace",
+                resource_id=target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace,
+                role="Administrateur"
+            )
             available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
             if available_admins:
                 raise HTTPException(
@@ -784,7 +880,7 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
     elif target_membre.role == "Créateur":
         raise HTTPException(status_code=403, detail="La demande du Créateur doit être validée par la hiérarchie supérieure.")
 
-    # Construction du texte de décision avec le nom de l'utilisateur et la date
+    # Construction du texte de décision
     user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
     user_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
     decision_text = f"Approuvé par {user_name} (id: {current_user_id}) le {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}"
@@ -808,26 +904,43 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
             detail="Cette demande a deja ete traitee.",
         )
     
-    # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
-    actor_direct_member = db.query(Membre).filter(
-        Membre.id_liste == target_membre.id_liste,
-        Membre.id_espace == target_membre.id_espace,
-        Membre.id_utilisateur == current_user_id,
-        Membre.statut == "Actif"
-    ).first()
-    
+    actor_direct_member = None
+    if target_membre.id_liste:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_liste == target_membre.id_liste,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+    elif target_membre.id_espace:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_espace == target_membre.id_espace,
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+    elif target_membre.id_workspace:
+        actor_direct_member = db.query(Membre).filter(
+            Membre.id_workspace == target_membre.id_workspace,
+            Membre.id_espace.is_(None),
+            Membre.id_liste.is_(None),
+            Membre.id_tache.is_(None),
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif"
+        ).first()
+
     if not actor_direct_member:
-        res_label = "l'espace" if target_membre.id_espace else "la liste"
+        res_label = "le workspace" if target_membre.id_workspace else ("l'espace" if target_membre.id_espace else "la liste")
         raise HTTPException(status_code=403, detail=f"Seul un gestionnaire direct de {res_label} peut rejeter.")
 
     if target_membre.role == "Membre":
         if actor_direct_member.role == "Créateur":
-            active_admins = db.query(Membre).filter(
-                Membre.id_liste == target_membre.id_liste,
-                Membre.id_espace == target_membre.id_espace,
-                Membre.role == "Administrateur",
-                Membre.statut == "Actif"
-            ).all()
+            active_admins = _direct_resource_members(
+                db,
+                resource_type="liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace",
+                resource_id=target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace,
+                role="Administrateur"
+            )
             available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
             if available_admins:
                 raise HTTPException(
@@ -844,7 +957,6 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     elif target_membre.role == "Créateur":
         raise HTTPException(status_code=403, detail="La demande du Créateur ne peut être rejetée que par la hiérarchie supérieure.")
 
-    # Construction du texte de rejet avec le nom de l'utilisateur et la date
     user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
     user_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username or user.email
     decision_text = f"Rejeté par {user_name} (id: {current_user_id}) le {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}"
