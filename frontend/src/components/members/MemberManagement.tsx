@@ -37,10 +37,10 @@ const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
 
 // ✅ RÔLES MODIFIABLES PAR L'ADMIN PAR HÉRITAGE (promotions uniquement)
 const INHERITED_ADMIN_PROMOTION_OPTIONS: Record<string, string[]> = {
-  'Invité': ['Invité', 'Membre', 'Administrateur'],      // ✅ Invité → Membre ou Admin
-  'Membre': ['Membre', 'Administrateur'],                // ✅ Membre → Admin
-  'Administrateur': ['Administrateur'],                  // ❌ Ne peut pas modifier un Admin direct
-  'Créateur': ['Créateur'],                              // ❌ Ne peut pas modifier un Créateur
+  'Invité': ['Invité', 'Membre', 'Administrateur'],
+  'Membre': ['Membre', 'Administrateur'],
+  'Administrateur': ['Administrateur'],
+  'Créateur': ['Créateur'],
 };
 
 const ADMIN_ROLE = 'Administrateur';
@@ -186,6 +186,10 @@ export default function MemberManagement({
           email: getMemberContactLabel(m),
           role: m.role,
           photo_base64: utilisateur?.photo_base64 || m.photo_base64 || null,
+          // ✅ AJOUT : extraire username, nom, prenoms pour les initiales
+          username: utilisateur?.username || m.username || '',
+          nom: utilisateur?.nom || m.nom || '',
+          prenoms: utilisateur?.prenoms || m.prenoms || '',
         };
       }));
     } catch (err) {
