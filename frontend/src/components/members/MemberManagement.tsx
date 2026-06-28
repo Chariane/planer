@@ -178,20 +178,23 @@ export default function MemberManagement({
         return;
       }
 
-      setMembers(data.map((m: any) => {
+      const mappedMembers = data.map((m: any) => {
         const utilisateur = m.utilisateur || m;
+        const photo = getMemberPhotoBase64(m);
+
         return {
           id: m.id_utilisateur || utilisateur?.id || m.id,
           name: getMemberDisplayName(m),
           email: getMemberContactLabel(m),
           role: m.role,
-          photo_base64: utilisateur?.photo_base64 || m.photo_base64 || null,
-          // ✅ AJOUT : extraire username, nom, prenoms pour les initiales
+          photo_base64: photo,
           username: utilisateur?.username || m.username || '',
           nom: utilisateur?.nom || m.nom || '',
           prenoms: utilisateur?.prenoms || m.prenoms || '',
         };
-      }));
+      });
+
+      setMembers(mappedMembers);
     } catch (err) {
       console.error('Erreur chargement membres', err);
       showMessage('Erreur lors du chargement des membres', 'error');
@@ -619,7 +622,6 @@ export default function MemberManagement({
                       </div>
                     </Link>
                     <div className="flex items-center gap-2">
-                      {/* ✅ AJOUT DU SÉLECTEUR DE RÔLE POUR LES INVITÉS */}
                       {canEditMemberRoleInList(member) && (
                         <>
                           {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}

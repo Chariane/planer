@@ -1,3 +1,4 @@
+// frontend/src/components/ui/MemberAvatar.tsx
 import { useMemo } from 'react';
 import { cn } from '../../lib/utils';
 import { AvailabilityBadge } from './AvailabilityBadge';
@@ -46,7 +47,6 @@ export function MemberAvatar({
   status = 'offline',
   availability
 }: MemberAvatarProps) {
-  // Extract info from either top-level or utilisateur nested object
   const userInfo = member?.utilisateur || member;
 
   const photo = userInfo?.photo_base64;
@@ -56,6 +56,8 @@ export function MemberAvatar({
 
   const initials = useMemo(() => {
     if (prenoms && nom) return `${prenoms[0]}${nom[0]}`.toUpperCase();
+    if (prenoms) return prenoms[0].toUpperCase();
+    if (nom) return nom[0].toUpperCase();
     return username.slice(0, 1).toUpperCase();
   }, [username, nom, prenoms]);
 
@@ -82,7 +84,6 @@ export function MemberAvatar({
             alt={username}
             className="h-full w-full object-cover"
             onError={(e) => {
-              // If image fails to load, fallback to initials
               (e.target as HTMLImageElement).style.display = 'none';
               (e.target as HTMLImageElement).parentElement?.classList.add(bgColor);
             }}
