@@ -533,30 +533,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
     setExpandedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
-  const deleteCanevas = async () => {
-    if (!canevas || canevas.sections.length > 0) {
-      alert('Supprimez d\'abord toutes les sections');
-      return;
-    }
-    setConfirmModal({
-      isOpen: true,
-      title: 'Supprimer le canevas',
-      message: 'Voulez-vous vraiment supprimer ce canevas ?',
-      onConfirm: async () => {
-        setActionLoading('delete-canevas');
-        try {
-          await canevasService.delete(canevas.id);
-          setCanevas(null);
-        } catch (err) {
-          console.error('Erreur suppression canevas:', err);
-          alert('Erreur lors de la suppression du canevas');
-        } finally {
-          setActionLoading(null);
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        }
-      }
-    });
-  };
+  // Fonction deleteCanevas SUPPRIMÉE - personne ne doit pouvoir supprimer le canevas
 
   if (!isOpen) {
     if (onClose) return null;
@@ -704,16 +681,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {canevas && canevas.sections.length === 0 && canModify && (
-            <button
-              onClick={deleteCanevas}
-              disabled={actionLoading === 'delete-canevas'}
-              className="p-1 text-theme-muted hover:text-red-500 transition rounded-lg hover:bg-red-500/10"
-              title="Supprimer le canevas"
-            >
-              {actionLoading === 'delete-canevas' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </button>
-          )}
+          {/* Bouton de suppression du canevas SUPPRIMÉ */}
           <button onClick={closeCanevas} className="p-1.5 text-theme-muted hover:text-theme-main transition rounded-xl hover:bg-theme-surface-hover">
             <X className="h-5 w-5" />
           </button>

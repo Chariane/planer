@@ -15,6 +15,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
+import MemberManagement from '../../../components/members/MemberManagement'; // ✅ IMPORT AJOUTÉ
 
 interface WorkspaceDashboardPanelProps {
   workspaceId: string;
@@ -39,7 +40,7 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Composant Toast premium
+// Composant Toast premium (optionnel, on peut aussi utiliser celui de MemberManagement)
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
@@ -91,14 +92,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('Invité');
-  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
-  const [confirmData, setConfirmData] = useState<{
-    isOpen: boolean;
-    member: Member | null;
-  }>({ isOpen: false, member: null });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -109,42 +102,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const { isGuest, isAdmin, isCreator, role } = useWorkspaceRole(workspaceId);
   
   const canInviteMembers = isAdmin || isCreator;
-  
-  // ✅ SEUL le Créateur peut gérer les membres (modifier les rôles)
-  const canManageMemberRoles = isCreator;
-  
-  // ✅ CORRECTION : Le Créateur peut retirer n'importe quel membre (sauf lui-même et les autres créateurs)
-  const canRemoveMember = (member: Member) => {
-    // Le créateur ne peut pas se retirer lui-même
-    if (member.id === user?.id) return false;
-    // Le créateur ne peut pas retirer un autre créateur
-    if (member.role === 'Créateur') return false;
-    // ✅ Le créateur peut retirer n'importe quel autre membre (Membre, Admin, Invité)
-    return isCreator;
-  };
-
-  // ✅ RÔLES DISPONIBLES POUR LA MODIFICATION
-  // - Si l'utilisateur est Créateur : peut tout modifier (Invité → Membre → Admin)
-  // - Si l'utilisateur est Admin : NE PEUT MODIFIER AUCUN RÔLE
-  const roleManagementOptions = useMemo(() => {
-    if (isCreator) {
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    // ✅ L'Admin ne voit pas de select, donc pas d'options
-    return ADMIN_ROLE_MANAGEMENT_OPTIONS;
-  }, [isCreator]);
-
-  const availableInvitationRoles = useMemo(() => {
-    if (isCreator) return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    // ✅ L'Admin ne peut inviter qu'avec Invité ou Membre
-    return ['Invité', 'Membre'];
-  }, [isCreator]);
-
-  useEffect(() => {
-    if (!availableInvitationRoles.includes(inviteRole)) {
-      setInviteRole(availableInvitationRoles[0]);
-    }
-  }, [availableInvitationRoles, inviteRole]);
 
   const loadData = async () => {
     setLoading(true);
@@ -202,76 +159,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     loadData();
   }, [workspaceId]);
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    try {
-      await workspaceService.inviteMember(workspaceId, inviteEmail, inviteRole);
-      showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
-      setIsInviteModalOpen(false);
-      setInviteEmail('');
-      await loadData();
-    } catch (err: any) {
-      showMessage(sanitizeApiErrorMessage(err, "Erreur d'invitation"), 'error');
-    }
-  };
-
-  const handleMemberRoleChange = async (member: Member, nextRole: string) => {
-    // ✅ SEUL le Créateur peut modifier les rôles
-    if (!isCreator) {
-      showMessage('Seul le créateur du workspace peut modifier les rôles des membres.', 'error');
-      return;
-    }
-    if (member.role === 'Créateur' || nextRole === member.role) return;
-    if (!roleManagementOptions.includes(nextRole)) return;
-    setUpdatingMemberId(member.id);
-    try {
-      await workspaceService.updateMemberRole(workspaceId, member.id, nextRole);
-      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
-      showMessage(`Rôle de ${member.name} mis à jour`, 'success');
-    } catch (err: any) {
-      const message = sanitizeApiErrorMessage(err, "Impossible de modifier le rôle");
-      const lowerMessage = message.toLowerCase();
-      if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
-        showMessage(
-          isCreator
-            ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de ce workspace avec le bouton Retirer.`
-            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de ce workspace.`,
-          'info'
-        );
-      } else {
-        showMessage(message, 'error');
-      }
-      await loadData();
-    } finally {
-      setUpdatingMemberId(null);
-    }
-  };
-
-  const handleRemoveMember = async () => {
-    const member = confirmData.member;
-    if (!member) return;
-    if (!canRemoveMember(member)) {
-      showMessage(
-        member.id === user?.id
-          ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
-          : member.role === 'Créateur'
-            ? 'Le créateur ne peut pas être retiré du workspace.'
-            : 'Seul le créateur du workspace peut retirer un membre.',
-        'error',
-      );
-      setConfirmData({ isOpen: false, member: null });
-      return;
-    }
-    try {
-      await workspaceService.removeMember(workspaceId, member.id);
-      setConfirmData({ isOpen: false, member: null });
-      await loadData();
-      showMessage(`${member.name} a été retiré du workspace`, 'success');
-    } catch (err) {
-      showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-96 space-y-4">
@@ -280,9 +167,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       </div>
     );
   }
-
-  const activeMembers = members.filter(member => member.role !== 'Invité');
-  const guestMembers = members.filter(member => member.role === 'Invité');
 
   return (
     <motion.div
@@ -327,7 +211,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             Ouvrir la discussion
           </Link>
           {canInviteMembers && (
-            <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+            <Button onClick={() => {/* L'invitation est gérée par MemberManagement */}} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
               <UserPlus size={18} className="mr-3" />
               Inviter un collaborateur
             </Button>
@@ -384,181 +268,12 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             )}
           </div>
 
-          {/* ✅ Message pour les Admins : ils ne peuvent pas modifier les rôles */}
-          {isAdmin && !isCreator && (
-            <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
-              <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
-                <p className="text-xs text-theme-muted mt-1 leading-relaxed">
-                  En tant qu'administrateur de ce workspace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur du workspace peut gérer les rôles des membres.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeMembers.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {activeMembers.map((member, i) => (
-                <motion.div
-                  key={member.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                >
-                  <GlassCard className="p-5 flex items-center justify-between gap-4 group hover:bg-theme-surface-hover/30 transition-all border-theme-border-subtle/30">
-                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-theme-border-subtle/20 flex items-center justify-center overflow-hidden font-black text-primary text-base group-hover:scale-110 transition-transform shadow-inner">
-                        {getAvatarSrc(member.photo_base64) ? (
-                          <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
-                        ) : (
-                          getInitials(member.name)
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-theme-main truncate tracking-tight text-base group-hover:text-primary transition-colors">{member.name}</p>
-                        <p className="text-[10px] text-theme-muted font-bold truncate opacity-40 uppercase mt-0.5">{member.email}</p>
-                      </div>
-                    </Link>
-
-                    {/*
-                      ✅ AFFICHAGE DU SELECT DE RÔLE
-                      SEUL le Créateur peut modifier les rôles
-                    */}
-                    {isCreator && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
-                      <div className="flex items-center gap-3">
-                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
-                        <select
-                          value={member.role}
-                          onChange={e => handleMemberRoleChange(member, e.target.value)}
-                          disabled={updatingMemberId === member.id}
-                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
-                        >
-                          {roleManagementOptions.map(r => (
-                            <option key={r} value={r} className="bg-theme-page text-theme-main">
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                        {canRemoveMember(member) && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmData({ isOpen: true, member })}
-                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                            title="Retirer de ce workspace"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
-                          {getRoleLabel(member.role)}
-                        </span>
-                        {canRemoveMember(member) && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmData({ isOpen: true, member })}
-                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                            title="Retirer de ce workspace"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </GlassCard>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <GlassCard className="py-20 border-dashed border-theme-border-subtle/30 flex flex-col items-center justify-center bg-theme-surface/20">
-              <div className="p-6 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle/30">
-                <Users size={40} className="opacity-10 text-theme-muted" />
-              </div>
-              <p className="font-black uppercase tracking-[0.2em] text-xs text-theme-muted opacity-30">Aucun membre actif</p>
-            </GlassCard>
-          )}
-
-          {/* ✅ SECTION DES INVITÉS DIRECTS */}
-          {guestMembers.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-theme-muted">Invités directs</p>
-                <span className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
-                  {guestMembers.length}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {guestMembers.map(member => (
-                  <GlassCard key={member.id} className="p-5 flex items-center justify-between gap-4 border-dashed opacity-85">
-                    <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
-                      <div className="h-12 w-12 rounded-2xl bg-theme-surface-hover border border-theme-border-subtle/30 flex items-center justify-center overflow-hidden font-black text-theme-muted text-base">
-                        {getAvatarSrc(member.photo_base64) ? (
-                          <img src={getAvatarSrc(member.photo_base64) || ''} alt={member.name} className="h-full w-full object-cover" />
-                        ) : (
-                          getInitials(member.name)
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-theme-main truncate tracking-tight text-base">{member.name}</p>
-                        <p className="text-[10px] text-theme-muted font-bold truncate opacity-40 uppercase mt-0.5">{member.email}</p>
-                      </div>
-                    </Link>
-
-                    {/*
-                      ✅ AFFICHAGE DU SELECT DE RÔLE POUR LES INVITÉS
-                      SEUL le créateur peut modifier le rôle des invités
-                    */}
-                    {isCreator && member.role !== 'Créateur' && roleManagementOptions.includes(member.role) ? (
-                      <div className="flex items-center gap-3">
-                        {updatingMemberId === member.id && <Loader2 className="h-4 w-4 animate-spin text-secondary" />}
-                        <select
-                          value={member.role}
-                          onChange={e => handleMemberRoleChange(member, e.target.value)}
-                          disabled={updatingMemberId === member.id}
-                          className="bg-theme-surface/50 text-[10px] font-black text-theme-main uppercase tracking-widest border border-theme-border-subtle/30 rounded-xl px-3 py-2 outline-none focus:border-primary transition-all cursor-pointer hover:bg-theme-surface-hover"
-                        >
-                          {roleManagementOptions.map(r => (
-                            <option key={r} value={r} className="bg-theme-page text-theme-main">
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                        {canRemoveMember(member) && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmData({ isOpen: true, member })}
-                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                            title="Retirer de ce workspace"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[9px] px-3 py-1.5 rounded-xl font-black uppercase tracking-widest shadow-sm ${getRoleBadgeClass(member.role)}`}>
-                          {getRoleLabel(member.role)}
-                        </span>
-                        {canRemoveMember(member) && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmData({ isOpen: true, member })}
-                            className="p-2 text-theme-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                            title="Retirer de ce workspace"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </GlassCard>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* ✅ REMPLACEMENT : utilisation de MemberManagement */}
+          <MemberManagement
+            workspaceId={workspaceId}
+            currentUserRole={role}
+            onMemberAdded={loadData}
+          />
         </div>
 
         <div className="space-y-10">
@@ -581,72 +296,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           </div>
         </div>
       </div>
-
-      <Modal
-        isOpen={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        title="Extension de la Collaboration"
-        size="md"
-      >
-        <div className="space-y-8 py-4">
-          <div className="space-y-3">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] ml-2 opacity-60">Email ou username</label>
-            <div className="relative group">
-              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-primary transition-colors">
-                <Users size={20} />
-              </div>
-              <input
-                type="text"
-                placeholder="collaborateur@kplanner.io ou username"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl pl-14 pr-6 py-5 text-theme-main placeholder:text-theme-muted/20 focus:ring-4 focus:ring-primary/10 focus:border-primary/50 transition-all outline-none font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] ml-2 opacity-60">Privilèges au Workspace</label>
-            <div className="relative group">
-              <select
-                value={inviteRole}
-                onChange={e => setInviteRole(e.target.value)}
-                className="w-full bg-theme-surface/50 border border-theme-border-subtle/30 rounded-2xl px-6 py-5 text-theme-main focus:ring-4 focus:ring-primary/10 outline-none transition-all font-black uppercase tracking-widest text-xs appearance-none cursor-pointer"
-              >
-                {availableInvitationRoles.map(r => <option key={r} value={r} className="bg-theme-page text-theme-main">{r}</option>)}
-              </select>
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-theme-muted opacity-40">
-                <Briefcase size={18} />
-              </div>
-            </div>
-
-            <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10">
-              <div className="flex items-start gap-3">
-                <Info size={16} className="text-primary mt-0.5" />
-                <p className="text-[10px] text-theme-muted font-bold leading-relaxed uppercase tracking-tight">
-                  <strong className="text-theme-main">Invité</strong>: Accès aux éléments assignés.<br />
-                  <strong className="text-theme-main">Membre</strong>: Collaborateur interne en lecture descendante.<br />
-                  <strong className="text-theme-main">Admin</strong>: Contrôle total sur les espaces et membres.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-4 pt-4">
-            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100">Annuler</Button>
-            <Button onClick={handleInvite} className="flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20">Envoyer l'Invite</Button>
-          </div>
-        </div>
-      </Modal>
-
-      <ConfirmModal
-        isOpen={confirmData.isOpen}
-        onClose={() => setConfirmData({ isOpen: false, member: null })}
-        onConfirm={handleRemoveMember}
-        title="Retirer du workspace"
-        message={`Voulez-vous retirer ${confirmData.member?.name || 'ce membre'} de ce workspace ? Si cette personne possède un accès hérité ailleurs, celui-ci restera actif.`}
-        confirmText="Retirer"
-      />
     </motion.div>
   );
 }

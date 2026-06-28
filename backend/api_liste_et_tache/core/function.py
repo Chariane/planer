@@ -19,7 +19,7 @@ from ..models import (
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Constantes de rôles (selon les schémas existants)
 WORKSPACE_OWNER_ROLE = "Créateur"
@@ -109,19 +109,83 @@ ROLE_HIERARCHY = {
 }
 
 
+# ========== FONCTIONS DE DATES (déplacées depuis absence.py) ==========
+def _as_naive_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _date_overlap(start_a, end_a, start_b, end_b) -> bool:
+    start_a = _as_naive_datetime(start_a)
+    end_a = _as_naive_datetime(end_a)
+    start_b = _as_naive_datetime(start_b)
+    end_b = _as_naive_datetime(end_b)
+    if not start_a or not start_b:
+        return False
+    a_end = end_a or start_a
+    b_end = end_b or start_b
+    return start_a <= b_end and start_b <= a_end
+
+
+# ========== NOUVELLES FONCTIONS POUR ABSENCES GLOBALES ==========
+def _get_user_active_memberships(db: Session, user_id: str) -> list[Membre]:
+    """Récupère toutes les adhésions actives d'un utilisateur."""
+    return db.query(Membre).filter(
+        Membre.id_utilisateur == user_id,
+        Membre.statut == "Actif"
+    ).all()
+
+
+def _has_overlapping_leave_for_user(
+    db: Session,
+    user_id: str,
+    date_debut,
+    date_fin,
+    exclude_absence_id: Optional[str] = None,
+    exclude_member_ids: Optional[list[str]] = None,
+    statuses: Optional[list[str]] = None,
+) -> bool:
+    """
+    Vérifie si l'utilisateur a une absence (en attente ou approuvée par défaut) sur la période donnée,
+    sur l'un de ses membres actifs.
+    """
+    membres = _get_user_active_memberships(db, user_id)
+    member_ids = [m.id for m in membres]
+    if exclude_member_ids:
+        member_ids = [mid for mid in member_ids if mid not in exclude_member_ids]
+    if not member_ids:
+        return False
+
+    query = db.query(AbsenceEtConge).filter(
+        AbsenceEtConge.id_membre.in_(member_ids),
+    )
+    if statuses is None:
+        statuses = ["en_attente", "approuvee"]
+    query = query.filter(AbsenceEtConge.statut.in_(statuses))
+    if exclude_absence_id:
+        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+
+    for absence in query.all():
+        if _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin):
+            return True
+    return False
+
+
 def _is_user_available_now(db: Session, user_id: str) -> bool:
     """Checks if the user has an approved absence covering the current date."""
     now = datetime.now()
-    ref_date = now.date()
+    # Utilisation de la nouvelle fonction pour vérifier les absences approuvées sur la date actuelle
+    return not _has_overlapping_leave_for_user(
+        db,
+        user_id,
+        date_debut=now,
+        date_fin=now,
+        statuses=["approuvee"]
+    )
 
-    absence = db.query(AbsenceEtConge).join(Membre, AbsenceEtConge.id_membre == Membre.id).filter(
-        Membre.id_utilisateur == user_id,
-        AbsenceEtConge.statut == "approuvee",
-        func.date(AbsenceEtConge.date_debut) <= ref_date,
-        (AbsenceEtConge.date_fin == None) | (func.date(AbsenceEtConge.date_fin) >= ref_date)
-    ).first()
-
-    return absence is None
 
 # -----------------------------------------------
 # Helpers d'accès — Workspace

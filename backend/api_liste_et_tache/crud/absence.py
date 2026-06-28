@@ -20,6 +20,9 @@ from ..core.function import (
     _require_direct_workspace_admin_grant,
     _require_workspace_creator_grant,
     _get_active_workspace_membership,
+    _date_overlap,                         
+    _has_overlapping_leave_for_user,       
+    _get_user_active_memberships,          
 )
 from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision

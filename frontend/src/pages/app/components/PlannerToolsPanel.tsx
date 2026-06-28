@@ -162,11 +162,14 @@ export default function PlannerToolsPanel({
   const canViewSpaceOrWorkspaceReports = !listeId && !isGuestAccess && (isDirectResourceCreator || isDirectResourceAdmin);
 
   const canViewReports = hasReportScope && !isListInheritedOnlyManager && (canViewListReports || canViewSpaceOrWorkspaceReports);
+  
+  // ✅ MODIFICATION : les membres directs du workspace (quel que soit leur rôle) voient l'onglet Absences
   const canViewAbsences = !isGuestAccess && !isListInheritedOnlyManager && (
-    listeId || espaceId
+    (listeId || espaceId)
       ? !!isDirectMemberRecord
-      : !!workspaceId && (isDirectResourceAdmin || isDirectResourceCreator)
+      : !!workspaceId && !!isDirectMemberRecord
   );
+  
   const hasVisibleTool = canViewFiles || canViewReports || canViewAbsences;
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
@@ -182,7 +185,7 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
-  // ✅ MODIFICATION : autoriser les Membres du workspace à créer une demande
+  // ✅ Autoriser les Membres du workspace à créer une demande
   const canCreateAbsence = !!isDirectMemberRecord && (
     (!!listeId || !!espaceId) && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role)
     || (!!workspaceId && !listeId && !espaceId && (isDirectResourceAdmin || isDirectMemberRecord?.role === ROLES.MEMBER))
