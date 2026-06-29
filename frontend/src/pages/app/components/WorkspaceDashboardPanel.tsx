@@ -1,5 +1,5 @@
 // frontend/src/pages/app/components/WorkspaceDashboardPanel.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Activity, Briefcase, Calendar, FolderTree, ListTodo, Loader2, MessageCircle, ShieldCheck, Trash2, UserPlus, Users, X, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
@@ -15,7 +15,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
-import MemberManagement from '../../../components/members/MemberManagement'; // ✅ IMPORT AJOUTÉ
+import type { MemberManagementRef } from '../../../components/members/MemberManagement';
+import MemberManagement from '../../../components/members/MemberManagement';
 
 interface WorkspaceDashboardPanelProps {
   workspaceId: string;
@@ -40,7 +41,7 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Composant Toast premium (optionnel, on peut aussi utiliser celui de MemberManagement)
+// Composant Toast premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
@@ -94,6 +95,8 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   const [loading, setLoading] = useState(true);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const memberManagementRef = useRef<MemberManagementRef>(null);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -211,7 +214,10 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             Ouvrir la discussion
           </Link>
           {canInviteMembers && (
-            <Button onClick={() => {/* L'invitation est gérée par MemberManagement */}} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+            <Button
+              onClick={() => memberManagementRef.current?.openInviteModal()}
+              className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]"
+            >
               <UserPlus size={18} className="mr-3" />
               Inviter un collaborateur
             </Button>
@@ -268,8 +274,9 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             )}
           </div>
 
-          {/* ✅ REMPLACEMENT : utilisation de MemberManagement */}
+          {/* ✅ REMPLACEMENT : utilisation de MemberManagement avec ref */}
           <MemberManagement
+            ref={memberManagementRef}
             workspaceId={workspaceId}
             currentUserRole={role}
             onMemberAdded={loadData}

@@ -1,5 +1,5 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, MessageCircle, ShieldCheck, Trash2, X, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
@@ -17,7 +17,8 @@ import { getRoleRank, ROLES } from '../../../lib/roleHierarchy';
 import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName, getMemberPhotoBase64 } from '../../../utils/memberDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
-import MemberManagement from '../../../components/members/MemberManagement'; // ✅ IMPORT AJOUTÉ
+import type { MemberManagementRef } from '../../../components/members/MemberManagement';
+import MemberManagement from '../../../components/members/MemberManagement';
 
 interface SpaceDashboardProps {
   spaceId: string;
@@ -101,6 +102,8 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const memberManagementRef = useRef<MemberManagementRef>(null);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -290,7 +293,10 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             Ouvrir la discussion
           </Link>
           {canInviteMembers && (
-            <Button onClick={() => {/* L'invitation est gérée par MemberManagement */}} className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]">
+            <Button
+              onClick={() => memberManagementRef.current?.openInviteModal()}
+              className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]"
+            >
               <UserPlus size={18} className="mr-3" />
               Inviter un membre
             </Button>
@@ -345,8 +351,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             )}
           </div>
 
-          {/* ✅ REMPLACEMENT : utilisation de MemberManagement */}
+          {/* ✅ REMPLACEMENT : utilisation de MemberManagement avec ref */}
           <MemberManagement
+            ref={memberManagementRef}
             espaceId={spaceId}
             currentUserRole={effectiveSpaceRole}
             isInheritedAdmin={isInheritedSpaceAdmin}
