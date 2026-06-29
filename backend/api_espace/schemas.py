@@ -736,7 +736,7 @@ class EspaceMemberUserOut(BaseModel):
     email: EmailStr
     nom: Optional[str] = None
     prenoms: Optional[str] = None
-
+    photo_base64: Optional[str] = None  # ✅ Ajout
 
 class EspaceMemberOut(MembreOut):
     utilisateur: Optional[EspaceMemberUserOut] = None

@@ -311,6 +311,11 @@ def can_create_espace(db: Session, user_id: str) -> bool:
 
 def _serialize_member(membre):
     utilisateur = membre.utilisateur
+    # Calcul de la photo en base64 si présente
+    photo_base64 = None
+    if utilisateur and utilisateur.photo:
+        photo_base64 = base64.b64encode(utilisateur.photo).decode('ascii')
+    
     return {
         "id": membre.id,
         "created_at": membre.created_at,
@@ -328,7 +333,8 @@ def _serialize_member(membre):
                 "email": utilisateur.email,
                 "nom": utilisateur.nom,
                 "prenoms": utilisateur.prenoms,
-                "photo": utilisateur.photo if utilisateur and utilisateur.photo else None,  # ✅ ICI
+                "photo": utilisateur.photo if utilisateur and utilisateur.photo else None,  # bytes bruts
+                "photo_base64": photo_base64,  # ✅ nouveau champ pour le frontend
             }
             if utilisateur
             else None

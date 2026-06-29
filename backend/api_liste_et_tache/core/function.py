@@ -1182,7 +1182,7 @@ def _serialize_member(membre):
                 "email": utilisateur.email,
                 "nom": utilisateur.nom,
                 "prenoms": utilisateur.prenoms,
-                "photo": utilisateur.photo if utilisateur and utilisateur.photo else None,  # ✅ ICI
+                "photo": utilisateur.photo if utilisateur and utilisateur.photo else None,  
             }
             if utilisateur
             else None
