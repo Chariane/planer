@@ -118,21 +118,31 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     return joinedEspaces.find(espace => espace.id === targetSpaceId)?.role || null;
   };
 
-  const effectiveSpaceRole = inheritedSpaceRole
-    || (isEspaceCreator ? ROLES.CREATOR : null)
-    || (isEspaceAdmin ? ROLES.ADMIN : null)
-    || (isEspaceGuest ? ROLES.GUEST : null);
-  
-  // ✅ Détection de l'admin par héritage
-  const isInheritedSpaceAdmin = !!spaceId
-    && (isWorkspaceAdmin || isWorkspaceCreator)
-    && !isEspaceAdmin
-    && !isEspaceCreator;
+  // ✅ Détection du créateur direct via les membres chargés
+  const isDirectEspaceCreator = !!spaceId && members.some(
+    m => m.id === user?.id && m.role === ROLES.CREATOR
+  );
 
   // ✅ Détection de l'admin direct via les membres chargés
   const isDirectEspaceAdmin = !!spaceId && members.some(
     m => m.id === user?.id && m.role === ROLES.ADMIN
   );
+
+  // ✅ Rôle effectif : priorité au créateur direct, puis héritage, puis hooks
+  const effectiveSpaceRole = isDirectEspaceCreator
+    ? ROLES.CREATOR
+    : inheritedSpaceRole
+      || (isEspaceCreator ? ROLES.CREATOR : null)
+      || (isEspaceAdmin ? ROLES.ADMIN : null)
+      || (isEspaceGuest ? ROLES.GUEST : null);
+
+  // ✅ Détection de l'admin par héritage
+  const isInheritedSpaceAdmin = !!spaceId
+    && (isWorkspaceAdmin || isWorkspaceCreator)
+    && !isEspaceAdmin
+    && !isEspaceCreator
+    && !isDirectEspaceCreator
+    && !isDirectEspaceAdmin;
 
   const canInviteMembers = effectiveSpaceRole === ROLES.ADMIN
     || effectiveSpaceRole === ROLES.CREATOR
@@ -219,9 +229,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     );
   }
 
-  // ✅ Déterminer si on affiche un message d'information
-  const showAdminMessage = isDirectEspaceAdmin && !isEspaceCreator && !isWorkspaceCreator;
-  const showInheritedAdminMessage = isInheritedSpaceAdmin && !isEspaceCreator && !isWorkspaceCreator;
+  // ✅ Déterminer si on affiche un message d'information (exclure le créateur direct)
+  const showAdminMessage = isDirectEspaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
+  const showInheritedAdminMessage = isInheritedSpaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
   const showGuestMessage = isEspaceGuest && !canInviteMembers;
 
   return (
@@ -244,7 +254,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </div>
       )}
 
-      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles */}
+      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles (sauf si créateur direct) */}
       {showAdminMessage && (
         <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
@@ -341,7 +351,7 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
               <Users className="h-6 w-6 text-secondary" />
               Équipe de l'espace
             </h3>
-            {(isEspaceCreator || isWorkspaceCreator || isInheritedSpaceAdmin) && (
+            {(isDirectEspaceCreator || isWorkspaceCreator || isInheritedSpaceAdmin) && (
               <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
                 <ShieldCheck className="h-4 w-4 text-indigo-500" />
                 <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">

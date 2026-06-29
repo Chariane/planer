@@ -121,15 +121,21 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const isDirectListAdmin = !!listId && members.some(
     m => m.id === user?.id && m.role === ROLES.ADMIN
   );
+
+  // ✅ Détection du créateur direct via les membres chargés
+  const isDirectListCreator = !!listId && members.some(
+    m => m.id === user?.id && m.role === ROLES.CREATOR
+  );
   
   // ✅ Détection de l'admin par héritage
   const isInheritedListAdmin = !!listId
     && (isWorkspaceAdmin || isWorkspaceCreator)
     && !isListeAdmin
     && !isListeCreator
-    && !isDirectListAdmin;
+    && !isDirectListAdmin
+    && !isDirectListCreator;
 
-  // ✅ DEBUG : Afficher les détections dans la console
+  // ✅ DEBUG : Afficher les détections dans la console (peut être supprimé)
   useEffect(() => {
     console.log('🔍 [ListDashboard] Détection des rôles:', {
       listId,
@@ -138,21 +144,23 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       isListeAdmin,
       isListeCreator,
       isDirectListAdmin,
+      isDirectListCreator,
       isInheritedListAdmin,
       membres: members.map(m => ({ id: m.id, role: m.role, name: m.name }))
     });
-  }, [isWorkspaceAdmin, isWorkspaceCreator, isListeAdmin, isListeCreator, isDirectListAdmin, isInheritedListAdmin, members]);
+  }, [isWorkspaceAdmin, isWorkspaceCreator, isListeAdmin, isListeCreator, isDirectListAdmin, isDirectListCreator, isInheritedListAdmin, members]);
 
   // ✅ canEditMemberRole : Détermine si l'utilisateur peut modifier le rôle d'un membre
   const canEditMemberRole = (member: Member) => {
     console.log(`🔍 [canEditMemberRole] Début pour ${member.name} (${member.role})`);
+    console.log(`   - isDirectListCreator: ${isDirectListCreator}`);
     console.log(`   - isListeCreator: ${isListeCreator}`);
     console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
     console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
     console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
     
     // ✅ Créateur direct : peut modifier n'importe quel membre (sauf lui-même)
-    if (isListeCreator || isWorkspaceCreator) {
+    if (isDirectListCreator || isWorkspaceCreator) {
       const canEdit = member.role !== ROLES.CREATOR && member.id !== user?.id;
       console.log(`🔍 [canEditMemberRole] Créateur: ${canEdit} pour ${member.name} (${member.role})`);
       return canEdit;
@@ -191,19 +199,20 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     // Ne peut pas retirer un autre créateur
     if (member.role === ROLES.CREATOR) return false;
     // ✅ SEUL le Créateur peut retirer un membre
-    return isListeCreator || isWorkspaceCreator;
+    return isDirectListCreator || isWorkspaceCreator;
   };
 
   // ✅ getManageableRolesForMember : Détermine les rôles disponibles pour la modification
   const getManageableRolesForMember = (memberRole: string) => {
     console.log(`🔍 [getManageableRolesForMember] memberRole: ${memberRole}`);
+    console.log(`   - isDirectListCreator: ${isDirectListCreator}`);
     console.log(`   - isListeCreator: ${isListeCreator}`);
     console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
     console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
     console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
     
     // ✅ Créateur direct : peut tout modifier (Invité → Membre → Admin et inversement)
-    if (isListeCreator || isWorkspaceCreator) {
+    if (isDirectListCreator || isWorkspaceCreator) {
       console.log(`🔍 [getManageableRolesForMember] Créateur: retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS}`);
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
@@ -233,7 +242,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   // ✅ getAvailableInvitationRoles : Détermine les rôles disponibles pour l'invitation
   const getAvailableInvitationRoles = () => {
     // ✅ Créateur direct ou Admin par héritage : peut inviter avec tous les rôles
-    if (isListeCreator || isWorkspaceCreator || isInheritedListAdmin) {
+    if (isDirectListCreator || isWorkspaceCreator || isInheritedListAdmin) {
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
     // ✅ Admin direct : ne peut inviter qu'avec Membre ou Invité
@@ -243,7 +252,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     return [];
   };
 
-  const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator || isInheritedListAdmin;
+  const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator || isInheritedListAdmin || isDirectListCreator;
 
   const availableRoles = getAvailableInvitationRoles();
 
@@ -372,7 +381,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       const lowerMessage = message.toLowerCase();
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
         showMessage(
-          (isListeCreator || isWorkspaceCreator)
+          (isDirectListCreator || isWorkspaceCreator)
             ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de cette liste avec le bouton Retirer.`
             : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de cette liste.`,
           'info'
@@ -429,9 +438,20 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
   })();
 
-  // ✅ Déterminer si on affiche un message d'information
-  const showDirectAdminMessage = isDirectListAdmin && !isListeCreator && !isWorkspaceCreator;
-  const showInheritedAdminMessage = isInheritedListAdmin && !isListeCreator && !isWorkspaceCreator;
+  // ✅ Déterminer si on affiche un message d'information (exclure le créateur direct)
+  const showDirectAdminMessage = isDirectListAdmin && !isDirectListCreator && !isWorkspaceCreator;
+  const showInheritedAdminMessage = isInheritedListAdmin && !isDirectListCreator && !isWorkspaceCreator;
+
+  // ✅ Rôle effectif pour MemberManagement
+  const effectiveListRole = isDirectListCreator
+    ? ROLES.CREATOR
+    : isListeCreator
+      ? ROLES.CREATOR
+      : isListeAdmin
+        ? ROLES.ADMIN
+        : isListeGuest
+          ? ROLES.GUEST
+          : null;
 
   return (
     <div className="space-y-6">
@@ -569,7 +589,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
             <Users className="h-5 w-5" />
             Membres de la liste
           </h3>
-          {(isListeCreator || isWorkspaceCreator || isInheritedListAdmin) && (
+          {(isDirectListCreator || isWorkspaceCreator || isInheritedListAdmin) && (
             <div className="flex items-center gap-2 bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-500/20 shadow-sm shadow-indigo-500/5">
               <ShieldCheck className="h-4 w-4 text-indigo-500" />
               <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">
@@ -579,10 +599,10 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           )}
         </div>
 
-        {/* ✅ PASSER isInheritedAdmin à MemberManagement */}
+        {/* ✅ PASSER isInheritedAdmin et currentUserRole corrigé */}
         <MemberManagement
           listeId={listId}
-          currentUserRole={isListeCreator ? ROLES.CREATOR : isListeAdmin ? ROLES.ADMIN : isListeGuest ? ROLES.GUEST : null}
+          currentUserRole={effectiveListRole}
           isInheritedAdmin={isInheritedListAdmin}
           onMemberAdded={loadData}
         />
