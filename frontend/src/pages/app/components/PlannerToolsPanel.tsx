@@ -1,3 +1,4 @@
+// frontend/src/pages/app/components/PlannerToolsPanel.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Archive, Calendar, Check, Download, Edit, Eye, FileText, Loader2, MessageCircle, Paperclip, ShieldAlert, Trash2, Upload, Users, X, CheckCircle2, AlertTriangle, Info, Filter, Plus, XCircle } from 'lucide-react';
@@ -837,18 +838,19 @@ export default function PlannerToolsPanel({
     return 'inconnu';
   };
 
+  // ✅ renderAbsenceCard corrigée (comparaisons de rôles en chaînes littérales)
   const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
     if (!absence) return null;
     const isOwn = absence.owner_user_id === currentUserId;
 
-    // ✅ MODIFICATION : condition d'approbation pour workspace
+    // ✅ MODIFICATION : condition d'approbation avec chaînes littérales
     const canApproveThis = !isOwn && (
-      (absence.author_role === ROLES.MEMBER && (
+      (absence.author_role === 'Membre' && (
         (listeId && isDirectResourceAdmin) ||
         (espaceId && isDirectResourceAdmin) ||
         (workspaceId && isDirectResourceAdmin)
       )) ||
-      (absence.author_role === ROLES.ADMIN && (
+      (absence.author_role === 'Administrateur' && (
         (listeId && isDirectResourceCreator) ||
         (espaceId && isDirectResourceCreator) ||
         (workspaceId && isDirectResourceCreator)
@@ -1065,40 +1067,40 @@ export default function PlannerToolsPanel({
       // Liste
       if (listeId) {
         if (isDirectResourceAdmin) {
-          return absence.author_role === ROLES.MEMBER;
+          return absence.author_role === 'Membre';
         }
         if (isDirectResourceCreator) {
-          if (absence.author_role === ROLES.ADMIN) return true;
+          if (absence.author_role === 'Administrateur') return true;
           const hasAvailableAdmin = listAvailability.some(a =>
             a.is_available &&
-            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
+            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === 'Administrateur'
           );
-          return absence.author_role === ROLES.MEMBER && !hasAvailableAdmin;
+          return absence.author_role === 'Membre' && !hasAvailableAdmin;
         }
       }
 
       // Espace
       if (espaceId) {
         if (isDirectResourceAdmin) {
-          return absence.author_role === ROLES.MEMBER;
+          return absence.author_role === 'Membre';
         }
         if (isDirectResourceCreator) {
-          if (absence.author_role === ROLES.ADMIN) return true;
+          if (absence.author_role === 'Administrateur') return true;
           const hasAvailableAdmin = listAvailability.some(a =>
             a.is_available &&
-            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === ROLES.ADMIN
+            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === 'Administrateur'
           );
-          return absence.author_role === ROLES.MEMBER && !hasAvailableAdmin;
+          return absence.author_role === 'Membre' && !hasAvailableAdmin;
         }
       }
 
       // Workspace
       if (workspaceId) {
         if (isDirectResourceAdmin) {
-          return absence.author_role === ROLES.MEMBER;
+          return absence.author_role === 'Membre';
         }
         if (isDirectResourceCreator) {
-          return absence.author_role === ROLES.ADMIN;
+          return absence.author_role === 'Administrateur';
         }
       }
 
@@ -1213,18 +1215,30 @@ export default function PlannerToolsPanel({
     }
   };
 
+  // ✅ MODIFICATION : absenceDashboard inclut maintenant impactedProjectsCount
   const absenceDashboard = useMemo(() => {
     const unavailableToday = listAvailability.filter(item => !item.is_available).length;
     const upcoming = visibleAbsences.filter(absence =>
       absence.statut === 'approuvee' && new Date(absence.date_debut) > new Date()
     ).length;
+    
+    // Calcul du nombre de projets impactés (pour espaces/workspaces)
+    const impactedProjectsCount = visibleAbsences.reduce((acc, absence) => {
+      const impact = absenceImpacts[absence.id];
+      if (impact && impact.impacted_projects) {
+        return acc + impact.impacted_projects.length;
+      }
+      return acc;
+    }, 0);
+
     return {
       unavailableToday,
       pending: pendingAbsences.length,
       upcoming,
       impactedTasks: impactedTasksForAbsences,
+      impactedProjectsCount,
     };
-  }, [impactedTasksForAbsences, listAvailability, pendingAbsences.length, visibleAbsences]);
+  }, [impactedTasksForAbsences, listAvailability, pendingAbsences.length, visibleAbsences, absenceImpacts]);
 
   const renderAbsenceList = (items: any[], emptyLabel: string) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1241,6 +1255,9 @@ export default function PlannerToolsPanel({
     </div>
   );
 
+  // ============================================================
+  // ✅ NOUVELLE FONCTION renderImpactPanel (projets impactés)
+  // ============================================================
   const renderImpactPanel = () => {
     const impactAbsences = visibleAbsences.filter(absence => absence.statut === 'approuvee');
 
@@ -1257,22 +1274,25 @@ export default function PlannerToolsPanel({
       <div className="space-y-5">
         {impactAbsences.map(absence => {
           const absenceImpact = absenceImpacts[absence.id];
-          const impactedTasks = getTasksImpactedByAbsence(absence);
+          const impactedProjects = absenceImpact?.impacted_projects || [];
+          const soleAdminProjects = absenceImpact?.sole_admin_projects || [];
+          const soleCreatorProjects = absenceImpact?.sole_creator_projects || [];
+
+          // Définition de canManageThisImpact (identique à l'ancienne version)
           const isOwn = absence.owner_user_id === currentUserId;
           const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
 
-          const hasSoleAdminRisk = !!absenceImpact?.sole_admin_lists?.length;
-          const hasSubSpaceRisk = !!absenceImpact?.admin_subspaces?.length;
-          const hasGovernanceRisk = hasSoleAdminRisk || hasSubSpaceRisk;
+          // Pour les listes : on utilise les tâches (ancien comportement)
+          const impactedTasks = listeId ? getTasksImpactedByAbsence(absence) : [];
+          const showTasks = listeId && (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
 
-          const otherAdmins = directMembers.filter(m => m.role === ROLES.ADMIN && m.id_utilisateur !== absence.owner_user_id);
-          const needsBackupAdmin = hasGovernanceRisk && otherAdmins.length === 0;
+          // Pour les espaces/workspaces : on utilise les projets
+          const showProjects = !listeId && impactedProjects.length > 0;
 
-          const showTasks = (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
-          const showGovernance = (isDirectResourceCreator || isInheritedManager) && hasGovernanceRisk;
-          const hasOperationalImpact = showTasks || showGovernance;
+          const hasGovernanceRisk = soleAdminProjects.length > 0 || soleCreatorProjects.length > 0;
 
-          if (!hasOperationalImpact) return null;
+          // Si aucun impact (ni tâches ni projets) et pas de risque, on saute cette absence
+          if (!showTasks && !showProjects && !hasGovernanceRisk) return null;
 
           return (
             <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70">
@@ -1291,16 +1311,14 @@ export default function PlannerToolsPanel({
                     {formatDate(absence.date_debut)} → {formatDate(absence.date_fin)}
                   </p>
                 </div>
-                <div className={`rounded-2xl border px-4 py-3 text-right ${hasOperationalImpact ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
-                  <p className={`text-[9px] font-black uppercase tracking-widest ${hasOperationalImpact ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    {hasOperationalImpact ? 'Action recommandée' : 'Impact faible'}
+                <div className={`rounded-2xl border px-4 py-3 text-right ${(showTasks || showProjects || hasGovernanceRisk) ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-widest ${(showTasks || showProjects || hasGovernanceRisk) ? 'text-amber-500' : 'text-emerald-500'}`}>
+                    {(showTasks || showProjects || hasGovernanceRisk) ? 'Action recommandée' : 'Impact faible'}
                   </p>
                   <p className="mt-1 text-xs font-bold text-theme-main">
-                    {!hasGovernanceRisk ? (
-                      `${impactedTasks.length} tâche(s) touchée(s)`
-                    ) : (
-                      needsBackupAdmin ? 'Admin unique (Projet)' : `Gouvernance assurée (${otherAdmins.length} autres admins)`
-                    )}
+                    {showTasks ? `${impactedTasks.length} tâche(s) touchée(s)` :
+                     showProjects ? `${impactedProjects.length} projet(s) impacté(s)` :
+                     hasGovernanceRisk ? 'Risque de gouvernance' : 'Aucun impact'}
                   </p>
                 </div>
               </div>
@@ -1323,9 +1341,10 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
+              {/* Tâches impactées (pour les listes) */}
               {showTasks && (
                 <div className="mt-5 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches réellement impactées</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches impactées</p>
                   {impactedTasks.length === 0 ? (
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs font-bold text-emerald-600">
                       Aucune tâche assignée à cette personne ne chevauche la période demandée.
@@ -1390,87 +1409,55 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
-              {showGovernance && (
-                <div className="mt-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance de la liste</p>
-                    <Link to={`/liste/${listeId}`} className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-secondary hover:underline">
-                      <Eye size={12} />
-                      Voir le projet
-                    </Link>
-                  </div>
-
-                  {!needsBackupAdmin ? (
-                    <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-                      <div className="flex items-start gap-4">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-black text-theme-main">Continuité assurée</p>
-                          <p className="mt-1 text-xs text-theme-muted leading-relaxed">
-                            La liste possède {otherAdmins.length} autre(s) administrateur(s) actif(s) :
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {otherAdmins.map(adm => (
-                              <span key={adm.id} className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-bold">
-                                {adm.name}
-                              </span>
-                            ))}
+              {/* Projets impactés (pour les espaces/workspaces) */}
+              {showProjects && (
+                <div className="mt-5 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Projets impactés</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {impactedProjects.map((project: any) => (
+                      <div key={project.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-black text-theme-main">{project.nom}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted mt-1">
+                              Rôle : {project.role}
+                            </p>
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 rounded-3xl border border-secondary/20 bg-secondary/5 p-5">
-                      <div className="flex items-start gap-3">
-                        <ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-secondary" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-black text-theme-main">Ajouter un administrateur de secours</p>
-                          <p className="mt-1 text-xs font-medium leading-relaxed text-theme-muted">
-                            Promouvez un membre hérité ou invitez un nouvel administrateur pour assurer la continuité.
-                          </p>
-                          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
-                            <select
-                              value={adminCandidateUserId}
-                              onChange={e => {
-                                setAdminCandidateUserId(e.target.value);
-                                if (e.target.value) setAdminInviteIdentifier('');
-                              }}
-                              className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
-                            >
-                              <option value="">Membre par héritage</option>
-                              {eligibleInheritedMembers.map(member => (
-                                <option key={member.id_utilisateur} value={member.id_utilisateur}>
-                                  {member.name} · {member.email}
-                                </option>
-                              ))}
-                            </select>
-                            <div className="flex flex-col gap-1">
-                              <input
-                                value={adminInviteIdentifier}
-                                onChange={e => {
-                                  setAdminInviteIdentifier(e.target.value);
-                                  if (e.target.value.trim()) setAdminCandidateUserId('');
-                                }}
-                                placeholder="Email ou username"
-                                className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none placeholder:text-theme-muted/40 focus:ring-2 focus:ring-secondary/20"
-                              />
-                              <span className="text-[9px] text-theme-muted/60 font-medium uppercase tracking-widest ml-1">
-                                Invitation externe
-                              </span>
+                          <div className="text-right">
+                            <span className="text-sm font-black text-theme-main">{project.progression}%</span>
+                            <div className="w-20 h-1.5 bg-theme-border-subtle rounded-full mt-1 overflow-hidden">
+                              <div className="h-full bg-secondary rounded-full" style={{ width: `${project.progression}%` }} />
                             </div>
-                            <Button
-                              type="button"
-                              onClick={handleAddBackupAdmin}
-                              disabled={loading || (!adminCandidateUserId && !adminInviteIdentifier.trim())}
-                              className="h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-widest bg-secondary text-white hover:bg-secondary/80 shadow-premium-sm"
-                            >
-                              Ajouter admin
-                            </Button>
                           </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Gouvernance : alertes sur les projets sans admin disponible */}
+              {hasGovernanceRisk && (
+                <div className="mt-5 space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance critique</p>
+                  {soleAdminProjects.map((p: any) => (
+                    <div key={p.id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+                      <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-black text-theme-main">Admin unique : {p.nom}</p>
+                        <p className="text-[11px] text-theme-muted">Ce projet n'aura plus d'administrateur actif durant l'absence.</p>
+                      </div>
                     </div>
-                  )}
+                  ))}
+                  {soleCreatorProjects.map((p: any) => (
+                    <div key={p.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 flex items-start gap-3">
+                      <ShieldAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-black text-theme-main">Créateur unique : {p.nom}</p>
+                        <p className="text-[11px] text-theme-muted">Ce projet n'aura plus de créateur direct actif.</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </GlassCard>
@@ -2048,7 +2035,11 @@ export default function PlannerToolsPanel({
                 { label: "Indisponibles aujourd'hui", value: absenceDashboard.unavailableToday, tone: 'text-rose-500', icon: Users },
                 { label: 'Demandes en attente', value: absenceDashboard.pending, tone: 'text-amber-500', icon: AlertTriangle },
                 { label: 'Absences à venir', value: absenceDashboard.upcoming, tone: 'text-primary', icon: Calendar },
-                { label: 'Tâches impactées', value: absenceDashboard.impactedTasks, tone: 'text-secondary', icon: FileText },
+                // ✅ MODIFICATION : Affichage conditionnel selon le scope
+                ...(listeId
+                  ? [{ label: 'Tâches impactées', value: absenceDashboard.impactedTasks, tone: 'text-secondary', icon: FileText }]
+                  : [{ label: 'Projets impactés', value: absenceDashboard.impactedProjectsCount, tone: 'text-secondary', icon: FileText }]
+                ),
               ].map(item => (
                 <GlassCard key={item.label} className="p-5 border-theme-border-subtle bg-theme-surface/60">
                   <div className="flex items-center justify-between">

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { GanttChartSquare, Calendar, ChevronRight, GitBranch, ListChecks, AlertCircle, CheckCircle, Users } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
+import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 import type { Task } from '../../../types';
 
 const priorityLabels: Record<string, string> = {
@@ -63,43 +64,6 @@ function isOverdue(task: Task) {
   const due = new Date(task.dueDate);
   due.setHours(23, 59, 59, 999);
   return due.getTime() < Date.now();
-}
-
-function getAssigneeInitial(name: string) {
-  return (name || '?').trim().charAt(0).toUpperCase();
-}
-
-function AssigneeInitials({ assignees, compact = false }: { assignees: Task['assignees']; compact?: boolean }) {
-  const sizeClass = compact ? 'h-6 w-6 text-[9px]' : 'h-7 w-7 text-[10px]';
-  const visibleAssignees = assignees.slice(0, compact ? 2 : 3);
-  const remainingCount = assignees.length - visibleAssignees.length;
-
-  if (assignees.length === 0) {
-    return (
-      <div className={`${sizeClass} flex items-center justify-center rounded-lg border border-dashed border-theme-border-subtle bg-theme-surface-hover text-theme-muted opacity-40`} title="Aucun membre assigné">
-        <Users size={compact ? 12 : 14} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center -space-x-2">
-      {visibleAssignees.map((assignee) => (
-        <div
-          key={assignee.id}
-          className={`${sizeClass} flex items-center justify-center rounded-lg border-2 border-theme-border-subtle bg-theme-surface font-black text-secondary shadow-sm`}
-          title={assignee.name}
-        >
-          {getAssigneeInitial(assignee.name)}
-        </div>
-      ))}
-      {remainingCount > 0 && (
-        <div className={`${sizeClass} flex items-center justify-center rounded-lg border-2 border-theme-border-subtle bg-theme-surface-hover font-black text-theme-muted shadow-sm`}>
-          +{remainingCount}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function GanttView({ tasks }: GanttViewProps) {
@@ -298,7 +262,17 @@ export default function GanttView({ tasks }: GanttViewProps) {
                       <span className="h-1 w-1 rounded-full bg-current" />
                       {priorityLabels[task.priority]}
                     </span>
-                    <AssigneeInitials assignees={task.assignees} compact />
+                    {/* ✅ Remplacement de AssigneeInitials par MemberAvatar */}
+                    <div className="flex items-center -space-x-1.5">
+                      {task.assignees.slice(0, 2).map((a) => (
+                        <MemberAvatar key={a.id} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
+                      ))}
+                      {task.assignees.length > 2 && (
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md border border-theme-border-subtle bg-theme-surface-hover text-[8px] font-black text-theme-muted shadow-sm">
+                          +{task.assignees.length - 2}
+                        </span>
+                      )}
+                    </div>
                     {progressInfo.mode === 'checklist' && progressInfo.total > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
                         <ListChecks size={11} />
@@ -358,13 +332,13 @@ export default function GanttView({ tasks }: GanttViewProps) {
                     </span>
                     {task.assignees.length > 0 && (
                       <span className="ml-1 hidden max-w-[54px] items-center -space-x-1.5 sm:flex">
-                        {task.assignees.slice(0, 2).map((assignee) => (
+                        {task.assignees.slice(0, 2).map((a) => (
                           <span
-                            key={assignee.id}
+                            key={a.id}
                             className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-white/20 text-[8px] font-black text-white shadow-sm backdrop-blur"
-                            title={assignee.name}
+                            title={a.name}
                           >
-                            {getAssigneeInitial(assignee.name)}
+                            {a.name.charAt(0).toUpperCase()}
                           </span>
                         ))}
                       </span>
@@ -515,7 +489,16 @@ export default function GanttView({ tasks }: GanttViewProps) {
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
-                            <AssigneeInitials assignees={child.assignees} compact />
+                            <div className="flex items-center -space-x-1">
+                              {child.assignees.slice(0, 2).map((a) => (
+                                <MemberAvatar key={a.id} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
+                              ))}
+                              {child.assignees.length > 2 && (
+                                <span className="flex h-5 w-5 items-center justify-center rounded-md border border-theme-border-subtle bg-theme-surface-hover text-[8px] font-black text-theme-muted shadow-sm">
+                                  +{child.assignees.length - 2}
+                                </span>
+                              )}
+                            </div>
                             <ChevronRight size={16} className="text-theme-muted" />
                           </div>
                         </button>
@@ -547,9 +530,7 @@ export default function GanttView({ tasks }: GanttViewProps) {
                 <div className="flex flex-wrap gap-2">
                   {selectedTask.assignees.map(assignee => (
                     <span key={assignee.id} className="inline-flex items-center gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface-hover px-3 py-2 text-xs font-bold text-theme-main">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-secondary/10 text-[10px] font-black text-secondary">
-                        {assignee.name.charAt(0).toUpperCase()}
-                      </span>
+                      <MemberAvatar member={assignee} size="xs" />
                       {assignee.name}
                     </span>
                   ))}

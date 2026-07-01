@@ -5,7 +5,7 @@ import {
   FolderKanban, CheckSquare, Users,
   ArrowRight, TrendingUp,
   Star, Briefcase, PlusCircle, Bell, ChevronRight,
-  Activity, Clock, LayoutGrid, Building2
+  Activity, Clock, LayoutGrid
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp } from '../contexts/AppContext';
@@ -108,13 +108,6 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-          <Link
-            to="/entreprise"
-            className="inline-flex w-full items-center justify-center rounded-2xl border border-theme-border-subtle bg-theme-surface px-6 py-5 text-[11px] font-black uppercase tracking-widest text-theme-main transition hover:border-secondary/40 hover:text-secondary sm:w-auto"
-          >
-            <Building2 className="mr-2 h-4 w-4" />
-            Entreprise
-          </Link>
           <Button
             onClick={() => setIsCreateModalOpen(true)}
             className="w-full rounded-2xl px-6 py-5 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px] sm:w-auto sm:px-8 sm:py-6"

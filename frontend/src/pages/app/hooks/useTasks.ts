@@ -3,12 +3,26 @@ import { useState, useEffect, useCallback } from 'react';
 import { tacheService } from '../../../services/tache.service';
 import { CHECKLIST_CHANGED_EVENT } from '../../../services/checklist.service';
 import type { TacheFilters } from '../../../services/tache.service';
-import { getMemberContactLabel, getMemberDisplayName } from '../../../utils/memberDisplay';
 import type { Task } from '../../../types';
 
 type NewTaskInput = Omit<Task, 'id' | 'createdAt' | 'progression'>;
 
 export function transformTask(apiTask: any): Task {
+  // Extraire les membres depuis apiTask.membres (si présents)
+  const members = (apiTask.membres || []).map((m: any) => {
+    const u = m.utilisateur || {};
+    return {
+      id: m.id_utilisateur || u.id,
+      username: u.username || '',
+      nom: u.nom || '',
+      prenoms: u.prenoms || '',
+      photo_base64: u.photo_base64 || null,
+      role: m.role || 'Membre',
+      name: u.prenoms && u.nom ? `${u.prenoms} ${u.nom}` : (u.username || 'Membre'),
+      email: u.email || '',
+    };
+  });
+
   return {
     id: apiTask.id,
     title: apiTask.titre,
@@ -18,7 +32,7 @@ export function transformTask(apiTask: any): Task {
     startDate: apiTask.date_debut ? apiTask.date_debut.split('T')[0] : '',
     dueDate: apiTask.date_fin_prevue ? apiTask.date_fin_prevue.split('T')[0] : '',
     order: apiTask.ordre_affichage,
-    assignees: [],
+    assignees: members,
     listId: apiTask.id_liste,
     parentTaskId: apiTask.id_tache_parent || null,
     creatorId: apiTask.id_createur || null,
@@ -59,24 +73,7 @@ export function useTasks(listId: string | undefined) {
         return;
       }
 
-      const transformed = (Array.isArray(data) ? data : []).map(transformTask);
-
-      const tasksWithMembers = await Promise.all(
-        transformed.map(async (task) => {
-          try {
-            const taskMembers = await tacheService.getMembers(task.id);
-            const assignees = taskMembers.map((m: any) => ({
-              id: m.id_utilisateur || m.id,
-              name: getMemberDisplayName(m),
-              email: getMemberContactLabel(m),
-              role: m.role || 'Membre',
-            }));
-            return { ...task, assignees };
-          } catch {
-            return task;
-          }
-        })
-      );
+      const tasksWithMembers = (Array.isArray(data) ? data : []).map(transformTask);
       setTasks(tasksWithMembers);
     } catch (err) {
       console.error('Erreur chargement tâches:', err);

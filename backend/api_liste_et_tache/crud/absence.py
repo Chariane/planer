@@ -23,6 +23,10 @@ from ..core.function import (
     _date_overlap,
     _has_overlapping_leave_for_user,
     _get_user_active_memberships,
+    _get_liste_or_404,
+    _get_liste_member_record,
+    LISTE_OWNER_ROLE,
+    LISTE_ADMIN_ROLE,
 )
 from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
@@ -270,16 +274,44 @@ def _user_direct_role_in_resource(db: Session, *, user_id: str, resource_type: s
     return membre.role if membre else None
 
 
+def _calculate_list_progress(db: Session, liste_id: str) -> float:
+    """Calcule le pourcentage d'avancement d'une liste basé sur ses tâches."""
+    tasks = db.query(Tache).filter(Tache.id_liste == liste_id).all()
+    if not tasks:
+        return 0.0
+    total = 0
+    for task in tasks:
+        if hasattr(task, 'progression') and task.progression is not None:
+            total += task.progression
+        else:
+            if task.statut == "terminé":
+                total += 100
+            elif task.statut == "en cours":
+                total += 50
+            elif task.statut == "bloqué":
+                total += 25
+            else:
+                total += 0
+    return round(total / len(tasks), 1)
+
+
 def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     absence, _membre = _require_absence_read_access(db, absence_id, current_user_id)
     target_membre = _get_member_or_404(db, absence.id_membre)
     scope_type, scope_id = _get_absence_scope_for_member(db, target_membre)
 
-    assigned_tasks: list[Tache] = []
-    sole_admin_resources: list[dict] = []
-    sole_creator_resources: list[dict] = []
+    # Variables pour les tâches (liste)
+    overlapping_tasks = []
+    overdue_tasks = []
+    high_priority_tasks = []
+
+    # Variables pour les projets (espace/workspace)
+    impacted_projects = []
+    sole_admin_projects = []
+    sole_creator_projects = []
 
     if scope_type == "liste":
+        # Comportement existant : on analyse les tâches assignées
         assigned_tasks = (
             db.query(Tache)
             .join(Membre, Tache.id == Membre.id_tache)
@@ -291,121 +323,40 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             )
             .all()
         )
+        now = datetime.utcnow()
+        for task in assigned_tasks:
+            if _date_overlap(absence.date_debut, absence.date_fin, task.date_debut, task.date_fin_prevue):
+                overlapping_tasks.append(task)
+                if task.priorite in {"haute", "critique"}:
+                    high_priority_tasks.append(task)
+            if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
+                overdue_tasks.append(task)
 
-    elif scope_type == "espace":
-        direct_lists = db.query(Liste).filter(Liste.id_espace == scope_id).all()
-        direct_subspaces = db.query(Espace).filter(Espace.id_espace_parent == scope_id).all()
-        direct_children = [
-            *[
-                {"type": "liste", "id": liste.id, "nom": liste.nom, "resource_type": "liste"}
-                for liste in direct_lists
-            ],
-            *[
-                {"type": "sous-espace", "id": espace.id, "nom": espace.nom, "resource_type": "espace"}
-                for espace in direct_subspaces
-            ],
-        ]
+    else:
+        # Espace ou Workspace : on liste les projets (listes) où le membre a un rôle de gestionnaire
+        listes = []
+        if scope_type == "espace":
+            listes = db.query(Liste).filter(Liste.id_espace == scope_id).all()
+        elif scope_type == "workspace":
+            listes = db.query(Liste).filter(Liste.id_workspace == scope_id).all()
 
-        for child in direct_children:
-            child_role = _user_direct_role_in_resource(
-                db,
-                user_id=target_membre.id_utilisateur,
-                resource_type=child["resource_type"],
-                resource_id=child["id"],
-            )
-            available_admins = _available_direct_admins(
-                db,
-                resource_type=child["resource_type"],
-                resource_id=child["id"],
-                date_debut=absence.date_debut,
-                date_fin=absence.date_fin,
-                exclude_absence_id=absence.id,
-            )
-
-            if target_membre.role == "Membre" and child_role == "Administrateur":
-                other_available_admins = [
-                    admin for admin in available_admins
-                    if admin.id_utilisateur != target_membre.id_utilisateur
-                ]
-                if not other_available_admins:
-                    sole_admin_resources.append({
-                        "type": child["type"],
-                        "id": child["id"],
-                        "nom": child["nom"],
-                    })
-
-            if target_membre.role == "Administrateur" and child_role == "Créateur":
-                if not available_admins:
-                    sole_creator_resources.append({
-                        "type": child["type"],
-                        "id": child["id"],
-                        "nom": child["nom"],
-                    })
-
-    elif scope_type == "workspace":
-        # Pour un workspace, on regarde les espaces et listes directs
-        direct_espaces = db.query(Espace).filter(Espace.id_workspace == scope_id).all()
-        direct_listes = db.query(Liste).filter(Liste.id_workspace == scope_id).all()
-        direct_children = [
-            *[
-                {"type": "espace", "id": espace.id, "nom": espace.nom, "resource_type": "espace"}
-                for espace in direct_espaces
-            ],
-            *[
-                {"type": "liste", "id": liste.id, "nom": liste.nom, "resource_type": "liste"}
-                for liste in direct_listes
-            ],
-        ]
-
-        for child in direct_children:
-            child_role = _user_direct_role_in_resource(
-                db,
-                user_id=target_membre.id_utilisateur,
-                resource_type=child["resource_type"],
-                resource_id=child["id"],
-            )
-            available_admins = _available_direct_admins(
-                db,
-                resource_type=child["resource_type"],
-                resource_id=child["id"],
-                date_debut=absence.date_debut,
-                date_fin=absence.date_fin,
-                exclude_absence_id=absence.id,
-            )
-
-            if target_membre.role == "Membre" and child_role == "Administrateur":
-                other_available_admins = [
-                    admin for admin in available_admins
-                    if admin.id_utilisateur != target_membre.id_utilisateur
-                ]
-                if not other_available_admins:
-                    sole_admin_resources.append({
-                        "type": child["type"],
-                        "id": child["id"],
-                        "nom": child["nom"],
-                    })
-
-            if target_membre.role == "Administrateur" and child_role == "Créateur":
-                if not available_admins:
-                    sole_creator_resources.append({
-                        "type": child["type"],
-                        "id": child["id"],
-                        "nom": child["nom"],
-                    })
-
-    overlapping = []
-    overdue = []
-    high_priority = []
-    now = datetime.utcnow()
-
-    for task in assigned_tasks:
-        if _date_overlap(absence.date_debut, absence.date_fin, task.date_debut, task.date_fin_prevue):
-            overlapping.append(task)
-            if task.priorite in {"haute", "critique"}:
-                high_priority.append(task)
-
-        if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
-            overdue.append(task)
+        for liste in listes:
+            member_role = _get_liste_member_record(db, liste.id, target_membre.id_utilisateur)
+            if member_role and member_role.role in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]:
+                progress = _calculate_list_progress(db, liste.id)
+                impacted_projects.append({
+                    "id": liste.id,
+                    "nom": liste.nom,
+                    "progression": progress,
+                    "role": member_role.role
+                })
+                # Vérification de la gouvernance
+                admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
+                available_admins = [a for a in admins if _is_user_available_now(db, a.id_utilisateur)]
+                if member_role.role == LISTE_ADMIN_ROLE and len(available_admins) == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
+                    sole_admin_projects.append({"id": liste.id, "nom": liste.nom})
+                elif member_role.role == LISTE_OWNER_ROLE and not available_admins:
+                    sole_creator_projects.append({"id": liste.id, "nom": liste.nom})
 
     conflicts = detect_leave_conflicts_for_member(
         db,
@@ -415,73 +366,90 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         exclude_absence_id=absence.id,
     )
 
-    # Statistiques d'absences/congés approuvés sur les 3 derniers mois (90 jours)
+    # Statistiques d'absences approuvées (3 derniers mois)
     limit_date = datetime.utcnow() - timedelta(days=90)
-    recent_approved = (
-        db.query(AbsenceEtConge)
-        .filter(
-            AbsenceEtConge.id_membre == target_membre.id,
-            AbsenceEtConge.statut == "approuvee",
-            AbsenceEtConge.date_debut >= limit_date,
-        )
-        .all()
-    )
-
+    recent_approved = db.query(AbsenceEtConge).filter(
+        AbsenceEtConge.id_membre == target_membre.id,
+        AbsenceEtConge.statut == "approuvee",
+        AbsenceEtConge.date_debut >= limit_date,
+    ).all()
     approved_count = len(recent_approved)
-    approved_days = 0
-    for a in recent_approved:
-        if a.duree_demandee_en_jours:
-            approved_days += a.duree_demandee_en_jours
-        elif a.date_debut:
-            end_val = a.date_fin or a.date_debut
-            delta = end_val - a.date_debut
-            approved_days += delta.days + 1
+    approved_days = sum(a.duree_demandee_en_jours or 0 for a in recent_approved)
 
+    # Calcul du risque
     risk_level = "faible"
-    if high_priority or overdue or sole_admin_resources or sole_creator_resources:
-        risk_level = "eleve"
-    elif overlapping or conflicts:
-        risk_level = "moyen"
+    if scope_type == "liste":
+        if high_priority_tasks or overdue_tasks or overlapping_tasks or sole_admin_projects or sole_creator_projects:
+            risk_level = "eleve"
+        elif conflicts:
+            risk_level = "moyen"
+    else:
+        if sole_admin_projects or sole_creator_projects:
+            risk_level = "eleve"
+        elif conflicts:
+            risk_level = "moyen"
 
-    risk_reasons: list[str] = []
-    if high_priority:
-        risk_reasons.append(f"{len(high_priority)} tâche(s) prioritaire(s) touchée(s)")
-    if overdue:
-        risk_reasons.append(f"{len(overdue)} tâche(s) déjà en retard")
-    if overlapping:
-        risk_reasons.append(f"{len(overlapping)} tâche(s) chevauchent la période")
+    risk_reasons = []
+    if scope_type == "liste":
+        if high_priority_tasks:
+            risk_reasons.append(f"{len(high_priority_tasks)} tâche(s) prioritaire(s) touchée(s)")
+        if overdue_tasks:
+            risk_reasons.append(f"{len(overdue_tasks)} tâche(s) déjà en retard")
+        if overlapping_tasks:
+            risk_reasons.append(f"{len(overlapping_tasks)} tâche(s) chevauchent la période")
+    else:
+        if sole_admin_projects:
+            risk_reasons.append(f"Seul administrateur disponible dans {len(sole_admin_projects)} projet(s)")
+        if sole_creator_projects:
+            risk_reasons.append(f"Créateur unique sans administrateur disponible dans {len(sole_creator_projects)} projet(s)")
     if conflicts:
         risk_reasons.append(f"{len(conflicts)} autre(s) demande(s) sur la même période")
-    if sole_admin_resources:
-        risk_reasons.append(f"Seul administrateur disponible dans {len(sole_admin_resources)} ressource(s) enfant(s) directe(s)")
-    if sole_creator_resources:
-        risk_reasons.append(f"Créateur direct de {len(sole_creator_resources)} ressource(s) enfant(s) sans administrateur disponible")
-
     if approved_count > 3:
         risk_reasons.append(f"Le membre a déjà eu {approved_count} absences approuvées ces 3 derniers mois")
     if approved_days > 15:
         risk_reasons.append(f"Le membre cumule déjà {approved_days} jours d'absence ces 3 derniers mois")
 
+    recommendation = ""
     if risk_level == "eleve":
-        recommendation = "Impact élevé : sécurisez les ressources enfants ou les tâches critiques avant d'approuver."
+        if scope_type == "liste":
+            recommendation = "Impact élevé : sécurisez les tâches critiques ou la gouvernance avant d'approuver."
+        else:
+            recommendation = "Impact élevé : sécurisez la gouvernance des projets avant d'approuver."
     elif risk_level == "moyen":
         recommendation = "Impact modéré : vérifiez les chevauchements avant décision."
     else:
         recommendation = "Impact faible : aucun risque opérationnel majeur détecté."
 
-    return {
-        "overlapping_tasks": overlapping,
-        "overdue_tasks": overdue,
-        "high_priority_tasks": high_priority,
+    # Construction de la réponse (adaptée au scope)
+    response = {
         "conflicting_absences": conflicts,
-        "sole_admin_resources": sole_admin_resources,
-        "sole_creator_resources": sole_creator_resources,
         "risk_level": risk_level,
         "recommendation": recommendation,
         "risk_reasons": risk_reasons,
         "approved_absences_last_3_months": approved_count,
         "approved_days_last_3_months": approved_days,
     }
+
+    if scope_type == "liste":
+        response.update({
+            "overlapping_tasks": overlapping_tasks,
+            "overdue_tasks": overdue_tasks,
+            "high_priority_tasks": high_priority_tasks,
+        })
+    else:
+        response.update({
+            "impacted_projects": impacted_projects,
+            "sole_admin_projects": sole_admin_projects,
+            "sole_creator_projects": sole_creator_projects,
+        })
+
+    # On ajoute également les ressources enfants pour la gouvernance si nécessaire (anciens champs pour compatibilité)
+    # Mais on ne les utilise plus dans le frontend pour les espaces/workspaces
+    if scope_type == "liste":
+        response["sole_admin_resources"] = sole_admin_projects  # réutilisé pour la compatibilité
+        response["sole_creator_resources"] = sole_creator_projects
+
+    return response
 
 
 def _date_overlap(start_a, end_a, start_b, end_b) -> bool:
@@ -514,31 +482,37 @@ def _ensure_no_overlapping_active_leave(
     date_fin,
     exclude_absence_id: Optional[str] = None,
 ) -> None:
+    """
+    Vérifie qu'il n'y a pas de conflit avec une demande existante :
+      - Pour les demandes en attente : on vérifie uniquement dans la même ressource (scope).
+      - Pour les demandes approuvées : on vérifie globalement (toutes les ressources).
+    """
     if not date_debut:
         raise HTTPException(
             status_code=400,
             detail="La date de début est obligatoire pour une demande d'absence ou de congé.",
         )
 
-    query = (
+    # 1. Vérification des demandes EN ATTENTE dans la même ressource (scope)
+    query_pending = (
         db.query(AbsenceEtConge)
         .join(Membre, AbsenceEtConge.id_membre == Membre.id)
         .filter(
             Membre.id_utilisateur == user_id,
             Membre.statut == "Actif",
-            AbsenceEtConge.statut.in_(["en_attente", "approuvee"]),
+            AbsenceEtConge.statut == "en_attente",
         )
     )
     if scope_type == "liste":
-        query = query.filter(Membre.id_liste == scope_id)
+        query_pending = query_pending.filter(Membre.id_liste == scope_id)
     elif scope_type == "espace":
-        query = query.filter(
+        query_pending = query_pending.filter(
             Membre.id_espace == scope_id,
             Membre.id_liste.is_(None),
             Membre.id_tache.is_(None),
         )
     elif scope_type == "workspace":
-        query = query.filter(
+        query_pending = query_pending.filter(
             Membre.id_workspace == scope_id,
             Membre.id_espace.is_(None),
             Membre.id_liste.is_(None),
@@ -547,17 +521,34 @@ def _ensure_no_overlapping_active_leave(
     else:
         raise HTTPException(status_code=400, detail="Scope de demande invalide.")
     if exclude_absence_id:
-        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+        query_pending = query_pending.filter(AbsenceEtConge.id != exclude_absence_id)
 
-    for existing in query.all():
+    for existing in query_pending.all():
         if _date_overlap(date_debut, date_fin, existing.date_debut, existing.date_fin):
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "Vous avez déjà une demande d'absence ou de congé en attente ou approuvée "
-                    "sur cette période. Annulez ou modifiez la demande existante avant d'en créer une autre."
+                    "Vous avez déjà une demande d'absence ou de congé en attente "
+                    "sur cette période dans cette ressource. Annulez ou modifiez la demande existante."
                 ),
             )
+
+    # 2. Vérification des demandes APPROUVÉES (globales, sans restriction de ressource)
+    if _has_overlapping_leave_for_user(
+        db,
+        user_id,
+        date_debut=date_debut,
+        date_fin=date_fin,
+        exclude_absence_id=exclude_absence_id,
+        statuses=["approuvee"],
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Vous êtes déjà en absence approuvée sur cette période. "
+                "Vous ne pouvez pas faire une nouvelle demande qui chevauche une absence déjà validée."
+            ),
+        )
 
 
 def detect_leave_conflicts_for_member(
@@ -1011,7 +1002,6 @@ def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     return _serialize_absence(db, absence)
 
 
-# ================ FONCTION MODIFIÉE ================
 def get_user_availability(
     db: Session, 
     *, 
@@ -1076,7 +1066,6 @@ def get_user_availability(
             "current_absence": _serialize_absence(db, absence) if absence else None
         })
     return results
-# ================ FIN DE LA MODIFICATION ================
 
 
 def delete_absence(db: Session, *, absence_id: str, current_user_id: str) -> None:

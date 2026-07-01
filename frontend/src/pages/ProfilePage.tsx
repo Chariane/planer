@@ -1,3 +1,4 @@
+// frontend/src/pages/ProfilePage.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Camera, Check, Copy, Edit2, Eye, Mail, MapPin, Phone, Save, Shield, Trash2, UserRound, X, Briefcase, Calendar, Globe, GraduationCap, ChevronRight, Hash, User, Lock, ChevronDown } from 'lucide-react';
@@ -90,7 +91,6 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setEditForm({
-      // ✅ username et email ne sont PAS dans le formulaire
       nom: user?.nom || '',
       prenoms: user?.prenoms || '',
       telephone: user?.telephone || '',
@@ -132,24 +132,17 @@ export default function ProfilePage() {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
 
-  // ✅ Fonction corrigée : ne pas envoyer date_nais vide
   const handleEditSubmit = async () => {
     try {
-      // ✅ Préparer les données avant l'envoi
       const payload = { ...editForm };
-      
-      // ✅ Si date_nais est vide, on ne l'envoie pas (sera ignoré par le backend)
       if (!payload.date_nais || payload.date_nais === '') {
         delete payload.date_nais;
       }
-      
-      // ✅ Supprimer les autres champs vides
       for (const [key, value] of Object.entries(payload)) {
         if (value === '' || value === null || value === undefined) {
           delete payload[key as keyof ProfileForm];
         }
       }
-      
       await updateProfile(payload);
       setIsEditing(false);
       showMessage('✅ Profil mis à jour avec succès');
@@ -258,6 +251,9 @@ export default function ProfilePage() {
     { id: 'security', label: 'Sécurité & Accès', icon: <Shield className="h-4 w-4" /> },
   ];
 
+  // Classe commune pour les boutons harmonisés avec la sidebar (fond dégradé slate-900->slate-800)
+  const sidebarButtonClass = "bg-slate-800 hover:bg-slate-700 text-white border-slate-700 shadow-lg shadow-slate-800/40";
+
   return (
     <div className="mx-auto max-w-6xl pb-20 pt-4 px-4 sm:px-6 lg:px-8">
       {/* Cinematic Header Area */}
@@ -329,7 +325,11 @@ export default function ProfilePage() {
           <AnimatedButton 
              onClick={() => setIsEditing(!isEditing)}
              variant={isEditing ? "outline" : "primary"}
-             className={cn("shadow-xl ring-8 ring-white dark:ring-slate-950", isEditing ? "bg-white dark:bg-slate-900" : "")}
+             className={cn(
+               "shadow-xl ring-8 ring-white dark:ring-slate-950",
+               isEditing ? "bg-white dark:bg-slate-900" : sidebarButtonClass,
+               !isEditing && "hover:bg-slate-700"
+             )}
           >
             {isEditing ? (
               <><X className="mr-2 h-5 w-5" /> Annuler</>
@@ -447,7 +447,10 @@ export default function ProfilePage() {
                            </PremiumSection>
 
                            <div className="lg:hidden">
-                             <AnimatedButton onClick={() => setIsEditing(true)} className="w-full py-4 text-lg">
+                             <AnimatedButton 
+                                onClick={() => setIsEditing(true)} 
+                                className={cn("w-full py-4 text-lg", sidebarButtonClass)}
+                             >
                                Modifier mon profil
                              </AnimatedButton>
                            </div>
@@ -523,7 +526,10 @@ export default function ProfilePage() {
                                  </div>
                                  <div className="flex items-center justify-end gap-4 border-t border-theme-border-subtle pt-6">
                                     <Button variant="ghost" onClick={() => setIsEditing(false)} className="font-bold">Annuler</Button>
-                                    <AnimatedButton onClick={handleEditSubmit} className="px-8 shadow-xl">
+                                    <AnimatedButton 
+                                      onClick={handleEditSubmit} 
+                                      className={cn("px-8 shadow-xl", sidebarButtonClass)}
+                                    >
                                       <Save className="mr-2 h-5 w-5" /> Enregistrer les modifications
                                     </AnimatedButton>
                                  </div>
@@ -575,7 +581,10 @@ export default function ProfilePage() {
                                  </div>
                                  <h3 className="text-lg font-bold text-theme-main">Non activé</h3>
                                  <p className="mt-2 text-sm text-theme-muted max-w-sm">Recommandé : Utilisez Google Authenticator pour protéger vos données.</p>
-                                 <AnimatedButton onClick={handleSetup2FA} className="mt-8 px-10">
+                                 <AnimatedButton 
+                                   onClick={handleSetup2FA} 
+                                   className={cn("mt-8 px-10", sidebarButtonClass)}
+                                 >
                                     Démarrer la configuration
                                  </AnimatedButton>
                               </div>
@@ -607,7 +616,10 @@ export default function ProfilePage() {
                                    />
                                 </div>
                                 <div className="pt-4">
-                                   <AnimatedButton onClick={handleChangePassword} className="w-full py-3">
+                                   <AnimatedButton 
+                                     onClick={handleChangePassword} 
+                                     className={cn("w-full py-3", sidebarButtonClass)}
+                                   >
                                       Mettre à jour le mot de passe
                                    </AnimatedButton>
                                 </div>
@@ -659,7 +671,10 @@ export default function ProfilePage() {
                   onChange={e => setTwoFACode(e.target.value.replace(/\D/g, ''))} 
                   className="w-full text-center text-3xl font-black tracking-[0.5em] h-16 rounded-2xl border-2 border-theme-border bg-theme-surface focus:border-secondary focus:ring-4 focus:ring-secondary/5 transition-all text-secondary" 
                />
-               <AnimatedButton onClick={handleEnable2FA} className="w-full py-4 text-lg">
+               <AnimatedButton 
+                 onClick={handleEnable2FA} 
+                 className={cn("w-full py-4 text-lg", sidebarButtonClass)}
+               >
                   Confirmer et Activer
                </AnimatedButton>
             </div>

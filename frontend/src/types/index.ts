@@ -249,18 +249,26 @@ export interface AbsenceConflictOut {
   motif?: string;
 }
 
+// ✅ Interface AbsenceImpactOut mise à jour
 export interface AbsenceImpactOut {
-  overlapping_tasks: Task[];
-  overdue_tasks: Task[];
-  high_priority_tasks: Task[];
+  // Pour les listes (scope liste) : tâches impactées
+  overlapping_tasks?: Task[];
+  overdue_tasks?: Task[];
+  high_priority_tasks?: Task[];
+  // Pour les espaces/workspaces : projets impactés
+  impacted_projects?: Array<{ id: string; nom: string; progression: number; role: string }>;
+  sole_admin_projects?: Array<{ id: string; nom: string }>;
+  sole_creator_projects?: Array<{ id: string; nom: string }>;
+  // Communs
   conflicting_absences: AbsenceConflictOut[];
-  sole_admin_resources?: any[];
-  sole_creator_resources?: any[];
   risk_level: 'faible' | 'moyen' | 'eleve' | string;
   recommendation?: string | null;
   risk_reasons?: string[];
   approved_absences_last_3_months?: number;
   approved_days_last_3_months?: number;
+  // Anciens champs (pour compatibilité si nécessaire)
+  sole_admin_resources?: any[];
+  sole_creator_resources?: any[];
 }
 
 export interface UserAvailabilityOut {
