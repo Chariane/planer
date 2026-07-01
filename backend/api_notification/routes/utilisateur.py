@@ -50,7 +50,13 @@ def create_my_notification(
     if not current_user.is_admin and not current_user.is_super_admin:
         payload.id_utilisateur = current_user.id
         payload.est_globale = False
-    return create_notification(db, payload)
+    # Passer les champs cible
+    return create_notification(
+        db,
+        payload,
+        target_type=payload.target_type,
+        target_id=payload.target_id,
+    )
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationOut)

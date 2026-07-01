@@ -56,9 +56,16 @@ def _create_notification(
     message: str,
     type_: str = "info",
     dedupe_today: bool = False,
+    target_type: str | None = None,
+    target_id: str | None = None,
 ) -> bool:
     if not user_id:
         return False
+
+    # Ajouter le tag si fourni
+    if target_type and target_id:
+        message = f"[[{target_type}:{target_id}]] {message}"
+
     if dedupe_today and _already_notified_today(db, user_id=user_id, message=message, type_=type_):
         return False
     try:
@@ -186,7 +193,6 @@ def _direct_espace_admin_user_ids(db: Session, espace_id: str, *, exclude_user_i
         db.query(Membre)
         .filter(
             Membre.id_espace == espace_id,
-            # IMPORTANT: on veut les admins direct de l'espace, donc pas ceux d'une liste dedans
             Membre.id_liste.is_(None),
             Membre.statut == "Actif",
             Membre.role == "Administrateur",
@@ -296,7 +302,6 @@ def _inherited_list_manager_user_ids(db: Session, liste: Liste, *, exclude_user_
 def _inherited_espace_manager_user_ids(db: Session, espace: Espace, *, exclude_user_id: str | None = None) -> list[str]:
     user_ids: list[str | None] = []
 
-    # Parents de l'espace
     ancestor_ids = _ancestor_espace_ids(db, espace.id_espace_parent)
     if ancestor_ids:
         espace_members = (
@@ -310,7 +315,6 @@ def _inherited_espace_manager_user_ids(db: Session, espace: Espace, *, exclude_u
         )
         user_ids.extend(member.id_utilisateur for member in espace_members)
 
-    # Workspace
     if espace.id_workspace:
         workspace_members = (
             db.query(Membre)
@@ -335,6 +339,8 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
     author_name = _display_user(author)
 
     recipients: list[str] = []
+    target_type: str | None = None
+    target_id: str | None = None
     
     if report_member.id_liste:
         liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
@@ -343,17 +349,16 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
         
         resource_name = liste.nom or "une liste"
         message = f"{author_name} a envoyé un rapport dans la liste « {resource_name} » : {report_title}."
+        target_type = "liste"
+        target_id = liste.id
         
         if report_member.role == "Membre":
-            # ✅ Récupérer les admins directs de la liste
             admins = db.query(Membre).filter(
                 Membre.id_liste == liste.id,
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
             
-            # ✅ Filtrer les admins disponibles (pas en congé)
-            from ..core.function import _is_user_available_now
             disponibles = [
                 admin for admin in admins 
                 if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)
@@ -362,7 +367,6 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
             if disponibles:
                 recipients = [admin.id_utilisateur for admin in disponibles]
             else:
-                # ✅ Fallback : créateur de la liste
                 createurs = db.query(Membre).filter(
                     Membre.id_liste == liste.id,
                     Membre.statut == "Actif",
@@ -371,7 +375,6 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
                 recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
                 
         elif report_member.role == "Administrateur":
-            # ✅ L'admin direct envoie au créateur
             createurs = db.query(Membre).filter(
                 Membre.id_liste == liste.id,
                 Membre.statut == "Actif",
@@ -387,6 +390,8 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
             return
         resource_name = espace.nom or "un espace"
         message = f"{author_name} a envoyé un rapport dans l'espace « {resource_name} » : {report_title}."
+        target_type = "espace"
+        target_id = espace.id
         
         if report_member.role == "Membre":
             admins = db.query(Membre).filter(
@@ -421,6 +426,8 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
             return
         resource_name = workspace.nom or "un workspace"
         message = f"{author_name} a envoyé un rapport dans le workspace « {resource_name} » : {report_title}."
+        target_type = "workspace"
+        target_id = workspace.id
         
         if report_member.role == "Membre":
             admins = db.query(Membre).filter(
@@ -451,7 +458,6 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
     else:
         return
 
-    # ✅ Envoyer les notifications
     for user_id in recipients:
         if user_id == actor_user_id:
             continue
@@ -460,13 +466,17 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
             user_id=user_id,
             message=message,
             type_="info",
-            dedupe_today=True
+            dedupe_today=True,
+            target_type=target_type,
+            target_id=target_id,
         )
 
 
 def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id: str, is_absence: bool) -> None:
     resource_name = "une ressource"
     resource_type_label = "la ressource"
+    target_type: str | None = None
+    target_id: str | None = None
     
     liste = None
     espace = None
@@ -476,11 +486,15 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
         if liste:
             resource_name = liste.nom or "une liste"
             resource_type_label = "la liste"
+            target_type = "liste"
+            target_id = liste.id
     elif absence_member.id_espace:
         espace = db.query(Espace).filter(Espace.id == absence_member.id_espace).first()
         if espace:
             resource_name = espace.nom or "un espace"
             resource_type_label = "l'espace"
+            target_type = "espace"
+            target_id = espace.id
 
     author = db.query(Utilisateur).filter(Utilisateur.id == absence_member.id_utilisateur).first()
     author_name = _display_user(author)
@@ -489,7 +503,6 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
 
     recipients = []
     if absence_member.role == "Membre":
-        # Logique available Admins -> Creator
         if absence_member.id_liste:
             admins = _direct_list_admin_user_ids(db, absence_member.id_liste, exclude_user_id=actor_user_id)
             creator_ids = _direct_list_creator_user_ids(db, absence_member.id_liste, exclude_user_id=actor_user_id)
@@ -503,7 +516,6 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
         else:
             recipients = creator_ids
     else:
-        # Admin requests go to hierarchy
         if absence_member.id_liste and liste:
             recipients = _inherited_list_manager_user_ids(db, liste, exclude_user_id=actor_user_id)
         elif absence_member.id_espace and espace:
@@ -515,7 +527,9 @@ def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id
             user_id=user_id,
             message=message,
             type_="alerte",
-            dedupe_today=True
+            dedupe_today=True,
+            target_type=target_type,
+            target_id=target_id,
         )
 
 
@@ -528,7 +542,9 @@ def notify_absence_decision(db: Session, *, absence_member: Membre, accepted: bo
         user_id=absence_member.id_utilisateur,
         message=message,
         type_=type_,
-        dedupe_today=True
+        dedupe_today=True,
+        target_type=None,  # pas de cible spécifique pour la décision
+        target_id=None,
     )
 
 
@@ -543,7 +559,9 @@ def notify_task_assigned(db: Session, *, tache: Tache, assigned_user_id: str) ->
         user_id=assigned_user_id,
         message=message,
         type_="info",
-        dedupe_today=True
+        dedupe_today=True,
+        target_type="tache",
+        target_id=tache.id,
     )
 
 
@@ -595,6 +613,8 @@ def notify_overdue_tasks_for_liste(db: Session, *, liste_id: str) -> None:
                 message=message,
                 type_="warning",
                 dedupe_today=True,
+                target_type="tache",
+                target_id=tache.id,
             )
 
 
@@ -632,6 +652,8 @@ def _notify_task_deadline(
             message=message,
             type_=type_,
             dedupe_today=True,
+            target_type="tache",
+            target_id=tache.id,
         )
         if created:
             created_count += 1

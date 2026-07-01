@@ -1,3 +1,4 @@
+# api_notification/schemas.py
 from typing import Optional, List, Any
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator, field_validator
@@ -1069,6 +1070,8 @@ class NotificationOut(BaseModel):
     date_modif: Optional[datetime] = None
     date_lecture: Optional[datetime] = None
     id_utilisateur: Optional[str] = None
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1078,6 +1081,8 @@ class NotificationCreate(BaseModel):
     type: str = Field(default="info", pattern="^(info|alerte|warning|promotion|evenement|systeme)$")
     message: str = Field(..., min_length=1)
     est_globale: bool = False
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
 
 
 class UnreadCountOut(BaseModel):

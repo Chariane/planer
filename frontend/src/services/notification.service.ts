@@ -12,12 +12,36 @@ export interface NotificationItem {
   date_modif?: string | null;
   date_lecture?: string | null;
   id_utilisateur?: string | null;
+  target_type?: string | null;
+  target_id?: string | null;
 }
 
 export interface NotificationRealtimeEvent {
   event: 'connected' | 'notification.created';
   notification?: NotificationItem;
 }
+
+const parseTargetFromMessage = (message: string): { message: string; target_type?: string; target_id?: string } => {
+  const match = message.match(/^\[\[([a-zA-Z]+):([a-zA-Z0-9_-]+)\]\]\s*/);
+  if (match) {
+    return {
+      message: message.slice(match[0].length),
+      target_type: match[1],
+      target_id: match[2],
+    };
+  }
+  return { message };
+};
+
+const transformNotification = (raw: any): NotificationItem => {
+  const parsed = parseTargetFromMessage(raw.message || '');
+  return {
+    ...raw,
+    message: parsed.message,
+    target_type: parsed.target_type || null,
+    target_id: parsed.target_id || null,
+  };
+};
 
 const withParams = (path: string, params: Record<string, string | number | boolean | null | undefined>) => {
   const search = new URLSearchParams();
@@ -33,14 +57,18 @@ const withParams = (path: string, params: Record<string, string | number | boole
 const wsBaseUrl = () => NOTIFICATION_BASE_URL.replace(/^http/, 'ws');
 
 export const notificationService = {
-  list: (params: { unread_only?: boolean; include_global?: boolean; limit?: number } = {}) =>
-    apiFetch(NOTIFICATION_BASE_URL, withParams('/notifications', params)) as Promise<NotificationItem[]>,
+  list: async (params: { unread_only?: boolean; include_global?: boolean; limit?: number } = {}) => {
+    const raw = await apiFetch(NOTIFICATION_BASE_URL, withParams('/notifications', params)) as any[];
+    return raw.map(transformNotification);
+  },
 
   unreadCount: () =>
     apiFetch(NOTIFICATION_BASE_URL, '/notifications/unread-count') as Promise<{ count: number }>,
 
-  markRead: (notificationId: string) =>
-    apiFetch(NOTIFICATION_BASE_URL, `/notifications/${notificationId}/read`, { method: 'PATCH' }) as Promise<NotificationItem>,
+  markRead: async (notificationId: string) => {
+    const raw = await apiFetch(NOTIFICATION_BASE_URL, `/notifications/${notificationId}/read`, { method: 'PATCH' });
+    return transformNotification(raw);
+  },
 
   markAllRead: () =>
     apiFetch(NOTIFICATION_BASE_URL, '/notifications/read-all', { method: 'PATCH' }) as Promise<{ updated: number }>,

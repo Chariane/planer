@@ -1,4 +1,6 @@
+// frontend/src/pages/NotificationsPage.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Archive, Bell, CheckCheck, Clock, Loader2, Trash2 } from 'lucide-react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { notificationService, type NotificationItem, type NotificationRealtimeEvent } from '../services/notification.service';
@@ -29,6 +31,18 @@ const notificationStyle = (type: NotificationItem['type']) => {
       return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
     default:
       return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+  }
+};
+
+const getNotificationLink = (notification: NotificationItem): string | null => {
+  if (!notification.target_type || !notification.target_id) return null;
+  switch (notification.target_type) {
+    case 'workspace': return `/workspace/${notification.target_id}`;
+    case 'espace': return `/espace/${notification.target_id}`;
+    case 'liste': return `/liste/${notification.target_id}`;
+    case 'tache': return `/tache/${notification.target_id}`;
+    case 'utilisateur': return `/users/${notification.target_id}`;
+    default: return null;
   }
 };
 
@@ -255,61 +269,87 @@ export default function NotificationsPage() {
           ) : (
             <div className="divide-y divide-white/5">
               <AnimatePresence mode="popLayout">
-                {notifications.map((notification, idx) => (
-                  <motion.div
-                    key={notification.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className={`p-4 sm:p-6 flex gap-3 sm:gap-6 transition-all group ${notification.est_lu ? 'hover:bg-white/[0.02]' : 'bg-secondary/[0.03] hover:bg-secondary/[0.05]'}`}
-                  >
-                    <button
-                      onClick={() => markRead(notification)}
-                      className="flex-1 text-left flex gap-3 sm:gap-6"
-                    >
-                      <div className={`shrink-0 mt-1 h-12 w-12 rounded-2xl border flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${notificationStyle(notification.type)}`}>
-                        <Bell size={20} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-3">
-                          {!notification.est_lu && <span className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.5)]" />}
-                          <span className={`text-[9px] px-2.5 py-1 rounded-lg border font-black uppercase tracking-widest ${notificationStyle(notification.type)}`}>
-                            {notification.type}
-                          </span>
-                          <span className="text-[10px] font-black text-theme-muted flex items-center gap-1.5 uppercase tracking-tighter opacity-40">
-                            <Clock size={12} />
-                            {formatDateTime(notification.date_creation)}
-                          </span>
-                        </div>
-                        <p className={`text-base mt-3 leading-relaxed tracking-tight ${notification.est_lu ? 'text-theme-muted font-medium' : 'text-theme-main font-bold'}`}>
-                          {notification.message}
-                        </p>
-                      </div>
-                    </button>
+                {notifications.map((notification, idx) => {
+                  const link = getNotificationLink(notification);
+                  const isClickable = !!link;
 
-                    <div className="flex items-start gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {!notification.est_lu && (
-                        <button
-                          onClick={() => markRead(notification)}
-                          disabled={actionLoading === notification.id}
-                          className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
-                          title="Marquer comme lu"
-                        >
-                          <CheckCheck size={18} />
-                        </button>
+                  return (
+                    <motion.div
+                      key={notification.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className={`p-4 sm:p-6 flex gap-3 sm:gap-6 transition-all group ${notification.est_lu ? 'hover:bg-white/[0.02]' : 'bg-secondary/[0.03] hover:bg-secondary/[0.05]'}`}
+                    >
+                      {isClickable ? (
+                        <Link to={link} className="flex-1 text-left flex gap-3 sm:gap-6 transition-all group">
+                          <div className={`shrink-0 mt-1 h-12 w-12 rounded-2xl border flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${notificationStyle(notification.type)}`}>
+                            <Bell size={20} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-3">
+                              {!notification.est_lu && <span className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.5)]" />}
+                              <span className={`text-[9px] px-2.5 py-1 rounded-lg border font-black uppercase tracking-widest ${notificationStyle(notification.type)}`}>
+                                {notification.type}
+                              </span>
+                              <span className="text-[10px] font-black text-theme-muted flex items-center gap-1.5 uppercase tracking-tighter opacity-40">
+                                <Clock size={12} />
+                                {formatDateTime(notification.date_creation)}
+                              </span>
+                            </div>
+                            <p className={`text-base mt-3 leading-relaxed tracking-tight ${notification.est_lu ? 'text-theme-muted font-medium' : 'text-theme-main font-bold'}`}>
+                              {notification.message}
+                            </p>
+                          </div>
+                        </Link>
+                      ) : (
+                        <div className="flex-1 text-left flex gap-3 sm:gap-6 transition-all group">
+                          <div className={`shrink-0 mt-1 h-12 w-12 rounded-2xl border flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${notificationStyle(notification.type)}`}>
+                            <Bell size={20} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-3">
+                              {!notification.est_lu && <span className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.5)]" />}
+                              <span className={`text-[9px] px-2.5 py-1 rounded-lg border font-black uppercase tracking-widest ${notificationStyle(notification.type)}`}>
+                                {notification.type}
+                              </span>
+                              <span className="text-[10px] font-black text-theme-muted flex items-center gap-1.5 uppercase tracking-tighter opacity-40">
+                                <Clock size={12} />
+                                {formatDateTime(notification.date_creation)}
+                              </span>
+                            </div>
+                            <p className={`text-base mt-3 leading-relaxed tracking-tight ${notification.est_lu ? 'text-theme-muted font-medium' : 'text-theme-main font-bold'}`}>
+                              {notification.message}
+                            </p>
+                          </div>
+                        </div>
                       )}
-                      <button
-                        onClick={() => removeNotification(notification.id)}
-                        disabled={actionLoading === notification.id}
-                        className="h-10 w-10 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                        title="Supprimer"
-                      >
-                        {actionLoading === notification.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+
+                      {/* Boutons d'action - toujours en dehors du lien */}
+                      <div className="flex items-start gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!notification.est_lu && (
+                          <button
+                            onClick={() => markRead(notification)}
+                            disabled={actionLoading === notification.id}
+                            className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                            title="Marquer comme lu"
+                          >
+                            <CheckCheck size={18} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => removeNotification(notification.id)}
+                          disabled={actionLoading === notification.id}
+                          className="h-10 w-10 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                          title="Supprimer"
+                        >
+                          {actionLoading === notification.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
           )}

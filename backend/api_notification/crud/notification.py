@@ -1,6 +1,6 @@
 from datetime import date, datetime
 import json
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -49,13 +49,22 @@ def _emit_notification_created(db: Session, notification: dict) -> None:
     )
 
 
-def create_notification(db: Session, payload: NotificationCreate) -> dict:
+def create_notification(
+    db: Session,
+    payload: NotificationCreate,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+) -> dict:
     if not payload.est_globale and not payload.id_utilisateur:
         raise HTTPException(status_code=400, detail="Une notification non globale doit cibler un utilisateur.")
 
     message = payload.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Le message de notification est obligatoire.")
+
+    # Enrichir avec le tag si target_type et target_id sont fournis
+    if target_type and target_id:
+        message = f"[[{target_type}:{target_id}]] {message}"
 
     row = db.execute(
         text(
