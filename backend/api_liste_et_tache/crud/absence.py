@@ -20,9 +20,9 @@ from ..core.function import (
     _require_direct_workspace_admin_grant,
     _require_workspace_creator_grant,
     _get_active_workspace_membership,
-    _date_overlap,                         
-    _has_overlapping_leave_for_user,       
-    _get_user_active_memberships,          
+    _date_overlap,
+    _has_overlapping_leave_for_user,
+    _get_user_active_memberships,
 )
 from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
@@ -1011,6 +1011,7 @@ def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
     return _serialize_absence(db, absence)
 
 
+# ================ FONCTION MODIFIÉE ================
 def get_user_availability(
     db: Session, 
     *, 
@@ -1018,33 +1019,54 @@ def get_user_availability(
     user_ids: list[str],
     reference_date: Optional[datetime] = None
 ) -> list[dict]:
+    """
+    Retourne la disponibilité des utilisateurs pour une ressource donnée.
+    - resource_id : id de la ressource (workspace, espace ou liste)
+    - user_ids : liste des id_utilisateur à vérifier
+    - reference_date : date de référence (par défaut maintenant)
+    """
     if not reference_date:
         reference_date = datetime.utcnow()
         
+    # 1. Récupérer les membres actifs de la ressource
     active_members = db.query(Membre).filter(
         ((Membre.id_liste == resource_id) | (Membre.id_espace == resource_id) | (Membre.id_workspace == resource_id)),
         Membre.id_utilisateur.in_(user_ids),
         Membre.statut == "Actif"
     ).all()
     
-    member_map = {m.id: m.id_utilisateur for m in active_members}
-    member_ids = list(member_map.keys())
+    # 2. Extraire les ID utilisateurs des membres trouvés
+    active_user_ids = [m.id_utilisateur for m in active_members]
+    
+    # 3. Chercher les absences approuvées pour ces utilisateurs (via n'importe quel membre)
+    absences = (
+        db.query(AbsenceEtConge)
+        .join(Membre, AbsenceEtConge.id_membre == Membre.id)
+        .filter(
+            Membre.id_utilisateur.in_(active_user_ids),
+            Membre.statut == "Actif",
+            AbsenceEtConge.statut == "approuvee"
+        )
+        .all()
+    )
     
     ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
     
-    absences = db.query(AbsenceEtConge).filter(
-        AbsenceEtConge.id_membre.in_(member_ids),
-        AbsenceEtConge.statut == "approuvee"
-    ).all()
-    
+    # 4. Construire un dictionnaire user_id -> absence active
     absent_map = {}
-    for a in absences:
-        a_start = a.date_debut.date() if a.date_debut else None
-        a_end = a.date_fin.date() if a.date_fin else a_start
+    for absence in absences:
+        user_id = absence.membres.id_utilisateur if absence.membres else None
+        if not user_id:
+            continue
+        a_start = absence.date_debut.date() if absence.date_debut else None
+        a_end = absence.date_fin.date() if absence.date_fin else a_start
         
         if a_start and ref_date >= a_start and (not a_end or ref_date <= a_end):
-            absent_map[member_map[a.id_membre]] = a
+            # Garder la première absence active (normalement une seule)
+            if user_id not in absent_map:
+                absent_map[user_id] = absence
     
+    # 5. Construire la réponse
     results = []
     for uid in user_ids:
         absence = absent_map.get(uid)
@@ -1054,6 +1076,7 @@ def get_user_availability(
             "current_absence": _serialize_absence(db, absence) if absence else None
         })
     return results
+# ================ FIN DE LA MODIFICATION ================
 
 
 def delete_absence(db: Session, *, absence_id: str, current_user_id: str) -> None:
