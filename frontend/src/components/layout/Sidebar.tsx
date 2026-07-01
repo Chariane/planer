@@ -1,10 +1,10 @@
 // frontend/src/components/layout/Sidebar.tsx
 import { useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { 
-  LayoutDashboard, Plus, LogOut, Crown, Users, 
-  ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2, 
-  Globe, User
+import {
+  LayoutDashboard, Plus, LogOut, Crown, Users,
+  ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2,
+  Globe, User, Briefcase, Building2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
@@ -102,11 +102,11 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
     return (
       <div className="flex h-full flex-col bg-gradient-to-b from-slate-900 to-slate-800 py-4 shadow-2xl overflow-y-auto items-center w-full border-r border-white/5">
         <div className="mb-10 flex justify-center">
-          <motion.div 
-            whileHover={{ rotate: 15, scale: 1.05 }} 
-            className="h-9 w-9 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-xs shadow-lg shadow-secondary/30"
+          <motion.div
+            whileHover={{ rotate: 15, scale: 1.05 }}
+            className="h-9 w-9 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-xs shadow-lg shadow-secondary/30 overflow-hidden"
           >
-            KP
+            <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
           </motion.div>
         </div>
         <nav className="flex flex-col items-center gap-6">
@@ -134,11 +134,11 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
     <div className="flex h-full flex-col bg-gradient-to-b from-slate-900 to-slate-800 shadow-2xl overflow-y-auto w-full items-center pb-2 border-r border-white/5">
       {/* Logo Section */}
       <div className={`flex ${isCompact ? 'flex-col items-center justify-center gap-1 py-6 px-1' : 'items-center gap-3 px-5 py-6'} w-full border-b border-white/5 transition-all`}>
-        <motion.div 
-          whileHover={{ rotate: 15, scale: 1.05 }} 
-          className="h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-sm shadow-xl shadow-secondary/30"
+        <motion.div
+          whileHover={{ rotate: 15, scale: 1.05 }}
+          className="h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-sm shadow-xl shadow-secondary/30 overflow-hidden"
         >
-          KP
+          <img src="/logo.png" alt="Logo K-Planner" className="h-full w-full object-cover" />
         </motion.div>
         {!isCompact && (
           <div className="flex flex-col">
@@ -148,11 +148,11 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         )}
       </div>
 
-      {/* Profil Section avec MemberAvatar - clic redirige vers /profile */}
+      {/* Profil Section - sans bordure externe et sans bordure sur l'avatar */}
       <div className={`w-full ${isCompact ? 'px-2 mt-6' : 'px-4 mt-6'}`}>
         <div
           onClick={() => navigate('/profile')}
-          className={`p-2.5 bg-white/5 rounded-2xl flex ${isCompact ? 'flex-col items-center justify-center' : 'items-center gap-3'} border border-white/5 group hover:bg-white/10 transition-all duration-300 cursor-pointer relative`}
+          className={`p-2.5 bg-white/5 rounded-2xl flex ${isCompact ? 'flex-col items-center justify-center' : 'items-center gap-3'} group hover:bg-white/10 transition-all duration-300 cursor-pointer relative`}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/profile'); }}
@@ -161,15 +161,15 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             <MemberAvatar
               member={userMember}
               size={isCompact ? 'sm' : 'md'}
-              className="border-2 border-white/10 shadow-lg group-hover:border-secondary/50 transition-all duration-300"
+              className="border-0 shadow-lg group-hover:shadow-secondary/50 transition-all duration-300"
             />
           ) : (
-            <div className={`${isCompact ? 'h-8 w-8 text-xs' : 'h-10 w-10 text-sm'} flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-white/10 flex items-center justify-center text-white font-black shadow-lg`}>
+            <div className={`${isCompact ? 'h-8 w-8 text-xs' : 'h-10 w-10 text-sm'} flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border-0 flex items-center justify-center text-white font-black shadow-lg`}>
               <User size={isCompact ? 16 : 20} />
             </div>
           )}
           {!isCompact && user && (
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-0 overflow-hidden">
               <p className="text-sm font-bold text-white truncate group-hover:text-secondary transition-colors">
                 {user.prenoms && user.nom ? `${user.prenoms} ${user.nom}` : user.username || user.email}
               </p>
@@ -179,8 +179,10 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             </div>
           )}
           {isCompact && user && (
-            <div className="mt-1 flex flex-col items-center">
-              <span className="text-[8px] font-black text-white/30 uppercase tracking-tight">{user.email}</span>
+            <div className="mt-1 flex flex-col items-center w-full overflow-hidden">
+              <span className="text-[8px] font-black text-white/30 uppercase tracking-tight truncate max-w-full">
+                {user.email}
+              </span>
             </div>
           )}
         </div>
@@ -189,7 +191,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       {/* Main Navigation - uniquement Tableau de bord */}
       <nav className={`mt-6 w-full ${isCompact ? 'px-2' : 'px-4'} space-y-2`}>
         <Link to="/dashboard" className="block w-full">
-          <motion.div 
+          <motion.div
             whileHover={{ x: 4, backgroundColor: 'rgba(255,255,255,0.05)' }}
             transition={{ type: 'spring', stiffness: 300 }}
             className={`flex ${isCompact ? 'flex-col items-center justify-center p-2.5' : 'items-center px-4 py-3'} gap-3 rounded-xl transition-all duration-300 ${location.pathname === '/dashboard'
@@ -221,7 +223,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
               onClick={() => setOwnedOpen(!ownedOpen)}
               className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors group`}
             >
-              <motion.div 
+              <motion.div
                 animate={{ rotate: ownedOpen ? 0 : -90 }}
                 transition={{ duration: 0.2 }}
                 className="mr-1"
@@ -242,9 +244,9 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
 
           <AnimatePresence>
             {ownedOpen && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }} 
-                animate={{ opacity: 1, height: 'auto' }} 
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
               >
@@ -258,7 +260,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                       : 'text-white/40 hover:bg-white/5 hover:text-white'
                       }`}
                   >
-                    <Crown size={isCompact ? 14 : 16} className={`${activeWorkspaceId === ws.id ? 'text-amber-400' : 'text-amber-400/40 group-hover:text-amber-400 transition-colors'}`} />
+                    <Briefcase size={isCompact ? 14 : 16} className={`${activeWorkspaceId === ws.id ? 'text-secondary' : 'text-secondary/40 group-hover:text-secondary transition-colors'}`} />
                     {!isCompact && <span className="text-sm truncate w-full">{ws.nom}</span>}
                     {isCompact && <span className="text-[8px] font-black truncate text-center">{ws.nom.substring(0, 2).toUpperCase()}</span>}
                   </Link>
@@ -276,7 +278,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 onClick={() => setJoinedOpen(!joinedOpen)}
                 className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors group`}
               >
-                <motion.div 
+                <motion.div
                   animate={{ rotate: joinedOpen ? 0 : -90 }}
                   transition={{ duration: 0.2 }}
                   className="mr-1"
@@ -289,9 +291,9 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             </div>
             <AnimatePresence>
               {joinedOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }} 
-                  animate={{ opacity: 1, height: 'auto' }} 
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
                 >
@@ -304,7 +306,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                         : 'text-white/40 hover:bg-white/5 hover:text-white'
                         }`}
                     >
-                      <Globe size={16} className={`${activeWorkspaceId === ws.id ? 'text-sky-400' : 'text-sky-400/40 group-hover:text-sky-400 transition-colors'}`} />
+                      <Building2 size={16} className={`${activeWorkspaceId === ws.id ? 'text-sky-400' : 'text-sky-400/40 group-hover:text-sky-400 transition-colors'}`} />
                       {!isCompact && <span className="text-sm truncate w-full flex-1">{ws.nom}</span>}
                     </Link>
                   ))}
@@ -322,7 +324,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 onClick={() => setEspacesOpen(!espacesOpen)}
                 className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors group`}
               >
-                <motion.div 
+                <motion.div
                   animate={{ rotate: espacesOpen ? 0 : -90 }}
                   transition={{ duration: 0.2 }}
                   className="mr-1"
@@ -335,9 +337,9 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             </div>
             <AnimatePresence>
               {espacesOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }} 
-                  animate={{ opacity: 1, height: 'auto' }} 
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
                 >
@@ -370,7 +372,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 onClick={() => setListesOpen(!listesOpen)}
                 className={`flex items-center ${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black text-white/40 uppercase tracking-widest hover:text-white transition-colors group`}
               >
-                <motion.div 
+                <motion.div
                   animate={{ rotate: listesOpen ? 0 : -90 }}
                   transition={{ duration: 0.2 }}
                   className="mr-1"
@@ -383,9 +385,9 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             </div>
             <AnimatePresence>
               {listesOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }} 
-                  animate={{ opacity: 1, height: 'auto' }} 
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
                 >
@@ -443,16 +445,16 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
             style={{ top: contextMenu.y, left: contextMenu.x }}
             onMouseLeave={() => setContextMenu(prev => ({ ...prev, visible: false }))}
           >
-            <button 
-              onClick={openEditWorkspace} 
+            <button
+              onClick={openEditWorkspace}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-all duration-200"
             >
               <Edit size={14} className="text-secondary" />
               Modifier l'Espace
             </button>
             <div className="h-[1px] bg-white/5 my-1 mx-2" />
-            <button 
-              onClick={handleDeleteWorkspace} 
+            <button
+              onClick={handleDeleteWorkspace}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-200"
             >
               <Trash2 size={14} />
