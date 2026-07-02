@@ -191,7 +191,7 @@ export default function NotificationsPage() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-theme-main tracking-tight uppercase leading-none">Notifications</h1>
                 <p className="text-sm text-theme-muted font-medium mt-2 opacity-60">
-                  Suivi en temps réel de votre activité K‑Planner.
+                  Suivi en temps réel de votre activité K‑Planer.
                 </p>
               </div>
             </div>

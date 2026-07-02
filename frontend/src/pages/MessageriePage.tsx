@@ -492,7 +492,7 @@ export default function MessageriePage() {
     setLoadingGroups(true);
     setError(null);
     try {
-      // ✅ Si un resource_type est demandé, garantir le groupe via K-Planner
+      // ✅ Si un resource_type est demandé, garantir le groupe via K-Planer
       if (desiredResourceType && desiredResourceId) {
         try {
           await ensureChatGroup(desiredResourceType, desiredResourceId);

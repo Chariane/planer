@@ -100,7 +100,7 @@ export default function LandingPage() {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <KhcLogo size={32} />
-            <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planner</span>
+            <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planer</span>
           </div>
 
           {/* Menu desktop */}
@@ -217,7 +217,7 @@ export default function LandingPage() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-orange-400">de vos projets</span>
           </h1>
           <p className="text-xl text-theme-muted mb-12 max-w-2xl mx-auto font-medium leading-relaxed opacity-80">
-            K‑Planner combine gestion de tâches, suivi du temps, absences et rapports dans une interface futuriste inspirée du néomorphisme.
+            K‑Planer combine gestion de tâches, suivi du temps, absences et rapports dans une interface futuriste inspirée du néomorphisme.
           </p>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/dashboard" className="inline-flex items-center px-10 py-5 rounded-2xl bg-secondary text-white font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-2xl shadow-secondary/30 group">
@@ -274,7 +274,7 @@ export default function LandingPage() {
       <section id="demo" ref={demoRef} className="py-32 bg-theme-surface/20">
         <div className="container mx-auto px-6">
           <motion.div variants={fadeInUp} initial="hidden" animate={isDemoInView ? "visible" : "hidden"} className="text-center mb-20">
-            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Voir K‑Planner en action</h2>
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Voir K‑Planer en action</h2>
             <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Découvrez comment notre plateforme transforme votre quotidien.</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 50 }} animate={isDemoInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, type: "spring", delay: 0.2 }} className="relative max-w-5xl mx-auto rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.3)] border border-theme-border-subtle bg-theme-surface p-4">
@@ -433,7 +433,7 @@ export default function LandingPage() {
               Prêt à transformer <br /> votre gestion ?
             </motion.h2>
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ delay: 0.2 }} viewport={{ once: true }} className="text-xl text-blue-100 mb-12 max-w-2xl mx-auto font-medium opacity-80 leading-relaxed">
-              Rejoignez plus de 500 entreprises qui utilisent K‑Planner pour piloter leurs projets stratégiques au quotidien.
+              Rejoignez plus de 500 entreprises qui utilisent K‑Planer pour piloter leurs projets stratégiques au quotidien.
             </motion.p>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link to="/dashboard" className="inline-flex items-center px-12 py-6 rounded-2xl bg-secondary text-white font-black uppercase tracking-widest text-xs shadow-2xl shadow-secondary/40 hover:bg-orange-600 transition-all">
@@ -451,7 +451,7 @@ export default function LandingPage() {
             <div>
               <div className="flex items-center gap-3 mb-8">
                 <KhcLogo size={32} />
-                <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planner</span>
+                <span className="text-xl font-black text-theme-main tracking-tighter uppercase">K‑Planer</span>
               </div>
               <p className="text-sm text-theme-muted font-medium leading-relaxed opacity-70">
                 La plateforme futuriste tout-en-un pour gérer vos projets, vos équipes, vos tâches et vos absences avec élégance.
@@ -499,7 +499,7 @@ export default function LandingPage() {
           </div>
           <div className="mt-24 pt-8 border-t border-theme-border-subtle/50 text-center">
             <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] opacity-40">
-              &copy; 2025 K‑Planner. Design System Premium par Kapitals.
+              &copy; 2025 K‑Planer. Design System Premium par Kapitals.
             </p>
           </div>
         </div>
@@ -528,7 +528,7 @@ const fallbackPlans: SubscriptionPlan[] = [
     code: 'ESSENTIEL',
     nom: 'Essentiel',
     audience: 'Pour un utilisateur ou une petite equipe qui structure son travail.',
-    description: 'Le socle gratuit pour demarrer avec K-Planner sans complexite.',
+    description: 'Le socle gratuit pour demarrer avec K-Planer sans complexite.',
     price_label: '0 XOF',
     highlight: false,
     billing: { montant: 0, devise: 'XOF', duree_jours: 30 },

@@ -1,6 +1,7 @@
+// frontend/src/pages/LoginPage.tsx
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, Shield, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, Building2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -64,27 +65,29 @@ export default function LoginPage() {
 
   if (requires2fa) {
     return (
-      <GlassCard className="p-8 w-full border-theme-border-subtle/30">
+      <GlassCard className="p-10 w-full border-theme-border-subtle/30 shadow-2xl shadow-secondary/5 backdrop-blur-sm bg-theme-surface/60">
         <div className="text-center mb-10">
           <motion.div
-            initial={{ scale: 0.5, opacity: 0 }}
+            initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-2xl mx-auto mb-6 shadow-xl shadow-secondary/20"
+            transition={{ type: 'spring', stiffness: 300 }}
+            className="h-20 w-20 rounded-3xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center shadow-2xl shadow-secondary/30 mx-auto mb-6 overflow-hidden border-2 border-white/20"
           >
-            KP
+            <img src="/logo.png" alt="K-Planer" className="h-14 w-14 object-contain" />
           </motion.div>
-          <h1 className="text-2xl font-black text-theme-main tracking-tight uppercase">Double Sécurité</h1>
-          <p className="text-theme-muted text-sm mt-2 opacity-60">Entrez le code Google Authenticator</p>
+          <h1 className="text-3xl font-black text-theme-main tracking-tight uppercase">Vérification 2FA</h1>
+          <p className="text-theme-muted text-sm mt-2 opacity-70">Entrez le code de votre application d'authentification</p>
         </div>
 
         <form onSubmit={handle2FASubmit} className="space-y-6">
           {error && (
-            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm font-bold">
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
+              <Shield size={18} className="shrink-0" />
               {error}
             </motion.div>
           )}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Code 2FA</label>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Code à 6 chiffres</label>
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-secondary transition-colors">
                 <Shield size={20} />
@@ -92,15 +95,15 @@ export default function LoginPage() {
               <input
                 type="text"
                 value={twoFactorCode}
-                onChange={e => setTwoFactorCode(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-theme-surface/50 border border-white/10 rounded-2xl text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold tracking-[0.5em] text-center"
+                onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                className="w-full pl-12 pr-4 py-4 bg-theme-surface/40 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/60 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/30 outline-none font-bold tracking-[0.5em] text-center text-xl transition-all"
                 placeholder="000000"
                 maxLength={6}
                 required
               />
             </div>
           </div>
-          <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-lg shadow-secondary/20">
+          <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl shadow-secondary/20 hover:shadow-secondary/40 transition-shadow">
             Vérifier & Continuer
           </Button>
         </form>
@@ -109,25 +112,31 @@ export default function LoginPage() {
   }
 
   return (
-    <GlassCard className="p-10 w-full border-theme-border-subtle/30">
-      <div className="text-center mb-10">
+    <GlassCard className="p-10 w-full border-theme-border-subtle/30 shadow-2xl shadow-secondary/5 backdrop-blur-sm bg-theme-surface/60 relative overflow-hidden">
+      {/* Subtle decorative background */}
+      <div className="absolute -top-20 -right-20 w-64 h-64 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="text-center mb-10 relative">
         <motion.div
-          initial={{ y: -20, opacity: 0 }}
+          initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-2xl mx-auto mb-6 shadow-xl shadow-secondary/20"
+          transition={{ type: 'spring', stiffness: 300 }}
+          className="h-20 w-20 rounded-3xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center shadow-2xl shadow-secondary/30 mx-auto mb-6 overflow-hidden border-2 border-white/20"
         >
-          KP
+          <img src="/logo.png" alt="K-Planer" className="h-14 w-14 object-contain" />
         </motion.div>
-        <h1 className="text-3xl font-black text-theme-main tracking-tighter uppercase mb-2">Bon Retour</h1>
-        <p className="text-theme-muted text-sm font-medium opacity-60">Poursuivez vos projets sur K‑Planner</p>
+        <h1 className="text-3xl font-black text-theme-main tracking-tight uppercase">Bon Retour</h1>
+        <p className="text-theme-muted text-sm mt-2 opacity-70">Poursuivez vos projets sur K‑Planer</p>
 
         <AnimatePresence>
           {(acceptedInvitationType || invitationToken) && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
-              className="mt-6 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl"
+              className="mt-6 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-2 justify-center"
             >
+              <Sparkles size={14} />
               {acceptedInvitationType
                 ? "Invitation acceptée ! Connectez-vous maintenant."
                 : "Invitation active détectée. Connectez-vous."}
@@ -136,15 +145,18 @@ export default function LoginPage() {
         </AnimatePresence>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 relative">
         {error && (
-          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-xl text-sm font-bold">
+          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-red-500" />
             {error}
           </motion.div>
         )}
 
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Identifiant</label>
+          <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 flex items-center gap-2">
+            <Mail size={14} className="text-secondary/60" /> Identifiant
+          </label>
           <div className="relative group">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-secondary transition-colors">
               <Mail size={18} />
@@ -153,7 +165,7 @@ export default function LoginPage() {
               type="text"
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/30 outline-none font-bold transition-all"
+              className="w-full pl-12 pr-4 py-4 bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/30 outline-none font-bold transition-all placeholder:font-medium"
               placeholder="Email ou username"
               required
             />
@@ -162,8 +174,10 @@ export default function LoginPage() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Mot de passe</label>
-            <Link to="/forgot-password" className="text-[10px] font-black text-secondary uppercase tracking-widest hover:underline">Oublié ?</Link>
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest flex items-center gap-2">
+              <Lock size={14} className="text-secondary/60" /> Mot de passe
+            </label>
+            <Link to="/forgot-password" className="text-[10px] font-black text-secondary/80 hover:text-secondary uppercase tracking-widest transition-colors hover:underline">Oublié ?</Link>
           </div>
           <div className="relative group">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted group-focus-within:text-secondary transition-colors">
@@ -173,7 +187,7 @@ export default function LoginPage() {
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full pl-12 pr-12 py-4 bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/30 outline-none font-bold transition-all"
+              className="w-full pl-12 pr-12 py-4 bg-theme-surface/30 border border-theme-border-subtle/20 rounded-2xl text-theme-main focus:bg-theme-surface/50 focus:ring-2 focus:ring-secondary/20 focus:border-secondary/30 outline-none font-bold transition-all placeholder:font-medium"
               placeholder="••••••••"
               required
             />
@@ -183,17 +197,17 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl shadow-secondary/20 group">
+        <Button type="submit" loading={isLoading} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl shadow-secondary/20 hover:shadow-secondary/40 transition-shadow group">
           <span className="flex items-center justify-center gap-2">
             Entrer dans l'espace <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
           </span>
         </Button>
       </form>
 
-      <div className="mt-10 pt-8 border-t border-theme-border-subtle/30 text-center">
+      <div className="mt-10 pt-8 border-t border-theme-border-subtle/30 text-center relative">
         <p className="text-xs font-medium text-theme-muted">
           Pas encore membre ?{' '}
-          <Link to="/register" className="text-secondary font-black uppercase tracking-widest ml-1 hover:underline">
+          <Link to="/register" className="text-secondary font-black uppercase tracking-widest ml-1 hover:underline hover:text-secondary/80 transition-colors">
             Créer un compte
           </Link>
         </p>

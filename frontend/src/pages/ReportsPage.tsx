@@ -194,7 +194,7 @@ export default function ReportsPage() {
                         <Plus size={16} />
                     </div>
                     <p className="text-xs font-bold text-white">
-                        Pour soumettre un rapport, utilisez le panneau <span className="text-primary italic">Outils du Planner</span> dans vos listes de tâches.
+                        Pour soumettre un rapport, utilisez le panneau <span className="text-primary italic">Outils du Planer</span> dans vos listes de tâches.
                     </p>
                 </div>
             )}

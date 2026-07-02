@@ -138,11 +138,11 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
           whileHover={{ rotate: 15, scale: 1.05 }}
           className="h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-sm shadow-xl shadow-secondary/30 overflow-hidden"
         >
-          <img src="/logo.png" alt="Logo K-Planner" className="h-full w-full object-cover" />
+          <img src="/logo.png" alt="Logo K-Planer" className="h-full w-full object-cover" />
         </motion.div>
         {!isCompact && (
           <div className="flex flex-col">
-            <span className="text-lg font-black text-white tracking-tight leading-none">K-Planner</span>
+            <span className="text-lg font-black text-white tracking-tight leading-none">K-Planer</span>
             <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.3em]">Gestion de projets</span>
           </div>
         )}

@@ -1557,7 +1557,7 @@ export default function PlannerToolsPanel({
             <div class="content note">${safeCommentaire}</div>
           </div>` : ''}
             <div class="footer">
-              <div>Généré par K-Planner le ${new Date().toLocaleDateString('fr-FR')}</div>
+              <div>Généré par K-Planer le ${new Date().toLocaleDateString('fr-FR')}</div>
               <div>Signé: <span class="signature">${safeAuthor}</span></div>
             </div>
             <script>window.onload = () => {window.print(); window.close(); }</script>
