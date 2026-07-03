@@ -280,6 +280,7 @@ export default function PlannerToolsPanel({
     return (extension || mimeSubtype || 'fichier').slice(0, 20);
   };
 
+  // 🔧 LOAD MEMBERS MODIFIÉ : ajout du créateur du workspace
   const loadMembers = async () => {
     if (!workspaceId && !espaceId && !listeId) return;
     try {
@@ -308,7 +309,30 @@ export default function PlannerToolsPanel({
       const workspaceMembers = processMembers(workspaceRes);
       const espaceMembers = processMembers(espaceRes);
       const listeMembers = processMembers(listeRes);
-      const direct = listeId ? listeMembers : espaceId ? espaceMembers : workspaceMembers;
+      let direct = listeId ? listeMembers : espaceId ? espaceMembers : workspaceMembers;
+
+      // 👇 AJOUT : pour un workspace, s'assurer que le créateur est dans les membres directs
+      if (workspaceId && !listeId && !espaceId) {
+        try {
+          const workspace = await workspaceService.getWorkspace(workspaceId);
+          if (workspace?.id_utilisateur) {
+            const creatorExists = direct.some(m => m.id_utilisateur === workspace.id_utilisateur);
+            if (!creatorExists) {
+              // Ajouter le créateur avec le rôle "Créateur"
+              direct.push({
+                id: `creator-${workspace.id_utilisateur}`,
+                id_utilisateur: workspace.id_utilisateur,
+                name: workspace.nom || 'Créateur',
+                email: '',
+                role: ROLES.CREATOR,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Impossible de récupérer le workspace pour ajouter le créateur", e);
+        }
+      }
+
       const inheritedNames = new Set(direct.map(m => m.id_utilisateur));
       const inheritedSources = listeId ? [...espaceMembers, ...workspaceMembers] : espaceId ? workspaceMembers : [];
       const inherited = inheritedSources
@@ -838,17 +862,23 @@ export default function PlannerToolsPanel({
     return 'inconnu';
   };
 
-  // ✅ renderAbsenceCard corrigée (comparaisons de rôles en chaînes littérales)
+  // ✅ renderAbsenceCard avec nouvelle logique canApproveThis
   const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
     if (!absence) return null;
     const isOwn = absence.owner_user_id === currentUserId;
 
-    // ✅ MODIFICATION : condition d'approbation avec chaînes littérales
+    // ✅ Déterminer s'il y a un administrateur direct disponible
+    const hasAvailableDirectAdmin = directMembers.some(m => 
+      m.role === ROLES.ADMIN && 
+      listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+    );
+
+    // ✅ NOUVELLE LOGIQUE canApproveThis
     const canApproveThis = !isOwn && (
       (absence.author_role === 'Membre' && (
-        (listeId && isDirectResourceAdmin) ||
-        (espaceId && isDirectResourceAdmin) ||
-        (workspaceId && isDirectResourceAdmin)
+        (listeId && (isDirectResourceAdmin || (isDirectResourceCreator && !hasAvailableDirectAdmin))) ||
+        (espaceId && (isDirectResourceAdmin || (isDirectResourceCreator && !hasAvailableDirectAdmin))) ||
+        (workspaceId && (isDirectResourceAdmin || (isDirectResourceCreator && !hasAvailableDirectAdmin)))
       )) ||
       (absence.author_role === 'Administrateur' && (
         (listeId && isDirectResourceCreator) ||
