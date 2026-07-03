@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/crud/notification_events.py
 from __future__ import annotations
 
 import logging
@@ -6,10 +7,7 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from ..core.function import (
-    _is_user_available_now,
-    commit_or_raise,
-)
+from ..core.function import commit_or_raise
 from ..models import AbsenceEtConge, Espace, Liste, Membre, Tache, Utilisateur, Workspace
 
 
@@ -335,6 +333,9 @@ def _inherited_espace_manager_user_ids(db: Session, espace: Espace, *, exclude_u
 
 
 def notify_report_created(db: Session, *, report_member: Membre, report_title: str, actor_user_id: str) -> None:
+    # Import local pour éviter les problèmes de circularité
+    from ..core.function import _is_user_available_now
+
     author = db.query(Utilisateur).filter(Utilisateur.id == report_member.id_utilisateur).first()
     author_name = _display_user(author)
 
@@ -399,7 +400,6 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
-            from ..core.function import _is_user_available_now
             disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
             if disponibles:
                 recipients = [admin.id_utilisateur for admin in disponibles]
@@ -435,7 +435,6 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
-            from ..core.function import _is_user_available_now
             disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
             if disponibles:
                 recipients = [admin.id_utilisateur for admin in disponibles]
@@ -473,6 +472,9 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
 
 
 def notify_absence_created(db: Session, *, absence_member: Membre, actor_user_id: str, is_absence: bool) -> None:
+    # Import local pour éviter les problèmes de circularité
+    from ..core.function import _is_user_available_now
+
     resource_name = "une ressource"
     resource_type_label = "la ressource"
     target_type: str | None = None
