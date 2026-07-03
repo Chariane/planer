@@ -852,7 +852,9 @@ def _get_list_member_management_grant(
 
 def _validate_list_member_management_permissions(
     *,
+    db: Session,
     liste_id: str,
+    current_user_id: str,
     actor_role: str,
     actor_source_type: str,
     actor_source_id: str,
@@ -860,6 +862,17 @@ def _validate_list_member_management_permissions(
     new_role: str | None = None,
 ) -> None:
     """Valide les permissions de gestion des membres d'une liste."""
+
+    # ✅ Vérification explicite : l'utilisateur actuel est-il le créateur direct de la liste ?
+    is_direct_creator = db.query(Membre).filter(
+        Membre.id_liste == liste_id,
+        Membre.id_utilisateur == current_user_id,
+        Membre.role == LISTE_OWNER_ROLE,
+        Membre.statut == "Actif",
+    ).first() is not None
+
+    if is_direct_creator:
+        return
 
     # Ajout d'un nouveau membre (target_member None)
     if target_member is None:

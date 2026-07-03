@@ -1,3 +1,4 @@
+# backend/api_espace/routes/utilisateur.py
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import RedirectResponse
@@ -54,6 +55,9 @@ from ..schemas import (
     WorkspaceMemberInvite,
     WorkspaceMemberUpdate
 )
+
+# ✅ Ajout des imports manquants
+from ..models import Espace, Membre, Utilisateur, Workspace
 
 router = APIRouter(tags=["Espaces"])
 
@@ -443,20 +447,7 @@ def remove_espace_member_endpoint(
             detail="Vous ne pouvez pas vous retirer via la gestion des membres."
         )
     
-    # ✅ Vérifier que l'utilisateur actuel est le créateur de l'espace
-    createur = db.query(Membre).filter(
-        Membre.id_espace == espace_id,
-        Membre.role == "Créateur",
-        Membre.statut == "Actif",
-        Membre.id_utilisateur == current_user.id
-    ).first()
-    
-    if not createur:
-        raise HTTPException(
-            status_code=403,
-            detail="Seul le créateur de l'espace peut retirer un membre."
-        )
-
-    if not remove_espace_member(db, espace_id, user_id):
+    # ✅ Délégation complète au CRUD qui vérifiera que current_user est le créateur
+    if not remove_espace_member(db, espace_id, user_id, current_user.id):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")
     return None

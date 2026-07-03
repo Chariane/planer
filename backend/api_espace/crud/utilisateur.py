@@ -1,3 +1,4 @@
+# backend/api_espace/crud/utilisateur.py
 from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy import func, text
@@ -557,24 +558,28 @@ def update_espace_member(
     return membre
 
 
-def remove_espace_member(db: Session, espace_id: str, user_id: str) -> bool:
-    """✅ Permet au Créateur de retirer n'importe quel membre (y compris les Invités)."""
+def remove_espace_member(db: Session, espace_id: str, user_id: str, current_user_id: str) -> bool:
+    """
+    Supprime un membre d'un espace.
+    Seul le créateur de l'espace peut retirer un membre.
+    """
     membre = get_espace_member(db, espace_id, user_id)
     if not membre:
         return False
     
-    # ✅ Vérification : Seul le Créateur peut retirer un membre
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         return False
     
+    # ✅ Vérification : l'utilisateur actuel doit être le créateur
     createur = db.query(Membre).filter(
         Membre.id_espace == espace_id,
         Membre.role == "Créateur",
-        Membre.statut == "Actif"
+        Membre.statut == "Actif",
+        Membre.id_utilisateur == current_user_id
     ).first()
     
-    if not createur or createur.id_utilisateur != user_id:
+    if not createur:
         raise HTTPException(
             status_code=403,
             detail="Seul le créateur de l'espace peut retirer un membre."
@@ -693,7 +698,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 user_id=target_user.id,
                 name=espace.nom,
                 creator_id=createur_id,
-                role=target_user.role,
+                role=membre_in.role,  # ✅ Correction : utiliser membre_in.role
             )
         
         # Token pour utilisateur existant (Contrainte 2)
@@ -707,6 +712,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
             },
             expires_delta=timedelta(days=7),
         )
+        # ✅ Correction : utiliser membre_in.role pour le retour
         return {"membre": membre, "invitation_token": token}
     
     else:
