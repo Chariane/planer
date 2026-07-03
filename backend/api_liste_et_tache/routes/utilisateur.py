@@ -1415,11 +1415,15 @@ def list_availability_endpoint(
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
+    # Déduire le type de ressource pour filtrer correctement
+    from ..core.function import resolve_resource_type
+    resource_type, _ = resolve_resource_type(db, resource_id)
     return get_user_availability(
         db, 
         resource_id=resource_id, 
         user_ids=request.user_ids, 
-        reference_date=request.reference_date
+        reference_date=request.reference_date,
+        resource_type=resource_type  # passage du type
     )
 
 

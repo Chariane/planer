@@ -1007,56 +1007,97 @@ def get_user_availability(
     *, 
     resource_id: str, 
     user_ids: list[str],
-    reference_date: Optional[datetime] = None
+    reference_date: Optional[datetime] = None,
+    resource_type: Optional[str] = None
 ) -> list[dict]:
     """
     Retourne la disponibilité des utilisateurs pour une ressource donnée.
     - resource_id : id de la ressource (workspace, espace ou liste)
     - user_ids : liste des id_utilisateur à vérifier
     - reference_date : date de référence (par défaut maintenant)
+    - resource_type : type de la ressource ('workspace', 'espace', 'liste') pour éviter une requête supplémentaire
     """
     if not reference_date:
         reference_date = datetime.utcnow()
-        
-    # 1. Récupérer les membres actifs de la ressource
-    active_members = db.query(Membre).filter(
-        ((Membre.id_liste == resource_id) | (Membre.id_espace == resource_id) | (Membre.id_workspace == resource_id)),
+    ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
+
+    # Déterminer le type si non fourni
+    if resource_type is None:
+        from ..core.function import resolve_resource_type
+        resource_type, _ = resolve_resource_type(db, resource_id)
+
+    # Obtenir les ancêtres de la ressource cible (incluant elle-même)
+    from ..core.function import _resolve_resource_hierarchy, ResourceType
+    hierarchy = _resolve_resource_hierarchy(db, resource_type, resource_id)
+    # hierarchy contient: workspace_id, espace_ids, liste_id, tache_id (et d'autres)
+    # On construit un ensemble de IDs valides pour chaque type
+    valid_workspace_ids = set()
+    valid_espace_ids = set()
+    valid_liste_ids = set()
+    valid_tache_ids = set()
+
+    if hierarchy.get("workspace_id"):
+        valid_workspace_ids.add(hierarchy["workspace_id"])
+    if hierarchy.get("espace_ids"):
+        valid_espace_ids.update(hierarchy["espace_ids"])
+    if hierarchy.get("liste_id"):
+        valid_liste_ids.add(hierarchy["liste_id"])
+    if hierarchy.get("tache_id"):
+        valid_tache_ids.add(hierarchy["tache_id"])
+
+    # Récupérer tous les membres actifs des utilisateurs demandés
+    membres = db.query(Membre).filter(
         Membre.id_utilisateur.in_(user_ids),
         Membre.statut == "Actif"
     ).all()
-    
-    # 2. Extraire les ID utilisateurs des membres trouvés
-    active_user_ids = [m.id_utilisateur for m in active_members]
-    
-    # 3. Chercher les absences approuvées pour ces utilisateurs (via n'importe quel membre)
+    if not membres:
+        return [{"id_utilisateur": uid, "is_available": True, "current_absence": None} for uid in user_ids]
+
+    # Récupérer toutes les absences approuvées de ces membres
     absences = (
         db.query(AbsenceEtConge)
         .join(Membre, AbsenceEtConge.id_membre == Membre.id)
         .filter(
-            Membre.id_utilisateur.in_(active_user_ids),
+            Membre.id_utilisateur.in_(user_ids),
             Membre.statut == "Actif",
             AbsenceEtConge.statut == "approuvee"
         )
         .all()
     )
-    
-    ref_date = reference_date.date() if isinstance(reference_date, datetime) else reference_date
-    
-    # 4. Construire un dictionnaire user_id -> absence active
+
+    # Filtrer les absences actives et dont la ressource est un ancêtre de la ressource cible
     absent_map = {}
     for absence in absences:
-        user_id = absence.membres.id_utilisateur if absence.membres else None
-        if not user_id:
+        membre = absence.membres
+        if not membre:
             continue
+
+        # Vérifier si la ressource du membre est dans les ancêtres
+        ressource_valide = False
+        if membre.id_workspace and membre.id_workspace in valid_workspace_ids:
+            ressource_valide = True
+        elif membre.id_espace and membre.id_espace in valid_espace_ids:
+            ressource_valide = True
+        elif membre.id_liste and membre.id_liste in valid_liste_ids:
+            ressource_valide = True
+        elif membre.id_tache:
+            # Pour une tâche, on remonte à sa liste
+            tache = db.query(Tache).filter(Tache.id == membre.id_tache).first()
+            if tache and tache.id_liste and tache.id_liste in valid_liste_ids:
+                ressource_valide = True
+
+        if not ressource_valide:
+            continue
+
+        # Vérifier si l'absence couvre la date de référence
         a_start = absence.date_debut.date() if absence.date_debut else None
         a_end = absence.date_fin.date() if absence.date_fin else a_start
-        
         if a_start and ref_date >= a_start and (not a_end or ref_date <= a_end):
-            # Garder la première absence active (normalement une seule)
+            user_id = membre.id_utilisateur
             if user_id not in absent_map:
                 absent_map[user_id] = absence
-    
-    # 5. Construire la réponse
+
+    # Construire la réponse
     results = []
     for uid in user_ids:
         absence = absent_map.get(uid)

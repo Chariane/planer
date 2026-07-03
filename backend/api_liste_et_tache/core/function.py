@@ -15,7 +15,7 @@ from ..models import (
     Rapport,
     AbsenceEtConge,
 )
-from sqlalchemy import func, text
+from sqlalchemy import func, text, or_
 from sqlalchemy.exc import IntegrityError
 from typing import Any, Optional
 from datetime import datetime, timezone
@@ -1904,3 +1904,74 @@ def _require_absence_self_or_management_access(db: Session, absence_id: str, cur
         return absence, membre, "owner"
     _require_member_workflow_evaluation_access(db, membre.id, current_user_id)
     return absence, membre, "manager"
+
+
+# ============================================================
+# NOUVELLES FONCTIONS POUR LA GESTION DES RESSOURCES ET DESCENDANTS
+# ============================================================
+
+def resolve_resource_type(db: Session, resource_id: str) -> tuple[str, str]:
+    """
+    Détermine le type d'une ressource à partir de son ID.
+    Retourne (type, id) où type est 'workspace', 'espace' ou 'liste'.
+    Lève une HTTPException si la ressource n'est trouvée.
+    """
+    if db.query(Liste).filter(Liste.id == resource_id).first():
+        return ("liste", resource_id)
+    if db.query(Espace).filter(Espace.id == resource_id).first():
+        return ("espace", resource_id)
+    if db.query(Workspace).filter(Workspace.id == resource_id).first():
+        return ("workspace", resource_id)
+    raise HTTPException(status_code=404, detail="Ressource non trouvée")
+
+
+def get_descendant_resource_ids(db: Session, resource_type: str, resource_id: str) -> dict:
+    """
+    Retourne un dictionnaire contenant les listes d'IDs par type de ressource descendant.
+    Inclut la ressource elle-même.
+    """
+    result = {
+        "workspace_ids": [],
+        "espace_ids": [],
+        "liste_ids": [],
+        "tache_ids": []
+    }
+
+    if resource_type == "workspace":
+        result["workspace_ids"].append(resource_id)
+        # Tous les espaces descendants (directs et indirects)
+        espaces = db.query(Espace).filter(Espace.id_workspace == resource_id).all()
+        for espace in espaces:
+            result["espace_ids"].append(espace.id)
+            sub_espace_ids = _get_all_descendant_espace_ids(db, espace.id)
+            result["espace_ids"].extend(sub_espace_ids)
+        # Toutes les listes rattachées au workspace ou à ses espaces
+        liste_ids = db.query(Liste.id).filter(
+            or_(
+                Liste.id_workspace == resource_id,
+                Liste.id_espace.in_(result["espace_ids"])
+            )
+        ).all()
+        result["liste_ids"] = [lid for (lid,) in liste_ids]
+        # Toutes les tâches de ces listes
+        if result["liste_ids"]:
+            tache_ids = db.query(Tache.id).filter(Tache.id_liste.in_(result["liste_ids"])).all()
+            result["tache_ids"] = [tid for (tid,) in tache_ids]
+
+    elif resource_type == "espace":
+        result["espace_ids"].append(resource_id)
+        sub_espace_ids = _get_all_descendant_espace_ids(db, resource_id)
+        result["espace_ids"].extend(sub_espace_ids)
+        # Listes rattachées à l'espace ou à ses sous-espaces
+        liste_ids = db.query(Liste.id).filter(Liste.id_espace.in_(result["espace_ids"])).all()
+        result["liste_ids"] = [lid for (lid,) in liste_ids]
+        if result["liste_ids"]:
+            tache_ids = db.query(Tache.id).filter(Tache.id_liste.in_(result["liste_ids"])).all()
+            result["tache_ids"] = [tid for (tid,) in tache_ids]
+
+    elif resource_type == "liste":
+        result["liste_ids"].append(resource_id)
+        tache_ids = db.query(Tache.id).filter(Tache.id_liste == resource_id).all()
+        result["tache_ids"] = [tid for (tid,) in tache_ids]
+
+    return result
