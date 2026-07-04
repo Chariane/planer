@@ -1,3 +1,5 @@
+# backend/api_liste_et_tache/schemas.py
+
 from typing import Optional, List, Any
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, model_validator, field_validator
@@ -906,28 +908,43 @@ class FichierShareOut(BaseModel):
     file_id: str
     allow_download: bool
 
-# Rapport
+# ----------------------------------------
+# RAPPORT - avec période obligatoire
+# ----------------------------------------
+
 class RapportBase(BaseModel):
     titre: str = Field(..., min_length=1, max_length=150)
     realisations: Optional[str] = None
     difficultes_et_solutions: Optional[str] = None
     commentaire: Optional[str] = None
     fichier_joint: Optional[str] = None
-    periode_debut: Optional[datetime] = None
-    periode_fin: Optional[datetime] = None
+    periode_debut: datetime = Field(..., description="Date de début de la période couverte par le rapport")
+    periode_fin: datetime = Field(..., description="Date de fin de la période couverte par le rapport")
+
+    @model_validator(mode='after')
+    def validate_period(self):
+        if self.periode_debut and self.periode_fin and self.periode_debut > self.periode_fin:
+            raise ValueError("La date de début doit être antérieure ou égale à la date de fin.")
+        return self
 
 class RapportCreate(RapportBase):
     id_membre: Optional[str] = None
 
 class RapportUpdate(BaseModel):
     titre: Optional[str] = Field(None, min_length=1, max_length=150)
-    realisations: Optional[str] = None    
+    realisations: Optional[str] = None
     difficultes_et_solutions: Optional[str] = None
     commentaire: Optional[str] = None
     fichier_joint: Optional[str] = None
     periode_debut: Optional[datetime] = None
     periode_fin: Optional[datetime] = None
     id_membre: Optional[str] = None
+
+    @model_validator(mode='after')
+    def validate_period_update(self):
+        if self.periode_debut and self.periode_fin and self.periode_debut > self.periode_fin:
+            raise ValueError("La date de début doit être antérieure ou égale à la date de fin.")
+        return self
 
 class RapportOut(RapportBase):
     id: str

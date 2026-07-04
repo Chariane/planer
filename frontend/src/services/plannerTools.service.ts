@@ -1,3 +1,4 @@
+// frontend/src/services/plannerTools.service.ts
 import { apiFetch } from './api';
 
 export const LISTE_TACHE_BASE_URL = import.meta.env.VITE_LISTE_TACHE_URL || 'http://localhost:8004';
@@ -76,6 +77,7 @@ export const plannerToolsService = {
   listReports: (params: ScopeParams & { member_id?: string; q?: string; limit?: number }) =>
     apiFetch(LISTE_TACHE_BASE_URL, withParams('/listes/rapports', params)),
 
+  // ✅ createReport : période obligatoire
   createReport: (data: {
     id_membre: string;
     titre: string;
@@ -83,8 +85,8 @@ export const plannerToolsService = {
     difficultes_et_solutions?: string;
     commentaire?: string;
     fichier_joint?: string;
-    periode_debut?: string;
-    periode_fin?: string;
+    periode_debut: string;  // obligatoire
+    periode_fin: string;    // obligatoire
   }) =>
     apiFetch(LISTE_TACHE_BASE_URL, '/listes/rapports', {
       method: 'POST',

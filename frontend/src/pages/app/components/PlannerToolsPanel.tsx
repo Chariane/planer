@@ -84,6 +84,8 @@ export default function PlannerToolsPanel({
     difficultes_et_solutions: '',
     commentaire: '',
     fichier_joint: '',
+    periode_debut: '',   // ✅ ajout
+    periode_fin: '',     // ✅ ajout
   });
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [editingReport, setEditingReport] = useState<any | null>(null);
@@ -95,6 +97,8 @@ export default function PlannerToolsPanel({
     difficultes_et_solutions: '',
     commentaire: '',
     fichier_joint: '',
+    periode_debut: '',
+    periode_fin: '',
   });
   const [archivedReportIds, setArchivedReportIds] = useState<string[]>([]);
   const [archivedAbsenceIds, setArchivedAbsenceIds] = useState<string[]>([]);
@@ -642,10 +646,18 @@ export default function PlannerToolsPanel({
   const handleCreateReport = async () => {
     const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
 
-    if (!currentUserMemberRecord || !reportForm.titre.trim()) {
-      showMessage('error', 'Vous devez avoir un rôle direct autorisé sur cette ressource et renseigner un titre pour envoyer un rapport.');
+    // Vérifier que les champs obligatoires sont remplis
+    if (!currentUserMemberRecord || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin) {
+      showMessage('error', 'Veuillez renseigner le titre, la date de début et la date de fin du rapport.');
       return;
     }
+
+    // Vérifier que la période est cohérente
+    if (new Date(reportForm.periode_debut) > new Date(reportForm.periode_fin)) {
+      showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
+      return;
+    }
+
     if (!canCreateReport) {
       showMessage(
         'error',
@@ -659,8 +671,25 @@ export default function PlannerToolsPanel({
     }
     setLoading(true);
     try {
-      const createdReport = await plannerToolsService.createReport({ id_membre: currentUserMemberRecord.id, ...reportForm });
-      setReportForm({ titre: '', realisations: '', difficultes_et_solutions: '', commentaire: '', fichier_joint: '' });
+      const createdReport = await plannerToolsService.createReport({
+        id_membre: currentUserMemberRecord.id,
+        titre: reportForm.titre,
+        realisations: reportForm.realisations || undefined,
+        difficultes_et_solutions: reportForm.difficultes_et_solutions || undefined,
+        commentaire: reportForm.commentaire || undefined,
+        fichier_joint: reportForm.fichier_joint || undefined,
+        periode_debut: new Date(reportForm.periode_debut).toISOString(),
+        periode_fin: new Date(reportForm.periode_fin).toISOString(),
+      });
+      setReportForm({
+        titre: '',
+        realisations: '',
+        difficultes_et_solutions: '',
+        commentaire: '',
+        fichier_joint: '',
+        periode_debut: '',
+        periode_fin: '',
+      });
       setSelectedMemberId('');
       setReports(prev => [
         {
@@ -691,14 +720,34 @@ export default function PlannerToolsPanel({
       difficultes_et_solutions: report.difficultes_et_solutions || '',
       commentaire: report.commentaire || '',
       fichier_joint: report.fichier_joint || '',
+      periode_debut: report.periode_debut ? new Date(report.periode_debut).toISOString().split('T')[0] : '',
+      periode_fin: report.periode_fin ? new Date(report.periode_fin).toISOString().split('T')[0] : '',
     });
   };
 
   const handleUpdateReport = async () => {
     if (!editingReport || !reportEditForm.titre.trim()) return;
+    // Vérification de la période si modifiée
+    if (reportEditForm.periode_debut && reportEditForm.periode_fin && new Date(reportEditForm.periode_debut) > new Date(reportEditForm.periode_fin)) {
+      showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
+      return;
+    }
     setLoading(true);
     try {
-      const updated = await plannerToolsService.updateReport(editingReport.id, reportEditForm);
+      const payload: any = {
+        titre: reportEditForm.titre,
+        realisations: reportEditForm.realisations || undefined,
+        difficultes_et_solutions: reportEditForm.difficultes_et_solutions || undefined,
+        commentaire: reportEditForm.commentaire || undefined,
+        fichier_joint: reportEditForm.fichier_joint || undefined,
+      };
+      if (reportEditForm.periode_debut) {
+        payload.periode_debut = new Date(reportEditForm.periode_debut).toISOString();
+      }
+      if (reportEditForm.periode_fin) {
+        payload.periode_fin = new Date(reportEditForm.periode_fin).toISOString();
+      }
+      const updated = await plannerToolsService.updateReport(editingReport.id, payload);
       setReports(prev => prev.map(report => report.id === editingReport.id ? { ...report, ...updated } : report));
       setSelectedReport((prev: any) => prev?.id === editingReport.id ? { ...prev, ...updated } : prev);
       setEditingReport(null);
@@ -1914,7 +1963,31 @@ export default function PlannerToolsPanel({
                       />
                     </div>
 
-                    <Button onClick={handleCreateReport} disabled={loading || !reportForm.titre.trim()} className="w-full py-7 rounded-2xl shadow-theme-lg group relative overflow-hidden">
+                    {/* ✅ CHAMPS PÉRIODE OBLIGATOIRES */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Période début</label>
+                        <input
+                          type="date"
+                          value={reportForm.periode_debut}
+                          onChange={e => setReportForm(prev => ({ ...prev, periode_debut: e.target.value }))}
+                          className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Période fin</label>
+                        <input
+                          type="date"
+                          value={reportForm.periode_fin}
+                          onChange={e => setReportForm(prev => ({ ...prev, periode_fin: e.target.value }))}
+                          className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <Button onClick={handleCreateReport} disabled={loading || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin} className="w-full py-7 rounded-2xl shadow-theme-lg group relative overflow-hidden">
                       <Upload className="h-5 w-5 mr-2 group-hover:-translate-y-1 transition-transform" />
                       <span className="font-black uppercase tracking-widest text-xs">Transmettre le rapport</span>
                     </Button>
@@ -2355,6 +2428,26 @@ export default function PlannerToolsPanel({
                 onChange={e => setReportEditForm(prev => ({ ...prev, commentaire: e.target.value }))}
                 placeholder="Notes additionnelles..."
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-32 resize-none transition-all shadow-inner"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Période début</label>
+              <input
+                type="date"
+                value={reportEditForm.periode_debut}
+                onChange={e => setReportEditForm(prev => ({ ...prev, periode_debut: e.target.value }))}
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Période fin</label>
+              <input
+                type="date"
+                value={reportEditForm.periode_fin}
+                onChange={e => setReportEditForm(prev => ({ ...prev, periode_fin: e.target.value }))}
+                className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
               />
             </div>
           </div>

@@ -1,5 +1,7 @@
 # backend/api_liste_et_tache/crud/rapport.py
+
 from typing import Optional
+from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -130,12 +132,16 @@ def create_report(
     difficultes_et_solutions: Optional[str] = None,
     commentaire: Optional[str] = None,
     fichier_joint: Optional[str] = None,
-    periode_debut=None,
-    periode_fin=None,
+    periode_debut: datetime,  # ✅ obligatoire
+    periode_fin: datetime,    # ✅ obligatoire
     id_membre: str,
 ) -> dict:
     if not id_membre:
         raise HTTPException(status_code=400, detail="Vous devez etre membre direct de la ressource pour creer un rapport.")
+
+    # ✅ Validation : la période doit être cohérente
+    if periode_debut > periode_fin:
+        raise HTTPException(status_code=400, detail="La date de début doit être antérieure ou égale à la date de fin.")
 
     membre = _get_member_or_404(db, id_membre)
 
@@ -169,7 +175,6 @@ def create_report(
             )
     elif espace_id:
         _require_espace_read_access(db, espace_id, current_user_id)
-        # Seuls les Admins qui sont Créateurs d'au moins un fils direct peuvent produire
         if membre.role == ESPACE_ADMIN_ROLE and _is_creator_of_any_direct_child_in_space(db, espace_id=espace_id, user_id=current_user_id):
             pass
         else:
@@ -179,7 +184,6 @@ def create_report(
             )
     elif workspace_id:
         _require_workspace_read_access(db, workspace_id, current_user_id)
-        # Seuls les Admins qui sont Créateurs d'au moins un fils direct peuvent produire
         if membre.role == WORKSPACE_ADMIN_ROLE and _is_creator_of_any_direct_child_in_workspace(db, workspace_id=workspace_id, user_id=current_user_id):
             pass
         else:
@@ -209,7 +213,6 @@ def create_report(
         detail="Impossible de creer ce rapport.",
         refresh_instance=rapport,
     )
-    # ✅ Appel avec le paramètre rapport ajouté
     notify_report_created(db, report_member=membre, report_title=titre, actor_user_id=current_user_id, rapport=rapport)
     commit_notification_events(db)
     return _serialize_report(rapport)
@@ -259,21 +262,16 @@ def list_accessible_reports(
         member_espace_id = membre.id_espace
         member_workspace_id = membre.id_workspace
 
-        # ✅ Si un liste_id est spécifié, filtrer par liste
         if liste_id:
             if member_liste_id != liste_id:
                 continue
-        # ✅ Si un espace_id est spécifié, filtrer par espace
         elif espace_id:
             if member_espace_id != espace_id:
                 continue
-        # ✅ Si un workspace_id est spécifié, filtrer par workspace
         elif workspace_id:
             if member_workspace_id != workspace_id:
                 continue
-        # ✅ Si AUCUN scope spécifié, l'utilisateur voit les rapports des ressources où il a accès
         else:
-            # Vérifier l'accès à la ressource du rapport
             if member_liste_id:
                 try:
                     from ..core.function import _require_list_read_access
