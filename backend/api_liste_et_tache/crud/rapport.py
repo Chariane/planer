@@ -1,3 +1,4 @@
+# backend/api_liste_et_tache/crud/rapport.py
 from typing import Optional
 
 from fastapi import HTTPException
@@ -208,7 +209,8 @@ def create_report(
         detail="Impossible de creer ce rapport.",
         refresh_instance=rapport,
     )
-    notify_report_created(db, report_member=membre, report_title=titre, actor_user_id=current_user_id)
+    # ✅ Appel avec le paramètre rapport ajouté
+    notify_report_created(db, report_member=membre, report_title=titre, actor_user_id=current_user_id, rapport=rapport)
     commit_notification_events(db)
     return _serialize_report(rapport)
 

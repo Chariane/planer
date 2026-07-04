@@ -7,8 +7,8 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from ..core.function import commit_or_raise
-from ..models import AbsenceEtConge, Espace, Liste, Membre, Tache, Utilisateur, Workspace
+from ..core.function import commit_or_raise, _has_overlapping_approved_leave
+from ..models import AbsenceEtConge, Espace, Liste, Membre, Rapport, Tache, Utilisateur, Workspace
 
 
 MANAGEMENT_ROLES = {"Créateur", "Administrateur"}
@@ -60,7 +60,6 @@ def _create_notification(
     if not user_id:
         return False
 
-    # Ajouter le tag si fourni
     if target_type and target_id:
         message = f"[[{target_type}:{target_id}]] {message}"
 
@@ -332,59 +331,75 @@ def _inherited_espace_manager_user_ids(db: Session, espace: Espace, *, exclude_u
     return _unique_user_ids(user_ids, exclude_user_id=exclude_user_id)
 
 
-def notify_report_created(db: Session, *, report_member: Membre, report_title: str, actor_user_id: str) -> None:
-    # Import local pour éviter les problèmes de circularité
-    from ..core.function import _is_user_available_now
+# ========== NOTIFICATION RAPPORT (AVEC PÉRIODE DU RAPPORT) ==========
 
+def notify_report_created(db: Session, *, report_member: Membre, report_title: str, actor_user_id: str, rapport: Rapport) -> None:
+    """
+    Envoie une notification aux administrateurs disponibles sur la période du rapport,
+    ou au créateur de la liste si aucun admin n'est disponible.
+    """
     author = db.query(Utilisateur).filter(Utilisateur.id == report_member.id_utilisateur).first()
     author_name = _display_user(author)
 
     recipients: list[str] = []
     target_type: str | None = None
     target_id: str | None = None
-    
+
     if report_member.id_liste:
         liste = db.query(Liste).filter(Liste.id == report_member.id_liste).first()
         if not liste:
             return
-        
+
         resource_name = liste.nom or "une liste"
         message = f"{author_name} a envoyé un rapport dans la liste « {resource_name} » : {report_title}."
         target_type = "liste"
         target_id = liste.id
-        
+
         if report_member.role == "Membre":
+            # Récupérer les administrateurs directs
             admins = db.query(Membre).filter(
                 Membre.id_liste == liste.id,
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
-            
+
+            # Période du rapport
+            date_debut = rapport.periode_debut or rapport.created_at
+            date_fin = rapport.periode_fin or rapport.created_at
+
+            # Filtrer les administrateurs disponibles sur la période
             disponibles = [
-                admin for admin in admins 
-                if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)
+                admin for admin in admins
+                if admin.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=admin.id_utilisateur,
+                    date_debut=date_debut,
+                    date_fin=date_fin,
+                )
             ]
-            
+
             if disponibles:
-                recipients = [admin.id_utilisateur for admin in disponibles]
+                recipients = [admin.id_utilisateur for admin in disponibles if admin.id_utilisateur != actor_user_id]
             else:
+                # Si aucun admin disponible, notifier le créateur de la liste
                 createurs = db.query(Membre).filter(
                     Membre.id_liste == liste.id,
                     Membre.statut == "Actif",
                     Membre.role == "Créateur"
                 ).all()
-                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
-                
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur and c.id_utilisateur != actor_user_id]
+
         elif report_member.role == "Administrateur":
+            # Rapport d'un admin → notifier le créateur
             createurs = db.query(Membre).filter(
                 Membre.id_liste == liste.id,
                 Membre.statut == "Actif",
                 Membre.role == "Créateur"
             ).all()
-            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur and c.id_utilisateur != actor_user_id]
         else:
             return
-            
+
     elif report_member.id_espace:
         espace = db.query(Espace).filter(Espace.id == report_member.id_espace).first()
         if not espace:
@@ -393,33 +408,44 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
         message = f"{author_name} a envoyé un rapport dans l'espace « {resource_name} » : {report_title}."
         target_type = "espace"
         target_id = espace.id
-        
+
+        # Pour les espaces, on applique une règle similaire : si membre → admins disponibles ou créateur
         if report_member.role == "Membre":
             admins = db.query(Membre).filter(
                 Membre.id_espace == espace.id,
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
-            disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
+            date_debut = rapport.periode_debut or rapport.created_at
+            date_fin = rapport.periode_fin or rapport.created_at
+            disponibles = [
+                admin for admin in admins
+                if admin.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=admin.id_utilisateur,
+                    date_debut=date_debut,
+                    date_fin=date_fin,
+                )
+            ]
             if disponibles:
-                recipients = [admin.id_utilisateur for admin in disponibles]
+                recipients = [admin.id_utilisateur for admin in disponibles if admin.id_utilisateur != actor_user_id]
             else:
                 createurs = db.query(Membre).filter(
                     Membre.id_espace == espace.id,
                     Membre.statut == "Actif",
                     Membre.role == "Créateur"
                 ).all()
-                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur != actor_user_id]
         elif report_member.role == "Administrateur":
             createurs = db.query(Membre).filter(
                 Membre.id_espace == espace.id,
                 Membre.statut == "Actif",
                 Membre.role == "Créateur"
             ).all()
-            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur != actor_user_id]
         else:
             return
-            
+
     elif report_member.id_workspace:
         workspace = db.query(Workspace).filter(Workspace.id == report_member.id_workspace).first()
         if not workspace:
@@ -428,38 +454,46 @@ def notify_report_created(db: Session, *, report_member: Membre, report_title: s
         message = f"{author_name} a envoyé un rapport dans le workspace « {resource_name} » : {report_title}."
         target_type = "workspace"
         target_id = workspace.id
-        
+
         if report_member.role == "Membre":
             admins = db.query(Membre).filter(
                 Membre.id_workspace == workspace.id,
                 Membre.statut == "Actif",
                 Membre.role == "Administrateur"
             ).all()
-            disponibles = [admin for admin in admins if admin.id_utilisateur and _is_user_available_now(db, admin.id_utilisateur)]
+            date_debut = rapport.periode_debut or rapport.created_at
+            date_fin = rapport.periode_fin or rapport.created_at
+            disponibles = [
+                admin for admin in admins
+                if admin.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=admin.id_utilisateur,
+                    date_debut=date_debut,
+                    date_fin=date_fin,
+                )
+            ]
             if disponibles:
-                recipients = [admin.id_utilisateur for admin in disponibles]
+                recipients = [admin.id_utilisateur for admin in disponibles if admin.id_utilisateur != actor_user_id]
             else:
                 createurs = db.query(Membre).filter(
                     Membre.id_workspace == workspace.id,
                     Membre.statut == "Actif",
                     Membre.role == "Créateur"
                 ).all()
-                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+                recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur != actor_user_id]
         elif report_member.role == "Administrateur":
             createurs = db.query(Membre).filter(
                 Membre.id_workspace == workspace.id,
                 Membre.statut == "Actif",
                 Membre.role == "Créateur"
             ).all()
-            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur]
+            recipients = [c.id_utilisateur for c in createurs if c.id_utilisateur != actor_user_id]
         else:
             return
     else:
         return
 
     for user_id in recipients:
-        if user_id == actor_user_id:
-            continue
         _create_notification(
             db,
             user_id=user_id,

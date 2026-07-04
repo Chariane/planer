@@ -186,6 +186,65 @@ def _is_user_available_now(db: Session, user_id: str) -> bool:
     )
 
 
+# ---------- RAPPORTS : disponibilité des administrateurs sur une période ----------
+def _has_overlapping_approved_leave(
+    db: Session,
+    *,
+    user_id: str,
+    date_debut,
+    date_fin,
+    exclude_absence_id: Optional[str] = None,
+) -> bool:
+    """
+    Vérifie si un utilisateur a une absence approuvée qui chevauche la période donnée,
+    toutes ressources confondues (héritage inclus).
+    """
+    query = (
+        db.query(AbsenceEtConge)
+        .join(Membre, AbsenceEtConge.id_membre == Membre.id)
+        .filter(
+            Membre.id_utilisateur == user_id,
+            Membre.statut == "Actif",
+            AbsenceEtConge.statut == "approuvee",
+        )
+    )
+    if exclude_absence_id:
+        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+    for absence in query.all():
+        if _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin):
+            return True
+    return False
+
+
+def _has_available_direct_admin_for_report(db: Session, liste_id: str, rapport: Rapport) -> bool:
+    """
+    Retourne True s'il existe au moins un administrateur direct de la liste
+    qui est disponible sur la période couverte par le rapport.
+    """
+    admins = db.query(Membre).filter(
+        Membre.id_liste == liste_id,
+        Membre.statut == "Actif",
+        Membre.role == LISTE_ADMIN_ROLE,
+    ).all()
+    if not admins:
+        return False
+
+    # Période de référence : on prend la période du rapport ou sa date de création
+    date_debut = rapport.periode_debut or rapport.created_at
+    date_fin = rapport.periode_fin or rapport.created_at
+
+    for admin in admins:
+        if admin.id_utilisateur:
+            if not _has_overlapping_approved_leave(
+                db,
+                user_id=admin.id_utilisateur,
+                date_debut=date_debut,
+                date_fin=date_fin,
+            ):
+                return True
+    return False
+
+
 # -----------------------------------------------
 # Helpers d'accès — Workspace
 # -----------------------------------------------
@@ -1645,6 +1704,8 @@ def _require_direct_workspace_admin_grant(db: Session, workspace_id: str, curren
     raise HTTPException(status_code=403, detail="Cette action est reservee aux administrateurs directs du workspace.")
 
 
+# ========== GESTION DES RAPPORTS ==========
+
 def _report_scope_and_author(db: Session, rapport: Rapport) -> tuple[str, str, str | None, str | None]:
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
     liste_id = getattr(rapport, "id_liste", None) or (membre.id_liste if membre else None)
@@ -1667,10 +1728,10 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
     """
     Circuit rapports :
     - l'auteur voit toujours son rapport ;
-    - rapports des membres directs de liste : administrateurs directs de la liste ;
-      s'il n'y a aucun administrateur direct, le createur direct de la liste reçoit ;
-    - rapports des administrateurs directs de liste : createur direct de la liste ;
-    - rapports d'espace/workspace : createur direct de la ressource uniquement.
+    - rapports des membres directs de liste : administrateurs directs disponibles ;
+      s'il n'y a aucun administrateur direct disponible, le créateur direct de la liste reçoit ;
+    - rapports des administrateurs directs de liste : créateur direct de la liste ;
+    - rapports d'espace/workspace : créateur direct de la ressource uniquement.
     """
     scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
     if owner_user_id == current_user_id:
@@ -1684,8 +1745,10 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
 
     if scope_type == ResourceType.LISTE:
         if author_role == LISTE_MEMBER_ROLE:
-            if _direct_list_has_admin(db, scope_id):
+            # ✅ NOUVELLE LOGIQUE : on vérifie s'il y a un admin disponible sur la période
+            if _has_available_direct_admin_for_report(db, scope_id, rapport):
                 return _require_direct_list_admin_grant(db, scope_id, current_user_id)
+            # Sinon, on redirige vers le créateur de la liste
             return _require_direct_list_creator_grant(db, scope_id, current_user_id)
 
         if author_role == LISTE_ADMIN_ROLE:
@@ -1696,6 +1759,33 @@ def _require_report_workflow_read_access(db: Session, rapport: Rapport, current_
 
     if scope_type == ResourceType.WORKSPACE and author_role == WORKSPACE_ADMIN_ROLE:
         return _require_workspace_creator_grant(db, scope_id, current_user_id)
+
+    raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
+
+
+def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
+    rapport = _get_rapport_or_404(db, rapport_id)
+    scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
+    if owner_user_id == current_user_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre rapport.")
+
+    if scope_type == ResourceType.LISTE:
+        if author_role == LISTE_MEMBER_ROLE:
+            if _has_available_direct_admin_for_report(db, scope_id, rapport):
+                membre = _require_direct_list_admin_grant(db, scope_id, current_user_id)
+            else:
+                membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
+        elif author_role == LISTE_ADMIN_ROLE:
+            membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
+        else:
+            raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
+        return rapport, membre
+
+    if scope_type == ResourceType.ESPACE and author_role == ESPACE_ADMIN_ROLE:
+        return rapport, _require_direct_espace_creator_grant(db, scope_id, current_user_id)
+
+    if scope_type == ResourceType.WORKSPACE and author_role == WORKSPACE_ADMIN_ROLE:
+        return rapport, _require_workspace_creator_grant(db, scope_id, current_user_id)
 
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
 
@@ -1766,13 +1856,9 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
 
     # --- WORKSPACE ---
     if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_MEMBER_ROLE:
-        # Un administrateur du workspace peut voir les demandes des membres
         try:
             _require_direct_workspace_admin_grant(db, membre.id_workspace, current_user_id)
         except HTTPException:
-            # Si aucun admin direct, le créateur peut voir (mais en V1 seul l'admin direct est autorisé)
-            # On applique la même règle que pour l'espace : le créateur ne voit que les admins, pas les membres
-            # Donc ici, seul l'admin direct peut voir les demandes des membres
             raise HTTPException(status_code=403, detail="Seul un administrateur direct du workspace peut voir les demandes des membres.")
         return membre
 
@@ -1790,10 +1876,6 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
 
 
 def _require_member_workflow_evaluation_access(db: Session, member_id: str, current_user_id: str):
-    """
-    Accès décision/évaluation pour demandes :
-    même routage que la lecture, mais l'auteur ne peut jamais évaluer sa propre demande.
-    """
     membre = _get_member_or_404(db, member_id)
     if membre.id_utilisateur == current_user_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre demande.")
@@ -1819,33 +1901,6 @@ def _require_report_read_access(db: Session, rapport_id: str, current_user_id: s
     rapport = _get_rapport_or_404(db, rapport_id)
     membre = _require_report_workflow_read_access(db, rapport, current_user_id)
     return rapport, membre
-
-
-def _require_report_management_access(db: Session, rapport_id: str, current_user_id: str):
-    rapport = _get_rapport_or_404(db, rapport_id)
-    scope_type, scope_id, author_role, owner_user_id = _report_scope_and_author(db, rapport)
-    if owner_user_id == current_user_id:
-        raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre rapport.")
-
-    if scope_type == ResourceType.LISTE:
-        if author_role == LISTE_MEMBER_ROLE:
-            if _direct_list_has_admin(db, scope_id):
-                membre = _require_direct_list_admin_grant(db, scope_id, current_user_id)
-            else:
-                membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
-        elif author_role == LISTE_ADMIN_ROLE:
-            membre = _require_direct_list_creator_grant(db, scope_id, current_user_id)
-        else:
-            raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
-        return rapport, membre
-
-    if scope_type == ResourceType.ESPACE and author_role == ESPACE_ADMIN_ROLE:
-        return rapport, _require_direct_espace_creator_grant(db, scope_id, current_user_id)
-
-    if scope_type == ResourceType.WORKSPACE and author_role == WORKSPACE_ADMIN_ROLE:
-        return rapport, _require_workspace_creator_grant(db, scope_id, current_user_id)
-
-    raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
 
 
 def _require_report_owner_or_management_access(
@@ -1939,13 +1994,11 @@ def get_descendant_resource_ids(db: Session, resource_type: str, resource_id: st
 
     if resource_type == "workspace":
         result["workspace_ids"].append(resource_id)
-        # Tous les espaces descendants (directs et indirects)
         espaces = db.query(Espace).filter(Espace.id_workspace == resource_id).all()
         for espace in espaces:
             result["espace_ids"].append(espace.id)
             sub_espace_ids = _get_all_descendant_espace_ids(db, espace.id)
             result["espace_ids"].extend(sub_espace_ids)
-        # Toutes les listes rattachées au workspace ou à ses espaces
         liste_ids = db.query(Liste.id).filter(
             or_(
                 Liste.id_workspace == resource_id,
@@ -1953,7 +2006,6 @@ def get_descendant_resource_ids(db: Session, resource_type: str, resource_id: st
             )
         ).all()
         result["liste_ids"] = [lid for (lid,) in liste_ids]
-        # Toutes les tâches de ces listes
         if result["liste_ids"]:
             tache_ids = db.query(Tache.id).filter(Tache.id_liste.in_(result["liste_ids"])).all()
             result["tache_ids"] = [tid for (tid,) in tache_ids]
@@ -1962,7 +2014,6 @@ def get_descendant_resource_ids(db: Session, resource_type: str, resource_id: st
         result["espace_ids"].append(resource_id)
         sub_espace_ids = _get_all_descendant_espace_ids(db, resource_id)
         result["espace_ids"].extend(sub_espace_ids)
-        # Listes rattachées à l'espace ou à ses sous-espaces
         liste_ids = db.query(Liste.id).filter(Liste.id_espace.in_(result["espace_ids"])).all()
         result["liste_ids"] = [lid for (lid,) in liste_ids]
         if result["liste_ids"]:
