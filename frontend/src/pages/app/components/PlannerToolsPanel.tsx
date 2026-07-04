@@ -20,6 +20,23 @@ import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
 import { Toast } from '../../../components/ui/Toast';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
+// ============================================================
+// UTILITAIRE POUR EXTRAIRE UN MESSAGE D'ERREUR LISIBLE
+// ============================================================
+const getErrorMessage = (err: any): string => {
+  if (typeof err === 'string') return err;
+  if (err?.detail) {
+    return typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+  }
+  if (err?.message) {
+    return typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
+  }
+  return 'Une erreur inattendue est survenue.';
+};
+
+// ============================================================
+// COMPOSANT
+// ============================================================
 interface PlannerToolsPanelProps {
   workspaceId?: string | null;
   espaceId?: string | null;
@@ -84,8 +101,8 @@ export default function PlannerToolsPanel({
     difficultes_et_solutions: '',
     commentaire: '',
     fichier_joint: '',
-    periode_debut: '',   // ✅ ajout
-    periode_fin: '',     // ✅ ajout
+    periode_debut: '',
+    periode_fin: '',
   });
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [editingReport, setEditingReport] = useState<any | null>(null);
@@ -168,7 +185,6 @@ export default function PlannerToolsPanel({
 
   const canViewReports = hasReportScope && !isListInheritedOnlyManager && (canViewListReports || canViewSpaceOrWorkspaceReports);
   
-  // ✅ MODIFICATION : les membres directs du workspace (quel que soit leur rôle) voient l'onglet Absences
   const canViewAbsences = !isGuestAccess && !isListInheritedOnlyManager && (
     (listeId || espaceId)
       ? !!isDirectMemberRecord
@@ -190,7 +206,6 @@ export default function PlannerToolsPanel({
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
-  // ✅ Autoriser les Membres du workspace à créer une demande
   const canCreateAbsence = !!isDirectMemberRecord && (
     (!!listeId || !!espaceId) && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role)
     || (!!workspaceId && !listeId && !espaceId && (isDirectResourceAdmin || isDirectMemberRecord?.role === ROLES.MEMBER))
@@ -284,7 +299,6 @@ export default function PlannerToolsPanel({
     return (extension || mimeSubtype || 'fichier').slice(0, 20);
   };
 
-  // 🔧 LOAD MEMBERS MODIFIÉ : ajout du créateur du workspace
   const loadMembers = async () => {
     if (!workspaceId && !espaceId && !listeId) return;
     try {
@@ -315,14 +329,12 @@ export default function PlannerToolsPanel({
       const listeMembers = processMembers(listeRes);
       let direct = listeId ? listeMembers : espaceId ? espaceMembers : workspaceMembers;
 
-      // 👇 AJOUT : pour un workspace, s'assurer que le créateur est dans les membres directs
       if (workspaceId && !listeId && !espaceId) {
         try {
           const workspace = await workspaceService.getWorkspace(workspaceId);
           if (workspace?.id_utilisateur) {
             const creatorExists = direct.some(m => m.id_utilisateur === workspace.id_utilisateur);
             if (!creatorExists) {
-              // Ajouter le créateur avec le rôle "Créateur"
               direct.push({
                 id: `creator-${workspace.id_utilisateur}`,
                 id_utilisateur: workspace.id_utilisateur,
@@ -520,7 +532,7 @@ export default function PlannerToolsPanel({
       if (activeTool === 'reports') await loadReports();
       if (activeTool === 'absences') await loadAbsences(loadedMembers);
     } catch (err: any) {
-      showMessage('error', err?.message || 'Impossible de charger les données.');
+      showMessage('error', getErrorMessage(err) || 'Impossible de charger les données.');
     } finally {
       setLoading(false);
     }
@@ -563,7 +575,7 @@ export default function PlannerToolsPanel({
       }));
       showMessage('success', `Fichier "${file.name}" prêt à être joint.`);
     } catch (err: any) {
-      showMessage('error', `Échec de l'envoi du fichier : ${err.message}`);
+      showMessage('error', `Échec de l'envoi du fichier : ${getErrorMessage(err)}`);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -586,7 +598,7 @@ export default function PlannerToolsPanel({
           showMessage('success', 'Fichier supprimé avec succès.');
           closeConfirm();
         } catch (err: any) {
-          showMessage('error', `Erreur lors de la suppression : ${err.message}`);
+          showMessage('error', `Erreur lors de la suppression : ${getErrorMessage(err)}`);
         } finally {
           setLoading(false);
         }
@@ -636,23 +648,20 @@ export default function PlannerToolsPanel({
       await loadFiles();
       showMessage('success', 'Fichier rattaché avec succès.');
     } catch (err: any) {
-      showMessage('error', err?.message || "Impossible d'ajouter le fichier.");
+      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter le fichier.");
     } finally {
       setLoading(false);
     }
   };
 
-
   const handleCreateReport = async () => {
     const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
 
-    // Vérifier que les champs obligatoires sont remplis
     if (!currentUserMemberRecord || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin) {
       showMessage('error', 'Veuillez renseigner le titre, la date de début et la date de fin du rapport.');
       return;
     }
 
-    // Vérifier que la période est cohérente
     if (new Date(reportForm.periode_debut) > new Date(reportForm.periode_fin)) {
       showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
       return;
@@ -706,7 +715,7 @@ export default function PlannerToolsPanel({
       setActiveTool('reports');
       showMessage('success', 'Rapport envoyé avec succès.');
     } catch (err: any) {
-      showMessage('error', err?.message || 'Impossible de créer le rapport.');
+      showMessage('error', getErrorMessage(err) || 'Impossible de créer le rapport.');
     } finally {
       setLoading(false);
     }
@@ -727,7 +736,6 @@ export default function PlannerToolsPanel({
 
   const handleUpdateReport = async () => {
     if (!editingReport || !reportEditForm.titre.trim()) return;
-    // Vérification de la période si modifiée
     if (reportEditForm.periode_debut && reportEditForm.periode_fin && new Date(reportEditForm.periode_debut) > new Date(reportEditForm.periode_fin)) {
       showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
       return;
@@ -753,7 +761,7 @@ export default function PlannerToolsPanel({
       setEditingReport(null);
       showMessage('success', 'Rapport modifié avec succès.');
     } catch (err: any) {
-      showMessage('error', err?.message || 'Impossible de modifier le rapport.');
+      showMessage('error', getErrorMessage(err) || 'Impossible de modifier le rapport.');
     } finally {
       setLoading(false);
     }
@@ -777,7 +785,7 @@ export default function PlannerToolsPanel({
           closeConfirm();
           showMessage('success', 'Rapport supprimé avec succès.');
         } catch (err: any) {
-          showMessage('error', err?.message || 'Impossible de supprimer le rapport.');
+          showMessage('error', getErrorMessage(err) || 'Impossible de supprimer le rapport.');
         } finally {
           setLoading(false);
         }
@@ -840,7 +848,7 @@ export default function PlannerToolsPanel({
       await loadAbsences();
       showMessage('success', `Demande de ${typeLabel} envoyée pour validation.`);
     } catch (err: any) {
-      showMessage('error', err?.message || 'Impossible de créer la demande.');
+      showMessage('error', getErrorMessage(err) || 'Impossible de créer la demande.');
     } finally {
       setLoading(false);
     }
@@ -874,7 +882,7 @@ export default function PlannerToolsPanel({
       setDecisionAction(null);
       setDecisionComment('');
     } catch (err: any) {
-      showMessage('error', err?.message || 'Action impossible.');
+      showMessage('error', getErrorMessage(err) || 'Action impossible.');
     } finally {
       setLoading(false);
     }
@@ -887,7 +895,7 @@ export default function PlannerToolsPanel({
       const impact = await absenceService.getImpact(absence.id);
       setAbsenceImpacts(prev => ({ ...prev, [absence.id]: impact }));
     } catch (err: any) {
-      showMessage('error', 'Impossible de charger l\'impact.');
+      showMessage('error', getErrorMessage(err) || 'Impossible de charger l\'impact.');
     } finally {
       setLoading(false);
     }
@@ -911,18 +919,15 @@ export default function PlannerToolsPanel({
     return 'inconnu';
   };
 
-  // ✅ renderAbsenceCard avec nouvelle logique canApproveThis
   const renderAbsenceCard = (absence: any, context: 'list' | 'archive' = 'list') => {
     if (!absence) return null;
     const isOwn = absence.owner_user_id === currentUserId;
 
-    // ✅ Déterminer s'il y a un administrateur direct disponible
     const hasAvailableDirectAdmin = directMembers.some(m => 
       m.role === ROLES.ADMIN && 
       listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
     );
 
-    // ✅ NOUVELLE LOGIQUE canApproveThis
     const canApproveThis = !isOwn && (
       (absence.author_role === 'Membre' && (
         (listeId && (isDirectResourceAdmin || (isDirectResourceCreator && !hasAvailableDirectAdmin))) ||
@@ -1059,7 +1064,7 @@ export default function PlannerToolsPanel({
                     await loadAbsences();
                     showMessage('success', absence.statut === 'en_attente' ? 'Demande retirée.' : 'Demande annulée.');
                   } catch (err: any) {
-                    showMessage('error', err?.detail || "Erreur lors de l'annulation.");
+                    showMessage('error', getErrorMessage(err) || "Erreur lors de l'annulation.");
                   }
                 }}
                 className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-lg transition-all border border-rose-500/10 flex items-center justify-center gap-2"
@@ -1138,12 +1143,10 @@ export default function PlannerToolsPanel({
     return aStart <= bEnd && bStart <= aEnd;
   };
 
-  // ✅ MODIFICATION : pendingAbsences inclut le workspace
   const pendingAbsences = useMemo(() => {
     return accessibleAbsences.filter(absence => {
       if (!absence || absence.statut !== 'en_attente') return false;
 
-      // Liste
       if (listeId) {
         if (isDirectResourceAdmin) {
           return absence.author_role === 'Membre';
@@ -1158,7 +1161,6 @@ export default function PlannerToolsPanel({
         }
       }
 
-      // Espace
       if (espaceId) {
         if (isDirectResourceAdmin) {
           return absence.author_role === 'Membre';
@@ -1173,7 +1175,6 @@ export default function PlannerToolsPanel({
         }
       }
 
-      // Workspace
       if (workspaceId) {
         if (isDirectResourceAdmin) {
           return absence.author_role === 'Membre';
@@ -1262,7 +1263,7 @@ export default function PlannerToolsPanel({
       showMessage('success', `${replacement?.name || 'Le membre'} a été ajouté sur "${task.title}".`);
       setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: '' }));
     } catch (err: any) {
-      showMessage('error', err?.message || "Impossible d'ajouter ce membre sur la tâche.");
+      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter ce membre sur la tâche.");
     } finally {
       setLoading(false);
     }
@@ -1288,20 +1289,18 @@ export default function PlannerToolsPanel({
       setAdminInviteIdentifier('');
       await loadMembers();
     } catch (err: any) {
-      showMessage('error', err?.message || "Impossible d'ajouter cet administrateur.");
+      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter cet administrateur.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ MODIFICATION : absenceDashboard inclut maintenant impactedProjectsCount
   const absenceDashboard = useMemo(() => {
     const unavailableToday = listAvailability.filter(item => !item.is_available).length;
     const upcoming = visibleAbsences.filter(absence =>
       absence.statut === 'approuvee' && new Date(absence.date_debut) > new Date()
     ).length;
     
-    // Calcul du nombre de projets impactés (pour espaces/workspaces)
     const impactedProjectsCount = visibleAbsences.reduce((acc, absence) => {
       const impact = absenceImpacts[absence.id];
       if (impact && impact.impacted_projects) {
@@ -1334,9 +1333,6 @@ export default function PlannerToolsPanel({
     </div>
   );
 
-  // ============================================================
-  // ✅ NOUVELLE FONCTION renderImpactPanel (projets impactés)
-  // ============================================================
   const renderImpactPanel = () => {
     const impactAbsences = visibleAbsences.filter(absence => absence.statut === 'approuvee');
 
@@ -1357,20 +1353,14 @@ export default function PlannerToolsPanel({
           const soleAdminProjects = absenceImpact?.sole_admin_projects || [];
           const soleCreatorProjects = absenceImpact?.sole_creator_projects || [];
 
-          // Définition de canManageThisImpact (identique à l'ancienne version)
           const isOwn = absence.owner_user_id === currentUserId;
           const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
 
-          // Pour les listes : on utilise les tâches (ancien comportement)
           const impactedTasks = listeId ? getTasksImpactedByAbsence(absence) : [];
           const showTasks = listeId && (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
-
-          // Pour les espaces/workspaces : on utilise les projets
           const showProjects = !listeId && impactedProjects.length > 0;
-
           const hasGovernanceRisk = soleAdminProjects.length > 0 || soleCreatorProjects.length > 0;
 
-          // Si aucun impact (ni tâches ni projets) et pas de risque, on saute cette absence
           if (!showTasks && !showProjects && !hasGovernanceRisk) return null;
 
           return (
@@ -1420,7 +1410,6 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
-              {/* Tâches impactées (pour les listes) */}
               {showTasks && (
                 <div className="mt-5 space-y-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches impactées</p>
@@ -1488,7 +1477,6 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
-              {/* Projets impactés (pour les espaces/workspaces) */}
               {showProjects && (
                 <div className="mt-5 space-y-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Projets impactés</p>
@@ -1515,7 +1503,6 @@ export default function PlannerToolsPanel({
                 </div>
               )}
 
-              {/* Gouvernance : alertes sur les projets sans admin disponible */}
               {hasGovernanceRisk && (
                 <div className="mt-5 space-y-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance critique</p>
@@ -1590,69 +1577,77 @@ export default function PlannerToolsPanel({
   const printReport = (report: any) => {
     const win = window.open('', '_blank');
     if (!win) return;
+
     const safeTitle = escapeHtml(report.titre);
     const safeAuthor = escapeHtml(report.authorName || 'Utilisateur');
     const safeRealisations = escapeHtml(report.realisations);
     const safeDifficultes = escapeHtml(report.difficultes_et_solutions);
     const safeCommentaire = escapeHtml(report.commentaire);
+    const periodeDebut = report.periode_debut ? formatDate(report.periode_debut) : 'Non renseignée';
+    const periodeFin = report.periode_fin ? formatDate(report.periode_fin) : 'Non renseignée';
+
     win.document.write(`
-        <html>
-          <head>
-            <title>Rapport - ${safeTitle}</title>
-            <style>
-              body {font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
-              .header {border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
-              .title {font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
-              .meta {font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-              .section {margin-bottom: 30px; }
-              .section-title {font-size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
-              .content {font-size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
-              .content.warning {background: #fff1f2; border-left-color: #f43f5e; color: #9f1239; }
-              .content.note {background: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; }
-              .footer {margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
-              .signature {font-weight: 700; color: #059669; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div>
-                <div class="meta">Rapport d'activité</div>
-                <h1 class="title">${safeTitle}</h1>
-              </div>
-              <div class="meta">Date: ${formatDate(report.created_at)}</div>
+      <html>
+        <head>
+          <title>Rapport - ${safeTitle}</title>
+          <style>
+            body {font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
+            .header {border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+            .title {font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
+            .meta {font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+            .section {margin-bottom: 30px; }
+            .section-title {font-size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+            .content {font-size: 14px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; white-space: pre-wrap; }
+            .content.warning {background: #fff1f2; border-left-color: #f43f5e; color: #9f1239; }
+            .content.note {background: #eff6ff; border-left-color: #3b82f6; color: #1d4ed8; }
+            .period {background: #f0fdf4; border-left-color: #22c55e; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; font-weight: 600; }
+            .footer {margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; }
+            .signature {font-weight: 700; color: #059669; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="meta">Rapport d'activité</div>
+              <h1 class="title">${safeTitle}</h1>
             </div>
-            <div class="section">
-              <div class="section-title">I. Réalisations</div>
-              <div class="content">${safeRealisations}</div>
-            </div>
-            ${safeDifficultes ? `
+            <div class="meta">Date d'émission: ${formatDate(report.created_at)}</div>
+          </div>
+
+          <div class="period">
+            <span>📅 Période du rapport</span>
+            <span>Du ${periodeDebut} au ${periodeFin}</span>
+          </div>
+
+          <div class="section">
+            <div class="section-title">I. Réalisations</div>
+            <div class="content">${safeRealisations}</div>
+          </div>
+          ${safeDifficultes ? `
           <div class="section">
             <div class="section-title">II. Difficultés & Solutions</div>
             <div class="content warning">${safeDifficultes}</div>
           </div>` : ''}
-            ${safeCommentaire ? `
+          ${safeCommentaire ? `
           <div class="section">
             <div class="section-title">III. Commentaires Additionnels</div>
             <div class="content note">${safeCommentaire}</div>
           </div>` : ''}
-            <div class="footer">
-              <div>Généré par K-Planer le ${new Date().toLocaleDateString('fr-FR')}</div>
-              <div>Signé: <span class="signature">${safeAuthor}</span></div>
-            </div>
-            <script>window.onload = () => {window.print(); window.close(); }</script>
-          </body>
-        </html>
-        `);
+          <div class="footer">
+            <div>Généré par K-Planer le ${new Date().toLocaleDateString('fr-FR')}</div>
+            <div>Signé: <span class="signature">${safeAuthor}</span></div>
+          </div>
+          <script>window.onload = () => {window.print(); window.close(); }</script>
+        </body>
+      </html>
+    `);
     win.document.close();
   };
-
-
 
   return (
     <div className="space-y-8 pb-20">
       {toast && <Toast message={toast.text} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Navigation Premium */}
       {hasVisibleTool && (
         <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
           {canViewFiles && (
@@ -1693,7 +1688,6 @@ export default function PlannerToolsPanel({
         </div>
       )}
 
-      {/* Filter Bar */}
       {((activeTool === 'files' && canViewFiles) || (activeTool === 'reports' && canViewReports)) && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3">
           <div className="relative flex-1 group">
@@ -1963,7 +1957,6 @@ export default function PlannerToolsPanel({
                       />
                     </div>
 
-                    {/* ✅ CHAMPS PÉRIODE OBLIGATOIRES */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Période début</label>
@@ -1998,7 +1991,6 @@ export default function PlannerToolsPanel({
           )}
 
           <div className={`${useFullReportWidth ? 'w-full' : 'lg:col-span-8'} space-y-8`}>
-            {/* Mes rapports */}
             {canShowOwnReportHistory && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
@@ -2049,7 +2041,6 @@ export default function PlannerToolsPanel({
               </div>
             )}
 
-            {/* Rapports reçus selon le circuit métier de la ressource */}
             {canReceiveReports && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
@@ -2138,7 +2129,6 @@ export default function PlannerToolsPanel({
                 { label: "Indisponibles aujourd'hui", value: absenceDashboard.unavailableToday, tone: 'text-rose-500', icon: Users },
                 { label: 'Demandes en attente', value: absenceDashboard.pending, tone: 'text-amber-500', icon: AlertTriangle },
                 { label: 'Absences à venir', value: absenceDashboard.upcoming, tone: 'text-primary', icon: Calendar },
-                // ✅ MODIFICATION : Affichage conditionnel selon le scope
                 ...(listeId
                   ? [{ label: 'Tâches impactées', value: absenceDashboard.impactedTasks, tone: 'text-secondary', icon: FileText }]
                   : [{ label: 'Projets impactés', value: absenceDashboard.impactedProjectsCount, tone: 'text-secondary', icon: FileText }]
@@ -2316,7 +2306,6 @@ export default function PlannerToolsPanel({
               })}
             </div>
           )}
-
         </motion.div>
       )}
 
@@ -2787,6 +2776,6 @@ export default function PlannerToolsPanel({
         loadingText={confirmData?.loadingText}
         isLoading={loading}
       />
-    </div >
+    </div>
   );
 }

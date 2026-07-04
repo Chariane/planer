@@ -817,8 +817,7 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
             detail="Cette demande a deja ete traitee.",
         )
     
-    # --- CIRCUIT DE VALIDATION HIÉRARCHIQUE ---
-    # Trouver le rôle direct de l'acteur sur la même ressource que le demandeur
+    # Rôle direct de l'acteur sur la même ressource que le demandeur
     actor_direct_member = None
     if target_membre.id_liste:
         actor_direct_member = db.query(Membre).filter(
@@ -848,22 +847,35 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
         res_label = "le workspace" if target_membre.id_workspace else ("l'espace" if target_membre.id_espace else "la liste")
         raise HTTPException(status_code=403, detail=f"Seul un gestionnaire direct de {res_label} peut valider.")
 
-    # Règles selon le rôle du demandeur
+    # Si la demande vient d'un Membre
     if target_membre.role == "Membre":
+        # Si l'acteur est le Créateur
         if actor_direct_member.role == "Créateur":
-            # Vérifier s'il existe un administrateur direct disponible
-            active_admins = _direct_resource_members(
-                db,
-                resource_type="liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace",
-                resource_id=target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace,
-                role="Administrateur"
-            )
-            available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
+            # Récupérer tous les administrateurs directs de la ressource
+            resource_type = "liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace"
+            resource_id = target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace
+            active_admins = _direct_resource_members(db, resource_type=resource_type, resource_id=resource_id, role="Administrateur")
+            
+            # Filtrer ceux qui sont disponibles sur la période de la demande
+            date_debut = absence.date_debut
+            date_fin = absence.date_fin
+            available_admins = [
+                a for a in active_admins
+                if a.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=a.id_utilisateur,
+                    date_debut=date_debut,
+                    date_fin=date_fin,
+                )
+            ]
+            
+            # S'il y a au moins un admin disponible, seul lui peut valider
             if available_admins:
                 raise HTTPException(
-                    status_code=403, 
+                    status_code=403,
                     detail="Seul un Administrateur disponible peut valider la demande d'un Membre."
                 )
+            # Sinon, le Créateur peut valider (on continue)
         elif actor_direct_member.role != "Administrateur":
             raise HTTPException(status_code=403, detail="Seul un Administrateur ou le Créateur peut valider la demande d'un Membre.")
             
@@ -929,16 +941,23 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
 
     if target_membre.role == "Membre":
         if actor_direct_member.role == "Créateur":
-            active_admins = _direct_resource_members(
-                db,
-                resource_type="liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace",
-                resource_id=target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace,
-                role="Administrateur"
-            )
-            available_admins = [a for a in active_admins if _is_user_available_now(db, a.id_utilisateur)]
+            resource_type = "liste" if target_membre.id_liste else "espace" if target_membre.id_espace else "workspace"
+            resource_id = target_membre.id_liste or target_membre.id_espace or target_membre.id_workspace
+            active_admins = _direct_resource_members(db, resource_type=resource_type, resource_id=resource_id, role="Administrateur")
+            date_debut = absence.date_debut
+            date_fin = absence.date_fin
+            available_admins = [
+                a for a in active_admins
+                if a.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=a.id_utilisateur,
+                    date_debut=date_debut,
+                    date_fin=date_fin,
+                )
+            ]
             if available_admins:
                 raise HTTPException(
-                    status_code=403, 
+                    status_code=403,
                     detail="Seul un Administrateur disponible peut rejeter la demande d'un Membre."
                 )
         elif actor_direct_member.role != "Administrateur":
@@ -964,6 +983,7 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
     return absence
+
 
 
 def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
