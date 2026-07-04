@@ -104,7 +104,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         <div className="mb-10 flex justify-center">
           <motion.div
             whileHover={{ rotate: 15, scale: 1.05 }}
-            className="h-9 w-9 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-xs shadow-lg shadow-secondary/30 overflow-hidden"
+            className="h-9 w-9 rounded-xl bg-transparent flex items-center justify-center font-black text-white text-xs shadow-lg shadow-secondary/30 overflow-hidden"
           >
             <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
           </motion.div>
@@ -136,7 +136,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       <div className={`flex ${isCompact ? 'flex-col items-center justify-center gap-1 py-6 px-1' : 'items-center gap-3 px-5 py-6'} w-full border-b border-white/5 transition-all`}>
         <motion.div
           whileHover={{ rotate: 15, scale: 1.05 }}
-          className="h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-sm shadow-xl shadow-secondary/30 overflow-hidden"
+          className="h-9 w-9 flex-shrink-0 rounded-xl bg-transparent flex items-center justify-center font-black text-white text-sm shadow-xl shadow-secondary/30 overflow-hidden"
         >
           <img src="/logo.png" alt="Logo K-Planer" className="h-full w-full object-cover" />
         </motion.div>

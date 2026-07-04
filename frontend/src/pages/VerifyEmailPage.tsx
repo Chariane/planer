@@ -1,3 +1,4 @@
+// frontend/src/pages/VerifyEmailPage.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,9 +64,13 @@ export default function VerifyEmailPage() {
         <motion.div
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center font-black text-white text-2xl mx-auto mb-6 shadow-xl shadow-secondary/20"
+          className="flex justify-center mb-6"
         >
-          KP
+          <img
+            src="/logo.png"
+            alt="K-Planner"
+            className="h-16 w-auto rounded-2xl shadow-xl shadow-secondary/20"
+          />
         </motion.div>
         <h1 className="text-3xl font-black text-theme-main tracking-tighter uppercase mb-2">Vérification</h1>
         <p className="text-theme-muted text-sm font-medium opacity-60">

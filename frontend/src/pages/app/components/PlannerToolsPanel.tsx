@@ -18,20 +18,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Task, UserAvailabilityOut } from '../../../types';
 import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
 import { Toast } from '../../../components/ui/Toast';
+import { sanitizeApiErrorMessage } from '../../../services/api';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
 // ============================================================
 // UTILITAIRE POUR EXTRAIRE UN MESSAGE D'ERREUR LISIBLE
 // ============================================================
+
 const getErrorMessage = (err: any): string => {
-  if (typeof err === 'string') return err;
-  if (err?.detail) {
-    return typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
-  }
-  if (err?.message) {
-    return typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
-  }
-  return 'Une erreur inattendue est survenue.';
+  return sanitizeApiErrorMessage(err, 'Une erreur inattendue est survenue.');
 };
 
 // ============================================================
@@ -2508,8 +2503,9 @@ export default function PlannerToolsPanel({
             && isDirectResourceCreator
             && !isOwn;
 
-          const otherAdmins = directMembers.filter(m => m.role === ROLES.ADMIN && m.id_utilisateur !== selectedAbsenceForImpact.owner_user_id);
-          const needsBackupAdmin = isPendingAdminRequest && otherAdmins.length === 0;
+          // ✅ UTILISATION DES DONNÉES D'IMPACT POUR LE BESOIN D'ADMIN DE SECOURS
+          const needsBackupAdmin = isPendingAdminRequest &&
+            impactData.sole_admin_resources && impactData.sole_admin_resources.length > 0;
 
           return (
             <div className="space-y-6">
@@ -2584,7 +2580,7 @@ export default function PlannerToolsPanel({
                         <div>
                           <p className="text-sm font-black text-theme-main">Continuité assurée</p>
                           <p className="mt-1 text-xs text-theme-muted leading-relaxed">
-                            La ressource possède {otherAdmins.length} autre(s) administrateur(s) actif(s).
+                            La ressource possède d'autres administrateurs disponibles sur cette période.
                           </p>
                         </div>
                       </div>
@@ -2596,7 +2592,7 @@ export default function PlannerToolsPanel({
                         <div>
                           <p className="text-sm font-black text-theme-main">Impact Gouvernance Critique</p>
                           <p className="mt-1 text-xs text-theme-muted leading-relaxed font-medium">
-                            Cet administrateur est seul. Son absence laisserait la ressource sans supervision directe.
+                            Cet administrateur est le seul disponible. Son absence laisserait la ressource sans supervision directe.
                           </p>
                         </div>
                       </div>

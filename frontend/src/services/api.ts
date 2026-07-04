@@ -4,19 +4,49 @@
  * Nettoie et traduit les messages d'erreur pour l'utilisateur final
  */
 export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
-  const rawMessage = error instanceof Error
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : fallback;
+  // 1. Extraire le message brut
+  let rawMessage: string;
+  if (error instanceof Error) {
+    rawMessage = error.message;
+  } else if (typeof error === 'string') {
+    rawMessage = error;
+  } else if (error && typeof error === 'object' && 'detail' in error) {
+    // Si l'objet a un champ 'detail'
+    const detail = (error as any).detail;
+    rawMessage = typeof detail === 'string' ? detail : JSON.stringify(detail);
+  } else {
+    rawMessage = fallback;
+  }
 
   if (!rawMessage || rawMessage === '[object Object]') return fallback;
 
+  // 2. Nettoyer les URLs locales
   const withoutLocalUrls = rawMessage
     .replace(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?[^\s)]*/gi, 'le serveur')
     .replace(/(?:localhost|127\.0\.0\.1)(?::\d+)?/gi, 'le serveur');
 
-  // ✅ Messages d'erreur Pydantic traduits
+  // 3. Si le message ressemble à un objet JSON, tenter d'extraire le détail
+  const trimmed = withoutLocalUrls.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.detail && typeof parsed.detail === 'string') {
+        return parsed.detail;
+      }
+      if (parsed.message && typeof parsed.message === 'string') {
+        return parsed.message;
+      }
+      if (parsed.msg && typeof parsed.msg === 'string') {
+        return parsed.msg;
+      }
+      // Si on n'a pas trouvé de champ lisible, on retourne la chaîne brute (sans les accolades)
+      return trimmed.slice(1, -1);
+    } catch (_) {
+      // Le parsing a échoué, on continue
+    }
+  }
+
+  // 4. Traduire les erreurs Pydantic connues
   const pydanticErrorMap: Record<string, string> = {
     'date_from_datetime_parsing': 'La date de naissance est invalide. Veuillez sélectionner une date valide.',
     'Input should be a valid date': 'La date de naissance est invalide.',
@@ -25,22 +55,22 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
     'field required': 'Ce champ est requis.',
     'value_error.missing': 'Ce champ est requis.',
     'type_error.date': 'La date de naissance est invalide.',
-    'La modification de l\'email est interdite': 'La modification de l\'adresse email est interdite.',
-    'La modification du nom d\'utilisateur est interdite': 'La modification du nom d\'utilisateur est interdite.',
+    "La modification de l'email est interdite": "La modification de l'adresse email est interdite.",
+    "La modification du nom d'utilisateur est interdite": 'La modification du nom d\'utilisateur est interdite.',
     'Mot de passe actuel incorrect': 'Votre mot de passe actuel est incorrect.',
     'Identifiants incorrects': 'Email ou mot de passe incorrect.',
     'Utilisateur inactif': 'Votre compte est désactivé. Veuillez contacter le support.',
     'Email déjà utilisé': 'Cette adresse email est déjà utilisée.',
-    'Nom d\'utilisateur déjà pris': 'Ce nom d\'utilisateur est déjà pris.',
+    "Nom d'utilisateur déjà pris": 'Ce nom d\'utilisateur est déjà pris.',
   };
 
-  // Vérifier si le message correspond à une erreur Pydantic connue
   for (const [key, value] of Object.entries(pydanticErrorMap)) {
-    if (rawMessage.includes(key) || withoutLocalUrls.includes(key)) {
+    if (withoutLocalUrls.includes(key)) {
       return value;
     }
   }
 
+  // 5. Erreurs réseau / timeout
   if (/failed to fetch|networkerror|load failed/i.test(withoutLocalUrls)) {
     return 'Impossible de joindre le serveur. Vérifiez votre connexion puis réessayez.';
   }
@@ -49,7 +79,7 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
     return 'La requête a pris trop de temps. Réessayez dans un instant.';
   }
 
-  // Si le message est encore technique, on le simplifie
+  // 6. Nettoyage final des préfixes inutiles
   const cleanMessage = withoutLocalUrls
     .replace(/^Error: /i, '')
     .replace(/^Erreur: /i, '')
@@ -123,14 +153,13 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
       console.error('📡 Détail erreur API:', data);
       
       if (Array.isArray(data.detail)) {
-        // ✅ Pydantic validation errors - messages clairs
+        // Pydantic validation errors - messages clairs
         errorDetail = data.detail
           .map((item: any) => {
             const field = Array.isArray(item.loc)
               ? item.loc.filter((part: string) => part !== 'body').join('.')
               : '';
             
-            // ✅ Traduire les erreurs Pydantic
             let message = typeof item.msg === 'string' ? item.msg : (item.message || JSON.stringify(item));
             
             // Mapping des messages Pydantic

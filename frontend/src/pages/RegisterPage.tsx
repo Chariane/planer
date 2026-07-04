@@ -96,7 +96,7 @@ export default function RegisterPage() {
           initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 300 }}
-          className="h-20 w-20 rounded-3xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center shadow-2xl shadow-secondary/30 mx-auto mb-6 overflow-hidden border-2 border-white/20"
+          className="h-20 w-20 rounded-3xl bg-transparent flex items-center justify-center shadow-2xl shadow-secondary/30 mx-auto mb-6 overflow-hidden border-2 border-white/20"
         >
           <img src="/logo.png" alt="K-Planer" className="h-14 w-14 object-contain" />
         </motion.div>

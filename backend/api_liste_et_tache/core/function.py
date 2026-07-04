@@ -176,7 +176,6 @@ def _has_overlapping_leave_for_user(
 def _is_user_available_now(db: Session, user_id: str) -> bool:
     """Checks if the user has an approved absence covering the current date."""
     now = datetime.now()
-    # Utilisation de la nouvelle fonction pour vérifier les absences approuvées sur la date actuelle
     return not _has_overlapping_leave_for_user(
         db,
         user_id,
@@ -194,10 +193,14 @@ def _has_overlapping_approved_leave(
     date_debut,
     date_fin,
     exclude_absence_id: Optional[str] = None,
+    scope_type: Optional[str] = None,
+    scope_id: Optional[str] = None,
 ) -> bool:
     """
-    Vérifie si un utilisateur a une absence approuvée qui chevauche la période donnée,
-    toutes ressources confondues (héritage inclus).
+    Vérifie si un utilisateur a une absence approuvée qui chevauche la période donnée.
+    Si scope_type/scope_id sont fournis, seules les absences dont la ressource est un ancêtre
+    (ou la même) que la ressource cible sont prises en compte.
+    Cela implique qu'une absence dans une ressource enfant ne rend pas indisponible dans un parent.
     """
     query = (
         db.query(AbsenceEtConge)
@@ -210,9 +213,43 @@ def _has_overlapping_approved_leave(
     )
     if exclude_absence_id:
         query = query.filter(AbsenceEtConge.id != exclude_absence_id)
+
     for absence in query.all():
-        if _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin):
-            return True
+        if not _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin):
+            continue
+
+        # Filtrer par héritage descendant si un scope est fourni
+        if scope_type and scope_id:
+            membre = absence.membres
+            if not membre:
+                continue
+
+            # Ressource de l'absence
+            if membre.id_liste:
+                absence_scope_type = ResourceType.LISTE
+                absence_scope_id = membre.id_liste
+            elif membre.id_espace:
+                absence_scope_type = ResourceType.ESPACE
+                absence_scope_id = membre.id_espace
+            elif membre.id_workspace:
+                absence_scope_type = ResourceType.WORKSPACE
+                absence_scope_id = membre.id_workspace
+            else:
+                continue
+
+            # Vérifier si la ressource cible est dans la portée de l'absence
+            # (i.e. l'absence est un ancêtre ou la ressource elle-même)
+            if not _is_resource_within_scope(
+                db,
+                target_type=scope_type,
+                target_id=scope_id,
+                scope_type=absence_scope_type,
+                scope_id=absence_scope_id,
+            ):
+                continue
+
+        return True
+
     return False
 
 
@@ -1705,6 +1742,7 @@ def _require_direct_workspace_admin_grant(db: Session, workspace_id: str, curren
 
 
 # ========== GESTION DES RAPPORTS ==========
+# (aucune modification)
 
 def _report_scope_and_author(db: Session, rapport: Rapport) -> tuple[str, str, str | None, str | None]:
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None

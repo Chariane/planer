@@ -9,13 +9,13 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp } from '../contexts/AppContext';
-import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
 export default function DashboardPage() {
   const {
     workspaces = [],
+    ownedWorkspaces = [],
     joinedWorkspaces = [],
     joinedEspaces = [],
     joinedListes = [],
@@ -45,29 +45,34 @@ export default function DashboardPage() {
     loadDashboardStats();
   };
 
+  // ✅ Données réelles et distinctes
+  const createdWorkspacesCount = (ownedWorkspaces || []).length;  // workspaces créés par l'utilisateur
+  const joinedWorkspacesCount = (joinedWorkspaces || []).length; // workspaces rejoints (sans être créateur)
+  const totalWorkspaces = createdWorkspacesCount + joinedWorkspacesCount;
+
   const statCards = [
     {
       label: "Workspaces",
-      value: (workspaces || []).length + (joinedWorkspaces || []).length,
+      value: totalWorkspaces,
       icon: <Briefcase size={24} />,
       color: "bg-blue-500/20 text-blue-500 dark:bg-blue-500/30 dark:text-blue-400 border-blue-500/20",
-      trend: "+12%",
+      sub: `${createdWorkspacesCount} créés, ${joinedWorkspacesCount} rejoints`,
       link: "/workspaces"
     },
     {
       label: "Espaces",
-      value: dashboardStats?.total_spaces || 0,
+      value: (joinedEspaces || []).length,
       icon: <FolderKanban size={24} />,
       color: "bg-orange-500/20 text-orange-500 dark:bg-orange-500/30 dark:text-orange-400 border-orange-500/20",
-      trend: "+8%",
+      sub: "Espaces accessibles",
       link: "#"
     },
     {
       label: "Projets",
-      value: dashboardStats?.total_projects || 0,
+      value: (joinedListes || []).length,
       icon: <CheckSquare size={24} />,
       color: "bg-emerald-500/20 text-emerald-500 dark:bg-emerald-500/30 dark:text-emerald-400 border-emerald-500/20",
-      trend: "+23%",
+      sub: "Listes accessibles",
       link: "#"
     },
     {
@@ -75,7 +80,7 @@ export default function DashboardPage() {
       value: dashboardStats?.active_members || 0,
       icon: <Users size={24} />,
       color: "bg-purple-500/20 text-purple-500 dark:bg-purple-500/30 dark:text-purple-400 border-purple-500/20",
-      trend: "+5%",
+      sub: "Sur l'ensemble des workspaces",
       link: "#"
     }
   ];
@@ -129,7 +134,7 @@ export default function DashboardPage() {
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-secondary/20 to-transparent"></div>
         </div>
 
-        {/* Statistiques - Cartes Premium avec couleurs adaptées au thème */}
+        {/* Statistiques - Cartes Premium */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
           {statCards.map((card, index) => (
             <motion.div
@@ -152,10 +157,10 @@ export default function DashboardPage() {
                         <div className="text-theme-main/80">{card.icon}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-4">
-                      <TrendingUp size={14} className="text-emerald-500" />
-                      <span className="text-xs font-black text-emerald-500 tracking-tight">{card.trend}</span>
-                      <span className="text-[10px] font-bold text-theme-muted/40 uppercase tracking-tighter ml-1">vs mois dernier</span>
+                    <div className="mt-4">
+                      <p className="text-[10px] font-bold text-theme-muted/60 uppercase tracking-tighter">
+                        {card.sub}
+                      </p>
                     </div>
                   </div>
                 </div>

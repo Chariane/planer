@@ -27,6 +27,8 @@ from ..core.function import (
     _get_liste_member_record,
     LISTE_OWNER_ROLE,
     LISTE_ADMIN_ROLE,
+    _has_overlapping_approved_leave,
+    ResourceType,
 )
 from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
@@ -176,31 +178,6 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
     return _get_absence_scope_for_member(db, membre)
 
 
-def _has_overlapping_approved_leave(
-    db: Session,
-    *,
-    user_id: str,
-    date_debut,
-    date_fin,
-    exclude_absence_id: Optional[str] = None,
-) -> bool:
-    query = (
-        db.query(AbsenceEtConge)
-        .join(Membre, AbsenceEtConge.id_membre == Membre.id)
-        .filter(
-            Membre.id_utilisateur == user_id,
-            Membre.statut == "Actif",
-            AbsenceEtConge.statut == "approuvee",
-        )
-    )
-    if exclude_absence_id:
-        query = query.filter(AbsenceEtConge.id != exclude_absence_id)
-    return any(
-        _date_overlap(date_debut, date_fin, absence.date_debut, absence.date_fin)
-        for absence in query.all()
-    )
-
-
 def _direct_resource_members(db: Session, *, resource_type: str, resource_id: str, role: Optional[str] = None) -> list[Membre]:
     query = db.query(Membre).filter(Membre.statut == "Actif")
     if resource_type == "liste":
@@ -244,6 +221,8 @@ def _available_direct_admins(
             date_debut=date_debut,
             date_fin=date_fin,
             exclude_absence_id=exclude_absence_id,
+            scope_type=resource_type,
+            scope_id=resource_id,
         )
     ]
 
@@ -310,8 +289,12 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     sole_admin_projects = []
     sole_creator_projects = []
 
+    # ⚠️ NOUVEAU : variables pour la gouvernance des listes
+    sole_admin_resources = []
+    sole_creator_resources = []
+
     if scope_type == "liste":
-        # Comportement existant : on analyse les tâches assignées
+        # --- Analyse des tâches assignées (inchangé) ---
         assigned_tasks = (
             db.query(Tache)
             .join(Membre, Tache.id == Membre.id_tache)
@@ -332,8 +315,33 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
                 overdue_tasks.append(task)
 
+        # ============================================================
+        # Détection de la gouvernance pour une liste
+        # ============================================================
+        admins = _direct_resource_members(db, resource_type="liste", resource_id=scope_id, role=LISTE_ADMIN_ROLE)
+        
+        if target_membre.role == LISTE_ADMIN_ROLE and admins:
+            available_admins = [
+                a for a in admins
+                if a.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=a.id_utilisateur,
+                    date_debut=absence.date_debut,
+                    date_fin=absence.date_fin,
+                    exclude_absence_id=absence.id,
+                    scope_type="liste",
+                    scope_id=scope_id,
+                )
+            ]
+            if len(available_admins) == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
+                sole_admin_resources.append({
+                    "id": scope_id,
+                    "nom": _get_liste_or_404(db, scope_id).nom,
+                    "type": "liste"
+                })
+
     else:
-        # Espace ou Workspace : on liste les projets (listes) où le membre a un rôle de gestionnaire
+        # --- Gestion des espaces et workspaces (modifié) ---
         listes = []
         if scope_type == "espace":
             listes = db.query(Liste).filter(Liste.id_espace == scope_id).all()
@@ -350,9 +358,18 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
                     "progression": progress,
                     "role": member_role.role
                 })
-                # Vérification de la gouvernance
                 admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
-                available_admins = [a for a in admins if _is_user_available_now(db, a.id_utilisateur)]
+                available_admins = [
+                    a for a in admins
+                    if a.id_utilisateur and not _has_overlapping_approved_leave(
+                        db,
+                        user_id=a.id_utilisateur,
+                        date_debut=absence.date_debut,
+                        date_fin=absence.date_fin,
+                        scope_type=ResourceType.LISTE,
+                        scope_id=liste.id,
+                    )
+                ]
                 if member_role.role == LISTE_ADMIN_ROLE and len(available_admins) == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
                     sole_admin_projects.append({"id": liste.id, "nom": liste.nom})
                 elif member_role.role == LISTE_OWNER_ROLE and not available_admins:
@@ -379,7 +396,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     # Calcul du risque
     risk_level = "faible"
     if scope_type == "liste":
-        if high_priority_tasks or overdue_tasks or overlapping_tasks or sole_admin_projects or sole_creator_projects:
+        if high_priority_tasks or overdue_tasks or overlapping_tasks or sole_admin_resources or sole_creator_resources:
             risk_level = "eleve"
         elif conflicts:
             risk_level = "moyen"
@@ -397,6 +414,10 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             risk_reasons.append(f"{len(overdue_tasks)} tâche(s) déjà en retard")
         if overlapping_tasks:
             risk_reasons.append(f"{len(overlapping_tasks)} tâche(s) chevauchent la période")
+        if sole_admin_resources:
+            risk_reasons.append("Seul administrateur disponible dans la liste")
+        if sole_creator_resources:
+            risk_reasons.append("Créateur unique sans administrateur disponible")
     else:
         if sole_admin_projects:
             risk_reasons.append(f"Seul administrateur disponible dans {len(sole_admin_projects)} projet(s)")
@@ -420,7 +441,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     else:
         recommendation = "Impact faible : aucun risque opérationnel majeur détecté."
 
-    # Construction de la réponse (adaptée au scope)
+    # Construction de la réponse
     response = {
         "conflicting_absences": conflicts,
         "risk_level": risk_level,
@@ -435,6 +456,8 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             "overlapping_tasks": overlapping_tasks,
             "overdue_tasks": overdue_tasks,
             "high_priority_tasks": high_priority_tasks,
+            "sole_admin_resources": sole_admin_resources,
+            "sole_creator_resources": sole_creator_resources,
         })
     else:
         response.update({
@@ -442,11 +465,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             "sole_admin_projects": sole_admin_projects,
             "sole_creator_projects": sole_creator_projects,
         })
-
-    # On ajoute également les ressources enfants pour la gouvernance si nécessaire (anciens champs pour compatibilité)
-    # Mais on ne les utilise plus dans le frontend pour les espaces/workspaces
-    if scope_type == "liste":
-        response["sole_admin_resources"] = sole_admin_projects  # réutilisé pour la compatibilité
+        response["sole_admin_resources"] = sole_admin_projects
         response["sole_creator_resources"] = sole_creator_projects
 
     return response
@@ -485,7 +504,8 @@ def _ensure_no_overlapping_active_leave(
     """
     Vérifie qu'il n'y a pas de conflit avec une demande existante :
       - Pour les demandes en attente : on vérifie uniquement dans la même ressource (scope).
-      - Pour les demandes approuvées : on vérifie globalement (toutes les ressources).
+      - Pour les demandes approuvées : on vérifie globalement, mais avec héritage descendant
+        (une absence dans une ressource parente rend indisponible dans l'enfant, mais l'inverse non).
     """
     if not date_debut:
         raise HTTPException(
@@ -533,20 +553,21 @@ def _ensure_no_overlapping_active_leave(
                 ),
             )
 
-    # 2. Vérification des demandes APPROUVÉES (globales, sans restriction de ressource)
-    if _has_overlapping_leave_for_user(
+    # 2. Vérification des demandes APPROUVÉES (avec héritage descendant)
+    if _has_overlapping_approved_leave(
         db,
-        user_id,
+        user_id=user_id,
         date_debut=date_debut,
         date_fin=date_fin,
         exclude_absence_id=exclude_absence_id,
-        statuses=["approuvee"],
+        scope_type=scope_type,
+        scope_id=scope_id,
     ):
         raise HTTPException(
             status_code=409,
             detail=(
-                "Vous êtes déjà en absence approuvée sur cette période. "
-                "Vous ne pouvez pas faire une nouvelle demande qui chevauche une absence déjà validée."
+                "Vous êtes déjà en absence approuvée dans cette ressource ou dans une ressource parente "
+                "sur cette période. Vous ne pouvez pas faire une nouvelle demande qui chevauche une absence déjà validée."
             ),
         )
 
@@ -866,6 +887,8 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
                     user_id=a.id_utilisateur,
                     date_debut=date_debut,
                     date_fin=date_fin,
+                    scope_type=resource_type,
+                    scope_id=resource_id,
                 )
             ]
             
@@ -953,6 +976,8 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
                     user_id=a.id_utilisateur,
                     date_debut=date_debut,
                     date_fin=date_fin,
+                    scope_type=resource_type,
+                    scope_id=resource_id,
                 )
             ]
             if available_admins:
@@ -983,7 +1008,6 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
     return absence
-
 
 
 def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
