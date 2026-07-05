@@ -1,7 +1,35 @@
-// src/store/api/baseApi.ts - VERSION CORRIGÉE
 import { createApi } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { apiFetch } from '../../services/api';
+
+// ⭐ Gestion du refresh token (queue)
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
+const refreshToken = async (): Promise<string | null> => {
+  try {
+    // Appel au backend pour rafraîchir le token
+    const response = await apiFetch(
+      import.meta.env.VITE_AUTH_URL || 'http://localhost:8002',
+      '/auth/refresh',
+      { method: 'POST', credentials: 'include' } // ✅ httpOnly cookie
+    );
+    const newToken = response?.access_token;
+    if (newToken) {
+      localStorage.setItem('access_token', newToken);
+      return newToken;
+    }
+    return null;
+  } catch (error) {
+    console.error('Refresh token failed:', error);
+    return null;
+  }
+};
 
 // Déterminer l'URL de base selon l'endpoint
 const getBaseUrlFromEndpoint = (url: string): string => {
@@ -26,17 +54,10 @@ const getBaseUrlFromEndpoint = (url: string): string => {
   return import.meta.env.VITE_API_URL || 'http://localhost:8000';
 };
 
-// ✅ BaseQuery qui réutilise VOTRE apiFetch
-const baseQuery: BaseQueryFn<{
-  url: string;
-  method?: string;
-  body?: unknown;
-  params?: Record<string, unknown>;
-}, unknown, unknown> = async ({ url, method, body, params }) => {
-  try {
+// ⭐ BaseQuery avec gestion du refresh
+const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraOptions) => {
+  const makeRequest = async (token?: string) => {
     let fullUrl = url;
-    
-    // ✅ Construction manuelle des paramètres
     if (params) {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
@@ -51,29 +72,74 @@ const baseQuery: BaseQueryFn<{
     }
 
     const baseUrl = getBaseUrlFromEndpoint(url);
-    
-    // ✅ Construction des options pour apiFetch
     const options: RequestInit = {
       method: method || 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: 'include', // ✅ Pour les cookies httpOnly
     };
-    
     if (body) {
       options.body = JSON.stringify(body);
     }
 
-    // ✅ Utilisation de VOTRE apiFetch
     const result = await apiFetch(baseUrl, fullUrl, options);
+    return result;
+  };
+
+  try {
+    // 1. Essayer avec le token actuel
+    const token = localStorage.getItem('access_token') || undefined;
+    let result = await makeRequest(token);
+
+    // 2. Si 401, tenter le refresh
+    if (result?.status === 401) {
+      // Si déjà en cours de refresh, mettre la requête en queue
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          refreshSubscribers.push((newToken: string) => {
+            makeRequest(newToken)
+              .then((res) => resolve({ data: res }))
+              .catch((err) => resolve({ error: { status: 500, data: err } }));
+          });
+        });
+      }
+
+      // Démarrer le refresh
+      isRefreshing = true;
+      try {
+        const newToken = await refreshToken();
+        if (newToken) {
+          isRefreshing = false;
+          onRefreshed(newToken);
+          // Réessayer la requête avec le nouveau token
+          const retryResult = await makeRequest(newToken);
+          return { data: retryResult };
+        } else {
+          // Refresh échoué -> logout
+          isRefreshing = false;
+          localStorage.removeItem('access_token');
+          window.dispatchEvent(new CustomEvent('unauthorized'));
+          return { error: { status: 401, data: 'Session expirée' } };
+        }
+      } catch (refreshError) {
+        isRefreshing = false;
+        localStorage.removeItem('access_token');
+        window.dispatchEvent(new CustomEvent('unauthorized'));
+        return { error: { status: 401, data: 'Session expirée' } };
+      }
+    }
 
     return { data: result };
   } catch (error) {
     console.error('[RTK Query] Erreur:', error);
-    return { 
-      error: { 
-        status: 500, 
+    return {
+      error: {
+        status: 500,
         data: error,
-        message: error instanceof Error ? error.message : 'Erreur inconnue'
-      } 
+        message: error instanceof Error ? error.message : 'Erreur inconnue',
+      },
     };
   }
 };
@@ -82,19 +148,41 @@ export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery,
   tagTypes: [
-    'User',
-    'Workspace',
-    'Espace',
-    'Liste',
-    'Tache',
+    'Absence',
+    'Availability',
+    'Calendar',
     'Canevas',
+    'ChatGroup',
+    'ChatPrivate',
+    'ChatUnread',
+    'Conflict',
+    'Entreprise',
+    'Espace',
+    'File',
+    'Impact',
+    'Invitation',
+    'Liste',
+    'Member',
+    'Navigation',
+    'Notification',
+    'Payment',
+    'Plan',
+    'PlanUsage',
+    'Report',
     'Section',
     'Checklist',
-    'Notification',
-    'Member',
-    'Invitation',
-    'Navigation',
-    'Dashboard',
+    'ChatGroup',
+    'ChatMember',
+    'ChatMessage',
+    'ChatPrivate',
+    'ChatUnread',
+    'Subscription',
+    'Tache',
+    'TwoFA',
+    'UnreadCount',
+    'User',
+    'UserPhoto',
+    'Workspace',
   ],
   endpoints: () => ({}),
 });

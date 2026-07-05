@@ -1,7 +1,9 @@
 // frontend/src/components/layout/Header.tsx
-import { ArrowLeft, ArrowRight, Menu, User, LogOut, Search, ChevronsLeft, AlignLeft, Moon, Sun, Sparkles, ChevronRight, Hash, FolderTree, Building2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Menu, User, LogOut, Search, ChevronsLeft, Moon, Sun, ChevronRight, Hash, FolderTree, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useUI } from '../../hooks/useUI';
+import { useNavigation } from '../../hooks/useNavigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -32,6 +34,7 @@ const Breadcrumbs = () => {
           if (found) return found;
         }
       }
+      return null;
     };
     const space = findSpace(workspace?.espaces || []);
     spaceName = space?.nom || joinedEspaces.find((e: any) => e.id === spaceId)?.nom || '';
@@ -83,6 +86,11 @@ interface HeaderProps {
 export default function Header({ onMenuClick, onToggleSidebar, isCompact = false }: HeaderProps) {
   const { user, logout, getProfilePhoto } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  
+  // ⭐ NOUVEAU: Utilisation des hooks Redux
+  const { toggleSidebar: toggleReduxSidebar, setSidebarOpen } = useUI();
+  const { activeWorkspaceId } = useNavigation();
+  
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,6 +98,12 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState({ index: 0, maxIndex: 0 });
+
+  // ⭐ Gestion du toggle sidebar avec Redux
+  const handleToggleSidebar = () => {
+    toggleReduxSidebar(); // ✅ Met à jour l'état Redux
+    onToggleSidebar(); // ✅ Notifie le parent (compatibilité)
+  };
 
   useEffect(() => {
     const loadPhoto = async () => {
@@ -140,7 +154,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
               <Menu className="h-5 w-5" />
             </button>
             <button
-              onClick={onToggleSidebar}
+              onClick={handleToggleSidebar}
               className="hidden lg:inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
               <ChevronsLeft className={`h-5 w-5 transition-transform duration-300 ${isCompact ? 'rotate-180' : ''}`} />

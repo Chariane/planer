@@ -1,36 +1,44 @@
 // src/store/api/workspaceApi.ts - VERSION CORRIGÉE
 import { baseApi } from './baseApi';
+export { skipToken } from '@reduxjs/toolkit/query/react';
+import type {
+  Workspace,
+  Member,
+  WorkspaceAccessListingResponse,
+  WorkspaceLocalResourcesResponse,
+  WorkspaceNavigationResponse,
+} from '../../types';
 
 export const workspaceApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // Navigation
-    getMyNavigation: builder.query<any, void>({
+    // ========== Navigation ==========
+    getMyNavigation: builder.query<WorkspaceNavigationResponse, void>({
       query: () => ({ url: '/workspaces/my_navigation' }),
       providesTags: ['Navigation', 'Workspace'],
       keepUnusedDataFor: 300,
     }),
 
-    getMyAccess: builder.query<any, void>({
+    getMyAccess: builder.query<WorkspaceAccessListingResponse, void>({
       query: () => ({ url: '/workspaces/my_access' }),
       providesTags: ['Workspace'],
       keepUnusedDataFor: 120,
     }),
 
-    getLocalResources: builder.query<any, string>({
+    getLocalResources: builder.query<WorkspaceLocalResourcesResponse, string>({
       query: (workspaceId) => ({
         url: `/workspaces/${workspaceId}/local_resources`,
       }),
       providesTags: (_result, _error, id) => [{ type: 'Workspace', id }],
     }),
 
-    // CRUD Workspace
-    getWorkspaceById: builder.query<any, string>({
+    // ========== CRUD Workspace ==========
+    getWorkspaceById: builder.query<Workspace, string>({
       query: (id) => ({ url: `/workspaces/${id}/get_workspace_detail` }),
       providesTags: (_result, _error, id) => [{ type: 'Workspace', id }],
       keepUnusedDataFor: 300,
     }),
 
-    createWorkspace: builder.mutation<any, { nom: string; description?: string }>({
+    createWorkspace: builder.mutation<Workspace, { nom: string; description?: string }>({
       query: (data) => ({
         url: '/workspaces/create_workspace',
         method: 'POST',
@@ -40,7 +48,7 @@ export const workspaceApi = baseApi.injectEndpoints({
     }),
 
     updateWorkspace: builder.mutation<
-      any,
+      Workspace,
       { id: string; data: { nom?: string; description?: string } }
     >({
       query: ({ id, data }) => ({
@@ -59,25 +67,33 @@ export const workspaceApi = baseApi.injectEndpoints({
       invalidatesTags: ['Workspace', 'Navigation'],
     }),
 
+    // ========== Membres ==========
+    getWorkspaceMembers: builder.query<Member[], string>({
+      query: (id) => ({ url: `/workspaces/${id}/list_workspace_members` }),
+      providesTags: (result, _error, id) => [
+        { type: 'Workspace', id },
+        ...(result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
+      ],
+      keepUnusedDataFor: 120,
+    }),
+
     inviteWorkspaceMember: builder.mutation<
       any,
-      { workspaceId: string; identifier: string; role?: string }
+      { workspaceId: string; identifier: string; role: string }
     >({
       query: ({ workspaceId, identifier, role }) => ({
         url: `/workspaces/${workspaceId}/invite_member_workspace`,
         method: 'POST',
-        body: { identifier, role },
+        body: { email: identifier, role },
       }),
       invalidatesTags: (_result, _error, { workspaceId }) => [
         { type: 'Workspace', id: workspaceId },
-        { type: 'Member', id: 'LIST' },
+        'Member',
+        'Invitation',
       ],
     }),
 
-    removeWorkspaceMember: builder.mutation<
-      void,
-      { workspaceId: string; userId: string }
-    >({
+    removeWorkspaceMember: builder.mutation<void, { workspaceId: string; userId: string }>({
       query: ({ workspaceId, userId }) => ({
         url: `/workspaces/${workspaceId}/members/${userId}/remove_workspace_member`,
         method: 'DELETE',
@@ -85,6 +101,7 @@ export const workspaceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { workspaceId, userId }) => [
         { type: 'Workspace', id: workspaceId },
         { type: 'Member', id: userId },
+        'Member',
       ],
     }),
 
@@ -94,16 +111,6 @@ export const workspaceApi = baseApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: ['Workspace', 'Navigation'],
-    }),
-
-    // Membres
-    getWorkspaceMembers: builder.query<any[], string>({
-      query: (id) => ({ url: `/workspaces/${id}/list_workspace_members` }),
-      providesTags: (result, _error, id) => [
-        { type: 'Workspace', id },
-        ...(result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
-      ],
-      keepUnusedDataFor: 120,
     }),
   }),
 });
@@ -116,8 +123,8 @@ export const {
   useCreateWorkspaceMutation,
   useUpdateWorkspaceMutation,
   useDeleteWorkspaceMutation,
+  useGetWorkspaceMembersQuery,
   useInviteWorkspaceMemberMutation,
   useRemoveWorkspaceMemberMutation,
   useLeaveWorkspaceMutation,
-  useGetWorkspaceMembersQuery,
 } = workspaceApi;

@@ -22,7 +22,7 @@ export const espaceService = {
     apiFetch(ESPACE_BASE_URL, `/espaces/${espaceId}/children`),
   
   // ========== CRUD Espace ==========
-  create: async (data: { nom: string; description?: string; id_workspace: string; id_espace_parent?: string }) => {
+  create: async (data: { nom: string; description?: string; id_workspace?: string; id_espace_parent?: string }) => {
     if (data.id_espace_parent) {
       return apiFetch(ESPACE_BASE_URL, `/espaces/${data.id_espace_parent}/create_sous_espace`, {
         method: 'POST',

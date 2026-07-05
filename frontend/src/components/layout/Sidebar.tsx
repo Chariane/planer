@@ -1,14 +1,14 @@
 // frontend/src/components/layout/Sidebar.tsx
-import { useState, type MouseEvent } from 'react';
+import { useState, type MouseEvent, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LayoutDashboard, Plus, LogOut, Crown, Users,
-  ChevronDown, ChevronRight, FolderOpen, ListTodo, Edit, Trash2,
+  ChevronDown, FolderOpen, ListTodo, Edit, Trash2,
   Globe, User, Briefcase, Building2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useApp } from '../../contexts/AppContext';
-import { useNavigationStore } from '../../store/useNavigationStore';
+import { useNavigation } from '../../hooks/useNavigation';
+import { useWorkspaceCompat } from '../../hooks/compat/useWorkspaceCompat';
 import CreateWorkspaceModal from '../workspace/CreateWorkspaceModal';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -26,12 +26,32 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { workspaceId, id } = useParams();
-  const activeWorkspaceId = workspaceId || (location.pathname.startsWith('/workspace/') ? id : undefined);
+  // ⭐ Définition correcte de currentActiveWorkspace (depuis l'URL)
+  const currentActiveWorkspace = workspaceId || (location.pathname.startsWith('/workspace/') ? id : undefined);
+  
   const { user, logout } = useAuth();
-  const { loadWorkspaces, updateWorkspace, deleteWorkspace } = useApp();
-  const { ownedWorkspaces, joinedWorkspaces, joinedEspaces, joinedListes } = useNavigationStore();
+  
+  // ⭐ NOUVEAU: Utilisation des hooks Redux
+  const { setActiveWorkspace: setReduxActiveWorkspace, setBreadcrumb } = useNavigation();
+  
+  // ⭐ NOUVEAU: RTK Query pour les données (avec cache)
+  const { 
+    navigation, 
+    isLoading: navLoading,
+    updateWorkspace,
+    deleteWorkspace,
+    refetch 
+  } = useWorkspaceCompat();
+
+  // ⭐ Utiliser Redux pour le workspace actif si disponible (synchronisation effectuée
+  // via l'useEffect ci-dessous qui pousse l'URL vers Redux)
+  // NOTE: la source de vérité initiale reste l'URL: `currentActiveWorkspace`.
+
+  // ✅ States locaux (conservés pour l'UI)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; workspace: Workspace | null }>({
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean; x: number; y: number; workspace: Workspace | null;
+  }>({
     visible: false,
     x: 0,
     y: 0,
@@ -47,8 +67,24 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [confirmData, setConfirmData] = useState<{ workspaceId: string; onConfirm: () => Promise<void> } | null>(null);
 
+  // ⭐ SYNCHRONISATION: Navigation Redux avec l'URL
+  useEffect(() => {
+    if (currentActiveWorkspace) {
+      setReduxActiveWorkspace(currentActiveWorkspace);
+    }
+  }, [currentActiveWorkspace, setReduxActiveWorkspace]);
+
+  // ⭐ Gestion de la sélection de workspace
+  const handleSelectWorkspace = (workspaceId: string, workspaceName: string) => {
+    setReduxActiveWorkspace(workspaceId);
+    setBreadcrumb([
+      { label: workspaceName, path: `/workspace/${workspaceId}`, type: 'workspace' },
+    ]);
+    navigate(`/workspace/${workspaceId}`);
+  };
+
   const handleWorkspaceCreated = () => {
-    loadWorkspaces();
+    refetch(); // ✅ Rafraîchit le cache RTK Query
   };
 
   const openWorkspaceMenu = (event: MouseEvent, workspace: Workspace) => {
@@ -77,7 +113,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       description: editDescription,
     });
     setIsEditModalOpen(false);
-    await loadWorkspaces();
+    refetch(); // ✅ Rafraîchit le cache
   };
 
   const handleDeleteWorkspace = async () => {
@@ -89,15 +125,34 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       workspaceId: workspace.id,
       onConfirm: async () => {
         await deleteWorkspace(workspace.id);
-        await loadWorkspaces();
-        if (activeWorkspaceId === workspace.id) {
-          navigate('/workspaces');
+        refetch(); // ✅ Rafraîchit le cache
+        if (currentActiveWorkspace === workspace.id) {
+          navigate('/dashboard');
         }
       }
     });
     setIsConfirmOpen(true);
   };
 
+  // ⭐ Données provenant de RTK Query (avec cache)
+  const ownedWorkspaces = navigation?.owned_workspaces || [];
+  const joinedWorkspaces = navigation?.joined_workspaces || [];
+  const joinedEspaces = navigation?.joined_espaces || [];
+  const joinedListes = navigation?.joined_listes || [];
+
+  // Construction de l'objet membre pour l'utilisateur connecté
+  const userMember = user
+    ? {
+        id: user.id,
+        username: user.username || '',
+        nom: user.nom || '',
+        prenoms: user.prenoms || '',
+        photo_base64: (user as any).photo_base64 || (user as any).photo || null,
+        email: user.email || '',
+      }
+    : null;
+
+  // Si compact, affichage minimal
   if (!isOpen) {
     return (
       <div className="flex h-full flex-col bg-gradient-to-b from-slate-900 to-slate-800 py-4 shadow-2xl overflow-y-auto items-center w-full border-r border-white/5">
@@ -118,18 +173,6 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
     );
   }
 
-  // Construction de l'objet membre pour l'utilisateur connecté
-  const userMember = user
-    ? {
-        id: user.id,
-        username: user.username || '',
-        nom: user.nom || '',
-        prenoms: user.prenoms || '',
-        photo_base64: (user as any).photo_base64 || (user as any).photo || null,
-        email: user.email || '',
-      }
-    : null;
-
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-slate-900 to-slate-800 shadow-2xl overflow-y-auto w-full items-center pb-2 border-r border-white/5">
       {/* Logo Section */}
@@ -148,7 +191,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         )}
       </div>
 
-      {/* Profil Section - sans bordure externe et sans bordure sur l'avatar */}
+      {/* Profil Section */}
       <div className={`w-full ${isCompact ? 'px-2 mt-6' : 'px-4 mt-6'}`}>
         <div
           onClick={() => navigate('/profile')}
@@ -188,7 +231,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         </div>
       </div>
 
-      {/* Main Navigation - uniquement Tableau de bord */}
+      {/* Main Navigation - Tableau de bord */}
       <nav className={`mt-6 w-full ${isCompact ? 'px-2' : 'px-4'} space-y-2`}>
         <Link to="/dashboard" className="block w-full">
           <motion.div
@@ -207,7 +250,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         </Link>
       </nav>
 
-      {/* Sections Dividers & Labels */}
+      {/* Sections Dividers */}
       <div className="w-full mt-8 px-4 flex items-center gap-3">
         <div className="h-[1px] flex-1 bg-white/5" />
         {!isCompact && <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Organisation</span>}
@@ -251,19 +294,19 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
               >
                 {ownedWorkspaces.map((ws) => (
-                  <Link
+                  <div
                     key={ws.id}
-                    to={`/workspace/${ws.id}`}
-                    onContextMenu={(event) => openWorkspaceMenu(event, ws)}
-                    className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-4 py-2'} gap-3 rounded-xl w-full transition-all duration-300 group ${activeWorkspaceId === ws.id
+                    onClick={() => handleSelectWorkspace(ws.id, ws.nom)}
+                    onContextMenu={(event) => openWorkspaceMenu(event, ws as Workspace)}
+                    className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-4 py-2'} gap-3 rounded-xl w-full transition-all duration-300 group cursor-pointer ${currentActiveWorkspace === ws.id
                       ? 'bg-white/10 text-white shadow-inner font-bold border border-white/5'
                       : 'text-white/40 hover:bg-white/5 hover:text-white'
                       }`}
                   >
-                    <Briefcase size={isCompact ? 14 : 16} className={`${activeWorkspaceId === ws.id ? 'text-secondary' : 'text-secondary/40 group-hover:text-secondary transition-colors'}`} />
+                    <Briefcase size={isCompact ? 14 : 16} className={`${currentActiveWorkspace === ws.id ? 'text-secondary' : 'text-secondary/40 group-hover:text-secondary transition-colors'}`} />
                     {!isCompact && <span className="text-sm truncate w-full">{ws.nom}</span>}
                     {isCompact && <span className="text-[8px] font-black truncate text-center">{ws.nom.substring(0, 2).toUpperCase()}</span>}
-                  </Link>
+                  </div>
                 ))}
               </motion.div>
             )}
@@ -298,17 +341,17 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                   className={`space-y-1 w-full ${isCompact ? 'px-2' : 'px-4'}`}
                 >
                   {joinedWorkspaces.map((ws) => (
-                    <Link
+                    <div
                       key={ws.id}
-                      to={`/workspace/${ws.id}`}
-                      className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-4 py-2'} gap-3 rounded-xl w-full transition-all duration-300 group ${activeWorkspaceId === ws.id
+                      onClick={() => handleSelectWorkspace(ws.id, ws.nom)}
+                      className={`flex ${isCompact ? 'flex-col items-center justify-center p-2' : 'items-center px-4 py-2'} gap-3 rounded-xl w-full transition-all duration-300 group cursor-pointer ${currentActiveWorkspace === ws.id
                         ? 'bg-white/10 text-white font-bold border border-white/5'
                         : 'text-white/40 hover:bg-white/5 hover:text-white'
                         }`}
                     >
-                      <Building2 size={16} className={`${activeWorkspaceId === ws.id ? 'text-sky-400' : 'text-sky-400/40 group-hover:text-sky-400 transition-colors'}`} />
+                      <Building2 size={16} className={`${currentActiveWorkspace === ws.id ? 'text-sky-400' : 'text-sky-400/40 group-hover:text-sky-400 transition-colors'}`} />
                       {!isCompact && <span className="text-sm truncate w-full flex-1">{ws.nom}</span>}
-                    </Link>
+                    </div>
                   ))}
                 </motion.div>
               )}
@@ -409,6 +452,13 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        )}
+
+        {/* Indicateur de chargement RTK Query */}
+        {navLoading && (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin h-5 w-5 border-2 border-secondary border-t-transparent rounded-full"></div>
           </div>
         )}
       </div>

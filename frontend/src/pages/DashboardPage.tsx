@@ -187,7 +187,7 @@ export default function DashboardPage() {
 
             <div className="space-y-3">
               {(dashboardStats?.recent_activities || []).length > 0 ? (
-                dashboardStats.recent_activities.map((activity: any, idx: number) => (
+                (dashboardStats?.recent_activities || []).map((activity: any, idx: number) => (
                   <motion.div
                     key={activity.id}
                     initial={{ opacity: 0, x: -10 }}

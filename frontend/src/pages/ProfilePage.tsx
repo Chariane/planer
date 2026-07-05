@@ -134,7 +134,7 @@ export default function ProfilePage() {
 
   const handleEditSubmit = async () => {
     try {
-      const payload = { ...editForm };
+      const payload: Partial<ProfileForm> = { ...editForm };
       if (!payload.date_nais || payload.date_nais === '') {
         delete payload.date_nais;
       }

@@ -1,10 +1,22 @@
 // src/store/store.ts
 import { configureStore } from '@reduxjs/toolkit';
 import { baseApi } from './api/baseApi';
+import uiReducer from './slices/uiSlice';
+import navigationReducer from './slices/navigationSlice';
+// import authReducer from './slices/authSlice'; // ⏳ Plus tard
 
 export const store = configureStore({
   reducer: {
+    // API
     [baseApi.reducerPath]: baseApi.reducer,
+    
+    // Slices UI
+    ui: uiReducer,
+    navigation: navigationReducer,
+    // auth: authReducer, // ⏳ Plus tard
+    
+    // ⭐ On garde vos contexts pour l'instant
+    // La migration se fera progressivement
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

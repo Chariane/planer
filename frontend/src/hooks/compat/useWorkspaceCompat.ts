@@ -1,5 +1,6 @@
 // src/hooks/compat/useWorkspaceCompat.ts
 import { useCallback } from 'react';
+import { skipToken } from '@reduxjs/toolkit/query/react';
 import { workspaceService } from '../../services/workspace.service';
 import {
   useGetMyNavigationQuery,
@@ -32,7 +33,7 @@ export const useWorkspaceCompat = (workspaceId?: string) => {
     data: members,
     isLoading: membersLoading,
     refetch: refetchMembers,
-  } = useGetWorkspaceMembersQuery(workspaceId!, { skip: !workspaceId });
+  } = useGetWorkspaceMembersQuery(workspaceId ?? skipToken);
 
   // Mutations RTK Query
   const [createWorkspaceRTK] = useCreateWorkspaceMutation();

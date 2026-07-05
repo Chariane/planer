@@ -1,5 +1,9 @@
 // frontend/src/types/index.ts
 
+// ============================================================================
+// TYPES DE BASE
+// ============================================================================
+
 export interface Member {
   id: string;
   name: string;
@@ -14,7 +18,10 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
-// Types pour les checklists (API)
+// ============================================================================
+// CHECKLISTS
+// ============================================================================
+
 export interface ApiChecklist {
   id: string;
   texte: string;
@@ -26,7 +33,6 @@ export interface ApiChecklist {
   id_createur?: string | null;
 }
 
-// Type simplifié pour les checklists dans les tâches (UI)
 export interface TaskChecklist {
   id: string;
   texte: string;
@@ -34,7 +40,10 @@ export interface TaskChecklist {
   creatorId?: string | null;
 }
 
-// Types pour les sections (API)
+// ============================================================================
+// SECTIONS
+// ============================================================================
+
 export interface ApiSection {
   id: string;
   titre: string;
@@ -43,13 +52,15 @@ export interface ApiSection {
   id_canevas: string;
 }
 
-// Types pour les sections (UI)
 export interface CanevasSection extends ApiSection {
   checklists: ApiChecklist[];
   progress: number;
 }
 
-// Types pour le canevas (API)
+// ============================================================================
+// CANEVAS
+// ============================================================================
+
 export interface ApiCanevas {
   id: string;
   is_verrouille: boolean;
@@ -58,12 +69,13 @@ export interface ApiCanevas {
   id_liste: string;
 }
 
-// Types pour le canevas (UI)
 export interface CanevasData extends ApiCanevas {
   sections: CanevasSection[];
 }
 
-// frontend/src/types/index.ts
+// ============================================================================
+// TÂCHES
+// ============================================================================
 
 export interface Task {
   id: string;
@@ -85,7 +97,6 @@ export interface Task {
   contentMode?: 'leaf' | 'checklist' | 'subtasks';
   canAddChecklist?: boolean;
   canAddSubtask?: boolean;
-  // ✅ NOUVEAU : créateur complet
   createur?: {
     id: string;
     username: string;
@@ -96,14 +107,9 @@ export interface Task {
   } | null;
 }
 
-export interface Period {
-  id: string;
-  name: string;
-  progress: number;
-  expanded?: boolean;
-  children?: Period[];
-  items?: ChecklistItem[];
-}
+// ============================================================================
+// LISTES (PROJETS)
+// ============================================================================
 
 export interface List {
   id: string;
@@ -113,10 +119,16 @@ export interface List {
   periods?: Period[];
   canevas?: CanevasData;
   createdAt: Date;
-  created_at?: string;  // Ajouté pour compatibilité API
-  id_espace?: string | null;  // Ajouté
-  id_workspace?: string | null;  // Ajouté
+  created_at?: string;
+  id_espace?: string | null;
+  id_workspace?: string | null;
+  membre_count?: number;
+  role_utilisateur?: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
 }
+
+// ============================================================================
+// ESPACES
+// ============================================================================
 
 export interface Space {
   id: string;
@@ -125,10 +137,16 @@ export interface Space {
   sous_espaces?: Space[];
   listes: List[];
   createdAt: Date;
-  created_at?: string;  // Ajouté pour compatibilité API
-  id_workspace?: string;  // Ajouté
-  id_espace_parent?: string | null;  // Ajouté
+  created_at?: string;
+  id_workspace?: string;
+  id_espace_parent?: string | null;
+  membre_count?: number;
+  role_utilisateur?: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
 }
+
+// ============================================================================
+// WORKSPACES
+// ============================================================================
 
 export interface Workspace {
   id: string;
@@ -145,6 +163,10 @@ export interface Workspace {
   current_user_statut?: string | null;
 }
 
+// ============================================================================
+// RESSOURCES REJOINTES
+// ============================================================================
+
 export interface JoinedResource {
   id: string;
   nom: string;
@@ -160,6 +182,10 @@ export interface JoinedResource {
   liste_nom?: string | null;
   tache_nom?: string | null;
 }
+
+// ============================================================================
+// WORKSPACE - RÉPONSES API
+// ============================================================================
 
 export interface WorkspaceAccessListingResponse {
   owned: Workspace[];
@@ -194,7 +220,178 @@ export interface WorkspaceNavigationResponse {
   joined_taches: JoinedResource[];
 }
 
-// Types pour les filtres de tâches
+// ============================================================================
+// ESPACE - TYPES API
+// ============================================================================
+
+export interface EspaceResponse {
+  id: string;
+  nom: string;
+  description?: string;
+  id_workspace: string;
+  id_espace_parent?: string;
+  created_at: string;
+  updated_at?: string;
+  role_utilisateur: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
+  membre_count: number;
+  sous_espaces?: EspaceResponse[];
+}
+
+export interface EspaceTreeResponse extends EspaceResponse {
+  sous_espaces?: EspaceTreeResponse[];
+}
+
+export interface EspaceCreateRequest {
+  nom: string;
+  description?: string;
+}
+
+export interface EspaceUpdateRequest {
+  nom?: string;
+  description?: string;
+  id_espace_parent?: string | null;
+}
+
+export interface EspaceMemberResponse {
+  id: string;
+  utilisateur: {
+    id: string;
+    username: string;
+    email: string;
+    nom: string;
+    prenoms: string;
+    photo?: string;
+  };
+  role: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
+  statut: 'Actif' | 'Inactif' | 'En attente';
+  date_invitation?: string;
+  date_acceptation?: string;
+}
+
+export interface EspaceInvitationResponse {
+  status: 'existing_user' | 'guest_invitation';
+  message: string;
+  email: string;
+  token?: string;
+  membre?: EspaceMemberResponse;
+}
+
+// ============================================================================
+// LISTE - TYPES API
+// ============================================================================
+
+export interface ListeResponse {
+  id: string;
+  nom: string;
+  description?: string;
+  id_workspace?: string;
+  id_espace?: string;
+  created_at: string;
+  updated_at: string;
+  role_utilisateur: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
+  membre_count: number;
+}
+
+export interface ListeCreateRequest {
+  nom: string;
+  description?: string;
+  id_workspace?: string;
+  id_espace?: string;
+}
+
+export interface ListeUpdateRequest {
+  nom?: string;
+  description?: string;
+  id_workspace?: string;
+  id_espace?: string;
+}
+
+export interface ListeMemberResponse {
+  id: string;
+  utilisateur: {
+    id: string;
+    username: string;
+    email: string;
+    nom: string;
+    prenoms: string;
+    photo?: string;
+  };
+  role: 'Créateur' | 'Administrateur' | 'Membre' | 'Invité';
+  statut: 'Actif' | 'Inactif' | 'En attente';
+  date_invitation?: string;
+  date_acceptation?: string;
+}
+
+export interface ListeInvitationResponse {
+  status: 'existing_user' | 'guest_invitation';
+  message: string;
+  email: string;
+  token?: string;
+  membre?: ListeMemberResponse;
+}
+
+// ============================================================================
+// TÂCHE - TYPES API
+// ============================================================================
+
+export interface TacheResponse {
+  id: string;
+  titre: string;
+  description?: string;
+  statut: 'à faire' | 'en cours' | 'bloqué' | 'terminé' | 'annulé';
+  priorite: 'basse' | 'moyenne' | 'haute' | 'critique';
+  date_debut?: string;
+  date_echeance?: string;
+  ordre_affichage: number;
+  id_liste: string;
+  id_tache_parent?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TacheFullResponse extends TacheResponse {
+  assignes: Member[];
+  sous_taches: TacheResponse[];
+  checklists: ApiChecklist[];
+  fichiers: FichierResponse[];
+}
+
+export interface TacheCreateRequest {
+  titre: string;
+  description?: string;
+  statut?: string;
+  priorite?: string;
+  date_debut?: string;
+  date_echeance?: string;
+  id_tache_parent?: string;
+}
+
+export interface TacheUpdateRequest {
+  id: string;
+  titre?: string;
+  description?: string;
+  statut?: string;
+  priorite?: string;
+  date_debut?: string;
+  date_echeance?: string;
+  ordre_affichage?: number;
+}
+
+export interface TacheBulkUpdateRequest {
+  items: TacheUpdateRequest[];
+}
+
+export interface TacheKanbanResponse {
+  columns: {
+    statut: string;
+    taches: TacheFullResponse[];
+  }[];
+}
+
+// ============================================================================
+// FILTRES ET REQUÊTES
+// ============================================================================
+
 export interface TaskFilters {
   statut?: string;
   priorite?: string;
@@ -203,14 +400,29 @@ export interface TaskFilters {
   order?: 'asc' | 'desc';
 }
 
-// Types pour les mises à jour groupées
 export interface TacheBulkUpdateItem {
   id: string;
   statut?: string;
   ordre_affichage?: number;
 }
 
-// === Absence & Congés (Original Schema) ===
+// ============================================================================
+// PÉRIODES
+// ============================================================================
+
+export interface Period {
+  id: string;
+  name: string;
+  progress: number;
+  expanded?: boolean;
+  children?: Period[];
+  items?: ChecklistItem[];
+}
+
+// ============================================================================
+// ABSENCES ET CONGÉS
+// ============================================================================
+
 export interface AbsenceEtConge {
   id: string;
   is_absence: boolean;
@@ -249,24 +461,19 @@ export interface AbsenceConflictOut {
   motif?: string;
 }
 
-// ✅ Interface AbsenceImpactOut mise à jour
 export interface AbsenceImpactOut {
-  // Pour les listes (scope liste) : tâches impactées
   overlapping_tasks?: Task[];
   overdue_tasks?: Task[];
   high_priority_tasks?: Task[];
-  // Pour les espaces/workspaces : projets impactés
   impacted_projects?: Array<{ id: string; nom: string; progression: number; role: string }>;
   sole_admin_projects?: Array<{ id: string; nom: string }>;
   sole_creator_projects?: Array<{ id: string; nom: string }>;
-  // Communs
   conflicting_absences: AbsenceConflictOut[];
   risk_level: 'faible' | 'moyen' | 'eleve' | string;
   recommendation?: string | null;
   risk_reasons?: string[];
   approved_absences_last_3_months?: number;
   approved_days_last_3_months?: number;
-  // Anciens champs (pour compatibilité si nécessaire)
   sole_admin_resources?: any[];
   sole_creator_resources?: any[];
 }
@@ -276,4 +483,112 @@ export interface UserAvailabilityOut {
   is_available: boolean;
   current_absence?: AbsenceEtConge | null;
   next_absence_start?: string | null;
+}
+
+// ============================================================================
+// FICHIERS
+// ============================================================================
+
+export interface FichierResponse {
+  id: string;
+  nom: string;
+  type_fichier: string;
+  url: string;
+  meta_donnees?: Record<string, any>;
+  created_at: string;
+  uploaded_by: {
+    id: string;
+    username: string;
+  };
+}
+
+export interface FichierCreateRequest {
+  nom: string;
+  type_fichier: string;
+  url: string;
+  target_type: 'workspace' | 'espace' | 'liste' | 'tache';
+  target_id: string;
+  meta_donnees?: Record<string, any>;
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+export interface NotificationResponse {
+  id: string;
+  titre: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'invitation';
+  is_read: boolean;
+  est_globale: boolean;
+  target_type?: 'workspace' | 'espace' | 'liste' | 'tache' | 'user';
+  target_id?: string;
+  data?: Record<string, any>;
+  date_creation: string;
+  date_lecture?: string;
+  id_utilisateur: string;
+  utilisateur?: {
+    id: string;
+    username: string;
+    email: string;
+  };
+}
+
+export interface NotificationCreateRequest {
+  titre: string;
+  message: string;
+  type?: 'info' | 'success' | 'warning' | 'error' | 'invitation';
+  est_globale?: boolean;
+  id_utilisateur?: string;
+  target_type?: 'workspace' | 'espace' | 'liste' | 'tache' | 'user';
+  target_id?: string;
+  data?: Record<string, any>;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
+
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+
+export interface DashboardStats {
+  total_projects: number;
+  total_spaces: number;
+  active_members: number;
+  recent_activities: NotificationResponse[];
+}
+
+// ============================================================================
+// RAPPORTS
+// ============================================================================
+
+export interface RapportResponse {
+  id: string;
+  titre: string;
+  contenu: string;
+  type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// RECHERCHE
+// ============================================================================
+
+export interface SearchRequest {
+  q: string;
+  workspace_id?: string;
+  espace_id?: string;
+  liste_id?: string;
+}
+
+export interface SearchResults {
+  tasks: TacheFullResponse[];
+  lists: ListeResponse[];
+  espaces: EspaceResponse[];
+  members: Member[];
+  files: FichierResponse[];
 }

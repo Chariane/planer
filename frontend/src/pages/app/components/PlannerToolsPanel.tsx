@@ -202,7 +202,7 @@ export default function PlannerToolsPanel({
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
 
   const canCreateAbsence = !!isDirectMemberRecord && (
-    (!!listeId || !!espaceId) && ![ROLES.CREATOR, ROLES.GUEST].includes(isDirectMemberRecord.role)
+    (!!listeId || !!espaceId) && isDirectMemberRecord.role !== ROLES.CREATOR && isDirectMemberRecord.role !== ROLES.GUEST
     || (!!workspaceId && !listeId && !espaceId && (isDirectResourceAdmin || isDirectMemberRecord?.role === ROLES.MEMBER))
   );
   const canViewOwnAbsenceRequests = !isDirectResourceCreator;
@@ -326,7 +326,7 @@ export default function PlannerToolsPanel({
 
       if (workspaceId && !listeId && !espaceId) {
         try {
-          const workspace = await workspaceService.getWorkspace(workspaceId);
+          const workspace = await workspaceService.getById(workspaceId);
           if (workspace?.id_utilisateur) {
             const creatorExists = direct.some(m => m.id_utilisateur === workspace.id_utilisateur);
             if (!creatorExists) {
@@ -2525,7 +2525,7 @@ export default function PlannerToolsPanel({
                     <div className="mt-3 space-y-1">
                       <p className="text-[9px] font-black text-theme-muted uppercase tracking-widest">Facteurs de risque :</p>
                       <ul className="list-disc pl-4 text-[10px] text-theme-muted space-y-0.5">
-                        {impactData.risk_reasons.map((reason, idx) => (
+                        {impactData.risk_reasons.map((reason: string, idx: number) => (
                           <li key={idx} className="font-medium">{reason}</li>
                         ))}
                       </ul>

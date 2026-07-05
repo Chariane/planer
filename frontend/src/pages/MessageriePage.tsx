@@ -508,7 +508,7 @@ export default function MessageriePage() {
       ]);
       
       const nextGroups = groupsResponse.groups || [];
-      const requestedGroup = nextGroups.find(group =>
+      const requestedGroup = nextGroups.find((group: any) =>
         group.resource_type === desiredResourceType && group.resource_id === desiredResourceId
       );
       
