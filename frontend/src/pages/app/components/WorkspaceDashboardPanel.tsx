@@ -22,9 +22,7 @@ interface WorkspaceDashboardPanelProps {
   workspaceId: string;
 }
 
-// ✅ RÔLES DISPONIBLES POUR LE CRÉATEUR : peut tout modifier
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-// ✅ L'ADMIN N'A AUCUNE OPTION DE MODIFICATION
 const ADMIN_ROLE_MANAGEMENT_OPTIONS: string[] = [];
 
 const getRoleBadgeClass = (role: string) => {
@@ -41,7 +39,6 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Composant Toast premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
@@ -93,8 +90,8 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [hideGuestMessage, setHideGuestMessage] = useState(false);
 
   const memberManagementRef = useRef<MemberManagementRef>(null);
 
@@ -103,7 +100,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
   };
 
   const { isGuest, isAdmin, isCreator, role } = useWorkspaceRole(workspaceId);
-  
   const canInviteMembers = isAdmin || isCreator;
 
   const loadData = async () => {
@@ -179,15 +175,22 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
     >
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {isGuest && (
+      {!hideGuestMessage && isGuest && (
         <div className="glass-card bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
             <Info className="h-6 w-6 text-primary" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
             <p className="text-xs text-theme-muted mt-1 opacity-60">Consultez les informations et les membres. Les modifications sont restreintes.</p>
           </div>
+          <button
+            onClick={() => setHideGuestMessage(true)}
+            className="p-1 hover:bg-primary-200/70 dark:hover:bg-primary-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -274,7 +277,6 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             )}
           </div>
 
-          {/* ✅ REMPLACEMENT : utilisation de MemberManagement avec ref */}
           <MemberManagement
             ref={memberManagementRef}
             workspaceId={workspaceId}

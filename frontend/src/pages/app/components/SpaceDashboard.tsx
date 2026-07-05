@@ -25,11 +25,8 @@ interface SpaceDashboardProps {
   onMemberInvited?: () => void;
 }
 
-// ✅ RÔLES MODIFIABLES PAR LE CRÉATEUR DIRECT : peut tout modifier
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-// ✅ RÔLES MODIFIABLES PAR L'ADMIN PAR HÉRITAGE : seulement promotions (Invité→Membre/Admin, Membre→Admin)
 const INHERITED_ADMIN_ROLE_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-// ✅ RÔLES MODIFIABLES PAR L'ADMIN DIRECT : NE PEUT MODIFIER AUCUN RÔLE
 const ADMIN_DIRECT_ROLE_OPTIONS: string[] = [];
 
 const getRoleBadgeClass = (role: string) => {
@@ -46,7 +43,6 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-// Toast Premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
@@ -100,8 +96,12 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
-
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // États pour masquer les messages
+  const [hideAdminMessage, setHideAdminMessage] = useState(false);
+  const [hideInheritedAdminMessage, setHideInheritedAdminMessage] = useState(false);
+  const [hideGuestMessage, setHideGuestMessage] = useState(false);
 
   const memberManagementRef = useRef<MemberManagementRef>(null);
 
@@ -118,17 +118,13 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     return joinedEspaces.find(espace => espace.id === targetSpaceId)?.role || null;
   };
 
-  // ✅ Détection du créateur direct via les membres chargés
   const isDirectEspaceCreator = !!spaceId && members.some(
     m => m.id === user?.id && m.role === ROLES.CREATOR
   );
-
-  // ✅ Détection de l'admin direct via les membres chargés
   const isDirectEspaceAdmin = !!spaceId && members.some(
     m => m.id === user?.id && m.role === ROLES.ADMIN
   );
 
-  // ✅ Rôle effectif : priorité au créateur direct, puis héritage, puis hooks
   const effectiveSpaceRole = isDirectEspaceCreator
     ? ROLES.CREATOR
     : inheritedSpaceRole
@@ -136,7 +132,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       || (isEspaceAdmin ? ROLES.ADMIN : null)
       || (isEspaceGuest ? ROLES.GUEST : null);
 
-  // ✅ Détection de l'admin par héritage
   const isInheritedSpaceAdmin = !!spaceId
     && (isWorkspaceAdmin || isWorkspaceCreator)
     && !isEspaceAdmin
@@ -229,7 +224,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     );
   }
 
-  // ✅ Déterminer si on affiche un message d'information (exclure le créateur direct)
   const showAdminMessage = isDirectEspaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
   const showInheritedAdminMessage = isInheritedSpaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
   const showGuestMessage = isEspaceGuest && !canInviteMembers;
@@ -242,41 +236,60 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     >
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {showGuestMessage && (
+      {!hideGuestMessage && showGuestMessage && (
         <div className="glass bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
             <Info className="h-6 w-6 text-primary" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-black text-theme-main tracking-tight uppercase tracking-widest text-[11px]">Accès Invité · Lecture seule</p>
             <p className="text-xs text-theme-muted mt-1 opacity-60">Vous pouvez consulter les informations, mais les modifications sont restreintes.</p>
           </div>
+          <button
+            onClick={() => setHideGuestMessage(true)}
+            className="p-1 hover:bg-primary-200/70 dark:hover:bg-primary-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles (sauf si créateur direct) */}
-      {showAdminMessage && (
+      {!hideAdminMessage && showAdminMessage && (
         <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
               En tant qu'administrateur direct de cet espace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de l'espace peut gérer les rôles des membres.
             </p>
           </div>
+          <button
+            onClick={() => setHideAdminMessage(true)}
+            className="p-1 hover:bg-amber-200/70 dark:hover:bg-amber-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* ✅ Message pour l'Admin par héritage : peut promouvoir */}
-      {showInheritedAdminMessage && (
+      {!hideInheritedAdminMessage && showInheritedAdminMessage && (
         <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-black uppercase tracking-widest text-[10px]">Administration par héritage - Promotions uniquement</p>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
               En tant qu'administrateur hérité de cet espace, vous pouvez promouvoir les membres directs (Invité → Membre/Admin, Membre → Admin). Vous ne pouvez pas rétrograder ni retirer de membres.
             </p>
           </div>
+          <button
+            onClick={() => setHideInheritedAdminMessage(true)}
+            className="p-1 hover:bg-emerald-200/70 dark:hover:bg-emerald-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -361,7 +374,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
             )}
           </div>
 
-          {/* ✅ REMPLACEMENT : utilisation de MemberManagement avec ref */}
           <MemberManagement
             ref={memberManagementRef}
             espaceId={spaceId}

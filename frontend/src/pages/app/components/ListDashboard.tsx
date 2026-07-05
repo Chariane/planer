@@ -26,10 +26,8 @@ interface ListDashboardProps {
   onMemberInvited?: () => void;
 }
 
-// ✅ RÔLES MODIFIABLES PAR LE CRÉATEUR DIRECT
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
 
-// Toast Premium
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
@@ -107,27 +105,25 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     member: Member | null;
   }>({ isOpen: false, member: null });
   const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
-  
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
+
+  // États pour masquer les messages
+  const [hideDirectAdminMessage, setHideDirectAdminMessage] = useState(false);
+  const [hideInheritedAdminMessage, setHideInheritedAdminMessage] = useState(false);
+
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
 
   const { isGuest: isListeGuest, isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId || undefined);
-  
-  // ✅ Détection de l'admin direct via les membres chargés
+
   const isDirectListAdmin = !!listId && members.some(
     m => m.id === user?.id && m.role === ROLES.ADMIN
   );
-
-  // ✅ Détection du créateur direct via les membres chargés
   const isDirectListCreator = !!listId && members.some(
     m => m.id === user?.id && m.role === ROLES.CREATOR
   );
-  
-  // ✅ Détection de l'admin par héritage
   const isInheritedListAdmin = !!listId
     && (isWorkspaceAdmin || isWorkspaceCreator)
     && !isListeAdmin
@@ -135,7 +131,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     && !isDirectListAdmin
     && !isDirectListCreator;
 
-  // ✅ DEBUG : Afficher les détections dans la console (peut être supprimé)
+  // DEBUG (peut être retiré)
   useEffect(() => {
     console.log('🔍 [ListDashboard] Détection des rôles:', {
       listId,
@@ -150,102 +146,38 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     });
   }, [isWorkspaceAdmin, isWorkspaceCreator, isListeAdmin, isListeCreator, isDirectListAdmin, isDirectListCreator, isInheritedListAdmin, members]);
 
-  // ✅ canEditMemberRole : Détermine si l'utilisateur peut modifier le rôle d'un membre
   const canEditMemberRole = (member: Member) => {
-    console.log(`🔍 [canEditMemberRole] Début pour ${member.name} (${member.role})`);
-    console.log(`   - isDirectListCreator: ${isDirectListCreator}`);
-    console.log(`   - isListeCreator: ${isListeCreator}`);
-    console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
-    console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
-    console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
-    
-    // ✅ Créateur direct : peut modifier n'importe quel membre (sauf lui-même)
     if (isDirectListCreator || isWorkspaceCreator) {
-      const canEdit = member.role !== ROLES.CREATOR && member.id !== user?.id;
-      console.log(`🔍 [canEditMemberRole] Créateur: ${canEdit} pour ${member.name} (${member.role})`);
-      return canEdit;
+      return member.role !== ROLES.CREATOR && member.id !== user?.id;
     }
-    
-    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
-    if (isDirectListAdmin) {
-      console.log(`🔍 [canEditMemberRole] Admin direct: false pour ${member.name}`);
-      return false;
-    }
-    
-    // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
-    // ❌ Mais ne peut pas modifier un Admin direct
+    if (isDirectListAdmin) return false;
     if (isInheritedListAdmin) {
-      if (member.role === ROLES.CREATOR) {
-        console.log(`🔍 [canEditMemberRole] Admin hérité: false pour ${member.name} (Créateur)`);
-        return false;
-      }
-      if (member.role === ROLES.ADMIN) {
-        console.log(`🔍 [canEditMemberRole] Admin hérité: false pour ${member.name} (Admin direct)`);
-        return false;
-      }
-      // ✅ Pour les invités et membres, l'Admin par héritage peut modifier
-      console.log(`🔍 [canEditMemberRole] Admin hérité: true pour ${member.name} (${member.role})`);
+      if (member.role === ROLES.CREATOR || member.role === ROLES.ADMIN) return false;
       return true;
     }
-    
-    console.log(`🔍 [canEditMemberRole] Aucun droit pour ${member.name}`);
     return false;
   };
 
-  // ✅ canRemoveMember : SEUL le Créateur peut retirer un membre
   const canRemoveMember = (member: Member) => {
-    // Ne peut pas se retirer lui-même
     if (member.id === user?.id) return false;
-    // Ne peut pas retirer un autre créateur
     if (member.role === ROLES.CREATOR) return false;
-    // ✅ SEUL le Créateur peut retirer un membre
     return isDirectListCreator || isWorkspaceCreator;
   };
 
-  // ✅ getManageableRolesForMember : Détermine les rôles disponibles pour la modification
   const getManageableRolesForMember = (memberRole: string) => {
-    console.log(`🔍 [getManageableRolesForMember] memberRole: ${memberRole}`);
-    console.log(`   - isDirectListCreator: ${isDirectListCreator}`);
-    console.log(`   - isListeCreator: ${isListeCreator}`);
-    console.log(`   - isWorkspaceCreator: ${isWorkspaceCreator}`);
-    console.log(`   - isDirectListAdmin: ${isDirectListAdmin}`);
-    console.log(`   - isInheritedListAdmin: ${isInheritedListAdmin}`);
-    
-    // ✅ Créateur direct : peut tout modifier (Invité → Membre → Admin et inversement)
-    if (isDirectListCreator || isWorkspaceCreator) {
-      console.log(`🔍 [getManageableRolesForMember] Créateur: retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS}`);
-      return CREATOR_ROLE_MANAGEMENT_OPTIONS;
-    }
-    
-    // ✅ Admin direct : NE PEUT MODIFIER AUCUN RÔLE
-    if (isDirectListAdmin) {
-      console.log(`🔍 [getManageableRolesForMember] Admin direct: retourne [${memberRole}]`);
-      return [memberRole];
-    }
-    
-    // ✅ Admin par héritage : peut promouvoir (Invité → Membre/Admin, Membre → Admin)
-    // Retourner TOUS les rôles, la vérification de promotion est faite dans handleMemberRoleChange
+    if (isDirectListCreator || isWorkspaceCreator) return CREATOR_ROLE_MANAGEMENT_OPTIONS;
+    if (isDirectListAdmin) return [memberRole];
     if (isInheritedListAdmin) {
-      // ❌ Ne peut pas modifier un Admin direct
-      if (memberRole === ROLES.ADMIN) {
-        console.log(`🔍 [getManageableRolesForMember] Admin hérité sur Admin: retourne [${memberRole}]`);
-        return [memberRole];
-      }
-      console.log(`🔍 [getManageableRolesForMember] Admin hérité: retourne ${CREATOR_ROLE_MANAGEMENT_OPTIONS}`);
+      if (memberRole === ROLES.ADMIN) return [memberRole];
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
-    
-    console.log(`🔍 [getManageableRolesForMember] Aucun droit: retourne [${memberRole}]`);
     return [memberRole];
   };
 
-  // ✅ getAvailableInvitationRoles : Détermine les rôles disponibles pour l'invitation
   const getAvailableInvitationRoles = () => {
-    // ✅ Créateur direct ou Admin par héritage : peut inviter avec tous les rôles
     if (isDirectListCreator || isWorkspaceCreator || isInheritedListAdmin) {
       return CREATOR_ROLE_MANAGEMENT_OPTIONS;
     }
-    // ✅ Admin direct : ne peut inviter qu'avec Membre ou Invité
     if (isDirectListAdmin || isListeAdmin) {
       return ['Invité', 'Membre'];
     }
@@ -253,7 +185,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   };
 
   const canInviteMembers = isListeAdmin || isListeCreator || isWorkspaceAdmin || isWorkspaceCreator || isInheritedListAdmin || isDirectListCreator;
-
   const availableRoles = getAvailableInvitationRoles();
 
   useEffect(() => {
@@ -349,28 +280,19 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   };
 
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
-    console.log(`🔍 [handleMemberRoleChange] ${member.name} (${member.role}) → ${nextRole}`);
-    
-    if (member.role === ROLES.CREATOR || nextRole === member.role) {
-      console.log(`🔍 [handleMemberRoleChange] Pas de changement nécessaire`);
-      return;
-    }
+    if (member.role === ROLES.CREATOR || nextRole === member.role) return;
     if (!canEditMemberRole(member)) {
       showMessage('Vous n\'avez pas les droits pour modifier le rôle de ce membre.', 'error');
       return;
     }
-    
-    // ✅ Vérification supplémentaire pour l'Admin par héritage : ne peut que promouvoir
     if (isInheritedListAdmin) {
       const currentRank = getRoleRank(member.role);
       const nextRank = getRoleRank(nextRole);
-      console.log(`🔍 [handleMemberRoleChange] Admin hérité: currentRank=${currentRank}, nextRank=${nextRank}`);
       if (nextRank < currentRank) {
         showMessage('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.', 'error');
         return;
       }
     }
-    
     setUpdatingMemberId(member.id);
     try {
       await listeService.updateMemberRole(listId, member.id, nextRole);
@@ -429,7 +351,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
 
   const activeMembers = members.filter(member => member.role !== ROLES.GUEST);
   const guestMembers = members.filter(member => member.role === ROLES.GUEST);
-  
+
   const statusGradient = (() => {
     if (stats.tasksCount === 0) return '#e5e7eb';
     const done = (stats.doneTasksCount / stats.tasksCount) * 100;
@@ -438,11 +360,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
   })();
 
-  // ✅ Déterminer si on affiche un message d'information (exclure le créateur direct)
   const showDirectAdminMessage = isDirectListAdmin && !isDirectListCreator && !isWorkspaceCreator;
   const showInheritedAdminMessage = isInheritedListAdmin && !isDirectListCreator && !isWorkspaceCreator;
 
-  // ✅ Rôle effectif pour MemberManagement
   const effectiveListRole = isDirectListCreator
     ? ROLES.CREATOR
     : isListeCreator
@@ -469,29 +389,41 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         </div>
       )}
 
-      {/* ✅ Message pour l'Admin direct : ne peut pas modifier les rôles */}
-      {showDirectAdminMessage && (
+      {!hideDirectAdminMessage && showDirectAdminMessage && (
         <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
               En tant qu'administrateur direct de cette liste, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de la liste peut gérer les rôles des membres.
             </p>
           </div>
+          <button
+            onClick={() => setHideDirectAdminMessage(true)}
+            className="p-1 hover:bg-amber-200/70 dark:hover:bg-amber-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* ✅ Message pour l'Admin par héritage : peut promouvoir */}
-      {showInheritedAdminMessage && (
+      {!hideInheritedAdminMessage && showInheritedAdminMessage && (
         <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
           <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-black uppercase tracking-widest text-[10px]">Administration par héritage - Promotions uniquement</p>
             <p className="text-xs text-theme-muted mt-1 leading-relaxed">
               En tant qu'administrateur hérité de cette liste, vous pouvez promouvoir les membres directs (Invité → Membre/Admin, Membre → Admin). Vous ne pouvez pas rétrograder ni retirer de membres.
             </p>
           </div>
+          <button
+            onClick={() => setHideInheritedAdminMessage(true)}
+            className="p-1 hover:bg-emerald-200/70 dark:hover:bg-emerald-400/10 rounded-xl transition-colors"
+            title="Masquer ce message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -556,9 +488,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
           <div className="flex items-center gap-4">
             <div
               className="h-16 w-16 rounded-full flex items-center justify-center"
-              style={{
-                background: statusGradient,
-              }}
+              style={{ background: statusGradient }}
               title={`Répartition par statut. Avancement moyen : ${stats.listProgress}%`}
             >
               <div className="h-11 w-11 rounded-full bg-white flex flex-col items-center justify-center leading-tight">
@@ -582,7 +512,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         </GlassCard>
       </div>
 
-      {/* ✅ Remplacer la section des membres par MemberManagement */}
       <div>
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -598,8 +527,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
             </div>
           )}
         </div>
-
-        {/* ✅ PASSER isInheritedAdmin et currentUserRole corrigé */}
         <MemberManagement
           listeId={listId}
           currentUserRole={effectiveListRole}
@@ -626,9 +553,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
         <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Inviter un membre dans la liste" size="md">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email ou username
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email ou username</label>
               <input
                 type="text"
                 placeholder="exemple@email.com ou username"
@@ -638,9 +563,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rôle
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rôle</label>
               <select
                 value={inviteRole}
                 onChange={e => setInviteRole(e.target.value)}
