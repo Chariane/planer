@@ -148,7 +148,7 @@ from ..schemas import (
     ChecklistOut, ChecklistCreate, ChecklistUpdate, ChecklistBase,
     WorkspaceMemberInvite,
 )
-from ..models import Checklist, Liste, Tache, Utilisateur
+from ..models import Checklist, Liste, Tache, Utilisateur, Membre
 
 router = APIRouter(prefix="/listes", tags=["Listes & Tâches"])
 
