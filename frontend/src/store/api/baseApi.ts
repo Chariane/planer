@@ -1,8 +1,12 @@
+// src/store/api/baseApi.ts
 import { createApi } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { apiFetch } from '../../services/api';
 
-// ⭐ Gestion du refresh token (queue)
+// ============================================================================
+// REFRESH TOKEN - GESTION DE FILE D'ATTENTE
+// ============================================================================
+
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
 
@@ -14,10 +18,14 @@ const onRefreshed = (token: string) => {
 const refreshToken = async (): Promise<string | null> => {
   try {
     // Appel au backend pour rafraîchir le token
+    // Le refresh token est automatiquement envoyé via le cookie httpOnly
     const response = await apiFetch(
       import.meta.env.VITE_AUTH_URL || 'http://localhost:8002',
       '/auth/refresh',
-      { method: 'POST', credentials: 'include' } // ✅ httpOnly cookie
+      { 
+        method: 'POST', 
+        credentials: 'include' // ✅ httpOnly cookie
+      }
     );
     const newToken = response?.access_token;
     if (newToken) {
@@ -26,12 +34,15 @@ const refreshToken = async (): Promise<string | null> => {
     }
     return null;
   } catch (error) {
-    console.error('Refresh token failed:', error);
+    console.error('[RTK Query] Refresh token failed:', error);
     return null;
   }
 };
 
-// Déterminer l'URL de base selon l'endpoint
+// ============================================================================
+// DÉTERMINATION DE L'URL DE BASE
+// ============================================================================
+
 const getBaseUrlFromEndpoint = (url: string): string => {
   if (url.startsWith('/auth')) {
     return import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';
@@ -54,7 +65,10 @@ const getBaseUrlFromEndpoint = (url: string): string => {
   return import.meta.env.VITE_API_URL || 'http://localhost:8000';
 };
 
-// ⭐ BaseQuery avec gestion du refresh
+// ============================================================================
+// BASE QUERY AVEC GESTION DU REFRESH
+// ============================================================================
+
 const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraOptions) => {
   const makeRequest = async (token?: string) => {
     let fullUrl = url;
@@ -121,13 +135,13 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
           isRefreshing = false;
           localStorage.removeItem('access_token');
           window.dispatchEvent(new CustomEvent('unauthorized'));
-          return { error: { status: 401, data: 'Session expirée' } };
+          return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
         }
       } catch (refreshError) {
         isRefreshing = false;
         localStorage.removeItem('access_token');
         window.dispatchEvent(new CustomEvent('unauthorized'));
-        return { error: { status: 401, data: 'Session expirée' } };
+        return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
       }
     }
 
@@ -144,45 +158,70 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
   }
 };
 
+// ============================================================================
+// CRÉATION DE L'API DE BASE
+// ============================================================================
+
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery,
   tagTypes: [
-    'Absence',
-    'Availability',
-    'Calendar',
-    'Canevas',
-    'ChatGroup',
-    'ChatPrivate',
-    'ChatUnread',
-    'Conflict',
-    'Entreprise',
-    'Espace',
-    'File',
-    'Impact',
-    'Invitation',
-    'Liste',
-    'Member',
+    // Authentification & Utilisateur
+    'User',
+    'UserPhoto',
+    'TwoFA',
+
+    // Workspace
+    'Workspace',
     'Navigation',
+    'Member',
+    'Invitation',
+
+    // Espace
+    'Espace',
+
+    // Liste
+    'Liste',
+
+    // Tâche
+    'Tache',
+
+    // Canevas
+    'Canevas',
+    'Section',
+    'Checklist',
+
+    // Notification
     'Notification',
+    'UnreadCount',
+
+    // Absence
+    'Absence',
+    'Calendar',
+    'Availability',
+    'Conflict',
+    'Impact',
+
+    // Entreprise & Abonnements
+    'Entreprise',
+    'Subscription',
     'Payment',
     'Plan',
     'PlanUsage',
+
+    // Fichiers & Rapports
+    'File',
     'Report',
-    'Section',
-    'Checklist',
+
+    // Messagerie (K-Chat)
     'ChatGroup',
     'ChatMember',
     'ChatMessage',
     'ChatPrivate',
     'ChatUnread',
-    'Subscription',
-    'Tache',
-    'TwoFA',
-    'UnreadCount',
-    'User',
-    'UserPhoto',
-    'Workspace',
+
+    // Dashboard
+    'Dashboard',
   ],
   endpoints: () => ({}),
 });

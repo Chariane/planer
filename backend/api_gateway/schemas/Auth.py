@@ -155,6 +155,16 @@ class TwoFactorVerifyRequest(BaseModel):
             raise ValueError("Le code Google Authenticator doit contenir exactement 6 chiffres.")
         return code
 
-# ----------------------------------------
-# SCHÉMAS POUR LES RÔLES
-# ----------------------------------------
+# ============================================================================
+# REFRESH TOKEN SCHEMAS
+# ============================================================================
+
+class RefreshTokenResponse(BaseModel):
+    """Réponse pour le refresh token."""
+    access_token: str
+    token_type: str = "bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    """Requête pour le refresh token (si utilisé dans le body)."""
+    refresh_token: Optional[str] = None

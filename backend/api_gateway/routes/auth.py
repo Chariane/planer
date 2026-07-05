@@ -1,7 +1,7 @@
 import base64
 import binascii
 from datetime import timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.emails import (
@@ -35,6 +35,9 @@ from ..core.security import (
     logout_user,
     oauth2_scheme,
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    create_refresh_token,
+    verify_refresh_token,
+    REFRESH_TOKEN_EXPIRE_DAYS,
 )
 from ..schemas import (
     EmailSchema,
@@ -59,6 +62,7 @@ from ..schemas import (
     UtilisateurCreate,
     UtilisateurOut,
     UtilisateurUpdate,
+    RefreshTokenResponse,
 )
 from ..crud.utilisateur import (
     create_or_update_password_reset_request,
@@ -146,7 +150,11 @@ def register(
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    payload: LoginRequest,
+    response: Response,  
+    db: Session = Depends(get_db)
+):
     # Rechercher l'utilisateur par email ou username
     user = get_utilisateur_by_email_or_username(db, payload.identifier, payload.identifier)
     if not user:
@@ -172,12 +180,27 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail=build_email_not_verified_detail(user.email),
         )
 
+    # ✅ Si 2FA n'est pas activé
     if not user.is_2fa_enabled:
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": str(user.id)},
             expires_delta=access_token_expires,
         )
+        
+        # ✅ CRÉER LE REFRESH TOKEN
+        refresh_token = create_refresh_token(data={"sub": str(user.id)})
+        
+        # ✅ DÉFINIR LE COOKIE HTTPONLY
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,        
+            secure=False,        
+            samesite="lax",
+            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  
+        )
+        
         return {
             "message": "Connexion reussie.",
             "requires_2fa": False,
@@ -186,10 +209,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             "user": user,
         }
 
+    # ✅ Si 2FA est activé
     challenge_token = create_access_token(
         data={"sub": str(user.id), "purpose": "2fa_login"},
         expires_delta=timedelta(minutes=10),
     )
+    
+    # ✅ NOTA: Le refresh token n'est pas créé ici car le 2FA n'est pas encore validé
+    # Il sera créé après la vérification du code 2FA dans /verify-2fa
+    
     return {
         "message": "Mot de passe valide. Veuillez renseigner le code Google Authenticator.",
         "requires_2fa": True,
@@ -673,8 +701,92 @@ def update_me(
             detail="Une erreur est survenue lors de la mise à jour de votre profil. Veuillez vérifier les champs saisis."
         )
 
-
 @router.post("/logout")
-def logout(current_user: UtilisateurOut = Depends(get_current_user), token: str = Depends(oauth2_scheme)):
+def logout(
+    response: Response,
+    current_user: UtilisateurOut = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
+):
     logout_user(token)
+
+    # Supprimer le cookie refresh_token
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+    )
+
     return {"message": "Déconnexion réussie"}
+
+
+# ============================================================================
+# ENDPOINT REFRESH TOKEN
+# ============================================================================
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Rafraîchit le token d'accès en utilisant le refresh token
+    stocké dans un cookie httpOnly.
+    
+    - Lit le refresh_token depuis le cookie
+    - Valide le refresh_token
+    - Génère un nouveau access_token
+    - Optionnel: fait la rotation du refresh_token
+    """
+    # 1. Lire le refresh token depuis le cookie
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token manquant. Veuillez vous reconnecter.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 2. Valider le refresh token
+    user_id = verify_refresh_token(refresh_token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token invalide ou expiré. Veuillez vous reconnecter.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 3. Vérifier que l'utilisateur existe toujours et est actif
+    user = get_utilisateur_by_id(db, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Utilisateur inactif ou introuvable.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 4. Générer un nouveau token d'accès
+    new_access_token = create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    
+    # 5. Optionnel: rotation du refresh token (meilleure sécurité)
+    # Désactiver l'ancien refresh token (le mettre dans une blacklist ou le supprimer)
+    # Générer un nouveau refresh token
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    
+    # Mettre à jour le cookie avec le nouveau refresh token
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=True,  # ✅ En production (HTTPS)
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # 30 jours en secondes
+        path="/",  # Disponible sur tout le site
+    )
+    
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer"
+    }

@@ -21,6 +21,7 @@ config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut
+REFRESH_TOKEN_EXPIRE_DAYS = int(config_data.get("REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/routers/auth/token")
@@ -48,8 +49,44 @@ def cleanup_expired_tokens():
     # Pour l'instant, nous gardons une blacklist simple en mémoire
     pass
 
-# ----------------------------
+# ============================================================================
+# FONCTIONS REFRESH TOKEN
+# ============================================================================
 
+def create_refresh_token(data: dict) -> str:
+    """
+    Crée un refresh token avec une expiration plus longue.
+    Utilisé pour rafraîchir les access tokens.
+    """
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def verify_refresh_token(token: str) -> Optional[str]:
+    """
+    Vérifie un refresh token et retourne l'ID utilisateur s'il est valide.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        
+        if not user_id or token_type != "refresh":
+            return None
+            
+        # Vérifier si le token est blacklisté
+        if is_token_blacklisted(token):
+            return None
+            
+        return user_id
+    except JWTError:
+        return None
+
+
+# ============================================================================
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)

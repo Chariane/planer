@@ -6,7 +6,7 @@ dossier.
 """
 
 from .Utilisateur import EntrepriseRegistrationPayload, UtilisateurBase, UtilisateurCreate, SuperAdminUtilisateurCreate, UtilisateurUpdate, UtilisateurOut, ProfilePhotoUpdate, ProfilePhotoResponse, PublicUserProfileOut, UserRolesUpdate
-from .Auth import Token, TokenData, EmailSchema, EmailVerificationCodeRequest, EmailVerificationResendRequest, MessageResponse, RegisterResponse, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest, GoogleAuthenticatorSetupResponse, GoogleAuthenticatorStatusResponse, TwoFactorEnableRequest, TwoFactorDisableRequest, LoginRequest, LoginResponse, LoginChallengeResponse, TwoFactorVerifyRequest
+from .Auth import Token, TokenData, EmailSchema, EmailVerificationCodeRequest, EmailVerificationResendRequest, MessageResponse, RegisterResponse, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest, GoogleAuthenticatorSetupResponse, GoogleAuthenticatorStatusResponse, TwoFactorEnableRequest, TwoFactorDisableRequest, LoginRequest, LoginResponse, LoginChallengeResponse, TwoFactorVerifyRequest, RefreshTokenRequest, RefreshTokenResponse
 from .Entreprise import EntrepriseBase, EntrepriseCreate, EntrepriseUpdate, EntrepriseOut, EntrepriseDelete
 from .Abonnement import PlanAbonnementBase, PlanAbonnementCreate, PlanAbonnementUpdate, PlanAbonnementOut, PlanAbonnementDelete, AbonnementEntrepriseBase, AbonnementEntrepriseCreate, AbonnementEntrepriseUpdate, AbonnementEntrepriseOut, AbonnementEntrepriseDelete, PaiementAbonnementBase, PaiementAbonnementCreate, PaiementAbonnementUpdate, PaiementAbonnementOut, PaiementAbonnementDelete
 from .Workspace import WorkspaceBase, WorkspaceCreate, WorkspaceUpdate, WorkspaceOut, WorkspaceWithContextOut, RegisterWithWorkspaceResponse, WorkspaceDelete
@@ -137,4 +137,6 @@ __all__ = [
     'ChecklistUpdate',
     'ChecklistOut',
     'ChecklistDelete',
+    'RefreshTokenRequest',
+    'RefreshTokenResponse'
 ]
