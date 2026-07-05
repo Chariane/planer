@@ -1,4 +1,4 @@
-// src/store/api/workspaceApi.ts - VERSION CORRIGÉE
+// src/store/api/workspaceApi.ts
 import { baseApi } from './baseApi';
 export { skipToken } from '@reduxjs/toolkit/query/react';
 import type {
@@ -14,13 +14,13 @@ export const workspaceApi = baseApi.injectEndpoints({
     // ========== Navigation ==========
     getMyNavigation: builder.query<WorkspaceNavigationResponse, void>({
       query: () => ({ url: '/workspaces/my_navigation' }),
-      providesTags: ['Navigation', 'Workspace'],
+      providesTags: ['Navigation', 'Workspace', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 300,
     }),
 
     getMyAccess: builder.query<WorkspaceAccessListingResponse, void>({
       query: () => ({ url: '/workspaces/my_access' }),
-      providesTags: ['Workspace'],
+      providesTags: ['Workspace', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
     }),
 
@@ -28,13 +28,13 @@ export const workspaceApi = baseApi.injectEndpoints({
       query: (workspaceId) => ({
         url: `/workspaces/${workspaceId}/local_resources`,
       }),
-      providesTags: (_result, _error, id) => [{ type: 'Workspace', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Workspace', id }, 'UserData'], // ✅ AJOUT
     }),
 
     // ========== CRUD Workspace ==========
     getWorkspaceById: builder.query<Workspace, string>({
       query: (id) => ({ url: `/workspaces/${id}/get_workspace_detail` }),
-      providesTags: (_result, _error, id) => [{ type: 'Workspace', id }],
+      providesTags: (_result, _error, id) => [{ type: 'Workspace', id }, 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 300,
     }),
 
@@ -44,7 +44,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Workspace', 'Navigation'],
+      invalidatesTags: ['Workspace', 'Navigation', 'UserData'], // ✅ AJOUT
     }),
 
     updateWorkspace: builder.mutation<
@@ -56,7 +56,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         method: 'PUT',
         body: data,
       }),
-      invalidatesTags: (_result, _error, { id }) => [{ type: 'Workspace', id }, 'Navigation'],
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'Workspace', id }, 'Navigation', 'UserData'], // ✅ AJOUT
     }),
 
     deleteWorkspace: builder.mutation<void, string>({
@@ -64,7 +64,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         url: `/workspaces/${id}/delete_workspace`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Workspace', 'Navigation'],
+      invalidatesTags: ['Workspace', 'Navigation', 'UserData'], // ✅ AJOUT
     }),
 
     // ========== Membres ==========
@@ -73,6 +73,7 @@ export const workspaceApi = baseApi.injectEndpoints({
       providesTags: (result, _error, id) => [
         { type: 'Workspace', id },
         ...(result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 120,
     }),
@@ -90,6 +91,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         { type: 'Workspace', id: workspaceId },
         'Member',
         'Invitation',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -102,6 +104,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         { type: 'Workspace', id: workspaceId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -110,7 +113,7 @@ export const workspaceApi = baseApi.injectEndpoints({
         url: `/workspaces/${workspaceId}/leave_workspace`,
         method: 'POST',
       }),
-      invalidatesTags: ['Workspace', 'Navigation'],
+      invalidatesTags: ['Workspace', 'Navigation', 'UserData'], // ✅ AJOUT
     }),
   }),
 });

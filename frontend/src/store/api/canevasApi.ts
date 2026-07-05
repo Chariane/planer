@@ -80,10 +80,10 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Canevas' as const, id: _result.id }] : []),
       ],
       keepUnusedDataFor: 300,
-      // Gérer le cas où le canevas n'existe pas encore
       transformErrorResponse: (response: any) => {
         if (response.status === 404) {
           return { data: null, message: 'Canevas non trouvé' };
@@ -99,6 +99,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Canevas' as const, id: _result.id }] : []),
         ...(_result?.sections?.map((s) => ({ type: 'Section' as const, id: s.id })) ?? []),
         ...(_result?.sections?.flatMap((s) =>
@@ -119,6 +120,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, canevasId) => [
         { type: 'Canevas', id: canevasId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((s) => ({ type: 'Section' as const, id: s.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -131,6 +133,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, sectionId) => [
         { type: 'Section', id: sectionId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((c) => ({ type: 'Checklist' as const, id: c.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -152,6 +155,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Canevas' as const, id: _result.id }] : []),
       ],
     }),
@@ -168,6 +172,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { canevasId }) => [
         { type: 'Canevas', id: canevasId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -179,6 +184,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, canevasId) => [
         { type: 'Canevas', id: canevasId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -198,6 +204,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { canevasId }) => [
         { type: 'Canevas', id: canevasId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Section' as const, id: _result.id }] : []),
       ],
     }),
@@ -214,6 +221,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { sectionId }) => [
         { type: 'Section', id: sectionId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_canevas ? [{ type: 'Canevas' as const, id: _result.id_canevas }] : []),
       ],
     }),
@@ -226,6 +234,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, sectionId) => [
         { type: 'Section', id: sectionId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -245,6 +254,7 @@ export const canevasApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { sectionId }) => [
         { type: 'Section', id: sectionId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Checklist' as const, id: _result.id }] : []),
       ],
     }),

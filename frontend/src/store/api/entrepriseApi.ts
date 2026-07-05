@@ -111,7 +111,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/entreprise/me',
       }),
-      providesTags: ['Entreprise', 'Subscription', 'Payment'],
+      providesTags: ['Entreprise', 'Subscription', 'Payment', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
     }),
 
@@ -119,11 +119,9 @@ export const entrepriseApi = baseApi.injectEndpoints({
     getEntrepriseProfile: builder.query<EntrepriseProfile | null, void>({
       query: () => ({
         url: '/entreprise/me',
-        // On extrait seulement la partie entreprise de l'overview
       }),
-      providesTags: ['Entreprise'],
+      providesTags: ['Entreprise', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 300,
-      // Transform pour extraire seulement l'entreprise de l'overview
       transformResponse: (response: EntrepriseOverview) => response.entreprise || null,
     }),
 
@@ -132,7 +130,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/entreprise/me',
       }),
-      providesTags: ['Subscription'],
+      providesTags: ['Subscription', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
       transformResponse: (response: EntrepriseOverview) => response.active_subscription || null,
     }),
@@ -151,7 +149,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Entreprise'],
+      invalidatesTags: ['Entreprise', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour le profil entreprise
@@ -164,7 +162,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
         method: 'PUT',
         body: data,
       }),
-      invalidatesTags: ['Entreprise'],
+      invalidatesTags: ['Entreprise', 'UserData'], // ✅ AJOUT
     }),
 
     // ==========================================================================
@@ -181,7 +179,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Subscription', 'Payment', 'Entreprise'],
+      invalidatesTags: ['Subscription', 'Payment', 'Entreprise', 'UserData'], // ✅ AJOUT
     }),
 
     // Confirmer le paiement d'un abonnement
@@ -194,7 +192,7 @@ export const entrepriseApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Subscription', 'Payment', 'Entreprise'],
+      invalidatesTags: ['Subscription', 'Payment', 'Entreprise', 'UserData'], // ✅ AJOUT
     }),
   }),
 });

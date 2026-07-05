@@ -1,8 +1,10 @@
-// frontend/src/contexts/AuthContext.tsx
+// src/contexts/AuthContext.tsx
 import { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux'; // ✅ AJOUT
 import { authService } from '../services/auth.service';
+import { baseApi, clearCacheOnLogout } from '../store/api/baseApi'; // ✅ AJOUT
 import type { ProfileUpdatePayload, RegisterPayload } from '../services/auth.service';
 
 interface User {
@@ -62,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const dispatch = useDispatch(); // ✅ AJOUT
 
   const isAuthenticated = !!token && !!user;
 
@@ -78,6 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('access_token');
           setToken(null);
           setUser(null);
+          // ✅ Nettoyer le cache en cas d'erreur
+          clearCacheOnLogout({ dispatch });
         }
       } else {
         setUser(null);
@@ -85,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     };
     loadUser();
-  }, []);
+  }, [dispatch]);
 
   const register = async (data: RegisterPayload) => {
     await authService.register(data);
@@ -105,6 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (response.requires_2fa) {
       return { requires2fa: true, challengeToken: response.challenge_token };
     }
+    
+    // ✅ Nettoyer le cache de l'ancien utilisateur avant de définir le nouveau
+    clearCacheOnLogout({ dispatch });
+    
     localStorage.setItem('access_token', response.access_token);
     setToken(response.access_token);
     setUser(response.user);
@@ -113,6 +122,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verify2FA = async (challengeToken: string, code: string) => {
     const response = await authService.verify2FA(challengeToken, code);
+    
+    // ✅ Nettoyer le cache avant de définir le nouvel utilisateur
+    clearCacheOnLogout({ dispatch });
+    
     localStorage.setItem('access_token', response.access_token);
     setToken(response.access_token);
     setUser(response.user);
@@ -175,9 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Erreur lors de la déconnexion', error);
     }
+    
+    // ✅ 1. Supprimer le token
     localStorage.removeItem('access_token');
+    
+    // ✅ 2. Vider le cache RTK Query
+    clearCacheOnLogout({ dispatch });
+    
+    // ✅ 3. Réinitialiser l'état utilisateur
     setToken(null);
     setUser(null);
+    
+    // ✅ 4. Rediriger vers login
     navigate('/login');
   };
 

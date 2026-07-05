@@ -20,6 +20,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, workspaceId) => [
         { type: 'Workspace', id: workspaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((e) => ({ type: 'Espace' as const, id: e.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -34,8 +35,8 @@ export const espaceApi = baseApi.injectEndpoints({
         const tags: Array<{ type: 'Workspace' | 'Espace'; id: string }> = [
           { type: 'Workspace', id: workspaceId },
         ];
+        // ✅ AJOUT
         if (_result) {
-          // Fonction récursive pour ajouter tous les espaces et sous-espaces
           const addEspaceTags = (espaces: any[]) => {
             for (const e of espaces) {
               tags.push({ type: 'Espace', id: e.id });
@@ -48,7 +49,7 @@ export const espaceApi = baseApi.injectEndpoints({
         }
         return tags;
       },
-      keepUnusedDataFor: 300, // L'arborescence change peu
+      keepUnusedDataFor: 300,
     }),
 
     // Récupérer les espaces racines (niveau 1) d'un workspace
@@ -58,6 +59,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, workspaceId) => [
         { type: 'Workspace', id: workspaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((e) => ({ type: 'Espace' as const, id: e.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -70,6 +72,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, espaceId) => [
         { type: 'Espace', id: espaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((e) => ({ type: 'Espace' as const, id: e.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -82,6 +85,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Espace', id },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_workspace ? [{ type: 'Workspace' as const, id: _result.id_workspace }] : []),
       ],
       keepUnusedDataFor: 300,
@@ -94,6 +98,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, espaceId) => [
         { type: 'Espace', id: espaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((e) => ({ type: 'Espace' as const, id: e.id })) ?? []),
       ],
       keepUnusedDataFor: 300,
@@ -106,6 +111,7 @@ export const espaceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, espaceId) => [
         { type: 'Espace', id: espaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -126,6 +132,7 @@ export const espaceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { workspaceId }) => [
         { type: 'Workspace', id: workspaceId },
         'Navigation',
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Espace' as const, id: _result.id }] : []),
       ],
     }),
@@ -143,6 +150,7 @@ export const espaceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { espaceId }) => [
         { type: 'Espace', id: espaceId },
         'Navigation',
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Espace' as const, id: _result.id }] : []),
         ...(_result?.id_workspace ? [{ type: 'Workspace' as const, id: _result.id_workspace }] : []),
       ],
@@ -161,7 +169,7 @@ export const espaceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { espaceId, body }) => [
         { type: 'Espace', id: espaceId },
         'Navigation',
-        // Si le parent change, invalider l'ancien et le nouveau parent
+        'UserData', // ✅ AJOUT
         ...(_result?.id_espace_parent ? [{ type: 'Espace' as const, id: _result.id_espace_parent }] : []),
         ...(body.id_espace_parent ? [{ type: 'Espace' as const, id: body.id_espace_parent }] : []),
         ...(_result?.id_workspace ? [{ type: 'Workspace' as const, id: _result.id_workspace }] : []),
@@ -177,6 +185,7 @@ export const espaceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, espaceId) => [
         { type: 'Espace', id: espaceId },
         'Navigation',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -196,6 +205,7 @@ export const espaceApi = baseApi.injectEndpoints({
         { type: 'Espace', id: espaceId },
         'Member',
         'Invitation',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -213,6 +223,7 @@ export const espaceApi = baseApi.injectEndpoints({
         { type: 'Espace', id: espaceId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -226,6 +237,7 @@ export const espaceApi = baseApi.injectEndpoints({
         { type: 'Espace', id: espaceId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -238,7 +250,7 @@ export const espaceApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { token },
       }),
-      invalidatesTags: ['Espace', 'Member', 'Invitation', 'Navigation'],
+      invalidatesTags: ['Espace', 'Member', 'Invitation', 'Navigation', 'UserData'], // ✅ AJOUT
     }),
   }),
 });

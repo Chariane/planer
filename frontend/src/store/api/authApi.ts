@@ -168,7 +168,7 @@ export const authApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/auth/me',
       }),
-      providesTags: ['User'],
+      providesTags: ['User', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 300,
     }),
 
@@ -177,7 +177,7 @@ export const authApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/auth/me/photo',
       }),
-      providesTags: ['UserPhoto'],
+      providesTags: ['UserPhoto', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 300,
     }),
 
@@ -225,7 +225,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // Connexion
@@ -235,7 +235,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { identifier, password },
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // Vérification 2FA
@@ -245,7 +245,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { challenge_token, code },
       }),
-      invalidatesTags: ['User', 'TwoFA'],
+      invalidatesTags: ['User', 'TwoFA', 'UserData'], // ✅ AJOUT
     }),
 
     // Déconnexion
@@ -254,7 +254,7 @@ export const authApi = baseApi.injectEndpoints({
         url: '/auth/logout',
         method: 'POST',
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // ==========================================================================
@@ -268,7 +268,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { email, code },
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // Renvoyer le code de vérification
@@ -309,7 +309,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { current_password, new_password },
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // ==========================================================================
@@ -332,7 +332,7 @@ export const authApi = baseApi.injectEndpoints({
           body: cleanedData,
         };
       },
-      invalidatesTags: ['User'],
+      invalidatesTags: ['User', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour la photo de profil
@@ -342,7 +342,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'PUT',
         body: { photo_base64 },
       }),
-      invalidatesTags: ['User', 'UserPhoto'],
+      invalidatesTags: ['User', 'UserPhoto', 'UserData'], // ✅ AJOUT
     }),
 
     // ==========================================================================
@@ -356,7 +356,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { code },
       }),
-      invalidatesTags: ['User', 'TwoFA'],
+      invalidatesTags: ['User', 'TwoFA', 'UserData'], // ✅ AJOUT
     }),
 
     // Désactiver 2FA
@@ -366,7 +366,7 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { current_password },
       }),
-      invalidatesTags: ['User', 'TwoFA'],
+      invalidatesTags: ['User', 'TwoFA', 'UserData'], // ✅ AJOUT
     }),
   }),
 });

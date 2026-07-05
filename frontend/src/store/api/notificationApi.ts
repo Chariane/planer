@@ -51,10 +51,8 @@ export const notificationApi = baseApi.injectEndpoints({
           limit: params.limit || 30,
         },
       }),
-      // ⚠️ Transformation des données pour correspondre à votre service
       transformResponse: (raw: any[]): NotificationItem[] => {
         return raw.map((item) => {
-          // Parser le target depuis le message (comme dans votre service)
           const match = item.message?.match(/^\[\[([a-zA-Z]+):([a-zA-Z0-9_-]+)\]\]\s*/);
           const parsed = match
             ? {
@@ -74,6 +72,7 @@ export const notificationApi = baseApi.injectEndpoints({
       },
       providesTags: (_result) => [
         'Notification',
+        'UserData', // ✅ AJOUT
         ...(_result?.map((n) => ({ type: 'Notification' as const, id: n.id })) ?? []),
       ],
       keepUnusedDataFor: 30,
@@ -84,7 +83,7 @@ export const notificationApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/notifications/unread-count',
       }),
-      providesTags: ['UnreadCount'],
+      providesTags: ['UnreadCount', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 15,
     }),
 
@@ -101,7 +100,6 @@ export const notificationApi = baseApi.injectEndpoints({
         url: `/notifications/${notificationId}/read`,
         method: 'PATCH',
       }),
-      // ⚠️ Transformation identique à votre service
       transformResponse: (raw: any): NotificationItem => {
         const match = raw.message?.match(/^\[\[([a-zA-Z]+):([a-zA-Z0-9_-]+)\]\]\s*/);
         const parsed = match
@@ -122,6 +120,7 @@ export const notificationApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, notificationId) => [
         { type: 'Notification', id: notificationId },
         'UnreadCount',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -134,7 +133,7 @@ export const notificationApi = baseApi.injectEndpoints({
         url: '/notifications/read-all',
         method: 'PATCH',
       }),
-      invalidatesTags: ['Notification', 'UnreadCount'],
+      invalidatesTags: ['Notification', 'UnreadCount', 'UserData'], // ✅ AJOUT
     }),
 
     // Créer une notification (admin/superadmin uniquement)
@@ -155,7 +154,6 @@ export const notificationApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      // ⚠️ Transformation identique à votre service
       transformResponse: (raw: any): NotificationItem => {
         const match = raw.message?.match(/^\[\[([a-zA-Z]+):([a-zA-Z0-9_-]+)\]\]\s*/);
         const parsed = match
@@ -173,7 +171,7 @@ export const notificationApi = baseApi.injectEndpoints({
           target_id: parsed.target_id || null,
         };
       },
-      invalidatesTags: ['Notification', 'UnreadCount'],
+      invalidatesTags: ['Notification', 'UnreadCount', 'UserData'], // ✅ AJOUT
     }),
 
     // Supprimer une notification
@@ -185,6 +183,7 @@ export const notificationApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, notificationId) => [
         { type: 'Notification', id: notificationId },
         'UnreadCount',
+        'UserData', // ✅ AJOUT
       ],
     }),
   }),

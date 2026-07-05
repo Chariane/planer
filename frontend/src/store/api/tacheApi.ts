@@ -36,6 +36,7 @@ export const tacheApi = baseApi.injectEndpoints({
       },
       providesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -48,6 +49,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Tache', id },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_liste ? [{ type: 'Liste' as const, id: _result.id_liste }] : []),
       ],
       keepUnusedDataFor: 300,
@@ -60,6 +62,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -76,6 +79,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.columns?.flatMap((col) =>
           col.taches?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []
         ) ?? []),
@@ -90,6 +94,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -114,6 +119,7 @@ export const tacheApi = baseApi.injectEndpoints({
       },
       providesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
       keepUnusedDataFor: 30,
@@ -130,6 +136,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((c) => ({ type: 'Checklist' as const, id: c.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -151,6 +158,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Tache' as const, id: _result.id }] : []),
       ],
     }),
@@ -167,6 +175,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { tacheId }) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_liste ? [{ type: 'Liste' as const, id: _result.id_liste }] : []),
       ],
     }),
@@ -179,6 +188,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -194,6 +204,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { items }) => [
         ...(items?.map((item) => ({ type: 'Tache' as const, id: item.id })) ?? []),
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -214,6 +225,7 @@ export const tacheApi = baseApi.injectEndpoints({
         { type: 'Tache', id: tacheId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -230,6 +242,7 @@ export const tacheApi = baseApi.injectEndpoints({
         { type: 'Tache', id: tacheId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -249,6 +262,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { tacheId }) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Checklist' as const, id: _result.id }] : []),
       ],
     }),
@@ -265,6 +279,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { checklistId }) => [
         { type: 'Checklist', id: checklistId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_tache ? [{ type: 'Tache' as const, id: _result.id_tache }] : []),
         ...(_result?.id_section ? [{ type: 'Section' as const, id: _result.id_section }] : []),
       ],
@@ -278,6 +293,7 @@ export const tacheApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, checklistId) => [
         { type: 'Checklist', id: checklistId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -293,6 +309,7 @@ export const tacheApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
         { type: 'Liste' },
+        'UserData', // ✅ AJOUT
       ],
     }),
   }),

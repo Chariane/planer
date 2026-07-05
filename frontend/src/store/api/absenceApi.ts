@@ -121,6 +121,7 @@ export const absenceApi = baseApi.injectEndpoints({
       },
       providesTags: (_result) => [
         'Absence',
+        'UserData', // ✅ AJOUT
         ...(_result?.map((a) => ({ type: 'Absence' as const, id: a.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -133,6 +134,7 @@ export const absenceApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Absence', id },
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 300,
     }),
@@ -152,7 +154,7 @@ export const absenceApi = baseApi.injectEndpoints({
           url: `/listes/absences/calendar${queryString ? '?' + queryString : ''}`,
         };
       },
-      providesTags: ['Absence', 'Calendar'],
+      providesTags: ['Absence', 'Calendar', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
     }),
 
@@ -164,6 +166,7 @@ export const absenceApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, id) => [
         { type: 'Absence', id },
         'Conflict',
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 60,
     }),
@@ -176,6 +179,7 @@ export const absenceApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, id) => [
         { type: 'Absence', id },
         'Impact',
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 60,
     }),
@@ -190,7 +194,7 @@ export const absenceApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      providesTags: ['Availability'],
+      providesTags: ['Availability', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 60,
     }),
 
@@ -208,7 +212,7 @@ export const absenceApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Absence', 'Calendar', 'Availability'],
+      invalidatesTags: ['Absence', 'Calendar', 'Availability', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour une absence
@@ -225,6 +229,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -238,6 +243,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -255,6 +261,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -272,6 +279,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -285,6 +293,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -298,6 +307,7 @@ export const absenceApi = baseApi.injectEndpoints({
         { type: 'Absence', id },
         'Calendar',
         'Availability',
+        'UserData', // ✅ AJOUT
       ],
     }),
   }),

@@ -3,27 +3,36 @@ import { configureStore } from '@reduxjs/toolkit';
 import { baseApi } from './api/baseApi';
 import uiReducer from './slices/uiSlice';
 import navigationReducer from './slices/navigationSlice';
-// import authReducer from './slices/authSlice'; // ⏳ Plus tard
+
+const authMiddleware = (store: any) => (next: any) => (action: any) => {
+  // Si une requête échoue avec 401
+  if (action.type === baseApi.reducerPath + '/executeQuery/rejected') {
+    const status = action.payload?.status;
+    if (status === 401) {
+      
+      store.dispatch(baseApi.util.invalidateTags(['UserData']));
+      // Déclencher l'événement unauthorized
+      window.dispatchEvent(new CustomEvent('unauthorized'));
+    }
+  }
+  return next(action);
+};
+
 
 export const store = configureStore({
   reducer: {
-    // API
     [baseApi.reducerPath]: baseApi.reducer,
-    
-    // Slices UI
     ui: uiReducer,
     navigation: navigationReducer,
-    // auth: authReducer, // ⏳ Plus tard
-    
-    // ⭐ On garde vos contexts pour l'instant
-    // La migration se fera progressivement
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
         ignoredActions: ['api/executeQuery/fulfilled', 'api/executeMutation/fulfilled'],
       },
-    }).concat(baseApi.middleware),
+    })
+      .concat(baseApi.middleware)
+      .concat(authMiddleware), // 
   devTools: import.meta.env.MODE !== 'production',
 });
 

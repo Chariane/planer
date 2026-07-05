@@ -103,7 +103,7 @@ export const messagerieApi = baseApi.injectEndpoints({
           url: `/group/user-groups/${userId}`,
         };
       },
-      providesTags: ['ChatGroup'],
+      providesTags: ['ChatGroup', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
     }),
 
@@ -114,6 +114,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, groupId) => [
         { type: 'ChatGroup', id: groupId },
+        'UserData', // ✅ AJOUT
         ...(_result?.members?.map((m) => ({ type: 'ChatMember' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -126,6 +127,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, groupId) => [
         { type: 'ChatGroup', id: groupId },
+        'UserData', // ✅ AJOUT
         ...(_result?.messages?.map((m) => ({ type: 'ChatMessage' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -139,7 +141,7 @@ export const messagerieApi = baseApi.injectEndpoints({
           url: `/chat/unread-summary/${userId}`,
         };
       },
-      providesTags: ['ChatUnread'],
+      providesTags: ['ChatUnread', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 30,
     }),
 
@@ -151,7 +153,7 @@ export const messagerieApi = baseApi.injectEndpoints({
           url: `/chat/conversations/${userId}`,
         };
       },
-      providesTags: ['ChatPrivate'],
+      providesTags: ['ChatPrivate', 'UserData'], // ✅ AJOUT
       keepUnusedDataFor: 120,
     }),
 
@@ -165,6 +167,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       },
       providesTags: (_result, _error, otherUserId) => [
         { type: 'ChatPrivate', id: otherUserId },
+        'UserData', // ✅ AJOUT
         ...(_result?.messages?.map((m) => ({ type: 'ChatMessage' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -188,7 +191,6 @@ export const messagerieApi = baseApi.injectEndpoints({
       { resourceType: 'workspace' | 'espace' | 'liste'; resourceId: string }
     >({
       query: ({ resourceType, resourceId }) => {
-        // Choisir le bon microservice selon le type
         const baseUrlMap: Record<string, string> = {
           workspace: import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003',
           espace: import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001',
@@ -199,7 +201,7 @@ export const messagerieApi = baseApi.injectEndpoints({
           url: `${baseUrl}/chat/ensure/${resourceType}/${resourceId}`,
         };
       },
-      invalidatesTags: ['ChatGroup'],
+      invalidatesTags: ['ChatGroup', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour l'état fermé d'un groupe
@@ -217,6 +219,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       },
       invalidatesTags: (_result, _error, { groupId }) => [
         { type: 'ChatGroup', id: groupId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -236,6 +239,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { messageId }) => [
         { type: 'ChatMessage', id: messageId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -247,6 +251,7 @@ export const messagerieApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, messageId) => [
         { type: 'ChatMessage', id: messageId },
+        'UserData', // ✅ AJOUT
       ],
     }),
   }),
@@ -256,7 +261,6 @@ export const messagerieApi = baseApi.injectEndpoints({
 // UTILITAIRES
 // ============================================================================
 
-// Fonction utilitaire pour extraire le user_id localement
 const getCurrentUserId = (): string => {
   try {
     const token = localStorage.getItem('access_token');

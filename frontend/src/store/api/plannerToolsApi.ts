@@ -315,6 +315,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       },
       providesTags: (_result) => [
         'File',
+        'UserData', // ✅ AJOUT
         ...(_result?.map((f) => ({ type: 'File' as const, id: f.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -327,6 +328,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'File', id },
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 300,
     }),
@@ -359,6 +361,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       },
       providesTags: (_result) => [
         'Report',
+        'UserData', // ✅ AJOUT
         ...(_result?.map((r) => ({ type: 'Report' as const, id: r.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -371,6 +374,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Report', id },
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 300,
     }),
@@ -388,9 +392,8 @@ export const plannerToolsApi = baseApi.injectEndpoints({
         url: '/listes/files/upload',
         method: 'POST',
         body: formData,
-        // Ne pas ajouter Content-Type, laisser le navigateur le gérer
       }),
-      invalidatesTags: ['File'],
+      invalidatesTags: ['File', 'UserData'], // ✅ AJOUT
     }),
 
     // Créer un fichier (attacher à une ressource)
@@ -403,7 +406,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['File'],
+      invalidatesTags: ['File', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour un fichier
@@ -418,6 +421,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { fileId }) => [
         { type: 'File', id: fileId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -429,6 +433,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, fileId) => [
         { type: 'File', id: fileId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -444,6 +449,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { fileId }) => [
         { type: 'File', id: fileId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -461,7 +467,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Report'],
+      invalidatesTags: ['Report', 'UserData'], // ✅ AJOUT
     }),
 
     // Mettre à jour un rapport
@@ -476,6 +482,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { reportId }) => [
         { type: 'Report', id: reportId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -487,6 +494,7 @@ export const plannerToolsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, reportId) => [
         { type: 'Report', id: reportId },
+        'UserData', // ✅ AJOUT
       ],
     }),
   }),

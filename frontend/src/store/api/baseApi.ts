@@ -17,14 +17,12 @@ const onRefreshed = (token: string) => {
 
 const refreshToken = async (): Promise<string | null> => {
   try {
-    // Appel au backend pour rafraîchir le token
-    // Le refresh token est automatiquement envoyé via le cookie httpOnly
     const response = await apiFetch(
       import.meta.env.VITE_AUTH_URL || 'http://localhost:8002',
       '/auth/refresh',
       { 
         method: 'POST', 
-        credentials: 'include' // ✅ httpOnly cookie
+        credentials: 'include'
       }
     );
     const newToken = response?.access_token;
@@ -92,7 +90,7 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      credentials: 'include', // ✅ Pour les cookies httpOnly
+      credentials: 'include',
     };
     if (body) {
       options.body = JSON.stringify(body);
@@ -103,13 +101,10 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
   };
 
   try {
-    // 1. Essayer avec le token actuel
     const token = localStorage.getItem('access_token') || undefined;
     let result = await makeRequest(token);
 
-    // 2. Si 401, tenter le refresh
     if (result?.status === 401) {
-      // Si déjà en cours de refresh, mettre la requête en queue
       if (isRefreshing) {
         return new Promise((resolve) => {
           refreshSubscribers.push((newToken: string) => {
@@ -120,18 +115,15 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
         });
       }
 
-      // Démarrer le refresh
       isRefreshing = true;
       try {
         const newToken = await refreshToken();
         if (newToken) {
           isRefreshing = false;
           onRefreshed(newToken);
-          // Réessayer la requête avec le nouveau token
           const retryResult = await makeRequest(newToken);
           return { data: retryResult };
         } else {
-          // Refresh échoué -> logout
           isRefreshing = false;
           localStorage.removeItem('access_token');
           window.dispatchEvent(new CustomEvent('unauthorized'));
@@ -168,6 +160,7 @@ export const baseApi = createApi({
   tagTypes: [
     // Authentification & Utilisateur
     'User',
+    'UserData', // ✅ AJOUTÉ pour nettoyer le cache utilisateur
     'UserPhoto',
     'TwoFA',
 
@@ -225,3 +218,50 @@ export const baseApi = createApi({
   ],
   endpoints: () => ({}),
 });
+
+// ============================================================================
+// FONCTIONS DE NETTOYAGE DU CACHE
+// ============================================================================
+
+/**
+ * Vide tout le cache RTK Query pour l'utilisateur actuel
+ * À appeler lors de la déconnexion
+ */
+export const clearCacheOnLogout = (store: any) => {
+  // 1. Invalider tous les tags utilisateur
+  store.dispatch(baseApi.util.invalidateTags([
+    'User',
+    'UserData',
+    'UserPhoto',
+    'Navigation',
+    'Workspace',
+    'Espace',
+    'Liste',
+    'Tache',
+    'Member',
+    'Invitation',
+    'Notification',
+    'UnreadCount',
+    'Absence',
+    'Calendar',
+    'Availability',
+    'ChatGroup',
+    'ChatPrivate',
+    'ChatUnread',
+    'Subscription',
+    'PlanUsage',
+    'Entreprise',
+    'Dashboard',
+  ]));
+
+  // 2. Réinitialiser l'état de l'API (vide tout le cache)
+  store.dispatch(baseApi.util.resetApiState());
+};
+
+/**
+ * Vide le cache pour un utilisateur spécifique
+ * À appeler lors du changement d'utilisateur
+ */
+export const clearUserCache = (store: any) => {
+  store.dispatch(baseApi.util.invalidateTags(['UserData']));
+};

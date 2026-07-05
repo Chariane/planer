@@ -28,6 +28,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, workspaceId) => [
         { type: 'Workspace', id: workspaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((l) => ({ type: 'Liste' as const, id: l.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -41,6 +42,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, espaceId) => [
         { type: 'Espace', id: espaceId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((l) => ({ type: 'Liste' as const, id: l.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -53,6 +55,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Liste', id },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_workspace ? [{ type: 'Workspace' as const, id: _result.id_workspace }] : []),
         ...(_result?.id_espace ? [{ type: 'Espace' as const, id: _result.id_espace }] : []),
       ],
@@ -66,6 +69,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -94,9 +98,10 @@ export const listeApi = baseApi.injectEndpoints({
       },
       providesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
-      keepUnusedDataFor: 60, // Données dynamiques
+      keepUnusedDataFor: 60,
     }),
 
     // Récupérer la vue Kanban d'une liste
@@ -106,11 +111,12 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.columns?.flatMap((col) =>
           col.taches?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []
         ) ?? []),
       ],
-      keepUnusedDataFor: 30, // Très dynamique
+      keepUnusedDataFor: 30,
     }),
 
     // Récupérer la vue Gantt d'une liste
@@ -120,6 +126,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
       keepUnusedDataFor: 60,
@@ -144,6 +151,7 @@ export const listeApi = baseApi.injectEndpoints({
       },
       providesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((t) => ({ type: 'Tache' as const, id: t.id })) ?? []),
       ],
       keepUnusedDataFor: 30,
@@ -156,6 +164,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [
         { type: 'Tache', id },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_liste ? [{ type: 'Liste' as const, id: _result.id_liste }] : []),
       ],
       keepUnusedDataFor: 300,
@@ -168,6 +177,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.map((m) => ({ type: 'Member' as const, id: m.id })) ?? []),
       ],
       keepUnusedDataFor: 120,
@@ -188,6 +198,7 @@ export const listeApi = baseApi.injectEndpoints({
         ...(body.id_workspace ? [{ type: 'Workspace' as const, id: body.id_workspace }] : []),
         ...(body.id_espace ? [{ type: 'Espace' as const, id: body.id_espace }] : []),
         'Navigation',
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Liste' as const, id: _result.id }] : []),
       ],
     }),
@@ -205,6 +216,7 @@ export const listeApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
         'Navigation',
+        'UserData', // ✅ AJOUT
         ...(_result?.id_workspace ? [{ type: 'Workspace' as const, id: _result.id_workspace }] : []),
         ...(_result?.id_espace ? [{ type: 'Espace' as const, id: _result.id_espace }] : []),
       ],
@@ -219,6 +231,7 @@ export const listeApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, listeId) => [
         { type: 'Liste', id: listeId },
         'Navigation',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -240,6 +253,7 @@ export const listeApi = baseApi.injectEndpoints({
         { type: 'Liste', id: listeId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -256,6 +270,7 @@ export const listeApi = baseApi.injectEndpoints({
         { type: 'Liste', id: listeId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -273,6 +288,7 @@ export const listeApi = baseApi.injectEndpoints({
         { type: 'Liste', id: listeId },
         'Member',
         'Invitation',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -292,6 +308,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { listeId }) => [
         { type: 'Liste', id: listeId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id ? [{ type: 'Tache' as const, id: _result.id }] : []),
       ],
     }),
@@ -308,6 +325,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { tacheId }) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
         ...(_result?.id_liste ? [{ type: 'Liste' as const, id: _result.id_liste }] : []),
       ],
     }),
@@ -320,6 +338,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, tacheId) => [
         { type: 'Tache', id: tacheId },
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -335,6 +354,7 @@ export const listeApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { items }) => [
         ...(items?.map((item) => ({ type: 'Tache' as const, id: item.id })) ?? []),
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -355,6 +375,7 @@ export const listeApi = baseApi.injectEndpoints({
         { type: 'Tache', id: tacheId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -371,6 +392,7 @@ export const listeApi = baseApi.injectEndpoints({
         { type: 'Tache', id: tacheId },
         { type: 'Member', id: userId },
         'Member',
+        'UserData', // ✅ AJOUT
       ],
     }),
 
@@ -385,7 +407,7 @@ export const listeApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { token },
       }),
-      invalidatesTags: ['Liste', 'Member', 'Invitation', 'Navigation'],
+      invalidatesTags: ['Liste', 'Member', 'Invitation', 'Navigation', 'UserData'], // ✅ AJOUT
     }),
   }),
 });

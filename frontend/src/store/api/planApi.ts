@@ -88,8 +88,8 @@ export const planApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/plans',
       }),
-      providesTags: ['Plan'],
-      keepUnusedDataFor: 3600, // 1 heure - les plans changent rarement
+      providesTags: ['Plan', 'UserData'], // ✅ AJOUT
+      keepUnusedDataFor: 3600,
     }),
 
     // Récupérer un plan par son code
@@ -99,6 +99,7 @@ export const planApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, code) => [
         { type: 'Plan', id: code },
+        'UserData', // ✅ AJOUT
       ],
       keepUnusedDataFor: 3600,
     }),
@@ -108,8 +109,8 @@ export const planApi = baseApi.injectEndpoints({
       query: () => ({
         url: '/plans/me/usage',
       }),
-      providesTags: ['PlanUsage'],
-      keepUnusedDataFor: 120, // 2 minutes - l'usage change plus souvent
+      providesTags: ['PlanUsage', 'UserData'], // ✅ AJOUT
+      keepUnusedDataFor: 120,
     }),
 
     // ==========================================================================
@@ -126,7 +127,7 @@ export const planApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { plan_code },
       }),
-      invalidatesTags: ['Plan', 'PlanUsage', 'Subscription'],
+      invalidatesTags: ['Plan', 'PlanUsage', 'Subscription', 'UserData'], // ✅ AJOUT
     }),
 
     // Annuler l'abonnement (si endpoint existe)
@@ -138,7 +139,7 @@ export const planApi = baseApi.injectEndpoints({
         url: '/plans/cancel',
         method: 'POST',
       }),
-      invalidatesTags: ['PlanUsage', 'Subscription'],
+      invalidatesTags: ['PlanUsage', 'Subscription', 'UserData'], // ✅ AJOUT
     }),
   }),
 });
