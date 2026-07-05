@@ -6,3 +6,5 @@ crud/__pycache__/
 routes/__pycache__/
 uploads
 email_debug.log
+model.py
+schema.py

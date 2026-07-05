@@ -1,7 +1,8 @@
 """Schemas Pydantic actifs de api_gateway.
 
-Le fichier voisin ``../schemas.py`` reste un temoin legacy. Comme ce dossier
-est un package Python, ``backend.api_gateway.schemas`` resout ici.
+Le fichier voisin ``../schemas.py`` reste un temoin legacy, mais ce package ne
+l'importe pas. Les schemas exposes ici viennent uniquement des modules de ce
+dossier.
 """
 
 from .Utilisateur import EntrepriseRegistrationPayload, UtilisateurBase, UtilisateurCreate, SuperAdminUtilisateurCreate, UtilisateurUpdate, UtilisateurOut, ProfilePhotoUpdate, ProfilePhotoResponse, PublicUserProfileOut, UserRolesUpdate
