@@ -1,5 +1,6 @@
-// frontend/src/App.tsx
-import { Routes, Route, Navigate } from 'react-router-dom';
+// src/App.tsx
+import { useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppProvider } from './contexts/AppContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -25,13 +26,45 @@ import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
 import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
-import { ToastContainer } from './components/ui/Toast'; // ✅ Import du ToastContainer maison
+import { ToastContainer, toast } from './components/ui/Toast';
+import { setupUnauthorizedHandler } from './store/api/baseApi';
+import ErrorBoundary from './components/ErrorBoundary';
 
-function App() {
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // ✅ Configurer le handler d'erreurs 401
+  useEffect(() => {
+    setupUnauthorizedHandler(navigate);
+  }, [navigate]);
+
+  // ✅ Vérifier si la session a expiré (paramètre URL)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('session_expired') === 'true') {
+      toast.error('Votre session a expiré. Veuillez vous reconnecter.');
+      // Nettoyer l'URL après un court délai
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 100);
+    }
+  }, [location, navigate]);
+
+  // ✅ Nettoyer le paramètre session_expired quand on quitte login
+  useEffect(() => {
+    if (location.pathname === '/login') {
+      const params = new URLSearchParams(location.search);
+      if (params.has('session_expired')) {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [location, navigate]);
+
   return (
     <AuthProvider>
       <AppProvider>
-        <ToastContainer /> {/* ✅ Conteneur de toasts maison */}
+        <ToastContainer />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route element={<AuthLayout />}>
@@ -39,21 +72,49 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
           </Route>
-          {/* Route d'acceptation d'invitation (accessible sans authentification) */}
           <Route path="/invitation/accept" element={<InvitationAccept />} />
           <Route path="/invitation/error" element={<InvitationError />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/workspace/:id" element={<ResourceGuard type="workspace"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
-              <Route path="/espace/:id" element={<ResourceGuard type="espace"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
-              <Route path="/liste/:id" element={<ResourceGuard type="liste"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
-              <Route path="/tache/:id" element={<ResourceGuard type="tache"><ActiveResourceProvider><AppView /></ActiveResourceProvider></ResourceGuard>} />
-
-              {/* Fallback support for old links if needed */}
-              <Route path="/workspace/:workspaceId/list/:listId" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
-              <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={<ActiveResourceProvider><AppView /></ActiveResourceProvider>} />
-
+              <Route path="/workspace/:id" element={
+                <ResourceGuard type="workspace">
+                  <ActiveResourceProvider>
+                    <AppView />
+                  </ActiveResourceProvider>
+                </ResourceGuard>
+              } />
+              <Route path="/espace/:id" element={
+                <ResourceGuard type="espace">
+                  <ActiveResourceProvider>
+                    <AppView />
+                  </ActiveResourceProvider>
+                </ResourceGuard>
+              } />
+              <Route path="/liste/:id" element={
+                <ResourceGuard type="liste">
+                  <ActiveResourceProvider>
+                    <AppView />
+                  </ActiveResourceProvider>
+                </ResourceGuard>
+              } />
+              <Route path="/tache/:id" element={
+                <ResourceGuard type="tache">
+                  <ActiveResourceProvider>
+                    <AppView />
+                  </ActiveResourceProvider>
+                </ResourceGuard>
+              } />
+              <Route path="/workspace/:workspaceId/list/:listId" element={
+                <ActiveResourceProvider>
+                  <AppView />
+                </ActiveResourceProvider>
+              } />
+              <Route path="/workspace/:workspaceId/:spaceId?/:listId?" element={
+                <ActiveResourceProvider>
+                  <AppView />
+                </ActiveResourceProvider>
+              } />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/users" element={<UsersPage />} />
@@ -70,6 +131,14 @@ function App() {
         </Routes>
       </AppProvider>
     </AuthProvider>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }
 

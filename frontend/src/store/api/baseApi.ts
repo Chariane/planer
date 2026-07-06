@@ -158,62 +158,39 @@ export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery,
   tagTypes: [
-    // Authentification & Utilisateur
     'User',
-    'UserData', // ✅ AJOUTÉ pour nettoyer le cache utilisateur
+    'UserData',
     'UserPhoto',
     'TwoFA',
-
-    // Workspace
     'Workspace',
     'Navigation',
     'Member',
     'Invitation',
-
-    // Espace
     'Espace',
-
-    // Liste
     'Liste',
-
-    // Tâche
     'Tache',
-
-    // Canevas
     'Canevas',
     'Section',
     'Checklist',
-
-    // Notification
     'Notification',
     'UnreadCount',
-
-    // Absence
     'Absence',
     'Calendar',
     'Availability',
     'Conflict',
     'Impact',
-
-    // Entreprise & Abonnements
     'Entreprise',
     'Subscription',
     'Payment',
     'Plan',
     'PlanUsage',
-
-    // Fichiers & Rapports
     'File',
     'Report',
-
-    // Messagerie (K-Chat)
     'ChatGroup',
     'ChatMember',
     'ChatMessage',
     'ChatPrivate',
     'ChatUnread',
-
-    // Dashboard
     'Dashboard',
   ],
   endpoints: () => ({}),
@@ -228,7 +205,6 @@ export const baseApi = createApi({
  * À appeler lors de la déconnexion
  */
 export const clearCacheOnLogout = (store: any) => {
-  // 1. Invalider tous les tags utilisateur
   store.dispatch(baseApi.util.invalidateTags([
     'User',
     'UserData',
@@ -253,15 +229,44 @@ export const clearCacheOnLogout = (store: any) => {
     'Entreprise',
     'Dashboard',
   ]));
-
-  // 2. Réinitialiser l'état de l'API (vide tout le cache)
   store.dispatch(baseApi.util.resetApiState());
 };
 
 /**
  * Vide le cache pour un utilisateur spécifique
- * À appeler lors du changement d'utilisateur
  */
 export const clearUserCache = (store: any) => {
   store.dispatch(baseApi.util.invalidateTags(['UserData']));
+};
+
+// ============================================================================
+// GESTION DE LA REDIRECTION SESSION EXPIRÉE
+// ============================================================================
+
+let isRedirecting = false;
+
+/**
+ * Configure le handler pour les événements 'unauthorized'
+ * À appeler dans App.tsx avec la fonction navigate
+ */
+export const setupUnauthorizedHandler = (navigate: (path: string) => void) => {
+  window.addEventListener('unauthorized', async () => {
+    if (isRedirecting) return;
+    isRedirecting = true;
+    
+    // Nettoyer le cache
+    const { store } = await import('../store');
+    clearCacheOnLogout(store);
+    
+    // Supprimer le token
+    localStorage.removeItem('access_token');
+    
+    // Rediriger vers login avec message
+    navigate('/login?session_expired=true');
+    
+    // Réinitialiser le flag après un délai
+    setTimeout(() => {
+      isRedirecting = false;
+    }, 1000);
+  });
 };
