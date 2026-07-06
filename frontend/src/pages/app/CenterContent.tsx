@@ -1,7 +1,8 @@
+// frontend/src/pages/app/CenterContent.tsx
 import { useState, useEffect } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, MessageCircle, Download, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import KanbanView from './views/KanbanView';
@@ -23,10 +24,11 @@ import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useNavigationStore } from '../../store/useNavigationStore';
-import { getRoleRank, ROLES } from '../../lib/roleHierarchy';
+import { getRoleRank, ROLES, getRoleLabel } from '../../lib/roleHierarchy';
 import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
 import { useAuth } from '../../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../../services/api';
+import { toast } from '../../components/ui/Toast';
 import type { Task, Member } from '../../types';
 
 export default function CenterContent() {
@@ -47,8 +49,28 @@ export default function CenterContent() {
   // Récupérer le rôle dans l'espace (si un espace est sélectionné)
   const { role: userEspaceRole, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId !== 'list' ? spaceId : undefined, 'espace');
 
-  // Récupérer le rôle dans la liste (si une liste est sélectionnée)
+  // Récupérer le rôle dans la liste (si une liste est sélectionnée) – fallback
   const { isAdmin: isListeAdmin, isCreator: isListeCreator, role: listeRole } = useResourceRole(listId, 'liste');
+
+  // ✅ Détection robuste du créateur direct de la liste via les membres réels
+  const [listMembers, setListMembers] = useState<any[]>([]);
+  const [isDirectListCreator, setIsDirectListCreator] = useState(false);
+  useEffect(() => {
+    if (!listId || !user) return;
+    listeService.getMembers(listId)
+      .then(members => {
+        setListMembers(members);
+        const creator = members.find(m => m.role === ROLES.CREATOR);
+        setIsDirectListCreator(creator?.id_utilisateur === user.id);
+      })
+      .catch(() => {
+        setListMembers([]);
+        setIsDirectListCreator(false);
+      });
+  }, [listId, user]);
+
+  // Pour le toggle, on combine la détection robuste avec le fallback du store
+  const effectiveIsDirectListCreator = isDirectListCreator || (listeRole === ROLES.CREATOR && isListeCreator);
 
   const getHighestRole = (roles: Array<string | null | undefined>): string | null => {
     return roles.reduce<string | null>((highest, role) => {
@@ -112,6 +134,14 @@ export default function CenterContent() {
   const [isAssignTaskModalOpen, setIsAssignTaskModalOpen] = useState(false);
   const [isAssignListModalOpen, setIsAssignListModalOpen] = useState(false);
   const [, setIsInitialTaskLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportVisible, setExportVisible] = useState<boolean>(() => {
+    if (listId) {
+      const stored = localStorage.getItem(`export-visible-${listId}`);
+      return stored !== null ? stored === 'true' : true;
+    }
+    return true;
+  });
 
   // Hooks
   const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask, addChecklistToTask, toggleTaskChecklist, deleteTaskChecklist } = useTasks(listId);
@@ -121,6 +151,13 @@ export default function CenterContent() {
       loadTasks();
     }
   );
+
+  // Sauvegarder la préférence exportVisible dans localStorage quand elle change
+  useEffect(() => {
+    if (listId) {
+      localStorage.setItem(`export-visible-${listId}`, String(exportVisible));
+    }
+  }, [exportVisible, listId]);
 
   useEffect(() => {
     const tool = new URLSearchParams(location.search).get('tool');
@@ -166,12 +203,6 @@ export default function CenterContent() {
         setIsInitialTaskLoading(true);
         try {
           const taskData = await tacheService.getById(taskId);
-          // Rediriger vers la liste parente pour charger le contexte complet
-          // On utilise window.location car changer listId via context nécessite une navigation
-          // mais ici CenterContent est déjà rendu.
-          // En fait, on peut simplement laisser loadTasks faire son boulot si on avait le listId.
-          // Mais useActiveResource est basé sur l'URL. 
-          // Donc on redirige l'utilisateur vers la vue liste avec le taskId pour ouvrir la modale.
           window.location.href = `/liste/${taskData.id_liste}?taskId=${taskId}`;
         } catch (err) {
           console.error("Erreur résolution contexte tâche:", err);
@@ -191,11 +222,8 @@ export default function CenterContent() {
         openEditTask(task);
       }
     } else if (taskId && listId && tasks.length === 0 && !loading) {
-      // Si taskId présent mais pas dans la liste (peut-être une sous-tâche ou décalage)
-      // On essaie de la charger spécifiquement
       tacheService.getById(taskId).then(apiTask => {
         const task = transformTask(apiTask);
-        // On l'ajoute temporairement ou on l'ouvre directement
         setEditingTask(task);
         setIsTaskModalOpen(true);
       }).catch(console.error);
@@ -386,7 +414,48 @@ export default function CenterContent() {
     if (!listId) return null;
 
     return (
-      <div className="mb-5 flex justify-stretch sm:justify-end">
+      <div className="mb-5 flex flex-wrap items-center justify-stretch gap-2 sm:justify-end">
+        {/* Toggle pour le créateur DIRECT de la liste */}
+        {effectiveIsDirectListCreator && (
+          <div className="flex items-center gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/80 px-3 py-2 shadow-sm">
+            <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
+              Export
+            </span>
+            <button
+              onClick={() => setExportVisible(!exportVisible)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                exportVisible ? 'bg-secondary' : 'bg-theme-muted/30'
+              }`}
+              aria-label="Basculer la visibilité de l'export"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  exportVisible ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-[10px] font-black text-theme-muted">
+              {exportVisible ? 'Activé' : 'Désactivé'}
+            </span>
+          </div>
+        )}
+
+        {/* Bouton Exporter le projet (visible uniquement si exportVisible est true) */}
+        {exportVisible && (
+          <Button
+            onClick={exportProject}
+            disabled={exporting}
+            className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-800 shadow-sm transition-all hover:bg-emerald-100 hover:border-emerald-400 disabled:opacity-50"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Exporter le projet
+          </Button>
+        )}
+
         <Link
           to={`/messagerie?resource_type=liste&resource_id=${listId}`}
           className="inline-flex w-full items-center justify-center rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-2 text-sm font-bold text-secondary shadow-theme-sm transition-all hover:border-secondary hover:bg-secondary hover:text-white sm:w-auto"
@@ -396,6 +465,184 @@ export default function CenterContent() {
         </Link>
       </div>
     );
+  };
+
+  // Fonction d'export du projet
+  const exportProject = async () => {
+    if (!listId) return;
+    setExporting(true);
+    try {
+      const [listeData, membersData, tasksData] = await Promise.all([
+        listeService.getById(listId),
+        listeService.getMembers(listId),
+        tacheService.getByListe(listId)
+      ]);
+
+      const taskMap = new Map();
+      tasksData.forEach((t: any) => {
+        const checklists = t.checklists || [];
+        taskMap.set(t.id, { ...t, children: [], checklists });
+      });
+      const rootTasks: any[] = [];
+      tasksData.forEach((t: any) => {
+        if (t.id_tache_parent && taskMap.has(t.id_tache_parent)) {
+          taskMap.get(t.id_tache_parent).children.push(taskMap.get(t.id));
+        } else {
+          rootTasks.push(taskMap.get(t.id));
+        }
+      });
+
+      // Créateur et membres directs
+      const creator = membersData.find((m: any) => m.role === ROLES.CREATOR);
+      const directMembers = membersData.filter((m: any) => m.role !== ROLES.CREATOR);
+
+      // Calcul de l'avancement
+      const totalTasks = tasksData.length;
+      const doneTasks = tasksData.filter((t: any) => t.statut === 'terminé').length;
+      const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+      // Fonction récursive pour afficher les tâches avec checklists
+      const renderTaskHTML = (task: any, level: number = 0): string => {
+        const statusLabels: Record<string, string> = {
+          'en attente': 'En attente',
+          'en cours': 'En cours',
+          'terminé': 'Terminé',
+          'bloqué': 'Bloqué'
+        };
+        const statusColor = task.statut === 'terminé' ? '#10b981' :
+                           task.statut === 'bloqué' ? '#ef4444' :
+                           task.statut === 'en cours' ? '#3b82f6' : '#6b7280';
+        const assignees = task.assignees?.map((a: any) => a.name).join(', ') || 'Non assigné';
+        const checklistsHTML = task.checklists && task.checklists.length > 0
+          ? `<ul style="margin-left: 16px; list-style: none; padding: 0;">
+              ${task.checklists.map((c: any) => `
+                <li style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${c.is_checked ? '#10b981' : '#6b7280'};">
+                  <span>${c.is_checked ? '✅' : '⬜'}</span>
+                  ${c.texte}
+                </li>
+              `).join('')}
+            </ul>`
+          : '';
+
+        return `
+          <div style="margin-left: ${level * 24}px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span style="font-weight: 700; color: #111827;">${task.titre || 'Sans titre'}</span>
+              <span style="background: ${statusColor}; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">${statusLabels[task.statut] || task.statut}</span>
+              <span style="font-size: 12px; color: #6b7280;">${assignees}</span>
+              ${task.priority ? `<span style="font-size: 10px; background: #f3f4f6; padding: 2px 8px; border-radius: 8px;">${task.priority}</span>` : ''}
+            </div>
+            ${task.description ? `<div style="margin-top: 4px; font-size: 13px; color: #4b5563;">${task.description}</div>` : ''}
+            <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
+              ${task.date_debut ? `Début: ${new Date(task.date_debut).toLocaleDateString('fr-FR')}` : ''}
+              ${task.date_fin_prevue ? ` • Échéance: ${new Date(task.date_fin_prevue).toLocaleDateString('fr-FR')}` : ''}
+            </div>
+            ${checklistsHTML}
+            ${task.children && task.children.length > 0 ? task.children.map((child: any) => renderTaskHTML(child, level + 1)).join('') : ''}
+          </div>
+        `;
+      };
+
+      const tasksHTML = rootTasks.map((task: any) => renderTaskHTML(task, 0)).join('');
+
+      // Canevas (placeholder)
+      const canevasHTML = '<p style="color: #6b7280; font-style: italic;">Aucun canevas associé à ce projet.</p>';
+
+      const docTitle = `Projet: ${listeData.nom || 'Projet'}`;
+      const exportDate = new Date().toLocaleString('fr-FR');
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>${docTitle}</title>
+            <style>
+              body { font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; max-width: 1000px; margin: 0 auto; }
+              .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+              .title { font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; }
+              .meta { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+              .section { margin-bottom: 30px; }
+              .section-title { font-size: 14px; font-weight: 900; color: #059669; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+              .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
+              .info-item { display: flex; flex-direction: column; }
+              .info-item .label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .info-item .value { font-weight: 600; color: #0f172a; }
+              .member-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+              .member-tag { background: #f1f5f9; padding: 4px 12px; border-radius: 16px; font-size: 12px; }
+              .member-tag.creator { background: #dbeafe; color: #1d4ed8; font-weight: 700; }
+              .task-tree { margin-top: 12px; }
+              .footer { margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; color: #64748b; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="meta">Projet</div>
+                <h1 class="title">${listeData.nom || 'Projet'}</h1>
+              </div>
+              <div class="meta">Exporté le ${exportDate}</div>
+            </div>
+
+            ${listeData.description ? `<p style="font-size: 14px; color: #475569; margin-bottom: 20px;">${listeData.description}</p>` : ''}
+
+            <div class="section">
+              <div class="section-title">📊 Informations générales</div>
+              <div class="info-grid">
+                <div class="info-item"><span class="label">Avancement global</span><span class="value">${progress}%</span></div>
+                <div class="info-item"><span class="label">Tâches totales</span><span class="value">${totalTasks}</span></div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">👥 Équipe</div>
+              <div class="member-list">
+                ${creator ? `<span class="member-tag creator">👑 ${getMemberDisplayName(creator)}</span>` : ''}
+                ${directMembers.map((m: any) => `
+                  <span class="member-tag">${getMemberDisplayName(m)} (${getRoleLabel(m.role)})</span>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">🗺️ Feuille de route (Canevas)</div>
+              <div>${canevasHTML}</div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">📋 Tâches</div>
+              <div class="task-tree">
+                ${tasksHTML || '<p style="color: #6b7280;">Aucune tâche dans ce projet.</p>'}
+              </div>
+            </div>
+
+            <div class="footer">
+              <span>Document généré automatiquement par K-Planer</span>
+            </div>
+
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `;
+
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.write(htmlContent);
+        win.document.close();
+      } else {
+        toast.error('Impossible d\'ouvrir la fenêtre d\'export. Vérifiez que les pop-ups ne sont pas bloqués.');
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de l\'export:', error);
+      toast.error(sanitizeApiErrorMessage(error, 'Erreur lors de l\'export du projet'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const openCreateTask = () => {
