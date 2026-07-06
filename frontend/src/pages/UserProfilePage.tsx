@@ -1,3 +1,4 @@
+// frontend/src/pages/UserProfilePage.tsx
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -10,6 +11,8 @@ import { messagerieService } from '../services/messagerie.service';
 import { useAuth } from '../contexts/AuthContext';
 import { getAvatarSrc, getInitials } from '../utils/memberDisplay';
 import { cn } from '../lib/utils';
+import { toast } from '../components/ui/Toast';
+import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
 
 /**
  * Retourne le nom complet de l'utilisateur
@@ -21,19 +24,15 @@ const getDisplayName = (profile: PublicUserProfile | null): string => {
   const prenoms = profile.prenoms?.trim() || '';
   const nom = profile.nom?.trim() || '';
   
-  // Si on a les deux, on les combine
   if (prenoms && nom) {
     return `${prenoms} ${nom}`;
   }
-  // Si on a seulement le prénom
   if (prenoms) {
     return prenoms;
   }
-  // Si on a seulement le nom
   if (nom) {
     return nom;
   }
-  // Fallback sur le username
   if (profile.username) {
     return profile.username;
   }
@@ -70,7 +69,6 @@ export default function UserProfilePage() {
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -78,19 +76,13 @@ export default function UserProfilePage() {
     const loadProfile = async () => {
       if (!userId) return;
       setLoading(true);
-      setError('');
       try {
         const [profileData, presenceData] = await Promise.all([
           authService.getUserProfile(userId),
           messagerieService.getPresence(userId).catch(() => ({ is_online: false, last_seen: null })),
         ]);
         if (!cancelled) {
-          // 🔍 DEBUG: Vérifier ce que retourne l'API
           console.log('📋 Profil chargé:', profileData);
-          console.log('📋 nom:', profileData?.nom);
-          console.log('📋 prenoms:', profileData?.prenoms);
-          console.log('📋 username:', profileData?.username);
-          
           setProfile(profileData);
           setIsOnline(Boolean(presenceData.is_online));
           setLastSeen(presenceData.last_seen || null);
@@ -98,7 +90,7 @@ export default function UserProfilePage() {
       } catch (err: unknown) {
         if (!cancelled) {
           setProfile(null);
-          setError(err instanceof Error ? err.message : 'Impossible de charger ce profil.');
+          toast.error(sanitizeApiErrorMessage(err, 'Impossible de charger ce profil.'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -124,11 +116,11 @@ export default function UserProfilePage() {
     );
   }
 
-  if (error || !profile) {
+  if (!profile) {
     return (
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
         <GlassCard className="p-6 sm:p-10 text-center" hover={false}>
-          <p className="font-bold text-red-500">{error || 'Profil introuvable.'}</p>
+          <p className="font-bold text-red-500">Profil introuvable.</p>
           <Link to="/dashboard" className="mt-4 inline-flex text-sm font-semibold text-primary hover:underline">Retour au tableau de bord</Link>
         </GlassCard>
       </div>
@@ -143,7 +135,6 @@ export default function UserProfilePage() {
       </button>
 
       <GlassCard className="overflow-hidden border-0 shadow-lg" hover={false}>
-        {/* En-tête avec gradient primary/secondary */}
         <div className="relative bg-gradient-to-r from-primary via-primary/80 to-secondary/60 p-6 sm:p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
@@ -186,7 +177,6 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        {/* Corps du profil */}
         <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
           <InfoCard icon={<Mail className="h-4 w-4" />} label="Email" value={profile.email} />
           <InfoCard icon={<Phone className="h-4 w-4" />} label="Téléphone" value={profile.telephone || 'Non renseigné'} />

@@ -12,7 +12,7 @@ import {
 import { motion } from 'framer-motion';
 import { Button } from '../ui/Button';
 import { absenceService } from '../../services/absence.service';
-import { Toast } from '../ui/Toast';
+import { toast } from '../ui/Toast'; // ✅ Import du toast maison
 
 interface LeaveRequestModalProps {
     isOpen: boolean;
@@ -23,7 +23,6 @@ interface LeaveRequestModalProps {
 
 export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveRequestModalProps) {
     const [loading, setLoading] = useState(false);
-    const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
     const [formData, setFormData] = useState({
         date_debut: '',
         date_fin: '',
@@ -55,11 +54,12 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                 duree_demandee_en_jours: duration,
                 is_conge_planifie: !formData.is_absence
             });
+            toast.success('Demande envoyée avec succès.');
             onSuccess();
             onClose();
         } catch (error: any) {
             console.error("Failed to submit leave request", error);
-            setToast({ type: 'error', text: error.message || "Une erreur est survenue lors de la demande." });
+            toast.error(error.message || "Une erreur est survenue lors de la demande.");
         } finally {
             setLoading(false);
         }
@@ -217,13 +217,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                     </p>
                 </div>
 
-                {toast && (
-                    <Toast
-                        type={toast.type}
-                        message={toast.text}
-                        onClose={() => setToast(null)}
-                    />
-                )}
+                {/* Le composant Toast local a été supprimé car nous utilisons l'API globale via toast.error() et toast.success() */}
             </motion.div>
         </div>
     );

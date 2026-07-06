@@ -1,5 +1,4 @@
 // frontend/src/components/modals/InviteEspaceMemberModal.tsx
-
 import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -11,6 +10,7 @@ import {
   getRoleLabel,
   getRoleDescription,
 } from '../../lib/roleHierarchy';
+import { toast } from '../ui/Toast'; // ✅ Import du toast maison
 
 interface InviteEspaceMemberModalProps {
   espaceId: string;
@@ -38,16 +38,12 @@ export default function InviteEspaceMemberModal({
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>(ROLES.GUEST);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isFormValid = email.trim();
 
   const resetForm = () => {
     setEmail('');
     setSelectedRole(ROLES.GUEST);
-    setError(null);
-    setSuccessMessage(null);
   };
 
   const handleClose = () => {
@@ -59,22 +55,21 @@ export default function InviteEspaceMemberModal({
     e.preventDefault();
 
     if (!email.trim()) {
-      setError('Email ou username requis');
+      toast.error('Email ou username requis');
       return;
     }
 
     if (!isValidInviteIdentifier(email)) {
-      setError("L'email ou le username ne doit pas contenir d'espaces.");
+      toast.error("L'email ou le username ne doit pas contenir d'espaces.");
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       await espaceService.inviteMember(espaceId, email, selectedRole);
       
-      setSuccessMessage(`Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`);
+      toast.success(`Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`);
       
       if (onSuccess) {
         onSuccess(email, selectedRole);
@@ -90,15 +85,15 @@ export default function InviteEspaceMemberModal({
       const message = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
 
       if (err.status === 409) {
-        setError(message);
+        toast.error(message);
       } else if (err.status === 400) {
-        setError(message || 'Email ou username invalide');
+        toast.error(message || 'Email ou username invalide');
       } else if (err.status === 404) {
-        setError('L\'espace n\'existe plus ou accès refusé');
+        toast.error('L\'espace n\'existe plus ou accès refusé');
       } else if (err.status === 403) {
-        setError('Vous n\'avez pas la permission d\'inviter des membres');
+        toast.error('Vous n\'avez pas la permission d\'inviter des membres');
       } else {
-        setError(message);
+        toast.error(message);
       }
     } finally {
       setLoading(false);
@@ -119,7 +114,6 @@ export default function InviteEspaceMemberModal({
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
-              setError(null);
             }}
             disabled={loading}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -135,7 +129,6 @@ export default function InviteEspaceMemberModal({
             value={selectedRole}
             onChange={(e) => {
               setSelectedRole(e.target.value);
-              setError(null);
             }}
             disabled={loading}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -159,20 +152,6 @@ export default function InviteEspaceMemberModal({
             ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
           </p>
         </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-800">{error}</p>
-          </div>
-        )}
-
-        {/* Success Display */}
-        {successMessage && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-800">{successMessage}</p>
-          </div>
-        )}
 
         {/* Buttons */}
         <div className="flex gap-3 justify-end pt-4">

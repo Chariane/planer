@@ -6,6 +6,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
+import { toast } from '../components/ui/Toast';
+import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
 
 export default function RegisterPage() {
   const { register, isLoading } = useAuth();
@@ -13,7 +15,6 @@ export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ username: '', email: '', password: '' });
-  const [error, setError] = useState('');
   const [loadingInvitation, setLoadingInvitation] = useState(false);
 
   const invitationToken = searchParams.get('invitation_token') || searchParams.get('invitation');
@@ -43,19 +44,18 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     const username = form.username.trim();
     const email = form.email.trim().toLowerCase();
     const usernameRegex = /^[a-zA-Z0-9_.-]{3,30}$/;
 
     if (!usernameRegex.test(username)) {
-      setError("Le nom d'utilisateur doit contenir 3 à 30 caractères : lettres, chiffres, point, tiret ou underscore uniquement.");
+      toast.error("Le nom d'utilisateur doit contenir 3 à 30 caractères : lettres, chiffres, point, tiret ou underscore uniquement.");
       return;
     }
 
     if (form.password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      toast.error('Le mot de passe doit contenir au moins 8 caractères.');
       return;
     }
 
@@ -65,14 +65,15 @@ export default function RegisterPage() {
         email,
         password: form.password,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
-        is_entreprise: false, // toujours un compte personnel
+        is_entreprise: false,
       };
 
       await register(registerData);
       sessionStorage.removeItem('pendingInvitation');
+      toast.success('Inscription réussie ! Un code de vérification vous a été envoyé par email.');
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur d’inscription');
+      toast.error(sanitizeApiErrorMessage(err, 'Erreur d’inscription'));
     }
   };
 
@@ -87,7 +88,6 @@ export default function RegisterPage() {
 
   return (
     <GlassCard className="p-10 w-full border-theme-border-subtle/30 shadow-2xl shadow-secondary/5 backdrop-blur-sm bg-theme-surface/60 relative overflow-hidden">
-      {/* Subtle decorative background */}
       <div className="absolute -top-20 -right-20 w-64 h-64 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -117,13 +117,6 @@ export default function RegisterPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5 relative">
-        {error && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-red-500" />
-            {error}
-          </motion.div>
-        )}
-
         <div className="space-y-2">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 flex items-center gap-2">
             <User size={14} className="text-secondary/60" /> Nom d'utilisateur

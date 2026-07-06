@@ -25,11 +25,13 @@ import InvitationAccept from './pages/InvitationAccept';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
 import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
+import { ToastContainer } from './components/ui/Toast'; // ✅ Import du ToastContainer maison
 
 function App() {
   return (
     <AuthProvider>
       <AppProvider>
+        <ToastContainer /> {/* ✅ Conteneur de toasts maison */}
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route element={<AuthLayout />}>

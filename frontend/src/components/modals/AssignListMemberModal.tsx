@@ -15,6 +15,7 @@ import { absenceService } from '../../services/absence.service';
 import { AvailabilityBadge } from '../ui/AvailabilityBadge';
 import { MemberAvatar } from '../ui/MemberAvatar';
 import type { UserAvailabilityOut } from '../../types';
+import { toast } from '../ui/Toast'; // ✅ Import du toast maison
 
 interface AssignListMemberModalProps {
   listeId: string;
@@ -81,8 +82,6 @@ export default function AssignListMemberModal({
   const [inviteRole, setInviteRole] = useState<string>('Membre');
   const [loading, setLoading] = useState(false);
   const [inviting, setInviting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
   const directCurrentMember = listMembers.find(member => member.id === user?.id);
   const directCurrentRole = directCurrentMember?.role || null;
@@ -110,7 +109,6 @@ export default function AssignListMemberModal({
 
     const loadParentMembers = async () => {
       setLoading(true);
-      setError(null);
       try {
         const byUser = new Map<string, Member & { highestRole: string }>();
         const addMembers = (items: any[]) => {
@@ -241,19 +239,16 @@ export default function AssignListMemberModal({
 
   const handleAddInvitedMember = async () => {
     if (!selectedMemberId) {
-      setError('Veuillez sélectionner un membre');
+      toast.error('Veuillez sélectionner un membre');
       return;
     }
 
     if (isMemberInList(selectedMemberId)) {
-      setError('Ce membre est déjà dans la liste');
+      toast.error('Ce membre est déjà dans la liste');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-
     try {
       const roleToAssign = parentAvailableRoles.includes(selectedRole) ? selectedRole : parentAvailableRoles[0];
       await listeService.assignMember(listeId, selectedMemberId, roleToAssign);
@@ -263,15 +258,13 @@ export default function AssignListMemberModal({
         setListMembers(prev => [...prev, { ...newMember, role: roleToAssign, id_liste: listeId, id_tache: null }]);
       }
 
-      setSuccessMessage(`Membre ajouté avec le rôle ${getRoleLabel(roleToAssign)}`);
+      toast.success(`Membre ajouté avec le rôle ${getRoleLabel(roleToAssign)}`);
       setSelectedMemberId('');
       setSelectedRole(parentAvailableRoles[0]);
-
-      setTimeout(() => setSuccessMessage(null), 3000);
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Erreur ajout membre:', err);
-      setError(sanitizeApiErrorMessage(err, 'Erreur lors de l\'ajout du membre'));
+      toast.error(sanitizeApiErrorMessage(err, 'Erreur lors de l\'ajout du membre'));
     } finally {
       setLoading(false);
     }
@@ -279,18 +272,18 @@ export default function AssignListMemberModal({
 
   const handleInviteExternal = async () => {
     if (!inviteEmail.trim()) {
-      setError('Veuillez entrer une adresse email ou un username');
+      toast.error('Veuillez entrer une adresse email ou un username');
       return;
     }
 
     if (!isValidInviteIdentifier(inviteEmail)) {
-      setError("L'email ou le username ne doit pas contenir d'espaces.");
+      toast.error("L'email ou le username ne doit pas contenir d'espaces.");
       return;
     }
 
     const alreadyDirectMember = directListMembers.find(member => memberMatchesIdentifier(member, inviteEmail));
     if (alreadyDirectMember) {
-      setError(`${alreadyDirectMember.name} est déjà membre direct de cette liste.`);
+      toast.error(`${alreadyDirectMember.name} est déjà membre direct de cette liste.`);
       return;
     }
 
@@ -300,34 +293,29 @@ export default function AssignListMemberModal({
     if (availableParentMember) {
       setActiveTab('parent');
       setSelectedMemberId(availableParentMember.id);
-      setError(
+      toast.error(
         `${availableParentMember.name} est déjà membre du workspace ou de l'espace parent. Utilisez l'onglet "Membres du workspace/espace" pour l'ajouter à cette liste.`
       );
       return;
     }
 
     setInviting(true);
-    setError(null);
-    setSuccessMessage(null);
-
     try {
       const roleToInvite = availableRoles.includes(inviteRole) ? inviteRole : 'Membre';
       await listeService.inviteMember(listeId, inviteEmail, roleToInvite);
-      setSuccessMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(roleToInvite)}`);
+      toast.success(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(roleToInvite)}`);
       setInviteEmail('');
       setInviteRole('Membre');
-
-      setTimeout(() => setSuccessMessage(null), 3000);
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Erreur invitation:', err);
       if (err.message?.includes('déjà') && !err.message?.includes('rôle')) {
-        setError(canUseParentMemberZone
+        toast.error(canUseParentMemberZone
           ? 'Cet utilisateur existe déjà. Utilisez l\'onglet "Membres du workspace/espace" pour l\'ajouter.'
           : 'Cet utilisateur existe déjà. Vous pouvez uniquement l’inviter avec le rôle Invité ou Membre.'
         );
       } else {
-        setError(sanitizeApiErrorMessage(err, 'Erreur lors de l\'envoi de l\'invitation'));
+        toast.error(sanitizeApiErrorMessage(err, 'Erreur lors de l\'envoi de l\'invitation'));
       }
     } finally {
       setInviting(false);
@@ -343,8 +331,6 @@ export default function AssignListMemberModal({
     setSelectedRole(parentAvailableRoles[0]);
     setInviteEmail('');
     setInviteRole('Membre');
-    setError(null);
-    setSuccessMessage(null);
     onClose();
   };
 
@@ -391,20 +377,6 @@ export default function AssignListMemberModal({
         {isDirectListAdmin && (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs font-semibold text-theme-muted leading-relaxed">
             En tant qu’administrateur direct de cette liste, vous pouvez inviter uniquement des personnes externes avec le rôle Membre ou Invité.
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-            <p className="text-red-500 text-sm font-medium">{error}</p>
-          </div>
-        )}
-        {successMessage && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-            <p className="text-emerald-500 text-sm font-medium flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              {successMessage}
-            </p>
           </div>
         )}
 

@@ -21,6 +21,7 @@ import { AvailabilityBadge } from '../ui/AvailabilityBadge';
 import { MemberAvatar } from '../ui/MemberAvatar';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Member, UserAvailabilityOut } from '../../types';
+import { toast } from '../../components/ui/Toast';
 
 export interface MemberManagementRef {
   openInviteModal: () => void;
@@ -53,46 +54,6 @@ const getRoleBadgeClass = (role: string) => {
   return 'bg-secondary/10 text-secondary border border-secondary/20';
 };
 
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const toneClass = type === 'success'
-    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
-    : type === 'error'
-      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
-      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
-  const iconShellClass = type === 'info'
-    ? 'bg-amber-500/15 border border-amber-500/20'
-    : 'bg-white/20 border border-white/10';
-  const closeClass = type === 'info'
-    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
-    : 'hover:bg-white/20';
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-        className="fixed bottom-6 right-6 z-[100]"
-      >
-        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-theme-lg min-w-[300px] border ${toneClass}`}>
-          <div className={`p-1.5 rounded-full ${iconShellClass}`}>
-            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-          </div>
-          <span className="text-sm font-bold flex-1 tracking-tight">{message}</span>
-          <button onClick={onClose} className={`p-1 rounded-xl transition-colors ${closeClass}`}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
 const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
   (
     {
@@ -112,7 +73,6 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState('Invité');
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [confirmData, setConfirmData] = useState<{
       userId: string;
@@ -132,10 +92,6 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
     useImperativeHandle(ref, () => ({
       openInviteModal: () => setIsInviteModalOpen(true),
     }));
-
-    const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-      setToast({ message, type });
-    };
 
     const resourceType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
     const { canManageMembers, canInviteMembers, isAdmin, isCreator } = usePermissions({
@@ -198,7 +154,7 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
         setMembers(mappedMembers);
       } catch (err) {
         console.error('Erreur chargement membres', err);
-        showMessage('Erreur lors du chargement des membres', 'error');
+        toast.error('Erreur lors du chargement des membres');
       } finally {
         setLoading(false);
       }
@@ -223,7 +179,7 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
     const handleInvite = async () => {
       if (!inviteEmail.trim()) return;
       if (!isValidInviteIdentifier(inviteEmail)) {
-        showMessage("Entrez une adresse email ou un username valide, sans espace.", 'error');
+        toast.error("Entrez une adresse email ou un username valide, sans espace.");
         return;
       }
       try {
@@ -235,22 +191,21 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
         onMemberAdded?.();
         setIsInviteModalOpen(false);
         setInviteEmail('');
-        showMessage(`Invitation envoyée à ${inviteEmail}`, 'success');
+        toast.success(`Invitation envoyée à ${inviteEmail}`);
       } catch (err: any) {
-        showMessage(err.message || 'Erreur lors de l\'invitation', 'error');
+        toast.error(err.message || 'Erreur lors de l\'invitation');
       }
     };
 
     const handleRemoveMember = async (userId: string) => {
       const targetMember = members.find(m => m.id === userId);
       if (!targetMember || !canRemoveMember(targetMember)) {
-        showMessage(
+        toast.error(
           targetMember?.id === user?.id
             ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
             : targetMember?.role === ROLES.CREATOR
               ? 'Le créateur ne peut pas être retiré de cette ressource.'
-              : 'Vous n\'avez pas les droits pour retirer ce membre.',
-          'error',
+              : 'Vous n\'avez pas les droits pour retirer ce membre.'
         );
         return;
       }
@@ -266,9 +221,9 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
             else if (espaceId) await espaceService.removeMember(espaceId, userId);
             else if (workspaceId) await workspaceService.removeMember(workspaceId, userId);
             await loadMembers();
-            showMessage('Membre retiré avec succès', 'success');
+            toast.success('Membre retiré avec succès');
           } catch (err) {
-            showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
+            toast.error(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'));
           }
         }
       });
@@ -298,21 +253,21 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
 
     const handleChangeRole = async (userId: string, newRole: string) => {
       if (isDirectAdmin) {
-        showMessage('Vous êtes administrateur direct, vous ne pouvez pas modifier les rôles des membres.', 'error');
+        toast.error('Vous êtes administrateur direct, vous ne pouvez pas modifier les rôles des membres.');
         return;
       }
       if (!isCreator && !isInheritedSpaceAdmin && !isInheritedListAdmin) {
-        showMessage('Vous n\'avez pas les droits pour modifier les rôles des membres.', 'error');
+        toast.error('Vous n\'avez pas les droits pour modifier les rôles des membres.');
         return;
       }
 
       const targetMember = members.find(m => m.id === userId);
       if (!targetMember) {
-        showMessage('Membre introuvable', 'error');
+        toast.error('Membre introuvable');
         return;
       }
       if (targetMember.role === ROLES.CREATOR) {
-        showMessage('Le créateur de la liste ne peut pas être modifié.', 'error');
+        toast.error('Le créateur de la liste ne peut pas être modifié.');
         return;
       }
 
@@ -320,14 +275,13 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
         const currentRank = getRoleRank(targetMember.role);
         const nextRank = getRoleRank(newRole);
         if (nextRank < currentRank) {
-          showMessage(
-            `Un administrateur par héritage ne peut que promouvoir un membre (${targetMember.role} → ${newRole} est une rétrogradation).`,
-            'error'
+          toast.error(
+            `Un administrateur par héritage ne peut que promouvoir un membre (${targetMember.role} → ${newRole} est une rétrogradation).`
           );
           return;
         }
         if (targetMember.role === ROLES.ADMIN) {
-          showMessage('Un administrateur par héritage ne peut pas modifier un administrateur direct de cette ressource.', 'error');
+          toast.error('Un administrateur par héritage ne peut pas modifier un administrateur direct de cette ressource.');
           return;
         }
       }
@@ -339,7 +293,7 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
         else if (espaceId) await espaceService.updateMemberRole(espaceId, userId, newRole);
         else if (workspaceId) await workspaceService.updateMemberRole(workspaceId, userId, newRole);
         await loadMembers();
-        showMessage(`Rôle de ${targetMember.name} mis à jour : ${getRoleLabel(newRole)}`, 'success');
+        toast.success(`Rôle de ${targetMember.name} mis à jour : ${getRoleLabel(newRole)}`);
       } catch (err: any) {
         const message = sanitizeApiErrorMessage(err, 'Erreur modification rôle');
         const lowerMessage = message.toLowerCase();
@@ -348,9 +302,9 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
             ? `${targetMember.name} possède déjà ce rôle via une ressource parent. Pour revenir au rôle hérité, retirez son rôle direct de cette ressource avec le bouton Retirer.`
             : `${targetMember.name} possède déjà ce rôle via une ressource parent. Seul le créateur peut retirer son rôle direct de cette ressource.`;
           setRoleActionNotice(friendlyMessage);
-          showMessage(friendlyMessage, 'info');
+          toast.info(friendlyMessage);
         } else {
-          showMessage(message, 'error');
+          toast.error(message);
         }
       } finally {
         setUpdatingMemberId(null);
@@ -404,20 +358,7 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
 
     return (
       <div className="space-y-6">
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-        <div className="flex justify-between items-center px-1">
-          <h3 className="text-xl font-black text-theme-main tracking-tighter flex items-center gap-3 uppercase">
-            <Users className="h-5 w-5 text-secondary" />
-            {listeId ? 'Membres de la liste' : espaceId ? 'Membres de l\'espace' : 'Membres du workspace'}
-          </h3>
-          {!listeId && canInviteMembers && !isDirectAdmin && (
-            <Button onClick={() => setIsInviteModalOpen(true)} className="rounded-xl px-4 py-2 shadow-theme-md group transition-all">
-              <UserPlus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
-              <span className="font-bold tracking-tight">Inviter</span>
-            </Button>
-          )}
-        </div>
+        {/* Titre supprimé ici */}
 
         {roleActionNotice && (
           <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-4 py-3 text-sm flex items-start justify-between gap-3 shadow-theme-sm">

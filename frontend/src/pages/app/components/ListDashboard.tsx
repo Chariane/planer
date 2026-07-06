@@ -17,6 +17,7 @@ import { getAvatarSrc, getInitials, getMemberContactLabel, getMemberDisplayName,
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 import MemberManagement from '../../../components/members/MemberManagement';
+import { toast } from '../../../components/ui/Toast'; // ✅ Import du toast maison
 
 interface ListDashboardProps {
   listId: string;
@@ -27,46 +28,6 @@ interface ListDashboardProps {
 }
 
 const CREATOR_ROLE_MANAGEMENT_OPTIONS = ['Invité', 'Membre', 'Administrateur'];
-
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const toneClass = type === 'success'
-    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
-    : type === 'error'
-      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
-      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
-  const iconShellClass = type === 'info'
-    ? 'bg-amber-500/15 border border-amber-500/20'
-    : 'bg-white/20 border border-white/10';
-  const closeClass = type === 'info'
-    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
-    : 'hover:bg-white/20';
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-        className="fixed bottom-6 right-6 z-[100]"
-      >
-        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl min-w-[320px] backdrop-blur-xl border ${toneClass}`}>
-          <div className={`p-2 rounded-xl ${iconShellClass}`}>
-            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-          </div>
-          <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
-          <button onClick={onClose} className={`p-1.5 rounded-xl transition-colors ${closeClass}`}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
 
 const getRoleBadgeClass = (role: string) => {
   if (role === 'Administrateur') return 'bg-orange-500/10 text-orange-500 border border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.1)]';
@@ -105,15 +66,10 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     member: Member | null;
   }>({ isOpen: false, member: null });
   const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // États pour masquer les messages
   const [hideDirectAdminMessage, setHideDirectAdminMessage] = useState(false);
   const [hideInheritedAdminMessage, setHideInheritedAdminMessage] = useState(false);
-
-  const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-  };
 
   const { isGuest: isListeGuest, isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId || undefined);
@@ -264,7 +220,7 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     if (!inviteEmail.trim()) return;
     try {
       await listeService.inviteMember(listId, inviteEmail, inviteRole);
-      showMessage(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`, 'success');
+      toast.success(`Invitation envoyée à ${inviteEmail} avec le rôle ${inviteRole}`);
       setIsInviteModalOpen(false);
       setInviteEmail('');
       await loadData();
@@ -272,9 +228,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     } catch (err: any) {
       const msg = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
       if (msg.includes('403')) {
-        showMessage('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cette liste.', 'error');
+        toast.error('Vous n\'avez pas les permissions nécessaires pour inviter des membres dans cette liste.');
       } else {
-        showMessage(msg, 'error');
+        toast.error(msg);
       }
     }
   };
@@ -282,14 +238,14 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const handleMemberRoleChange = async (member: Member, nextRole: string) => {
     if (member.role === ROLES.CREATOR || nextRole === member.role) return;
     if (!canEditMemberRole(member)) {
-      showMessage('Vous n\'avez pas les droits pour modifier le rôle de ce membre.', 'error');
+      toast.error('Vous n\'avez pas les droits pour modifier le rôle de ce membre.');
       return;
     }
     if (isInheritedListAdmin) {
       const currentRank = getRoleRank(member.role);
       const nextRank = getRoleRank(nextRole);
       if (nextRank < currentRank) {
-        showMessage('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.', 'error');
+        toast.error('Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.');
         return;
       }
     }
@@ -297,19 +253,18 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     try {
       await listeService.updateMemberRole(listId, member.id, nextRole);
       setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: nextRole } : m));
-      showMessage(`Rôle de ${member.name} mis à jour`, 'success');
+      toast.success(`Rôle de ${member.name} mis à jour`);
     } catch (err: any) {
       const message = sanitizeApiErrorMessage(err, "Impossible de modifier le rôle");
       const lowerMessage = message.toLowerCase();
       if (lowerMessage.includes('invitation non nécessaire') || lowerMessage.includes('hérité depuis un')) {
-        showMessage(
+        toast.info(
           (isDirectListCreator || isWorkspaceCreator)
             ? `${member.name} possède déjà ce rôle via un parent. Pour revenir au rôle hérité, retirez son rôle direct de cette liste avec le bouton Retirer.`
-            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de cette liste.`,
-          'info'
+            : `${member.name} possède déjà ce rôle via un parent. Seul le créateur peut retirer son rôle direct de cette liste.`
         );
       } else {
-        showMessage(message, 'error');
+        toast.error(message);
       }
       await loadData();
     } finally {
@@ -321,11 +276,10 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     const member = confirmData.member;
     if (!member) return;
     if (!canRemoveMember(member)) {
-      showMessage(
+      toast.error(
         member.id === user?.id
           ? 'Vous ne pouvez pas vous retirer via la gestion des membres.'
-          : "Seul le créateur de la liste peut retirer un membre.",
-        'error',
+          : "Seul le créateur de la liste peut retirer un membre."
       );
       setConfirmData({ isOpen: false, member: null });
       return;
@@ -334,9 +288,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
       await listeService.unassignMember(listId, member.id);
       setConfirmData({ isOpen: false, member: null });
       await loadData();
-      showMessage(`${member.name} a été retiré de cette liste`, 'success');
+      toast.success(`${member.name} a été retiré de cette liste`);
     } catch (err) {
-      showMessage(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'), 'error');
+      toast.error(sanitizeApiErrorMessage(err, 'Erreur lors du retrait du membre'));
     }
   };
 
@@ -375,8 +329,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
 
   return (
     <div className="space-y-6">
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
       {isListeGuest && !canInviteMembers && (
         <div className="glass-card bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center gap-4 shadow-theme-sm">
           <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
@@ -601,3 +553,4 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     </div>
   );
 }
+

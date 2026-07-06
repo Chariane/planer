@@ -6,6 +6,8 @@ import { Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
+import { toast } from '../components/ui/Toast';
+import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
 
 export default function VerifyEmailPage() {
   const navigate = useNavigate();
@@ -13,8 +15,6 @@ export default function VerifyEmailPage() {
   const { verifyEmail, resendVerificationCode } = useAuth();
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -27,17 +27,16 @@ export default function VerifyEmailPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      setError('Email manquant');
+      toast.error('Email manquant');
       return;
     }
     setIsLoading(true);
-    setError('');
     try {
       await verifyEmail(email, code);
-      setSuccess('Email vérifié avec succès ! Redirection vers la connexion...');
+      toast.success('Email vérifié avec succès ! Redirection vers la connexion...');
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Code invalide');
+      toast.error(sanitizeApiErrorMessage(err, 'Code invalide'));
     } finally {
       setIsLoading(false);
     }
@@ -46,13 +45,11 @@ export default function VerifyEmailPage() {
   const handleResend = async () => {
     if (!email) return;
     setResendLoading(true);
-    setError('');
     try {
       await resendVerificationCode(email);
-      setSuccess('Un nouveau code a été envoyé à votre adresse email.');
-      setTimeout(() => setSuccess(''), 3000);
+      toast.success('Un nouveau code a été envoyé à votre adresse email.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors du renvoi');
+      toast.error(sanitizeApiErrorMessage(err, 'Erreur lors du renvoi'));
     } finally {
       setResendLoading(false);
     }
@@ -80,19 +77,6 @@ export default function VerifyEmailPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <AnimatePresence mode="wait">
-          {error && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-xl text-xs font-bold leading-relaxed">
-              {error}
-            </motion.div>
-          )}
-          {success && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 p-4 rounded-xl text-xs font-bold leading-relaxed">
-              {success}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <div className="space-y-2">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Code de vérification</label>
           <div className="relative group">

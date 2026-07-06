@@ -6,6 +6,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
+import { toast } from '../components/ui/Toast';
+import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
 
 export default function LoginPage() {
   const { login, verify2FA, isLoading } = useAuth();
@@ -14,7 +16,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [requires2fa, setRequires2fa] = useState(false);
   const [challengeToken, setChallengeToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -23,7 +24,6 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     try {
       const result = await login(identifier, password);
       if (result.requires2fa) {
@@ -37,20 +37,20 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur de connexion';
+      const message = sanitizeApiErrorMessage(err, 'Erreur de connexion');
       if (message.includes('email n\'est pas encore verifiee')) {
         const emailMatch = identifier.match(/[^@]+@[^@]+\.[^@]+/);
         const emailToUse = emailMatch ? emailMatch[0] : identifier;
+        toast.info('Veuillez vérifier votre adresse email avant de vous connecter.');
         navigate(`/verify-email?email=${encodeURIComponent(emailToUse)}`);
       } else {
-        setError(message);
+        toast.error(message);
       }
     }
   };
 
   const handle2FASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     try {
       await verify2FA(challengeToken, twoFactorCode);
       if (invitationToken) {
@@ -59,7 +59,7 @@ export default function LoginPage() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Code 2FA invalide');
+      toast.error(sanitizeApiErrorMessage(err, 'Code 2FA invalide'));
     }
   };
 
@@ -80,12 +80,6 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handle2FASubmit} className="space-y-6">
-          {error && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
-              <Shield size={18} className="shrink-0" />
-              {error}
-            </motion.div>
-          )}
           <div className="space-y-2">
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Code à 6 chiffres</label>
             <div className="relative group">
@@ -146,13 +140,6 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 relative">
-        {error && (
-          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-red-500" />
-            {error}
-          </motion.div>
-        )}
-
         <div className="space-y-2">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 flex items-center gap-2">
             <Mail size={14} className="text-secondary/60" /> Identifiant

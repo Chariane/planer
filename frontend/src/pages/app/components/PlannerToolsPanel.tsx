@@ -17,7 +17,7 @@ import { ROLES } from '../../../lib/roleHierarchy';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Task, UserAvailabilityOut } from '../../../types';
 import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
-import { Toast } from '../../../components/ui/Toast';
+import { toast } from '../../../components/ui/Toast'; // ✅ Import du toast maison
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
@@ -210,13 +210,6 @@ export default function PlannerToolsPanel({
   const canAddFiles = isManager;
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
-
-  const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
-    setToast({ type, text });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const eligibleInheritedMembers = useMemo(
     () => inheritedMembers.filter(member => member.role === ROLES.MEMBER),
@@ -527,7 +520,7 @@ export default function PlannerToolsPanel({
       if (activeTool === 'reports') await loadReports();
       if (activeTool === 'absences') await loadAbsences(loadedMembers);
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Impossible de charger les données.');
+      toast.error(getErrorMessage(err) || 'Impossible de charger les données.');
     } finally {
       setLoading(false);
     }
@@ -568,9 +561,9 @@ export default function PlannerToolsPanel({
         url_fichier: result.url,
         type_fichier: getShortFileType(file)
       }));
-      showMessage('success', `Fichier "${file.name}" prêt à être joint.`);
+      toast.success(`Fichier "${file.name}" prêt à être joint.`);
     } catch (err: any) {
-      showMessage('error', `Échec de l'envoi du fichier : ${getErrorMessage(err)}`);
+      toast.error(`Échec de l'envoi du fichier : ${getErrorMessage(err)}`);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -590,10 +583,10 @@ export default function PlannerToolsPanel({
         try {
           await plannerToolsService.deleteFile(fileId);
           setFiles(prev => prev.filter(f => f.id !== fileId));
-          showMessage('success', 'Fichier supprimé avec succès.');
+          toast.success('Fichier supprimé avec succès.');
           closeConfirm();
         } catch (err: any) {
-          showMessage('error', `Erreur lors de la suppression : ${getErrorMessage(err)}`);
+          toast.error(`Erreur lors de la suppression : ${getErrorMessage(err)}`);
         } finally {
           setLoading(false);
         }
@@ -622,13 +615,13 @@ export default function PlannerToolsPanel({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
-      showMessage('error', "Échec du téléchargement.");
+      toast.error("Échec du téléchargement.");
     }
   };
 
   const handleCreateFile = async () => {
     if (!canAddFiles) {
-      showMessage('error', "Vous n'avez pas le droit d'ajouter un fichier à cette ressource.");
+      toast.error("Vous n'avez pas le droit d'ajouter un fichier à cette ressource.");
       return;
     }
     if (!fileForm.nom.trim() || !fileForm.url_fichier || !fileTargetId) return;
@@ -641,9 +634,9 @@ export default function PlannerToolsPanel({
       });
       setFileForm({ nom: '', url_fichier: '', type_fichier: '' });
       await loadFiles();
-      showMessage('success', 'Fichier rattaché avec succès.');
+      toast.success('Fichier rattaché avec succès.');
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter le fichier.");
+      toast.error(getErrorMessage(err) || "Impossible d'ajouter le fichier.");
     } finally {
       setLoading(false);
     }
@@ -653,18 +646,17 @@ export default function PlannerToolsPanel({
     const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
 
     if (!currentUserMemberRecord || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin) {
-      showMessage('error', 'Veuillez renseigner le titre, la date de début et la date de fin du rapport.');
+      toast.error('Veuillez renseigner le titre, la date de début et la date de fin du rapport.');
       return;
     }
 
     if (new Date(reportForm.periode_debut) > new Date(reportForm.periode_fin)) {
-      showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
+      toast.error('La date de début doit être antérieure ou égale à la date de fin.');
       return;
     }
 
     if (!canCreateReport) {
-      showMessage(
-        'error',
+      toast.error(
         listeId
           ? 'Seuls les administrateurs directs ou les membres directs ayant au moins une tâche assignée peuvent envoyer un rapport.'
           : espaceId
@@ -708,9 +700,9 @@ export default function PlannerToolsPanel({
         ...prev.filter(report => report.id !== createdReport.id),
       ]);
       setActiveTool('reports');
-      showMessage('success', 'Rapport envoyé avec succès.');
+      toast.success('Rapport envoyé avec succès.');
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Impossible de créer le rapport.');
+      toast.error(getErrorMessage(err) || 'Impossible de créer le rapport.');
     } finally {
       setLoading(false);
     }
@@ -732,7 +724,7 @@ export default function PlannerToolsPanel({
   const handleUpdateReport = async () => {
     if (!editingReport || !reportEditForm.titre.trim()) return;
     if (reportEditForm.periode_debut && reportEditForm.periode_fin && new Date(reportEditForm.periode_debut) > new Date(reportEditForm.periode_fin)) {
-      showMessage('error', 'La date de début doit être antérieure ou égale à la date de fin.');
+      toast.error('La date de début doit être antérieure ou égale à la date de fin.');
       return;
     }
     setLoading(true);
@@ -754,9 +746,9 @@ export default function PlannerToolsPanel({
       setReports(prev => prev.map(report => report.id === editingReport.id ? { ...report, ...updated } : report));
       setSelectedReport((prev: any) => prev?.id === editingReport.id ? { ...prev, ...updated } : prev);
       setEditingReport(null);
-      showMessage('success', 'Rapport modifié avec succès.');
+      toast.success('Rapport modifié avec succès.');
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Impossible de modifier le rapport.');
+      toast.error(getErrorMessage(err) || 'Impossible de modifier le rapport.');
     } finally {
       setLoading(false);
     }
@@ -778,9 +770,9 @@ export default function PlannerToolsPanel({
           setSelectedReport((prev: any | null) => prev?.id === report.id ? null : prev);
           setEditingReport((prev: any | null) => prev?.id === report.id ? null : prev);
           closeConfirm();
-          showMessage('success', 'Rapport supprimé avec succès.');
+          toast.success('Rapport supprimé avec succès.');
         } catch (err: any) {
-          showMessage('error', getErrorMessage(err) || 'Impossible de supprimer le rapport.');
+          toast.error(getErrorMessage(err) || 'Impossible de supprimer le rapport.');
         } finally {
           setLoading(false);
         }
@@ -793,28 +785,28 @@ export default function PlannerToolsPanel({
     const next = Array.from(new Set([...archivedReportIds, reportId]));
     setArchivedReportIds(next);
     localStorage.setItem(reportArchiveKey, JSON.stringify(next));
-    showMessage('success', 'Rapport archivé dans votre espace.');
+    toast.success('Rapport archivé dans votre espace.');
   };
 
   const unarchiveReport = (reportId: string) => {
     const next = archivedReportIds.filter(id => id !== reportId);
     setArchivedReportIds(next);
     localStorage.setItem(reportArchiveKey, JSON.stringify(next));
-    showMessage('success', 'Rapport restauré.');
+    toast.success('Rapport restauré.');
   };
 
   const archiveAbsence = (absenceId: string) => {
     const next = Array.from(new Set([...archivedAbsenceIds, absenceId]));
     setArchivedAbsenceIds(next);
     localStorage.setItem(absenceArchiveKey, JSON.stringify(next));
-    showMessage('success', 'Demande archivée dans votre espace.');
+    toast.success('Demande archivée dans votre espace.');
   };
 
   const unarchiveAbsence = (absenceId: string) => {
     const next = archivedAbsenceIds.filter(id => id !== absenceId);
     setArchivedAbsenceIds(next);
     localStorage.setItem(absenceArchiveKey, JSON.stringify(next));
-    showMessage('success', 'Demande restaurée.');
+    toast.success('Demande restaurée.');
   };
 
   const handleCreateAbsence = async () => {
@@ -822,7 +814,7 @@ export default function PlannerToolsPanel({
     const targetMemberId = currentUserMemberRecord?.id;
 
     if (!targetMemberId || !absenceForm.date_debut) {
-      showMessage('error', 'Sélectionnez une date de début.');
+      toast.error('Sélectionnez une date de début.');
       return;
     }
 
@@ -841,9 +833,9 @@ export default function PlannerToolsPanel({
       setAbsenceForm({ is_absence: true, is_conge_planifie: false, date_debut: '', date_fin: '', motif: '', duree_demandee_en_jours: '' });
       setIsAbsentModalOpen(false);
       await loadAbsences();
-      showMessage('success', `Demande de ${typeLabel} envoyée pour validation.`);
+      toast.success(`Demande de ${typeLabel} envoyée pour validation.`);
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Impossible de créer la demande.');
+      toast.error(getErrorMessage(err) || 'Impossible de créer la demande.');
     } finally {
       setLoading(false);
     }
@@ -872,12 +864,12 @@ export default function PlannerToolsPanel({
         await absenceService.reject(decisionTarget.id, decisionComment);
       }
       await loadAbsences();
-      showMessage('success', decisionAction === 'approve' ? 'Demande approuvée.' : 'Demande rejetée.');
+      toast.success(decisionAction === 'approve' ? 'Demande approuvée.' : 'Demande rejetée.');
       setDecisionTarget(null);
       setDecisionAction(null);
       setDecisionComment('');
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Action impossible.');
+      toast.error(getErrorMessage(err) || 'Action impossible.');
     } finally {
       setLoading(false);
     }
@@ -890,7 +882,7 @@ export default function PlannerToolsPanel({
       const impact = await absenceService.getImpact(absence.id);
       setAbsenceImpacts(prev => ({ ...prev, [absence.id]: impact }));
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || 'Impossible de charger l\'impact.');
+      toast.error(getErrorMessage(err) || 'Impossible de charger l\'impact.');
     } finally {
       setLoading(false);
     }
@@ -1057,9 +1049,9 @@ export default function PlannerToolsPanel({
                   try {
                     await absenceService.cancel(absence.id);
                     await loadAbsences();
-                    showMessage('success', absence.statut === 'en_attente' ? 'Demande retirée.' : 'Demande annulée.');
+                    toast.success(absence.statut === 'en_attente' ? 'Demande retirée.' : 'Demande annulée.');
                   } catch (err: any) {
-                    showMessage('error', getErrorMessage(err) || "Erreur lors de l'annulation.");
+                    toast.error(getErrorMessage(err) || "Erreur lors de l'annulation.");
                   }
                 }}
                 className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-lg transition-all border border-rose-500/10 flex items-center justify-center gap-2"
@@ -1248,17 +1240,17 @@ export default function PlannerToolsPanel({
   const handleAssignTaskReplacement = async (task: Task, _absence: any) => {
     const replacementUserId = taskReplacementByTaskId[task.id];
     if (!replacementUserId) {
-      showMessage('error', 'Choisissez un membre à ajouter sur cette tâche.');
+      toast.error('Choisissez un membre à ajouter sur cette tâche.');
       return;
     }
     setLoading(true);
     try {
       await tacheService.assignMember(task.id, replacementUserId);
       const replacement = directMembers.find(member => member.id_utilisateur === replacementUserId);
-      showMessage('success', `${replacement?.name || 'Le membre'} a été ajouté sur "${task.title}".`);
+      toast.success(`${replacement?.name || 'Le membre'} a été ajouté sur "${task.title}".`);
       setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: '' }));
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter ce membre sur la tâche.");
+      toast.error(getErrorMessage(err) || "Impossible d'ajouter ce membre sur la tâche.");
     } finally {
       setLoading(false);
     }
@@ -1267,7 +1259,7 @@ export default function PlannerToolsPanel({
   const handleAddBackupAdmin = async () => {
     if (!listeId) return;
     if (!adminCandidateUserId && !adminInviteIdentifier.trim()) {
-      showMessage('error', 'Choisissez un membre hérité ou renseignez un email/username.');
+      toast.error('Choisissez un membre hérité ou renseignez un email/username.');
       return;
     }
     setLoading(true);
@@ -1275,16 +1267,16 @@ export default function PlannerToolsPanel({
       if (adminCandidateUserId) {
         await listeService.assignMember(listeId, adminCandidateUserId, ROLES.ADMIN);
         const admin = inheritedMembers.find(member => member.id_utilisateur === adminCandidateUserId);
-        showMessage('success', `${admin?.name || 'Le membre'} a été ajouté comme administrateur de la liste.`);
+        toast.success(`${admin?.name || 'Le membre'} a été ajouté comme administrateur de la liste.`);
       } else {
         await listeService.inviteMember(listeId, adminInviteIdentifier.trim(), ROLES.ADMIN);
-        showMessage('success', 'Invitation administrateur envoyée.');
+        toast.success('Invitation administrateur envoyée.');
       }
       setAdminCandidateUserId('');
       setAdminInviteIdentifier('');
       await loadMembers();
     } catch (err: any) {
-      showMessage('error', getErrorMessage(err) || "Impossible d'ajouter cet administrateur.");
+      toast.error(getErrorMessage(err) || "Impossible d'ajouter cet administrateur.");
     } finally {
       setLoading(false);
     }
@@ -1641,8 +1633,6 @@ export default function PlannerToolsPanel({
 
   return (
     <div className="space-y-8 pb-20">
-      {toast && <Toast message={toast.text} type={toast.type} onClose={() => setToast(null)} />}
-
       {hasVisibleTool && (
         <div className="p-1 px-1 flex flex-wrap gap-1 border border-theme-border-subtle shadow-theme-md bg-theme-surface/50 backdrop-blur-xl rounded-2xl">
           {canViewFiles && (

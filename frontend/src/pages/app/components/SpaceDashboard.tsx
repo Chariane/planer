@@ -1,6 +1,6 @@
 // frontend/src/pages/app/components/SpaceDashboard.tsx
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, MessageCircle, ShieldCheck, Trash2, X, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Users, ListTodo, UserPlus, FolderTree, Calendar, Activity, Loader2, MessageCircle, ShieldCheck, Trash2, X, CheckCircle2, AlertTriangle, Info, TrendingUp, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -8,6 +8,8 @@ import Modal from '../../../components/ui/Modal';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import { espaceService } from '../../../services/espace.service';
 import { listeService } from '../../../services/liste.service';
+import { tacheService } from '../../../services/tache.service';
+import { absenceService } from '../../../services/absence.service';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { useResourceRole } from '../../../hooks/useResourceRole';
 import { useWorkspaceRole } from '../../../hooks/useWorkspaceRole';
@@ -19,6 +21,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Member } from '../../../types';
 import type { MemberManagementRef } from '../../../components/members/MemberManagement';
 import MemberManagement from '../../../components/members/MemberManagement';
+import { toast } from '../../../components/ui/Toast';
 
 interface SpaceDashboardProps {
   spaceId: string;
@@ -43,46 +46,6 @@ const getRoleLabel = (role: string) => {
   return 'Créateur';
 };
 
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const toneClass = type === 'success'
-    ? 'bg-emerald-600 text-white border-emerald-500/30 shadow-emerald-500/20'
-    : type === 'error'
-      ? 'bg-red-600 text-white border-red-500/30 shadow-red-500/20'
-      : 'bg-amber-100 text-amber-950 border-amber-400/50 shadow-amber-500/20 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-300/30';
-  const iconShellClass = type === 'info'
-    ? 'bg-amber-500/15 border border-amber-500/20'
-    : 'bg-white/20 border border-white/10';
-  const closeClass = type === 'info'
-    ? 'hover:bg-amber-200/70 dark:hover:bg-amber-400/10'
-    : 'hover:bg-white/20';
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-        className="fixed bottom-6 right-6 z-[100]"
-      >
-        <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl min-w-[320px] backdrop-blur-xl border ${toneClass}`}>
-          <div className={`p-2 rounded-xl ${iconShellClass}`}>
-            {type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-          </div>
-          <span className="text-sm font-black flex-1 tracking-tight uppercase tracking-widest text-[11px]">{message}</span>
-          <button onClick={onClose} className={`p-1.5 rounded-xl transition-colors ${closeClass}`}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
 export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashboardProps) {
   const { user } = useAuth();
   const [stats, setStats] = useState({
@@ -96,7 +59,13 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [inheritedSpaceRole, setInheritedSpaceRole] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Pulse & Agenda states
+  const [listProgress, setListProgress] = useState<{ id: string; nom: string; progression: number; totalTasks: number }[]>([]);
+  const [avgProgress, setAvgProgress] = useState(0);
+  const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
+  const [upcomingAbsences, setUpcomingAbsences] = useState<any[]>([]);
+  const [pulseLoading, setPulseLoading] = useState(true);
 
   // États pour masquer les messages
   const [hideAdminMessage, setHideAdminMessage] = useState(false);
@@ -104,10 +73,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [hideGuestMessage, setHideGuestMessage] = useState(false);
 
   const memberManagementRef = useRef<MemberManagementRef>(null);
-
-  const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-  };
 
   const { isGuest: isEspaceGuest, isAdmin: isEspaceAdmin, isCreator: isEspaceCreator } = useResourceRole(spaceId, 'espace');
   const { joinedEspaces } = useNavigationStore();
@@ -211,9 +176,73 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     }
   };
 
+  // Chargement du Pulse et de l'Agenda (basé sur les listes)
+  const loadPulseAndAgenda = async () => {
+    setPulseLoading(true);
+    try {
+      const lists = await listeService.getByEspace(spaceId);
+      const listProgressData = [];
+      let totalProgress = 0;
+      const allTasks: any[] = [];
+
+      for (const list of lists) {
+        const tasks = await tacheService.getByListe(list.id);
+        const total = tasks.length;
+        const done = tasks.filter((t: any) => t.statut === 'terminé').length;
+        const progression = total > 0 ? Math.round((done / total) * 100) : 0;
+        listProgressData.push({
+          id: list.id,
+          nom: list.nom || 'Liste sans nom',
+          progression,
+          totalTasks: total
+        });
+        totalProgress += progression;
+        allTasks.push(...tasks);
+      }
+
+      setListProgress(listProgressData);
+      setAvgProgress(listProgressData.length > 0 ? Math.round(totalProgress / listProgressData.length) : 0);
+
+      const now = new Date();
+      const in7Days = new Date();
+      in7Days.setDate(in7Days.getDate() + 7);
+      const upcoming = allTasks
+        .filter((t: any) => t.date_fin_prevue && new Date(t.date_fin_prevue) >= now && new Date(t.date_fin_prevue) <= in7Days)
+        .sort((a: any, b: any) => new Date(a.date_fin_prevue).getTime() - new Date(b.date_fin_prevue).getTime())
+        .slice(0, 5)
+        .map((t: any) => ({
+          ...t,
+          dueDate: t.date_fin_prevue,
+          liste_nom: lists.find((l: any) => l.id === t.id_liste)?.nom || 'Liste'
+        }));
+      setUpcomingTasks(upcoming);
+
+      const absences = await absenceService.list({ espace_id: spaceId });
+      const upcomingAbs = absences
+        .filter((a: any) => a.statut === 'approuvee' && a.date_debut && new Date(a.date_debut) <= in7Days)
+        .slice(0, 5)
+        .map((a: any) => ({
+          ...a,
+          authorName: a.owner_name || 'Utilisateur'
+        }));
+      setUpcomingAbsences(upcomingAbs);
+
+    } catch (err) {
+      console.warn('Erreur chargement pulse/agenda:', err);
+    } finally {
+      setPulseLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, [spaceId, joinedEspaces]);
+
+  useEffect(() => {
+    if (spaceId && !loading) {
+      loadPulseAndAgenda();
+    }
+  }, [spaceId, loading]);
 
   if (loading) {
     return (
@@ -234,8 +263,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
       animate={{ opacity: 1, y: 0 }}
       className="space-y-10"
     >
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
       {!hideGuestMessage && showGuestMessage && (
         <div className="glass bg-primary/5 border border-primary/20 rounded-2xl p-6 flex items-center gap-5 shadow-theme-sm">
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
@@ -384,46 +411,102 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
         </div>
 
         <div className="space-y-10">
+          {/* Pulse - Avancement des projets */}
           <div className="space-y-6">
             <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase px-2">
               <Activity className="h-6 w-6 text-secondary" />
               Pulse
             </h3>
-            <GlassCard className="p-10 flex flex-col items-center justify-center text-center space-y-6 min-h-[300px] border-theme-border-subtle/30 bg-theme-surface/30">
-              {stats.subSpacesCount > 0 ? (
-                <div className="flex flex-col items-center">
-                  <div className="p-5 rounded-3xl bg-blue-500/10 mb-6 border border-blue-500/20 shadow-xl shadow-blue-500/5 transition-transform hover:scale-105">
-                    <FolderTree size={36} className="text-blue-500" />
-                  </div>
-                  <p className="text-4xl font-black text-theme-main tracking-tighter">{stats.subSpacesCount}</p>
-                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] mt-2 opacity-60">Architectures actives</p>
+            <GlassCard className="p-6 border-theme-border-subtle/30 bg-theme-surface/30">
+              {pulseLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-secondary/40" /></div>
+              ) : listProgress.length === 0 ? (
+                <div className="py-8 text-center text-theme-muted/40">
+                  <FolderTree className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Aucun projet dans cet espace</p>
                 </div>
               ) : (
                 <>
-                  <div className="p-6 rounded-3xl bg-theme-surface border border-white/5 shadow-inner">
-                    <FolderTree size={40} className="text-theme-muted opacity-20" />
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Avancement global</p>
+                      <p className="text-4xl font-black text-theme-main">{avgProgress}%</p>
+                    </div>
+                    <div className="h-20 w-20 rounded-full bg-secondary/10 border-4 border-secondary/20 flex items-center justify-center">
+                      <span className="text-2xl font-black text-secondary">{avgProgress}%</span>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <p className="font-black text-theme-main uppercase tracking-widest text-xs">Structurer l'Espace</p>
-                    <p className="text-theme-muted text-[10px] font-medium leading-relaxed max-w-[180px] mx-auto opacity-40">
-                      Utilisez des sous-espaces pour organiser vos workflow plus finement.
-                    </p>
+                  <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2">
+                    {listProgress.slice(0, 5).map(list => (
+                      <div key={list.id} className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="truncate">{list.nom}</span>
+                            <span>{list.progression}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-theme-border-subtle rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-secondary rounded-full transition-all duration-500"
+                              style={{ width: `${list.progression}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
             </GlassCard>
           </div>
 
+          {/* Agenda - Échéances & Absences */}
           <div className="space-y-6">
             <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase px-2">
               <Calendar className="h-6 w-6 text-secondary" />
               Agenda
             </h3>
-            <GlassCard className="p-8 border-theme-border-subtle/30 bg-theme-surface/20">
-              <div className="flex items-center gap-4">
-                <div className="h-3 w-3 rounded-full bg-secondary/40 animate-pulse shadow-[0_0_10px_rgba(255,102,0,0.3)]" />
-                <p className="text-[10px] text-theme-muted font-black uppercase tracking-widest opacity-30 italic">Analyse des flux en cours...</p>
-              </div>
+            <GlassCard className="p-6 border-theme-border-subtle/30 bg-theme-surface/30">
+              {pulseLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-secondary/40" /></div>
+              ) : upcomingTasks.length === 0 && upcomingAbsences.length === 0 ? (
+                <div className="py-8 text-center text-theme-muted/40">
+                  <Calendar className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Aucune échéance à venir</p>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
+                  {upcomingTasks.map((task: any) => (
+                    <div key={task.id} className="flex items-center justify-between border-b border-theme-border-subtle pb-3 last:border-0">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-theme-main truncate">{task.title}</p>
+                        <p className="text-[10px] text-theme-muted">{task.liste_nom || 'Liste'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Clock className="h-3 w-3 text-theme-muted/30" />
+                        <span className="text-xs font-black text-theme-muted">
+                          {new Date(task.dueDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {upcomingAbsences.map((absence: any) => (
+                    <div key={absence.id} className="flex items-center justify-between border-b border-theme-border-subtle pb-3 last:border-0">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-theme-main truncate">
+                          {absence.is_absence ? 'Absence' : 'Congé'} · {absence.authorName}
+                        </p>
+                        <p className="text-[10px] text-theme-muted">{absence.motif || 'Motif non précisé'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Clock className="h-3 w-3 text-theme-muted/30" />
+                        <span className="text-xs font-black text-theme-muted">
+                          {new Date(absence.date_debut).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </GlassCard>
           </div>
         </div>

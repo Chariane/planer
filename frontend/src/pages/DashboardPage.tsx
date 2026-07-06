@@ -12,6 +12,21 @@ import { useApp } from '../contexts/AppContext';
 import { Button } from '../components/ui/Button';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
+/**
+ * Nettoie un message d'activité pour l'utilisateur.
+ * Si le message est vide ou ressemble à un UUID, on retourne un libellé générique.
+ */
+const formatActivityMessage = (message: string): string => {
+  if (!message || message.trim() === '') {
+    return 'Nouvelle activité';
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(message.trim())) {
+    return 'Nouvelle activité';
+  }
+  return message;
+};
+
 export default function DashboardPage() {
   const {
     workspaces = [],
@@ -45,10 +60,12 @@ export default function DashboardPage() {
     loadDashboardStats();
   };
 
-  // ✅ Données réelles et distinctes
-  const createdWorkspacesCount = (ownedWorkspaces || []).length;  // workspaces créés par l'utilisateur
-  const joinedWorkspacesCount = (joinedWorkspaces || []).length; // workspaces rejoints (sans être créateur)
+  const createdWorkspacesCount = (ownedWorkspaces || []).length;
+  const joinedWorkspacesCount = (joinedWorkspaces || []).length;
   const totalWorkspaces = createdWorkspacesCount + joinedWorkspacesCount;
+
+  const totalSpaces = dashboardStats?.total_spaces ?? 0;
+  const totalProjects = dashboardStats?.total_projects ?? 0;
 
   const statCards = [
     {
@@ -56,32 +73,28 @@ export default function DashboardPage() {
       value: totalWorkspaces,
       icon: <Briefcase size={24} />,
       color: "bg-blue-500/20 text-blue-500 dark:bg-blue-500/30 dark:text-blue-400 border-blue-500/20",
-      sub: `${createdWorkspacesCount} créés, ${joinedWorkspacesCount} rejoints`,
-      link: "/workspaces"
+      sub: `${createdWorkspacesCount} créés, ${joinedWorkspacesCount} rejoints`
     },
     {
       label: "Espaces",
-      value: (joinedEspaces || []).length,
+      value: totalSpaces,
       icon: <FolderKanban size={24} />,
       color: "bg-orange-500/20 text-orange-500 dark:bg-orange-500/30 dark:text-orange-400 border-orange-500/20",
-      sub: "Espaces accessibles",
-      link: "#"
+      sub: "Accessibles (directs + hérités)"
     },
     {
       label: "Projets",
-      value: (joinedListes || []).length,
+      value: totalProjects,
       icon: <CheckSquare size={24} />,
       color: "bg-emerald-500/20 text-emerald-500 dark:bg-emerald-500/30 dark:text-emerald-400 border-emerald-500/20",
-      sub: "Listes accessibles",
-      link: "#"
+      sub: "Listes accessibles (directes + héritées)"
     },
     {
       label: "Membres actifs",
       value: dashboardStats?.active_members || 0,
       icon: <Users size={24} />,
       color: "bg-purple-500/20 text-purple-500 dark:bg-purple-500/30 dark:text-purple-400 border-purple-500/20",
-      sub: "Sur l'ensemble des workspaces",
-      link: "#"
+      sub: "Sur l'ensemble des workspaces"
     }
   ];
 
@@ -134,7 +147,7 @@ export default function DashboardPage() {
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-secondary/20 to-transparent"></div>
         </div>
 
-        {/* Statistiques - Cartes Premium */}
+        {/* Statistiques - Cartes Premium (non cliquables) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
           {statCards.map((card, index) => (
             <motion.div
@@ -143,28 +156,26 @@ export default function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.08, type: 'spring', stiffness: 300 }}
             >
-              <Link to={card.link} className="block group h-full">
-                <div className={`relative h-full rounded-2xl ${card.color} backdrop-blur-sm border shadow-lg shadow-slate-900/10 dark:shadow-slate-900/40 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-secondary/10 hover:-translate-y-1 group`}>
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-                  <div className="relative p-5 sm:p-6 flex flex-col justify-between h-full">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-[11px] font-black text-theme-muted uppercase tracking-[0.2em] mb-2">{card.label}</p>
-                        <p className="text-4xl font-black text-theme-main tracking-tight">{card.value}</p>
-                      </div>
-                      <div className={`p-3 rounded-xl bg-white/10 dark:bg-white/10 backdrop-blur-sm border border-white/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-                        <div className="text-theme-main/80">{card.icon}</div>
-                      </div>
+              <div className={`relative h-full rounded-2xl ${card.color} backdrop-blur-sm border shadow-lg shadow-slate-900/10 dark:shadow-slate-900/40 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-secondary/10 hover:-translate-y-1 group`}>
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                <div className="relative p-5 sm:p-6 flex flex-col justify-between h-full">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[11px] font-black text-theme-muted uppercase tracking-[0.2em] mb-2">{card.label}</p>
+                      <p className="text-4xl font-black text-theme-main tracking-tight">{card.value}</p>
                     </div>
-                    <div className="mt-4">
-                      <p className="text-[10px] font-bold text-theme-muted/60 uppercase tracking-tighter">
-                        {card.sub}
-                      </p>
+                    <div className={`p-3 rounded-xl bg-white/10 dark:bg-white/10 backdrop-blur-sm border border-white/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                      <div className="text-theme-main/80">{card.icon}</div>
                     </div>
                   </div>
+                  <div className="mt-4">
+                    <p className="text-[10px] font-bold text-theme-muted/60 uppercase tracking-tighter">
+                      {card.sub}
+                    </p>
+                  </div>
                 </div>
-              </Link>
+              </div>
             </motion.div>
           ))}
         </div>
@@ -200,7 +211,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-theme-main font-medium leading-relaxed">
-                        {activity.message}
+                        {formatActivityMessage(activity.message)}
                       </p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <Clock size={12} className="text-theme-muted/30" />
@@ -230,31 +241,48 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-black text-theme-main tracking-tight uppercase">Favoris</h3>
               </div>
               <div className="space-y-2">
-                {workspaces.filter(ws => ws.current_user_role !== null).slice(0, 4).length > 0 ? (
-                  workspaces.filter(ws => ws.current_user_role !== null).slice(0, 4).map((ws) => (
-                    <Link
-                      key={ws.id}
-                      to={`/workspace/${ws.id}`}
-                      className="flex items-center justify-between p-3 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle hover:bg-theme-surface-hover hover:border-secondary/20 transition-all duration-300 group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-secondary/20 to-orange-400/20 flex items-center justify-center font-black text-secondary border border-secondary/20 group-hover:rotate-6 transition-transform">
-                          {ws.nom.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-theme-main truncate group-hover:text-secondary transition-colors">{ws.nom}</p>
-                          <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{ws.membres?.length || 1} membres</p>
-                        </div>
+                {(() => {
+                  // Filtrer les workspaces où l'utilisateur a un rôle
+                  const userWorkspaces = workspaces.filter(ws => ws.current_user_role !== null);
+                  // Trier par nombre de membres décroissant
+                  const sorted = [...userWorkspaces].sort((a, b) => {
+                    // Utiliser member_count (propriété retournée par l'API) ou membres.length si c'est un tableau
+                    const countA = Array.isArray(a.membres) ? a.membres.length : (a.member_count || 0);
+                    const countB = Array.isArray(b.membres) ? b.membres.length : (b.member_count || 0);
+                    return countB - countA;
+                  });
+                  const favoris = sorted.slice(0, 4);
+                  if (favoris.length === 0) {
+                    return (
+                      <div className="py-10 text-center rounded-xl border border-dashed border-theme-border-subtle bg-theme-surface/30">
+                        <Star size={28} className="text-theme-muted/20 mx-auto mb-2" />
+                        <p className="text-xs font-black text-theme-muted/40 uppercase tracking-widest">Aucun favori</p>
                       </div>
-                      <ChevronRight size={16} className="text-theme-muted/10 group-hover:text-theme-muted/30 transition-all" />
-                    </Link>
-                  ))
-                ) : (
-                  <div className="py-10 text-center rounded-xl border border-dashed border-theme-border-subtle bg-theme-surface/30">
-                    <Star size={28} className="text-theme-muted/20 mx-auto mb-2" />
-                    <p className="text-xs font-black text-theme-muted/40 uppercase tracking-widest">Aucun favori</p>
-                  </div>
-                )}
+                    );
+                  }
+                  return favoris.map(ws => {
+                    const memberCount = Array.isArray(ws.membres) ? ws.membres.length : (ws.member_count || 0);
+                    const label = memberCount === 1 ? '1 membre' : `${memberCount} membres`;
+                    return (
+                      <Link
+                        key={ws.id}
+                        to={`/workspace/${ws.id}`}
+                        className="flex items-center justify-between p-3 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle hover:bg-theme-surface-hover hover:border-secondary/20 transition-all duration-300 group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-secondary/20 to-orange-400/20 flex items-center justify-center font-black text-secondary border border-secondary/20 group-hover:rotate-6 transition-transform">
+                            {ws.nom.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-theme-main truncate group-hover:text-secondary transition-colors">{ws.nom}</p>
+                            <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{label}</p>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} className="text-theme-muted/10 group-hover:text-theme-muted/30 transition-all" />
+                      </Link>
+                    );
+                  });
+                })()}
                 <Link to="/workspaces" className="block mt-3 text-[10px] font-black text-theme-muted hover:text-secondary transition-colors flex items-center gap-1 uppercase tracking-widest hover:gap-2 duration-300">
                   Voir tout <ArrowRight size={12} />
                 </Link>

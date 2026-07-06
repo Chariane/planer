@@ -1,4 +1,4 @@
-// frontend/src/services/api.ts
+// src/services/api.ts
 
 /**
  * Nettoie et traduit les messages d'erreur pour l'utilisateur final
@@ -10,10 +10,33 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
     rawMessage = error.message;
   } else if (typeof error === 'string') {
     rawMessage = error;
-  } else if (error && typeof error === 'object' && 'detail' in error) {
+  } else if (error && typeof error === 'object') {
+    const err = error as any;
     // Si l'objet a un champ 'detail'
-    const detail = (error as any).detail;
-    rawMessage = typeof detail === 'string' ? detail : JSON.stringify(detail);
+    if (err.detail !== undefined) {
+      const detail = err.detail;
+      if (typeof detail === 'string') {
+        rawMessage = detail;
+      } else if (typeof detail === 'object' && detail !== null) {
+        // On cherche un message dans detail
+        if (detail.message) {
+          rawMessage = detail.message;
+        } else if (detail.msg) {
+          rawMessage = detail.msg;
+        } else {
+          // Sinon on transforme en JSON
+          rawMessage = JSON.stringify(detail);
+        }
+      } else {
+        rawMessage = JSON.stringify(detail);
+      }
+    } else if (err.message) {
+      rawMessage = err.message;
+    } else if (err.msg) {
+      rawMessage = err.msg;
+    } else {
+      rawMessage = JSON.stringify(err);
+    }
   } else {
     rawMessage = fallback;
   }
@@ -30,8 +53,24 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed.detail && typeof parsed.detail === 'string') {
-        return parsed.detail;
+      // Si parsed a un champ detail
+      if (parsed.detail !== undefined) {
+        if (typeof parsed.detail === 'string') {
+          return parsed.detail;
+        } else if (typeof parsed.detail === 'object' && parsed.detail !== null) {
+          // Extraire le message de detail
+          if (parsed.detail.message) {
+            return parsed.detail.message;
+          } else if (parsed.detail.msg) {
+            return parsed.detail.msg;
+          } else if (parsed.detail.field) {
+            // Si on a un champ mais pas de message, on peut formater
+            return `Le champ "${parsed.detail.field}" est invalide.`;
+          } else {
+            // Sinon on retourne la chaîne JSON sans les accolades extérieures
+            return JSON.stringify(parsed.detail);
+          }
+        }
       }
       if (parsed.message && typeof parsed.message === 'string') {
         return parsed.message;
@@ -173,9 +212,22 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
           })
           .join('\n');
       } else if (data.detail) {
-        errorDetail = typeof data.detail === 'string'
-          ? data.detail
-          : (data.detail.message || data.detail.msg || JSON.stringify(data.detail));
+        // Gestion du cas où detail est un objet (par exemple { field: "email", message: "..." })
+        if (typeof data.detail === 'object' && data.detail !== null && !Array.isArray(data.detail)) {
+          if (data.detail.message) {
+            errorDetail = data.detail.message;
+          } else if (data.detail.msg) {
+            errorDetail = data.detail.msg;
+          } else if (data.detail.field) {
+            errorDetail = `Le champ "${data.detail.field}" est invalide.`;
+          } else {
+            errorDetail = JSON.stringify(data.detail);
+          }
+        } else {
+          errorDetail = typeof data.detail === 'string'
+            ? data.detail
+            : (data.detail.message || data.detail.msg || JSON.stringify(data.detail));
+        }
       } else if (data.message || data.msg || data.error) {
         errorDetail = data.message || data.msg || data.error;
         if (typeof errorDetail !== 'string') {

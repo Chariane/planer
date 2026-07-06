@@ -11,6 +11,7 @@ import { AnimatedButton } from '../components/ui/AnimatedButton';
 import Modal from '../components/ui/Modal';
 import { sanitizeApiErrorMessage } from '../services/api';
 import { cn } from '../lib/utils';
+import { toast } from '../components/ui/Toast'; // ✅ Import du toast
 
 // ✅ SUPPRIMER username et email du formulaire d'édition
 const emptyProfileForm = {
@@ -68,8 +69,6 @@ export default function ProfilePage() {
   const [copied, setCopied] = useState(false);
   const [disablePassword, setDisablePassword] = useState('');
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
 
   const fullName = [user?.prenoms, user?.nom].filter(Boolean).join(' ') || user?.username || 'Utilisateur';
   const initials = (user?.prenoms?.[0] || user?.username?.[0] || 'U').toUpperCase();
@@ -118,16 +117,6 @@ export default function ProfilePage() {
     };
   }, [getProfilePhoto, user?.id]);
 
-  const showMessage = (text: string) => {
-    setMessage(text);
-    setTimeout(() => setMessage(''), 4000);
-  };
-
-  const showError = (text: string) => {
-    setError(text);
-    setTimeout(() => setError(''), 4500);
-  };
-
   const updateField = (field: keyof ProfileForm, value: string) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
@@ -145,20 +134,20 @@ export default function ProfilePage() {
       }
       await updateProfile(payload);
       setIsEditing(false);
-      showMessage('✅ Profil mis à jour avec succès');
+      toast.success('✅ Profil mis à jour avec succès');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, '❌ Erreur lors de la mise à jour du profil. Veuillez réessayer.'));
+      toast.error(getErrorMessage(err, '❌ Erreur lors de la mise à jour du profil. Veuillez réessayer.'));
     }
   };
 
   const handlePhotoChange = async (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showError('Veuillez choisir une image valide.');
+      toast.error('Veuillez choisir une image valide.');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      showError('La photo ne doit pas dépasser 2 Mo.');
+      toast.error('La photo ne doit pas dépasser 2 Mo.');
       return;
     }
 
@@ -169,16 +158,16 @@ export default function ProfilePage() {
         const photoDataUrl = String(reader.result);
         const savedPhotoBase64 = await updateProfilePhoto(photoDataUrl);
         setPhotoPreview(buildPhotoSrc(savedPhotoBase64) || photoDataUrl);
-        showMessage('✅ Photo de profil mise à jour');
+        toast.success('✅ Photo de profil mise à jour');
       } catch (err: unknown) {
-        showError(getErrorMessage(err, '❌ Impossible de mettre à jour la photo'));
+        toast.error(getErrorMessage(err, '❌ Impossible de mettre à jour la photo'));
       } finally {
         setPhotoLoading(false);
       }
     };
     reader.onerror = () => {
       setPhotoLoading(false);
-      showError('❌ Impossible de lire cette image.');
+      toast.error('❌ Impossible de lire cette image.');
     };
     reader.readAsDataURL(file);
   };
@@ -188,9 +177,9 @@ export default function ProfilePage() {
     try {
       await updateProfilePhoto(null);
       setPhotoPreview(null);
-      showMessage('✅ Photo de profil retirée');
+      toast.success('✅ Photo de profil retirée');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, '❌ Impossible de retirer la photo'));
+      toast.error(getErrorMessage(err, '❌ Impossible de retirer la photo'));
     } finally {
       setPhotoLoading(false);
     }
@@ -202,7 +191,7 @@ export default function ProfilePage() {
       setTwoFASetup(data);
       setIs2FAModalOpen(true);
     } catch {
-      showError('❌ Erreur lors de la préparation 2FA');
+      toast.error('❌ Erreur lors de la préparation 2FA');
     }
   };
 
@@ -212,37 +201,37 @@ export default function ProfilePage() {
       setIs2FAModalOpen(false);
       setTwoFASetup(null);
       setTwoFACode('');
-      showMessage('✅ 2FA activée avec succès');
+      toast.success('✅ 2FA activée avec succès');
     } catch {
-      showError('❌ Code 2FA invalide');
+      toast.error('❌ Code 2FA invalide');
     }
   };
 
   const handleDisable2FA = async () => {
     if (!disablePassword) {
-      showError('Veuillez entrer votre mot de passe');
+      toast.error('Veuillez entrer votre mot de passe');
       return;
     }
     try {
       await disable2FA(disablePassword);
       setDisablePassword('');
-      showMessage('✅ 2FA désactivée avec succès');
+      toast.success('✅ 2FA désactivée avec succès');
     } catch (err: unknown) {
-      showError(getErrorMessage(err, '❌ Erreur lors de la désactivation'));
+      toast.error(getErrorMessage(err, '❌ Erreur lors de la désactivation'));
     }
   };
 
   const handleChangePassword = async () => {
     if (passwordForm.new !== passwordForm.confirm) {
-      showError('Les nouveaux mots de passe ne correspondent pas');
+      toast.error('Les nouveaux mots de passe ne correspondent pas');
       return;
     }
     try {
       await changePassword(passwordForm.current, passwordForm.new);
       setPasswordForm({ current: '', new: '', confirm: '' });
-      showMessage('✅ Mot de passe modifié avec succès');
+      toast.success('✅ Mot de passe modifié avec succès');
     } catch {
-      showError('❌ Mot de passe actuel incorrect');
+      toast.error('❌ Mot de passe actuel incorrect');
     }
   };
 
@@ -694,22 +683,7 @@ export default function ProfilePage() {
         </div>
       </Modal>
 
-      <AnimatePresence>
-        {(message || error) && (
-          <motion.div 
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className={cn(
-              "fixed bottom-8 right-8 z-[100] flex items-center gap-3 rounded-2xl px-6 py-4 shadow-2xl backdrop-blur-xl border-l-[6px]",
-              message ? "bg-emerald-500/90 text-white border-emerald-400" : "bg-red-500/90 text-white border-red-400"
-            )}
-          >
-            {message ? <Check className="h-6 w-6" /> : <X className="h-6 w-6" />}
-            <span className="font-bold">{message || error}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Les notifications locales ont été supprimées au profit de toast */}
     </div>
   );
 }
