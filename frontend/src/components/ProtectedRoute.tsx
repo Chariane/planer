@@ -26,7 +26,6 @@ export default function ProtectedRoute() {
         if (!response.ok) {
           setSessionValid(false);
           localStorage.removeItem('access_token');
-          window.dispatchEvent(new CustomEvent('unauthorized'));
         }
       } catch (error) {
         console.error('Erreur vérification session:', error);
@@ -49,7 +48,11 @@ export default function ProtectedRoute() {
     );
   }
 
-  if (!user || !token || !sessionValid) {
+  if (!user || !token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!sessionValid) {
     return <Navigate to="/login?session_expired=true" replace />;
   }
 

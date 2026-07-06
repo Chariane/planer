@@ -58,9 +58,9 @@ export default function CenterContent() {
   useEffect(() => {
     if (!listId || !user) return;
     listeService.getMembers(listId)
-      .then(members => {
+      .then((members: Array<{ role?: string; id_utilisateur?: string }>) => {
         setListMembers(members);
-        const creator = members.find(m => m.role === ROLES.CREATOR);
+        const creator = members.find((m) => m.role === ROLES.CREATOR);
         setIsDirectListCreator(creator?.id_utilisateur === user.id);
       })
       .catch(() => {

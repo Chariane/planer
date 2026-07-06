@@ -126,13 +126,13 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
         } else {
           isRefreshing = false;
           localStorage.removeItem('access_token');
-          window.dispatchEvent(new CustomEvent('unauthorized'));
+          window.dispatchEvent(new CustomEvent('sessionExpired'));
           return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
         }
       } catch (refreshError) {
         isRefreshing = false;
         localStorage.removeItem('access_token');
-        window.dispatchEvent(new CustomEvent('unauthorized'));
+        window.dispatchEvent(new CustomEvent('sessionExpired'));
         return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
       }
     }
@@ -158,39 +158,62 @@ export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery,
   tagTypes: [
+    // Authentification & Utilisateur
     'User',
     'UserData',
     'UserPhoto',
     'TwoFA',
+
+    // Workspace
     'Workspace',
     'Navigation',
     'Member',
     'Invitation',
+
+    // Espace
     'Espace',
+
+    // Liste
     'Liste',
+
+    // Tâche
     'Tache',
+
+    // Canevas
     'Canevas',
     'Section',
     'Checklist',
+
+    // Notification
     'Notification',
     'UnreadCount',
+
+    // Absence
     'Absence',
     'Calendar',
     'Availability',
     'Conflict',
     'Impact',
+
+    // Entreprise & Abonnements
     'Entreprise',
     'Subscription',
     'Payment',
     'Plan',
     'PlanUsage',
+
+    // Fichiers & Rapports
     'File',
     'Report',
+
+    // Messagerie (K-Chat)
     'ChatGroup',
     'ChatMember',
     'ChatMessage',
     'ChatPrivate',
     'ChatUnread',
+
+    // Dashboard
     'Dashboard',
   ],
   endpoints: () => ({}),
@@ -244,29 +267,44 @@ export const clearUserCache = (store: any) => {
 // ============================================================================
 
 let isRedirecting = false;
+let sessionExpiredHandler: ((event: Event) => void) | null = null;
 
-/**
- * Configure le handler pour les événements 'unauthorized'
- * À appeler dans App.tsx avec la fonction navigate
- */
-export const setupUnauthorizedHandler = (navigate: (path: string) => void) => {
-  window.addEventListener('unauthorized', async () => {
+export const setupSessionExpiredHandler = (navigate: (path: string) => void) => {
+  if (sessionExpiredHandler) {
+    window.removeEventListener('sessionExpired', sessionExpiredHandler);
+  }
+
+  sessionExpiredHandler = async () => {
     if (isRedirecting) return;
     isRedirecting = true;
-    
+
     // Nettoyer le cache
     const { store } = await import('../store');
     clearCacheOnLogout(store);
-    
+
     // Supprimer le token
     localStorage.removeItem('access_token');
-    
-    // Rediriger vers login avec message
+
+    // ✅ Session expirée → paramètre session_expired
+    // Message géré par App.tsx
     navigate('/login?session_expired=true');
-    
+
     // Réinitialiser le flag après un délai
     setTimeout(() => {
       isRedirecting = false;
     }, 1000);
-  });
+  };
+
+  window.addEventListener('sessionExpired', sessionExpiredHandler);
+};
+
+/**
+ * Nettoie le handler d'événements 'unauthorized'
+ * À appeler lors du démontage si nécessaire
+ */
+export const cleanupSessionExpiredHandler = () => {
+  if (sessionExpiredHandler) {
+    window.removeEventListener('sessionExpired', sessionExpiredHandler);
+    sessionExpiredHandler = null;
+  }
 };

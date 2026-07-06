@@ -27,35 +27,63 @@ import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
 import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
 import { ToastContainer, toast } from './components/ui/Toast';
-import { setupUnauthorizedHandler } from './store/api/baseApi';
+import { setupSessionExpiredHandler } from './store/api/baseApi';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Configurer le handler d'erreurs 401
+  // ✅ Configurer le handler d'erreurs 401 (session expirée)
   useEffect(() => {
-    setupUnauthorizedHandler(navigate);
+    setupSessionExpiredHandler(navigate);
   }, [navigate]);
 
-  // ✅ Vérifier si la session a expiré (paramètre URL)
+  // ✅ Gérer les différents paramètres de redirection
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('session_expired') === 'true') {
-      toast.error('Votre session a expiré. Veuillez vous reconnecter.');
-      // Nettoyer l'URL après un court délai
+    
+    // 🔵 Déconnexion volontaire - Message "À bientôt !"
+    if (params.get('logout') === 'true') {
+      toast.info('À bientôt ! Vous êtes bien déconnecté.', {
+        duration: 3000,
+      });
+      // Nettoyer l'URL
       setTimeout(() => {
         navigate('/login', { replace: true });
       }, 100);
+      return;
+    }
+    
+    // 🔴 Session expirée - Message "Votre session a expiré"
+    if (params.get('session_expired') === 'true') {
+      toast.error('Votre session a expiré. Veuillez vous reconnecter.', {
+        duration: 5000,
+      });
+      // Nettoyer l'URL
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 100);
+      return;
+    }
+    
+    // 🟢 Invitation acceptée - Message "Invitation acceptée !"
+    if (params.get('accepted') === 'true') {
+      toast.success('Invitation acceptée ! Bienvenue dans votre nouvel espace.', {
+        duration: 4000,
+      });
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 100);
+      return;
     }
   }, [location, navigate]);
 
-  // ✅ Nettoyer le paramètre session_expired quand on quitte login
+  // ✅ Nettoyer les paramètres URL quand on est sur login
   useEffect(() => {
     if (location.pathname === '/login') {
       const params = new URLSearchParams(location.search);
-      if (params.has('session_expired')) {
+      if (params.has('logout') || params.has('session_expired') || params.has('accepted')) {
         navigate('/login', { replace: true });
       }
     }

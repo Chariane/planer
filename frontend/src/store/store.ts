@@ -11,8 +11,8 @@ const authMiddleware = (store: any) => (next: any) => (action: any) => {
     if (status === 401) {
       
       store.dispatch(baseApi.util.invalidateTags(['UserData']));
-      // Déclencher l'événement unauthorized
-      window.dispatchEvent(new CustomEvent('unauthorized'));
+      // Déclencher l'événement sessionExpired
+      window.dispatchEvent(new CustomEvent('sessionExpired'));
     }
   }
   return next(action);
