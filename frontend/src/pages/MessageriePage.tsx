@@ -40,6 +40,7 @@ import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import { useAuth } from '../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../services/api';
+import { sanitizeHtml, sanitizeText } from '../utils/sanitize';
 import { authService } from '../services/auth.service';
 import type { PublicUserProfile } from '../services/auth.service';
 import {
@@ -109,10 +110,10 @@ const initials = (label?: string | null) => {
 };
 
 const displayMember = (member: MessagerieMember) =>
-  member.username || member.email || 'Utilisateur';
+  sanitizeText(member.username || member.email || 'Utilisateur');
 
 const displayProfile = (profile: PublicUserProfile | null) =>
-  [profile?.prenoms, profile?.nom].filter(Boolean).join(' ').trim() || profile?.username || 'Utilisateur';
+  sanitizeText([profile?.prenoms, profile?.nom].filter(Boolean).join(' ').trim() || profile?.username || 'Utilisateur');
 
 const profileAsMember = (profile: PublicUserProfile | null): MessagerieMember | null =>
   profile
@@ -246,6 +247,7 @@ const canEditMessage = (message: MessageItem) => {
 function MessageContent({ message, isMine }: { message: MessageItem; isMine: boolean }) {
   const textColor = isMine ? 'text-white/90' : 'text-theme-main';
   const subtleColor = isMine ? 'text-white/70' : 'text-theme-muted';
+  const cleanedMessage = sanitizeHtml(cleanMessageText(message.message));
 
   if (message.audio) {
     const src = dataUrlFromBase64(message.audio, 'audio/webm');
@@ -256,7 +258,7 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
           Message vocal
         </div>
         <audio controls src={src} className="max-w-full h-10" />
-        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+        {cleanedMessage && <p className={`text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
       </div>
     );
   }
@@ -266,7 +268,7 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
     return (
       <div className="space-y-2">
         <img src={src} alt="Image jointe" className="max-h-72 w-full rounded-xl object-cover" />
-        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+        {cleanedMessage && <p className={`text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
       </div>
     );
   }
@@ -276,7 +278,7 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
     return (
       <div className="space-y-2">
         <video controls src={src} className="max-h-72 w-full rounded-xl bg-black" />
-        {cleanMessageText(message.message) && <p className={`text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+        {cleanedMessage && <p className={`text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
       </div>
     );
   }
@@ -291,7 +293,7 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
         <div className="min-w-0 flex-1">
           <p className={`truncate text-sm font-black ${textColor}`}>Fichier joint</p>
           <p className={`truncate text-xs ${subtleColor}`}>Piece jointe</p>
-          {cleanMessageText(message.message) && <p className={`mt-1 text-sm ${textColor}`}>{cleanMessageText(message.message)}</p>}
+          {cleanedMessage && <p className={`mt-1 text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
         </div>
         <a
           href={src}
@@ -305,7 +307,7 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
     );
   }
 
-  return <>{cleanMessageText(message.message)}</>;
+  return <div dangerouslySetInnerHTML={{ __html: cleanedMessage }} />;
 }
 
 const resourceLabel = (group: MessagerieGroup) => {
@@ -470,8 +472,8 @@ export default function MessageriePage() {
   const callsAllowed = isPrivateMode || Boolean(activeGroup && canWriteActiveGroup);
   const privateMember = profileAsMember(privateProfile);
   const threadTitle = isPrivateMode
-    ? (privateProfile ? displayProfile(privateProfile) : 'Discussion privée')
-    : activeGroup?.name;
+    ? (privateProfile ? sanitizeText(displayProfile(privateProfile)) : 'Discussion privée')
+    : activeGroup?.name ? sanitizeText(activeGroup.name) : '';
   const threadSubtitle = isPrivateMode
     ? `${presenceLabel(privateOnline, privateLastSeen)} • Discussion privée`
     : activeGroup
@@ -1808,7 +1810,7 @@ export default function MessageriePage() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex min-w-0 items-center justify-between gap-2">
-                                <p className="min-w-0 flex-1 truncate font-black">{displayMember(conversation.user)}</p>
+                                <p className="min-w-0 flex-1 truncate font-black">{sanitizeText(displayMember(conversation.user))}</p>
                                 <UnreadBadge count={unreadCount} selected={selected} />
                               </div>
                               <p className={`text-xs mt-1 truncate ${selected ? 'text-white/70' : 'text-theme-muted'}`}>
@@ -1864,7 +1866,7 @@ export default function MessageriePage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex min-w-0 items-center justify-between gap-2">
-                                  <p className="min-w-0 flex-1 truncate font-black">{group.name}</p>
+                                  <p className="min-w-0 flex-1 truncate font-black">{sanitizeText(group.name)}</p>
                                   <div className="flex shrink-0 items-center gap-1.5">
                                     <UnreadBadge count={unreadCount} selected={selected} />
                                   </div>

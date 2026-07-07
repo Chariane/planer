@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import { sanitizeApiErrorMessage } from '../../services/api';
+import { sanitizeHtml, sanitizeText } from '../../utils/sanitize';
 
 type AddChecklistMode = 'manual' | 'task';
 
@@ -49,10 +50,11 @@ const stripLegacyTaskPrefix = (text: string, taskTitle?: string | null) => {
 };
 
 const getChecklistLabel = (checklist: EnhancedChecklist) =>
-  stripLegacyTaskPrefix(checklist.texte, checklist.task_title);
+  sanitizeHtml(stripLegacyTaskPrefix(checklist.texte, checklist.task_title));
 
 const getChecklistTaskPath = (checklist: EnhancedChecklist) =>
-  checklist.task_path || checklist.task_title || null;
+  checklist.task_path ? sanitizeText(checklist.task_path) : (checklist.task_title ? sanitizeText(checklist.task_title) : null);
+
 
 export default function RightCanevas({ onClose }: RightCanevasProps) {
   const { pathname } = useLocation();
@@ -615,7 +617,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
             canevas.sections.map((section) => (
               <div key={section.id} className="border border-theme-border-subtle rounded-2xl mb-4 overflow-hidden shadow-theme-sm">
                 <div className="p-3 bg-theme-surface-hover/50">
-                  <span className="block min-w-0 break-words text-sm font-bold text-theme-main uppercase tracking-tight leading-snug">{section.titre}</span>
+                  <span className="block min-w-0 break-words text-sm font-bold text-theme-main uppercase tracking-tight leading-snug">{sanitizeText(section.titre)}</span>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-black text-secondary uppercase tracking-widest">{section.progress}%</span>
                     <div className="w-20 bg-theme-border-subtle rounded-full h-1.5 shadow-inner">
@@ -643,7 +645,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                         <span className="min-w-0 flex-1">
                           {checklist.source === 'task' && taskPath && (
                             <span className="mb-0.5 block break-words text-[10px] font-black uppercase tracking-widest text-theme-muted/60">
-                              {taskPath}
+                              {sanitizeText(taskPath)}
                             </span>
                           )}
                           <span className={`block break-words text-sm font-medium leading-snug ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main opacity-80'}`}>
@@ -743,7 +745,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                           autoFocus
                         />
                       ) : (
-                        <span className="min-w-0 flex-1 break-words text-sm font-black text-theme-main uppercase tracking-tight leading-snug">{section.titre}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-black text-theme-main uppercase tracking-tight leading-snug">{sanitizeText(section.titre)}</span>
                       )}
                     </button>
 

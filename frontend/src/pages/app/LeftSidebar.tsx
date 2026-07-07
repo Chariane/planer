@@ -19,6 +19,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkspaceRole } from '../../hooks/useWorkspaceRole';
 import { useResourceRole } from '../../hooks/useResourceRole';
 import { getRoleLabel, getRoleRank, ROLES } from '../../lib/roleHierarchy';
+import { sanitizeHtml, sanitizeText } from '../../utils/sanitize';
 
 // Composant Toast simple
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
@@ -1084,7 +1085,7 @@ export default function LeftSidebar() {
                 <div className={`shrink-0 p-1.5 rounded-xl transition-all duration-300 ${spaceId === item.id ? 'bg-primary text-white shadow-[0_0_15px_rgba(var(--color-primary),0.4)]' : 'bg-theme-surface-hover group-hover:bg-theme-surface group-hover:shadow-theme-sm'}`}>
                   <FolderTree className={`h-3.5 w-3.5 ${spaceId === item.id ? 'text-white' : 'text-theme-muted group-hover:text-theme-main'}`} />
                 </div>
-                <span className={`truncate tracking-tight transition-colors ${spaceId === item.id ? 'text-primary' : 'text-theme-main/80 group-hover:text-theme-main'}`}>{item.nom}</span>
+                <span className={`truncate tracking-tight transition-colors ${spaceId === item.id ? 'text-primary' : 'text-theme-main/80 group-hover:text-theme-main'}`}>{sanitizeText(item.nom)}</span>
 
                 {/* Subtle active glow background */}
                 {spaceId === item.id && (
@@ -1176,7 +1177,7 @@ export default function LeftSidebar() {
                             }`}
                         >
                           <Hash className={`h-3 w-3 transition-colors ${listId === list.id ? 'text-secondary drop-shadow-[0_0_3px_rgba(var(--secondary-rgb),0.5)]' : 'text-theme-muted'}`} />
-                          <span className="truncate">{list.nom}</span>
+                          <span className="truncate">{sanitizeText(list.nom)}</span>
                           {listId === list.id && (
                             <div className="absolute inset-0 bg-gradient-to-r from-secondary/5 to-transparent -z-10" />
                           )}
@@ -1232,7 +1233,7 @@ export default function LeftSidebar() {
           >
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-primary" />
-              <span className="truncate text-sm font-semibold text-theme-main">{currentWorkspace.nom}</span>
+              <span className="truncate text-sm font-semibold text-theme-main">{sanitizeText(currentWorkspace.nom)}</span>
             </div>
           </Link>
         )}
@@ -1749,7 +1750,7 @@ export default function LeftSidebar() {
         }
         message={
           confirmModal.type === 'workspace'
-            ? `Êtes-vous sûr de vouloir supprimer définitivement le workspace "${confirmModal.item?.nom || ''}" ? Cette action est irréversible et supprimera tout son contenu.`
+            ? `Êtes-vous sûr de vouloir supprimer définitivement le workspace "${sanitizeText(confirmModal.item?.nom || '')}" ? Cette action est irréversible et supprimera tout son contenu.`
             : confirmModal.type === 'space'
               ? `Êtes-vous sûr de vouloir supprimer l'espace "${confirmModal.item?.nom || ''}" ? Cette action est irréversible et supprimera également tous les sous-espaces et listes associés.`
               : `Êtes-vous sûr de vouloir supprimer la liste "${confirmModal.item?.nom || ''}" ? Cette action est irréversible.`

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { sanitizeText, sanitizeHtml } from '../utils/sanitize';
 import {
     FileText,
     Search,
@@ -96,7 +97,7 @@ export default function ReportsPage() {
                             </div>
                             <div>
                                 <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em]">{stat.label}</p>
-                                <p className="text-2xl font-black text-white tabular-nums">{loading ? '...' : stat.value}</p>
+                                <p className="text-2xl font-black text-white tabular-nums">{loading ? '...' : sanitizeText(String(stat.value))}</p>
                             </div>
                         </div>
                     </GlassCard>
@@ -141,7 +142,7 @@ export default function ReportsPage() {
                     </div>
                     <div className="space-y-2">
                         <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic">Historique Vierge</h3>
-                        <p className="text-theme-muted max-w-sm font-medium">Vous n'avez pas encore soumis de rapport d'activité pour cette période.</p>
+                        <p className="text-theme-muted max-w-sm font-medium">{sanitizeText('Vous n\'avez pas encore soumis de rapport d\'activité pour cette période.')}</p>
                     </div>
                 </GlassCard>
             ) : (
@@ -161,20 +162,20 @@ export default function ReportsPage() {
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-3">
-                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{report.titre}</h4>
+                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{sanitizeText(report.titre)}</h4>
                                                 <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-theme-muted uppercase tracking-widest">
                                                     {new Date(report.created_at).toLocaleDateString()}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-theme-muted font-medium line-clamp-1 max-w-2xl leading-relaxed">
-                                                {report.realisations || "Aucune réalisation détaillée renseignée."}
+                                                {report.realisations ? sanitizeText(report.realisations) : "Aucune réalisation détaillée renseignée."}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <div className="text-right hidden md:block px-4 border-r border-white/5">
                                             <p className="text-[9px] font-black text-theme-muted uppercase tracking-widest">Auteur</p>
-                                            <p className="text-xs font-bold text-white italic">{report.owner_name || 'Inconnu'}</p>
+                                            <p className="text-xs font-bold text-white italic">{sanitizeText(report.owner_name || 'Inconnu')}</p>
                                         </div>
                                         <button className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-theme-muted hover:text-white hover:bg-primary transition-all border border-transparent hover:shadow-lg hover:shadow-primary/20">
                                             <ChevronRight size={20} />
@@ -194,7 +195,7 @@ export default function ReportsPage() {
                         <Plus size={16} />
                     </div>
                     <p className="text-xs font-bold text-white">
-                        Pour soumettre un rapport, utilisez le panneau <span className="text-primary italic">Outils du Planer</span> dans vos listes de tâches.
+                        {sanitizeText('Pour soumettre un rapport, utilisez le panneau Outils du Planer dans vos listes de tâches.')}
                     </p>
                 </div>
             )}

@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { sanitizeText } from '../../utils/sanitize';
 import { cn } from '../../lib/utils';
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'sm' | 'md' | 'lg' }) {
@@ -25,7 +26,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
               className={cn('flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-2xl bg-theme-surface shadow-2xl border border-theme-border-subtle transition-all duration-300', sizes[size])}
             >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-theme-border-subtle px-4 py-3 sm:px-6 sm:py-4">
-                <h3 className="text-base sm:text-lg font-bold text-theme-main tracking-tight">{title}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-theme-main tracking-tight">{sanitizeText(title)}</h3>
                 <button onClick={onClose} className="rounded-full p-1.5 text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-colors"><X className="h-5 w-5" /></button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>

@@ -1,9 +1,30 @@
+<!-- frontend/index.html -->
 <!doctype html>
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- CONTENT SECURITY POLICY -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      img-src 'self' data: https: blob:;
+      font-src 'self' data: https://fonts.gstatic.com;
+      connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com;
+      frame-ancestors 'none';
+      form-action 'self';
+      base-uri 'self';
+      upgrade-insecure-requests;
+    " />
+    
+    <!-- HEADERS DE SÉCURITÉ -->
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    
     <script>
       try {
         const savedTheme = localStorage.getItem('darkMode');

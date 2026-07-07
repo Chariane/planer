@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { sanitizeText } from '../../utils/sanitize';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -21,7 +22,8 @@ let toasts: ToastMessage[] = [];
 // Fonction interne pour ajouter un toast
 const notify = (message: string, type: ToastType = 'success', duration: number = 4000) => {
   const id = String(++toastIdCounter);
-  const newToast: ToastMessage = { id, message, type, duration };
+  const safeMessage = typeof message === 'string' ? sanitizeText(message) : message;
+  const newToast: ToastMessage = { id, message: safeMessage, type, duration };
   toasts = [...toasts, newToast];
   listeners.forEach((fn) => fn(toasts));
   setTimeout(() => {

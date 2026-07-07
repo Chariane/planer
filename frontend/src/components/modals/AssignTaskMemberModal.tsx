@@ -1,6 +1,7 @@
 // frontend/src/components/modals/AssignTaskMemberModal.tsx
 import { useState, useEffect } from 'react';
 import { tacheService } from '../../services/tache.service';
+import { sanitizeText } from '../../utils/sanitize';
 import { listeService } from '../../services/liste.service';
 import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -80,7 +81,7 @@ export default function AssignTaskMemberModal({
         }
       } catch (err) {
         console.error('Erreur chargement membres:', err);
-        setMemberError('Impossible de charger les membres');
+        setMemberError(sanitizeText('Impossible de charger les membres'));
       } finally {
         setLoading(false);
       }
@@ -124,7 +125,7 @@ export default function AssignTaskMemberModal({
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error('Erreur assignation:', err);
-      alert('Erreur lors de l\'assignation');
+      alert(sanitizeText('Erreur lors de l\'assignation'));
     } finally {
       setLoading(false);
     }
@@ -138,7 +139,7 @@ export default function AssignTaskMemberModal({
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error('Erreur désassignation:', err);
-      alert('Erreur lors de la désassignation');
+      alert(sanitizeText('Erreur lors de la désassignation'));
     } finally {
       setLoading(false);
     }
@@ -164,12 +165,12 @@ export default function AssignTaskMemberModal({
                 <div key={member.id} className="flex items-center justify-between p-2.5 bg-theme-surface/50 border border-theme-border-subtle rounded-xl shadow-sm">
                   <div className="flex items-center gap-2">
                     <MemberAvatar member={member} size="xs" />
-                    <span className="text-sm font-bold text-theme-main">{member.name}</span>
+                    <span className="text-sm font-bold text-theme-main">{sanitizeText(member.name)}</span>
                     <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} showText size="sm" />
                   </div>
                   <div>
                     <span className="text-xs text-secondary font-bold ml-2 uppercase tracking-tighter">({member.role})</span>
-                    {member.source && <span className="text-[10px] text-theme-muted ml-2 italic tracking-tight">{member.source}</span>}
+                    {member.source && <span className="text-[10px] text-theme-muted ml-2 italic tracking-tight">{sanitizeText(member.source)}</span>}
                   </div>
                   <Button
                     variant="outline"
@@ -200,7 +201,7 @@ export default function AssignTaskMemberModal({
                 <option value="">Sélectionner un membre...</option>
                 {availableMembers.map(member => (
                   <option key={member.id} value={member.id} className={!listAvailability.find(a => a.id_utilisateur === member.id)?.is_available ? 'text-rose-500' : ''}>
-                    {member.name} ({member.source || member.role}) {!listAvailability.find(a => a.id_utilisateur === member.id)?.is_available ? ' [INDISPONIBLE]' : ''}
+                    {sanitizeText(member.name)} ({sanitizeText(member.source || member.role)}) {!listAvailability.find(a => a.id_utilisateur === member.id)?.is_available ? ' [INDISPONIBLE]' : ''}
                   </option>
                 ))}
               </select>

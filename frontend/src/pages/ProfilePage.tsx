@@ -10,8 +10,9 @@ import { Button } from '../components/ui/Button';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
 import Modal from '../components/ui/Modal';
 import { sanitizeApiErrorMessage } from '../services/api';
+import { sanitizeHtml, sanitizeInput, sanitizeText } from '../utils/sanitize'; // ✅ AJOUT
 import { cn } from '../lib/utils';
-import { toast } from '../components/ui/Toast'; // ✅ Import du toast
+import { toast } from '../components/ui/Toast';
 
 // ✅ SUPPRIMER username et email du formulaire d'édition
 const emptyProfileForm = {
@@ -90,14 +91,14 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setEditForm({
-      nom: user?.nom || '',
-      prenoms: user?.prenoms || '',
-      telephone: user?.telephone || '',
-      pays: user?.pays || '',
-      ville: user?.ville || '',
-      genre: user?.genre || '',
+      nom: sanitizeText(user?.nom || ''),
+      prenoms: sanitizeText(user?.prenoms || ''),
+      telephone: sanitizeText(user?.telephone || ''),
+      pays: sanitizeText(user?.pays || ''),
+      ville: sanitizeText(user?.ville || ''),
+      genre: sanitizeText(user?.genre || ''),
       date_nais: toDateInputValue(user?.date_nais),
-      biographie: user?.biographie || '',
+      biographie: sanitizeText(user?.biographie || ''),
     });
   }, [user]);
 
@@ -118,19 +119,21 @@ export default function ProfilePage() {
   }, [getProfilePhoto, user?.id]);
 
   const updateField = (field: keyof ProfileForm, value: string) => {
-    setEditForm(prev => ({ ...prev, [field]: value }));
+    // ✅ Sanitize l'entrée avant de la stocker
+    setEditForm(prev => ({ ...prev, [field]: sanitizeText(value) }));
   };
 
   const handleEditSubmit = async () => {
     try {
-      const payload: Partial<ProfileForm> = { ...editForm };
-      if (!payload.date_nais || payload.date_nais === '') {
-        delete payload.date_nais;
-      }
-      for (const [key, value] of Object.entries(payload)) {
-        if (value === '' || value === null || value === undefined) {
-          delete payload[key as keyof ProfileForm];
+      // ✅ Sanitize toutes les entrées avant l'envoi
+      const payload: Partial<ProfileForm> = {};
+      for (const [key, value] of Object.entries(editForm)) {
+        if (value && value.trim()) {
+          payload[key as keyof ProfileForm] = sanitizeText(value.trim());
         }
+      }
+      if (payload.date_nais && payload.date_nais === '') {
+        delete payload.date_nais;
       }
       await updateProfile(payload);
       setIsEditing(false);
@@ -299,10 +302,10 @@ export default function ProfilePage() {
           </div>
 
           <div className="mb-4">
-            <h1 className="text-3xl font-black tracking-tight text-theme-main sm:text-4xl">{fullName}</h1>
+            <h1 className="text-3xl font-black tracking-tight text-theme-main sm:text-4xl">{sanitizeText(fullName)}</h1>
             <div className="mt-1 flex items-center gap-2 text-theme-muted">
               <Hash className="h-4 w-4 text-secondary/60" />
-              <span className="text-sm font-bold uppercase tracking-widest">{user?.username}</span>
+              <span className="text-sm font-bold uppercase tracking-widest">{sanitizeText(user?.username || '')}</span>
               <span className="h-1 w-1 rounded-full bg-theme-muted/50"></span>
               <span className="text-xs font-medium italic">Membre depuis {new Date().getFullYear()}</span>
             </div>
@@ -358,7 +361,7 @@ export default function ProfilePage() {
 
                <div className="space-y-4 border-t border-theme-border-subtle pt-6">
                   <QuickInfo icon={<Mail />} label="Email" value={user?.email} />
-                  <QuickInfo icon={<MapPin />} label="Localisation" value={[user?.ville, user?.pays].filter(Boolean).join(', ')} />
+                  <QuickInfo icon={<MapPin />} label="Localisation" value={sanitizeText([user?.ville, user?.pays].filter(Boolean).join(', '))} />
                   <QuickInfo icon={<Briefcase />} label="Rôle" value="Collaborateur" />
                </div>
             </div>
@@ -413,24 +416,24 @@ export default function ProfilePage() {
                         <div className="grid gap-6">
                            <PremiumSection title="Aperçu Général" icon={<User className="h-5 w-5" />}>
                               <div className="grid gap-4 sm:grid-cols-2">
-                                 <InfoCard label="Nom" value={user?.nom} icon={<UserRound />} />
-                                 <InfoCard label="Prénoms" value={user?.prenoms} icon={<UserRound />} />
-                                 <InfoCard label="Genre" value={user?.genre} icon={<User />} />
+                                 <InfoCard label="Nom" value={sanitizeText(user?.nom || '')} icon={<UserRound />} />
+                                 <InfoCard label="Prénoms" value={sanitizeText(user?.prenoms || '')} icon={<UserRound />} />
+                                 <InfoCard label="Genre" value={sanitizeText(user?.genre || '')} icon={<User />} />
                                  <InfoCard label="Anniversaire" value={toDateInputValue(user?.date_nais)} icon={<Calendar />} />
                               </div>
                            </PremiumSection>
 
                            <PremiumSection title="Contact & Réseaux" icon={<Globe className="h-5 w-5" />}>
                               <div className="grid gap-4 sm:grid-cols-2">
-                                 <InfoCard label="Téléphone" value={user?.telephone} icon={<Phone />} />
-                                 <InfoCard label="Pays" value={user?.pays} icon={<Globe />} />
+                                 <InfoCard label="Téléphone" value={sanitizeText(user?.telephone || '')} icon={<Phone />} />
+                                 <InfoCard label="Pays" value={sanitizeText(user?.pays || '')} icon={<Globe />} />
                               </div>
                            </PremiumSection>
 
                            <PremiumSection title="Biographie professionnelle" icon={<GraduationCap className="h-5 w-5" />}>
                               <GlassCard className="p-5 bg-white/40 dark:bg-slate-800/40" hover={false}>
                                  <p className="text-sm leading-relaxed text-theme-main">
-                                    {user?.biographie || "Aucune biographie renseignée pour le moment. Cliquez sur 'Modifier' pour en ajouter une."}
+                                    {user?.biographie ? sanitizeHtml(user.biographie) : "Aucune biographie renseignée pour le moment. Cliquez sur 'Modifier' pour en ajouter une."}
                                  </p>
                               </GlassCard>
                            </PremiumSection>
@@ -458,14 +461,14 @@ export default function ProfilePage() {
                                        <label className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
                                           <Lock className="h-3 w-3" /> Email
                                        </label>
-                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">{user?.email}</p>
+                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">{sanitizeText(user?.email || '')}</p>
                                        <p className="mt-0.5 text-[10px] text-theme-muted">Non modifiable</p>
                                     </div>
                                     <div>
                                        <label className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
                                           <Lock className="h-3 w-3" /> Nom d'utilisateur
                                        </label>
-                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">@{user?.username}</p>
+                                       <p className="mt-1 text-sm font-semibold text-theme-main opacity-70">@{sanitizeText(user?.username || '')}</p>
                                        <p className="mt-0.5 text-[10px] text-theme-muted">Non modifiable</p>
                                     </div>
                                  </div>
@@ -682,8 +685,6 @@ export default function ProfilePage() {
            </div>
         </div>
       </Modal>
-
-      {/* Les notifications locales ont été supprimées au profit de toast */}
     </div>
   );
 }
@@ -703,6 +704,8 @@ function PremiumSection({ title, children, icon }: { title: string; children: Re
 }
 
 function InfoCard({ label, value, icon }: { label: string; value?: string | null; icon: ReactNode }) {
+  // ✅ Sanitize la valeur avant affichage
+  const safeValue = value ? sanitizeText(value) : "—";
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-theme-border-subtle bg-white/40 dark:bg-slate-800/40 p-4 transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-md group">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-surface text-theme-muted transition-colors group-hover:bg-primary/10 group-hover:text-primary">
@@ -710,7 +713,7 @@ function InfoCard({ label, value, icon }: { label: string; value?: string | null
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted mb-0.5">{label}</p>
-        <p className="text-sm font-bold text-theme-main truncate">{value || "—"}</p>
+        <p className="text-sm font-bold text-theme-main truncate">{safeValue}</p>
       </div>
     </div>
   );
@@ -742,6 +745,7 @@ function PremiumInput({ label, value, onChange, type = 'text', icon }: { label: 
 }
 
 function QuickInfo({ label, value, icon }: { label: string; value?: string | null; icon: ReactNode }) {
+   const safeValue = value ? sanitizeText(value) : "Non renseigné";
    return (
       <div className="flex items-center gap-3 text-theme-main">
          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-theme-surface text-theme-muted [&_svg]:h-3 [&_svg]:w-3">
@@ -749,7 +753,7 @@ function QuickInfo({ label, value, icon }: { label: string; value?: string | nul
          </div>
          <div className="min-w-0 flex-1">
             <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted">{label}</p>
-            <p className="text-xs font-bold truncate">{value || "Non renseigné"}</p>
+            <p className="text-xs font-bold truncate">{safeValue}</p>
          </div>
          <ChevronRight className="h-3 w-3 text-theme-muted opacity-30" />
       </div>

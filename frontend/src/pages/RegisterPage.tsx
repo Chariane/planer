@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import { toast } from '../components/ui/Toast';
 import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
+import { sanitizeInput } from '../utils/sanitize';
 
 export default function RegisterPage() {
   const { register, isLoading } = useAuth();
@@ -45,8 +46,9 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const username = form.username.trim();
-    const email = form.email.trim().toLowerCase();
+    // ✅ Sanitize les entrées
+    const username = sanitizeInput(form.username.trim());
+    const email = sanitizeInput(form.email.trim().toLowerCase());
     const usernameRegex = /^[a-zA-Z0-9_.-]{3,30}$/;
 
     if (!usernameRegex.test(username)) {

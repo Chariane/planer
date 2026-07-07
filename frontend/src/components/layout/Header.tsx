@@ -1,5 +1,6 @@
 // frontend/src/components/layout/Header.tsx
 import { ArrowLeft, ArrowRight, Menu, User, LogOut, Search, ChevronsLeft, Moon, Sun, ChevronRight, Hash, FolderTree, Building2 } from 'lucide-react';
+import { sanitizeText } from '../../utils/sanitize';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useUI } from '../../hooks/useUI';
@@ -20,7 +21,7 @@ const Breadcrumbs = () => {
   if (!workspaceId) return null;
 
   const workspace = workspaces.find((w: any) => w.id === workspaceId);
-  const workspaceName = workspace?.nom || 'Workspace';
+  const workspaceName = sanitizeText(workspace?.nom || 'Workspace');
 
   // Résoudre l'espace
   let spaceName = '';
@@ -37,14 +38,14 @@ const Breadcrumbs = () => {
       return null;
     };
     const space = findSpace(workspace?.espaces || []);
-    spaceName = space?.nom || joinedEspaces.find((e: any) => e.id === spaceId)?.nom || '';
+    spaceName = sanitizeText(space?.nom || joinedEspaces.find((e: any) => e.id === spaceId)?.nom || '');
   }
 
   // Résoudre la liste
   let listName = '';
   if (listId) {
     const list = joinedListes.find((l: any) => l.id === listId);
-    listName = list?.nom || '';
+    listName = sanitizeText(list?.nom || '');
   }
 
   return (
@@ -87,7 +88,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const { user, logout, getProfilePhoto } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   
-  // ⭐ NOUVEAU: Utilisation des hooks Redux
+  // NOUVEAU: Utilisation des hooks Redux
   const { toggleSidebar: toggleReduxSidebar, setSidebarOpen } = useUI();
   const { activeWorkspaceId } = useNavigation();
   
@@ -99,10 +100,10 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState({ index: 0, maxIndex: 0 });
 
-  // ⭐ Gestion du toggle sidebar avec Redux
+  // Gestion du toggle sidebar avec Redux
   const handleToggleSidebar = () => {
-    toggleReduxSidebar(); // ✅ Met à jour l'état Redux
-    onToggleSidebar(); // ✅ Notifie le parent (compatibilité)
+    toggleReduxSidebar(); // Met à jour l'état Redux
+    onToggleSidebar(); // Notifie le parent (compatibilité)
   };
 
   useEffect(() => {
@@ -234,7 +235,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
               onClick={() => setIsProfileOpen(!isProfileOpen)}
               className="hidden flex-col items-end sm:flex hover:opacity-80 transition-opacity outline-none"
             >
-              <span className="text-xs font-bold text-gray-700 dark:text-slate-200">{user?.username || user?.nom || 'Utilisateur'}</span>
+              <span className="text-xs font-bold text-gray-700 dark:text-slate-200">{sanitizeText(user?.username || user?.nom || 'Utilisateur')}</span>
               <span className="text-[10px] text-theme-muted uppercase tracking-wider font-bold">Connecté</span>
             </button>
             <div className="relative">
@@ -266,7 +267,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
                       className="absolute right-0 mt-2 w-52 origin-top-right rounded-2xl bg-white p-1.5 shadow-theme-xl ring-1 ring-black/5 dark:bg-slate-900 dark:border dark:border-slate-800 z-[100] overflow-hidden"
                     >
                       <div className="px-3 py-2 border-b border-gray-100 dark:border-slate-800 mb-1 sm:hidden">
-                        <p className="text-xs font-bold text-theme-main truncate">{user?.username}</p>
+                        <p className="text-xs font-bold text-theme-main truncate">{sanitizeText(user?.username || '')}</p>
                         <p className="text-[10px] text-theme-muted">Connecté</p>
                       </div>
 

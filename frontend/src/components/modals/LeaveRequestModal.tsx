@@ -10,9 +10,10 @@ import {
     Umbrella
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { sanitizeText } from '../../utils/sanitize';
 import { Button } from '../ui/Button';
 import { absenceService } from '../../services/absence.service';
-import { toast } from '../ui/Toast'; // ✅ Import du toast maison
+import { toast } from '../ui/Toast'; 
 
 interface LeaveRequestModalProps {
     isOpen: boolean;
@@ -27,7 +28,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
         date_debut: '',
         date_fin: '',
         motif: '',
-        is_absence: false, // Default is Congé (false)
+        is_absence: false, 
         is_conge_planifie: true,
     });
 
@@ -54,12 +55,12 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                 duree_demandee_en_jours: duration,
                 is_conge_planifie: !formData.is_absence
             });
-            toast.success('Demande envoyée avec succès.');
+            toast.success(sanitizeText('Demande envoyée avec succès.'));
             onSuccess();
             onClose();
         } catch (error: any) {
             console.error("Failed to submit leave request", error);
-            toast.error(error.message || "Une erreur est survenue lors de la demande.");
+            toast.error(sanitizeText(error.message || "Une erreur est survenue lors de la demande."));
         } finally {
             setLoading(false);
         }
@@ -135,7 +136,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2 px-1">
-                                    <CalendarIcon size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> Date de Début
+                                    <CalendarIcon size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> {sanitizeText('Date de Début')}
                                 </label>
                                 <input
                                     type="date"
@@ -147,7 +148,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                             </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2 px-1">
-                                    <CalendarIcon size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> Date de Fin
+                                    <CalendarIcon size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> {sanitizeText('Date de Fin')}
                                 </label>
                                 <input
                                     type="date"
@@ -161,10 +162,10 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
 
                         <div className="space-y-3">
                             <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2 px-1">
-                                <MessageSquare size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> Motif & Justification
+                                <MessageSquare size={14} className={isAbsence ? 'text-amber-500' : 'text-primary'} /> {sanitizeText('Motif & Justification')}
                             </label>
                             <textarea
-                                placeholder={isAbsence ? "Ex: Maladie, urgence familiale, panne technique..." : "Ex: Vacances d'été, voyage prévu..."}
+                                placeholder={isAbsence ? sanitizeText("Ex: Maladie, urgence familiale, panne technique...") : sanitizeText("Ex: Vacances d'été, voyage prévu...")}
                                 required
                                 value={formData.motif}
                                 onChange={(e) => setFormData({ ...formData, motif: e.target.value })}
@@ -178,13 +179,13 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                                     <Clock size={24} />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Durée Estimée</p>
-                                    <p className="text-lg font-black text-white italic">{duration} Jours Ouvrés</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">{sanitizeText('Durée Estimée')}</p>
+                                    <p className="text-lg font-black text-white italic">{duration} {sanitizeText('Jours Ouvrés')}</p>
                                 </div>
                             </div>
                             <div className="text-right">
                                 <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg transition-all duration-500 ${isAbsence ? 'bg-amber-500 text-white shadow-amber-500/20' : 'bg-primary text-white shadow-primary/20'}`}>
-                                    {isAbsence ? 'Impact Urgent' : 'Période Validée'}
+                                    {isAbsence ? sanitizeText('Impact Urgent') : sanitizeText('Période Validée')}
                                 </span>
                             </div>
                         </div>
@@ -202,7 +203,7 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                                 disabled={loading || duration <= 0}
                                 className={`flex-1 text-white h-14 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:grayscale ${isAbsence ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30' : 'bg-primary hover:bg-primary-hover shadow-primary/30'}`}
                             >
-                                {loading ? 'Soumission...' : (isAbsence ? 'Demander l\'Absence' : 'Confirmer le Congé')}
+                                {loading ? sanitizeText('Soumission...') : (isAbsence ? sanitizeText('Demander l\'Absence') : sanitizeText('Confirmer le Congé'))}
                             </Button>
                         </div>
                     </form>
@@ -212,8 +213,8 @@ export default function LeaveRequestModal({ isOpen, onClose, onSuccess }: LeaveR
                     <Info className="text-primary shrink-0" size={20} />
                     <p className="text-[11px] text-theme-muted font-medium leading-relaxed">
                         {isAbsence
-                            ? "Votre demande d'absence sera soumise pour validation. Une fois approuvée, elle informera votre équipe pour permettre une redistribution des tâches."
-                            : "Votre demande de congé sera transmise à votre responsable. Une fois approuvée, elle apparaîtra au planning pour assurer la continuité."}
+                            ? sanitizeText("Votre demande d'absence sera soumise pour validation. Une fois approuvée, elle informera votre équipe pour permettre une redistribution des tâches.")
+                            : sanitizeText("Votre demande de congé sera transmise à votre responsable. Une fois approuvée, elle apparaîtra au planning pour assurer la continuité.")}
                     </p>
                 </div>
 

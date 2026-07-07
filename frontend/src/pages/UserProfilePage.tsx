@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Mail, MapPin, MessageCircle, Phone, Shield, UserRound, Calendar, Globe, Briefcase, User, Check } from 'lucide-react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
+import { sanitizeText, sanitizeHtml } from '../utils/sanitize';
 import { authService } from '../services/auth.service';
 import type { PublicUserProfile } from '../services/auth.service';
 import { messagerieService } from '../services/messagerie.service';
@@ -12,17 +13,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { getAvatarSrc, getInitials } from '../utils/memberDisplay';
 import { cn } from '../lib/utils';
 import { toast } from '../components/ui/Toast';
-import { sanitizeApiErrorMessage } from '../services/api'; // ✅ Import
+import { sanitizeApiErrorMessage } from '../services/api'; 
 
-/**
- * Retourne le nom complet de l'utilisateur
- * Priorité: prenoms + nom > username > 'Utilisateur'
- */
+
 const getDisplayName = (profile: PublicUserProfile | null): string => {
   if (!profile) return 'Utilisateur';
   
-  const prenoms = profile.prenoms?.trim() || '';
-  const nom = profile.nom?.trim() || '';
+  const prenoms = sanitizeText(profile.prenoms?.trim() || '');
+  const nom = sanitizeText(profile.nom?.trim() || '');
   
   if (prenoms && nom) {
     return `${prenoms} ${nom}`;
@@ -34,7 +32,7 @@ const getDisplayName = (profile: PublicUserProfile | null): string => {
     return nom;
   }
   if (profile.username) {
-    return profile.username;
+    return sanitizeText(profile.username);
   }
   return 'Utilisateur';
 };
@@ -82,7 +80,7 @@ export default function UserProfilePage() {
           messagerieService.getPresence(userId).catch(() => ({ is_online: false, last_seen: null })),
         ]);
         if (!cancelled) {
-          console.log('📋 Profil chargé:', profileData);
+          console.log('Profil chargé:', profileData);
           setProfile(profileData);
           setIsOnline(Boolean(presenceData.is_online));
           setLastSeen(presenceData.last_seen || null);
@@ -155,7 +153,7 @@ export default function UserProfilePage() {
                   {presenceLabel(isOnline, lastSeen)}
                 </div>
                 <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{displayName}</h1>
-                <p className="mt-1 text-sm font-semibold text-white/70">@{profile.username}</p>
+                <p className="mt-1 text-sm font-semibold text-white/70">@{sanitizeText(profile.username)}</p>
               </div>
             </div>
 
@@ -192,6 +190,8 @@ export default function UserProfilePage() {
 }
 
 function InfoCard({ icon, label, value, multiline = false }: { icon: ReactNode; label: string; value?: string | null; multiline?: boolean }) {
+  const safeValue = sanitizeText(value || '—');
+
   return (
     <div className="rounded-xl border border-gray-100 bg-white/50 p-4 transition-all hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
       <div className="mb-1.5 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-500">
@@ -202,7 +202,7 @@ function InfoCard({ icon, label, value, multiline = false }: { icon: ReactNode; 
         "text-sm font-semibold text-gray-800 dark:text-slate-200",
         multiline ? "whitespace-pre-wrap leading-relaxed" : "truncate"
       )}>
-        {value || '—'}
+        {safeValue}
       </p>
     </div>
   );

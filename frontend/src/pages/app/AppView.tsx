@@ -1,4 +1,5 @@
-import { useState } from 'react';
+// frontend/src/pages/app/AppView.tsx
+import { useState, useEffect } from 'react';
 import TopBar from './TopBar';
 import LeftSidebar from './LeftSidebar';
 import CenterContent from './CenterContent';
@@ -6,6 +7,7 @@ import RightCanevas from './RightCanevas';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { PanelRightOpen, X } from 'lucide-react';
 import ErrorBoundary from '../../components/ErrorBoundary';
+import { sanitizeInput } from '../../utils/sanitize'; // ✅ AJOUT
 
 export default function AppView() {
   const { listId } = useActiveResource();
@@ -15,10 +17,25 @@ export default function AppView() {
   const [isDesktopCanevasOpen, setIsDesktopCanevasOpen] = useState(true);
   const [isMobileCanevasOpen, setIsMobileCanevasOpen] = useState(false);
 
+  // ✅ Sanitize l'ID de la liste pour éviter les injections
+  const safeListId = listId ? sanitizeInput(listId) : null;
+
+  // ✅ Effet pour fermer la sidebar sur les petits écrans
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div className="flex flex-col h-full w-full bg-theme-page transition-colors duration-200">
       <TopBar isSidebarOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="relative flex flex-1 overflow-hidden">
+        {/* Overlay mobile pour fermer la sidebar */}
         {isSidebarOpen && (
           <button
             type="button"
@@ -28,8 +45,12 @@ export default function AppView() {
           />
         )}
 
-        {/* Colonne gauche */}
-        <div className={`fixed left-0 top-[64px] z-30 h-[calc(100dvh-64px)] w-[min(86vw,300px)] flex-shrink-0 border-r border-theme-border-subtle bg-theme-surface overflow-y-auto shadow-2xl transition-all duration-300 lg:static lg:z-auto lg:h-auto lg:shadow-none ${isSidebarOpen ? 'translate-x-0 lg:w-[220px]' : '-translate-x-full lg:translate-x-0 lg:w-0 lg:opacity-0'}`}>
+        {/* Colonne gauche - Sidebar */}
+        <div 
+          className={`fixed left-0 top-[64px] z-30 h-[calc(100dvh-64px)] w-[min(86vw,300px)] flex-shrink-0 border-r border-theme-border-subtle bg-theme-surface overflow-y-auto shadow-2xl transition-all duration-300 lg:static lg:z-auto lg:h-auto lg:shadow-none ${
+            isSidebarOpen ? 'translate-x-0 lg:w-[220px]' : '-translate-x-full lg:translate-x-0 lg:w-0 lg:opacity-0'
+          }`}
+        >
           <ErrorBoundary label="la navigation des ressources">
             <LeftSidebar />
           </ErrorBoundary>
@@ -42,8 +63,8 @@ export default function AppView() {
           </ErrorBoundary>
         </div>
 
-        {/* Colonne droite — uniquement visible sur une liste/projet */}
-        {listId && isDesktopCanevasOpen && (
+        {/* Colonne droite - Canevas (uniquement si une liste est active) */}
+        {safeListId && isDesktopCanevasOpen && (
           <div className="hidden xl:block w-[320px] flex-shrink-0 border-l border-theme-border-subtle bg-theme-surface overflow-y-auto transition-colors duration-200">
             <ErrorBoundary label="le canevas">
               <RightCanevas onClose={() => setIsDesktopCanevasOpen(false)} />
@@ -51,8 +72,9 @@ export default function AppView() {
           </div>
         )}
 
-        {listId && (
+        {safeListId && (
           <>
+            {/* Bouton flottant pour ouvrir le canevas sur mobile */}
             <button
               type="button"
               onClick={() => setIsMobileCanevasOpen(true)}
@@ -63,6 +85,7 @@ export default function AppView() {
               <PanelRightOpen className="h-5 w-5" />
             </button>
 
+            {/* Bouton pour rouvrir le canevas si fermé */}
             {!isDesktopCanevasOpen && (
               <button
                 type="button"
@@ -75,6 +98,7 @@ export default function AppView() {
               </button>
             )}
 
+            {/* Overlay mobile du canevas */}
             {isMobileCanevasOpen && (
               <div className="fixed inset-0 z-40 xl:hidden">
                 <button

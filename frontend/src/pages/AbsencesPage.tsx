@@ -1,5 +1,6 @@
 // frontend/src/pages/AbsencesPage.tsx
 import { useState, useEffect, useMemo } from 'react';
+import { sanitizeText } from '../utils/sanitize';
 import {
     Calendar as CalendarIcon,
     Clock,
@@ -265,9 +266,9 @@ export default function AbsencesPage() {
                                     ].map((m, i) => (
                                         <div key={i} className="flex items-center justify-between group">
                                             <div className="flex items-center gap-3">
-                                                <div className="h-2 w-2 rounded-full bg-primary/40 group-hover:bg-primary group-hover:scale-150 transition-all" />
-                                                <span className="text-sm font-bold text-white/70 group-hover:text-white transition-colors">{m.month}</span>
-                                            </div>
+                                                    <div className="h-2 w-2 rounded-full bg-primary/40 group-hover:bg-primary group-hover:scale-150 transition-all" />
+                                                    <span className="text-sm font-bold text-white/70 group-hover:text-white transition-colors">{sanitizeText(m.month)}</span>
+                                                </div>
                                             <span className="text-xs font-black text-theme-muted italic">{m.count} j</span>
                                         </div>
                                     ))}
@@ -313,9 +314,9 @@ export default function AbsencesPage() {
                                         </div>
                                         <div className="space-y-1.5">
                                             <div className="flex items-center gap-4">
-                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{req.motif || (req.is_absence ? 'Absence urgente' : 'Congé planifié')}</h4>
+                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{sanitizeText(req.motif || (req.is_absence ? 'Absence urgente' : 'Congé planifié'))}</h4>
                                                 <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-[0.2em] shadow-sm ${getStatusTheme(req.statut, req.is_absence)}`}>
-                                                    {req.is_absence ? 'Absence' : 'Congé'} • {req.statut}
+                                                    {sanitizeText(req.is_absence ? 'Absence' : 'Congé')} • {sanitizeText(req.statut)}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-5 text-[11px] text-theme-muted font-bold uppercase tracking-tight">
@@ -362,9 +363,9 @@ export default function AbsencesPage() {
                                 </p>
                             </div>
                             <div className="flex gap-4">
-                                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase text-theme-muted">Janvier 2026</div>
-                                <div className="px-6 py-3 rounded-2xl bg-primary text-white text-xs font-black uppercase shadow-lg shadow-primary/20">Février 2026</div>
-                                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase text-theme-muted">Mars 2026</div>
+                                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase text-theme-muted">{sanitizeText('Janvier 2026')}</div>
+                                <div className="px-6 py-3 rounded-2xl bg-primary text-white text-xs font-black uppercase shadow-lg shadow-primary/20">{sanitizeText('Février 2026')}</div>
+                                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase text-theme-muted">{sanitizeText('Mars 2026')}</div>
                             </div>
                             <div className="grid grid-cols-7 gap-3 w-full max-w-4xl mt-8">
                                 {Array.from({ length: 28 }).map((_, i) => (

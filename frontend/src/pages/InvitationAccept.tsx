@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { sanitizeText } from '../utils/sanitize';
 import { workspaceService } from '../services/workspace.service';
 import { espaceService } from '../services/espace.service';
 import { listeService } from '../services/liste.service';
@@ -34,8 +35,8 @@ export default function InvitationAccept() {
         return;
       }
 
-      console.log('🔑 Token reçu:', token);
-      console.log('🔐 Utilisateur authentifié:', isAuthenticated);
+      console.log('Token reçu:', token);
+      console.log('Utilisateur authentifié:', isAuthenticated);
 
       // Sauvegarder le token pour une utilisation ultérieure (connexion/inscription)
       sessionStorage.setItem('pendingInvitation', token);
@@ -82,15 +83,12 @@ export default function InvitationAccept() {
         return;
       }
 
-      // Si l'utilisateur n'est pas connecté, on distingue les deux cas :
-      // - utilisateur existant -> connexion
-      // - utilisateur non inscrit -> inscription
       if (!isAuthenticated) {
         if (isExistingUserInvitation) {
-          console.log('🔄 Invitation pour utilisateur existant, redirection vers connexion');
+          console.log('Invitation pour utilisateur existant, redirection vers connexion');
           navigate(`/login?invitation_token=${encodeURIComponent(token)}`);
         } else {
-          console.log('🔄 Invitation guest, redirection vers inscription');
+          console.log('Invitation guest, redirection vers inscription');
           navigate(`/register?invitation_token=${encodeURIComponent(token)}`);
         }
         return;
@@ -104,44 +102,44 @@ export default function InvitationAccept() {
 
       try {
         if (isWorkspaceToken) {
-          console.log('📤 Acceptation workspace via token workspace...');
+          console.log('Acceptation workspace via token workspace...');
           const result = await workspaceService.acceptInvitation(token);
-          console.log('✅ Invitation workspace acceptée:', result);
+          console.log('Invitation workspace acceptée:', result);
           showAccepted('workspace');
 
         } else if (isEspaceToken) {
-          console.log('📤 Acceptation espace via token espace...');
+          console.log('Acceptation espace via token espace...');
           const result = await espaceService.acceptInvitation(token);
-          console.log('✅ Invitation espace acceptée:', result);
+          console.log('Invitation espace acceptée:', result);
           showAccepted('espace');
 
         } else if (isListeToken) {
-          console.log('📤 Acceptation liste via token liste...');
+          console.log('Acceptation liste via token liste...');
           const result = await listeService.acceptInvitation(token);
-          console.log('✅ Invitation liste acceptée:', result);
+          console.log('Invitation liste acceptée:', result);
           showAccepted('liste');
 
         } else {
-          console.log('❌ Type de token inconnu, tentative workspace puis espace...');
+          console.log('Type de token inconnu, tentative workspace puis espace...');
           try {
             const result = await workspaceService.acceptInvitation(token);
-            console.log('✅ Invitation workspace acceptée:', result);
+            console.log('Invitation workspace acceptée:', result);
             showAccepted('workspace');
 
           } catch (workspaceErr) {
-            console.log('❌ Échec workspace, tentative espace...');
+            console.log('Échec workspace, tentative espace...');
             const result = await espaceService.acceptInvitation(token);
-            console.log('✅ Invitation espace acceptée:', result);
+            console.log('Invitation espace acceptée:', result);
             showAccepted('espace');
           }
         }
       } catch (inviteErr: any) {
-        console.error('❌ Erreur acceptation invitation :', inviteErr);
+        console.error('Erreur acceptation invitation :', inviteErr);
         setLoading(false);
         if (inviteErr.message?.includes('Token d\'invitation invalide')) {
-          setError('Le lien d\'invitation est invalide ou a expiré.');
+          setError(sanitizeText('Le lien d\'invitation est invalide ou a expiré.'));
         } else {
-          setError(inviteErr.message || 'Invitation invalide ou expirée');
+          setError(sanitizeText(inviteErr.message || 'Invitation invalide ou expirée'));
         }
       }
     };
@@ -163,11 +161,11 @@ export default function InvitationAccept() {
           <p className="text-theme-muted font-medium mb-6">
             Invitation acceptée avec succès pour{' '}
             <span className="text-theme-main font-bold">
-              {invitationType === 'workspace'
+              {sanitizeText(invitationType === 'workspace'
                 ? 'le workspace'
                 : invitationType === 'liste'
                   ? 'la liste'
-                  : 'l\'espace'}
+                  : 'l\'espace')}
             </span>.
           </p>
           <div className="bg-theme-surface/30 border border-white/5 p-6 rounded-2xl mb-8 space-y-4">
@@ -204,6 +202,8 @@ export default function InvitationAccept() {
     );
   }
 
+  const title = 'Invitation invalide';
+
   if (error) {
     return (
       <div className="min-h-screen bg-theme-page flex items-center justify-center p-4 text-center">
@@ -211,10 +211,10 @@ export default function InvitationAccept() {
           <div className="h-20 w-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 mx-auto mb-8 shadow-xl shadow-red-500/10">
             <div className="text-4xl">⚠️</div>
           </div>
-          <h2 className="text-xl font-black text-red-500 uppercase tracking-tight mb-4">Invitation invalide</h2>
+          <h2 className="text-xl font-black text-red-500 uppercase tracking-tight mb-4">{sanitizeText(title)}</h2>
           <p className="text-theme-muted text-sm font-medium mb-8 leading-relaxed">
-            {error}.<br />
-            Le lien a peut-être expiré ou a déjà été utilisé.
+            {sanitizeText(error)}.<br />
+            {sanitizeText('Demandez à l\'administrateur de vous renvoyer une nouvelle invitation.')}
           </p>
           <Button onClick={() => navigate('/dashboard')} className="w-full py-6 rounded-2xl font-black uppercase tracking-widest text-[11px]">
             Retour au tableau de bord

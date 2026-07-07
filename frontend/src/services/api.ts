@@ -1,5 +1,7 @@
 // src/services/api.ts
 
+import { sanitizeInput, sanitizeUrl } from '../utils/sanitize';
+
 export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
   // 1. Extraire le message brut
   let rawMessage: string;
@@ -126,9 +128,25 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
 }
 
 export async function apiFetch(baseUrl: string, endpoint: string, options?: RequestInit) {
+  // ✅ Sanitize l'endpoint
+  const sanitizedEndpoint = sanitizeUrl(endpoint);
+
   const token = localStorage.getItem('access_token');
   const method = (options?.method || 'GET').toUpperCase();
   const isFormData = options?.body instanceof FormData;
+
+  // ✅ Sanitize le body si présent
+  let sanitizedBody = options?.body;
+  if (sanitizedBody && typeof sanitizedBody === 'string') {
+    try {
+      const parsed = JSON.parse(sanitizedBody);
+      const sanitized = sanitizeInput(parsed);
+      sanitizedBody = JSON.stringify(sanitized);
+      options = { ...options, body: sanitizedBody };
+    } catch {
+      // Si ce n'est pas du JSON, ne pas sanitizer
+    }
+  }
   const headers: HeadersInit = {
     ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(token && { Authorization: `Bearer ${token}` }),
@@ -139,7 +157,7 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 15000);
     try {
-      return await fetch(`${baseUrl}${endpoint}`, {
+      return await fetch(`${baseUrl}${sanitizedEndpoint}`, {
         ...options,
         headers,
         signal: options?.signal || controller.signal,

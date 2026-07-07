@@ -1,6 +1,7 @@
 // frontend/src/components/modals/AssignListMemberModal.tsx
 import { useState, useEffect } from 'react';
 import { UserPlus, Mail, Users, CheckCircle, Loader2 } from 'lucide-react';
+import { sanitizeText } from '../../utils/sanitize';
 import { listeService } from '../../services/liste.service';
 import { espaceService } from '../../services/espace.service';
 import { workspaceService } from '../../services/workspace.service';
@@ -15,7 +16,7 @@ import { absenceService } from '../../services/absence.service';
 import { AvailabilityBadge } from '../ui/AvailabilityBadge';
 import { MemberAvatar } from '../ui/MemberAvatar';
 import type { UserAvailabilityOut } from '../../types';
-import { toast } from '../ui/Toast'; // ✅ Import du toast maison
+import { toast } from '../ui/Toast'; 
 
 interface AssignListMemberModalProps {
   listeId: string;
@@ -283,7 +284,7 @@ export default function AssignListMemberModal({
 
     const alreadyDirectMember = directListMembers.find(member => memberMatchesIdentifier(member, inviteEmail));
     if (alreadyDirectMember) {
-      toast.error(`${alreadyDirectMember.name} est déjà membre direct de cette liste.`);
+      toast.error(`${sanitizeText(alreadyDirectMember.name)} est déjà membre direct de cette liste.`);
       return;
     }
 
@@ -294,7 +295,7 @@ export default function AssignListMemberModal({
       setActiveTab('parent');
       setSelectedMemberId(availableParentMember.id);
       toast.error(
-        `${availableParentMember.name} est déjà membre du workspace ou de l'espace parent. Utilisez l'onglet "Membres du workspace/espace" pour l'ajouter à cette liste.`
+        `${sanitizeText(availableParentMember.name)} est déjà membre du workspace ou de l'espace parent. Utilisez l'onglet "Membres du workspace/espace" pour l'ajouter à cette liste.`
       );
       return;
     }
@@ -303,7 +304,7 @@ export default function AssignListMemberModal({
     try {
       const roleToInvite = availableRoles.includes(inviteRole) ? inviteRole : 'Membre';
       await listeService.inviteMember(listeId, inviteEmail, roleToInvite);
-      toast.success(`Invitation envoyée à ${inviteEmail} avec le rôle ${getRoleLabel(roleToInvite)}`);
+      toast.success(`Invitation envoyée à ${sanitizeText(inviteEmail)} avec le rôle ${getRoleLabel(roleToInvite)}`);
       setInviteEmail('');
       setInviteRole('Membre');
       if (onSuccess) onSuccess();
@@ -505,9 +506,9 @@ export default function AssignListMemberModal({
                 <div key={member.id} className="flex items-center justify-between p-2 bg-theme-surface-hover/50 border border-theme-border-subtle rounded-xl">
                   <div className="flex items-center gap-2">
                     <MemberAvatar member={member} size="xs" />
-                    <span className="text-sm font-medium text-theme-main">{member.name}</span>
+                    <span className="text-sm font-medium text-theme-main">{sanitizeText(member.name)}</span>
                     <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
-                    <span className="text-xs text-theme-muted italic">({member.email})</span>
+                    <span className="text-xs text-theme-muted italic">({sanitizeText(member.email)})</span>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${member.role === 'Créateur' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' :
                       member.role === 'Administrateur' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' :

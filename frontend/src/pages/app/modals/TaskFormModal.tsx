@@ -4,6 +4,7 @@ import Modal from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import { CheckCircle, Circle, Plus, Trash, UserPlus, GitBranch, LayoutGrid, Clock, AlertTriangle } from 'lucide-react';
 import type { Task, Member } from '../../../types';
+import { sanitizeHtml, sanitizeInput } from '../../../utils/sanitize';
 
 const statusOptions = [
   { value: 'en attente', label: 'En attente' },
@@ -291,7 +292,7 @@ export default function TaskFormModal({
                     )}
                   </button>
                   <span className={`text-sm flex-1 tracking-tight ${checklist.is_checked ? 'line-through text-theme-muted opacity-40' : 'text-theme-main font-bold'}`}>
-                    {checklist.texte}
+                    {sanitizeHtml(checklist.texte)}
                   </span>
                   <button
                     onClick={() => onDeleteChecklist(checklist.id)}

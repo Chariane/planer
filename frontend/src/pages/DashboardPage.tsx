@@ -10,12 +10,9 @@ import {
 import { motion } from 'framer-motion';
 import { useApp } from '../contexts/AppContext';
 import { Button } from '../components/ui/Button';
+import { sanitizeText } from '../utils/sanitize';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 
-/**
- * Nettoie un message d'activité pour l'utilisateur.
- * Si le message est vide ou ressemble à un UUID, on retourne un libellé générique.
- */
 const formatActivityMessage = (message: string): string => {
   if (!message || message.trim() === '') {
     return 'Nouvelle activité';
@@ -271,10 +268,10 @@ export default function DashboardPage() {
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-secondary/20 to-orange-400/20 flex items-center justify-center font-black text-secondary border border-secondary/20 group-hover:rotate-6 transition-transform">
-                            {ws.nom.charAt(0).toUpperCase()}
+                            {sanitizeText(ws.nom).charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-theme-main truncate group-hover:text-secondary transition-colors">{ws.nom}</p>
+                            <p className="text-sm font-bold text-theme-main truncate group-hover:text-secondary transition-colors">{sanitizeText(ws.nom)}</p>
                             <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">{label}</p>
                           </div>
                         </div>
@@ -302,7 +299,7 @@ export default function DashboardPage() {
                       <Link key={ws.id} to={`/workspace/${ws.id}`} className="flex items-center gap-3 p-2 rounded-xl bg-theme-surface/50 hover:bg-theme-surface-hover transition-all group">
                         <div className="h-8 w-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center font-black text-[10px] border border-secondary/20">WS</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{ws.nom}</p>
+                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{sanitizeText(ws.nom)}</p>
                           <p className="text-[9px] font-black text-theme-muted/40 uppercase tracking-tighter">Workspace rejoint</p>
                         </div>
                       </Link>
@@ -311,8 +308,8 @@ export default function DashboardPage() {
                       <Link key={es.id} to={`/espace/${es.id}`} className="flex items-center gap-3 p-2 rounded-xl bg-theme-surface/50 hover:bg-theme-surface-hover transition-all group">
                         <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black text-[10px] border border-primary/20">ES</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{es.nom}</p>
-                          <p className="text-[9px] font-black text-theme-muted/40 uppercase tracking-tighter">Espace • {es.workspace_nom}</p>
+                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{sanitizeText(es.nom)}</p>
+                          <p className="text-[9px] font-black text-theme-muted/40 uppercase tracking-tighter">Espace • {sanitizeText(es.workspace_nom || '')}</p>
                         </div>
                       </Link>
                     ))}
@@ -320,8 +317,8 @@ export default function DashboardPage() {
                       <Link key={ls.id} to={`/liste/${ls.id}`} className="flex items-center gap-3 p-2 rounded-xl bg-theme-surface/50 hover:bg-theme-surface-hover transition-all group">
                         <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-black text-[10px] border border-emerald-500/20">LS</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{ls.nom}</p>
-                          <p className="text-[9px] font-black text-theme-muted/40 uppercase tracking-tighter">Liste • {ls.workspace_nom}</p>
+                          <p className="text-xs font-bold text-theme-main truncate group-hover:text-secondary">{sanitizeText(ls.nom)}</p>
+                          <p className="text-[9px] font-black text-theme-muted/40 uppercase tracking-tighter">Liste • {sanitizeText(ls.workspace_nom || '')}</p>
                         </div>
                       </Link>
                     ))}

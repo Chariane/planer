@@ -1,5 +1,6 @@
 // frontend/src/components/ui/ConfirmModal.tsx
 import { AlertTriangle } from 'lucide-react';
+import { sanitizeText } from '../../utils/sanitize';
 import Modal from './Modal';
 import { Button } from './Button';
 
@@ -34,11 +35,11 @@ export default function ConfirmModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={sanitizeText(title)} size="sm">
       <div className="space-y-4">
         <div className="flex items-start gap-3 p-4 bg-theme-surface-hover/50 rounded-xl border border-theme-border-subtle">
           <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-theme-main leading-relaxed">{message}</p>
+          <p className="text-sm text-theme-main leading-relaxed">{sanitizeText(message)}</p>
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>

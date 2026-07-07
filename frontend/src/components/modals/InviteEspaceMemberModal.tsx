@@ -4,13 +4,14 @@ import Modal from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { espaceService } from '../../services/espace.service';
 import { sanitizeApiErrorMessage } from '../../services/api';
+import { sanitizeText } from '../../utils/sanitize';
 import { isValidInviteIdentifier } from '../../utils/inviteIdentifier';
 import {
   ROLES,
   getRoleLabel,
   getRoleDescription,
 } from '../../lib/roleHierarchy';
-import { toast } from '../ui/Toast'; // ✅ Import du toast maison
+import { toast } from '../ui/Toast'; 
 
 interface InviteEspaceMemberModalProps {
   espaceId: string;
@@ -55,12 +56,12 @@ export default function InviteEspaceMemberModal({
     e.preventDefault();
 
     if (!email.trim()) {
-      toast.error('Email ou username requis');
+      toast.error(sanitizeText('Email ou username requis'));
       return;
     }
 
     if (!isValidInviteIdentifier(email)) {
-      toast.error("L'email ou le username ne doit pas contenir d'espaces.");
+      toast.error(sanitizeText("L'email ou le username ne doit pas contenir d'espaces."));
       return;
     }
 
@@ -69,7 +70,7 @@ export default function InviteEspaceMemberModal({
     try {
       await espaceService.inviteMember(espaceId, email, selectedRole);
       
-      toast.success(`Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`);
+      toast.success(sanitizeText(`Invitation envoyée à ${email} avec le rôle ${getRoleLabel(selectedRole)}`));
       
       if (onSuccess) {
         onSuccess(email, selectedRole);
@@ -81,19 +82,19 @@ export default function InviteEspaceMemberModal({
       }, 1500);
 
     } catch (err: any) {
-      console.error('❌ Erreur invitation espace:', err);
+      console.error('Erreur invitation espace:', err);
       const message = sanitizeApiErrorMessage(err, 'Erreur lors de l\'invitation');
 
       if (err.status === 409) {
-        toast.error(message);
+        toast.error(sanitizeText(message));
       } else if (err.status === 400) {
-        toast.error(message || 'Email ou username invalide');
+        toast.error(sanitizeText(message || 'Email ou username invalide'));
       } else if (err.status === 404) {
-        toast.error('L\'espace n\'existe plus ou accès refusé');
+        toast.error(sanitizeText('L\'espace n\'existe plus ou accès refusé'));
       } else if (err.status === 403) {
-        toast.error('Vous n\'avez pas la permission d\'inviter des membres');
+        toast.error(sanitizeText('Vous n\'avez pas la permission d\'inviter des membres'));
       } else {
-        toast.error(message);
+        toast.error(sanitizeText(message));
       }
     } finally {
       setLoading(false);
@@ -147,9 +148,9 @@ export default function InviteEspaceMemberModal({
         {/* Informations sur les rôles */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-xs text-blue-800">
-            ℹ️ <strong>Invitant</strong> : accès en lecture seule<br />
-            ℹ️ <strong>Administrateur</strong> : peut gérer l'espace et ses membres<br />
-            ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une liste ou une tâche.
+            {sanitizeText('Invitant : accès en lecture seule')}<br />
+            {sanitizeText('Administrateur : peut gérer l\'espace et ses membres')}<br />
+            {sanitizeText('⚡ Le rôle Membre sera attribué automatiquement lors de l\'assignation à une liste ou une tâche.')}
           </p>
         </div>
 

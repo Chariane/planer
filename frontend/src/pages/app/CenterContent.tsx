@@ -26,6 +26,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useNavigationStore } from '../../store/useNavigationStore';
 import { getRoleRank, ROLES, getRoleLabel } from '../../lib/roleHierarchy';
 import { getMemberContactLabel, getMemberDisplayName } from '../../utils/memberDisplay';
+import { sanitizeHtml, sanitizeText } from '../../utils/sanitize';
 import { useAuth } from '../../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../../services/api';
 import { toast } from '../../components/ui/Toast';
@@ -405,7 +406,8 @@ export default function CenterContent() {
 
     return (
       <div className="mb-5 rounded-xl border border-theme-border-subtle bg-theme-surface p-4 shadow-sm transition-colors duration-200">
-        <p className="text-sm text-theme-muted leading-relaxed">{currentListDescription}</p>
+        {/* ✅ Sanitize la description avant affichage */}
+        <p className="text-sm text-theme-muted leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentListDescription) }} />
       </div>
     );
   };
@@ -513,6 +515,7 @@ export default function CenterContent() {
                            task.statut === 'bloqué' ? '#ef4444' :
                            task.statut === 'en cours' ? '#3b82f6' : '#6b7280';
         const assignees = task.assignees?.map((a: any) => a.name).join(', ') || 'Non assigné';
+        const taskTitle = sanitizeText(task.titre || 'Sans titre');
         const checklistsHTML = task.checklists && task.checklists.length > 0
           ? `<ul style="margin-left: 16px; list-style: none; padding: 0;">
               ${task.checklists.map((c: any) => `
@@ -527,7 +530,7 @@ export default function CenterContent() {
         return `
           <div style="margin-left: ${level * 24}px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-              <span style="font-weight: 700; color: #111827;">${task.titre || 'Sans titre'}</span>
+              <span style="font-weight: 700; color: #111827;">${taskTitle}</span>
               <span style="background: ${statusColor}; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">${statusLabels[task.statut] || task.statut}</span>
               <span style="font-size: 12px; color: #6b7280;">${assignees}</span>
               ${task.priority ? `<span style="font-size: 10px; background: #f3f4f6; padding: 2px 8px; border-radius: 8px;">${task.priority}</span>` : ''}
@@ -548,7 +551,7 @@ export default function CenterContent() {
       // Canevas (placeholder)
       const canevasHTML = '<p style="color: #6b7280; font-style: italic;">Aucun canevas associé à ce projet.</p>';
 
-      const docTitle = `Projet: ${listeData.nom || 'Projet'}`;
+      const docTitle = `Projet: ${sanitizeText(listeData.nom || 'Projet')}`;
       const exportDate = new Date().toLocaleString('fr-FR');
 
       const htmlContent = `

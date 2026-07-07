@@ -1,4 +1,5 @@
 import { motion, useInView, easeOut, AnimatePresence } from 'framer-motion';
+import { sanitizeText, sanitizeHtml } from '../utils/sanitize';
 import { useRef, useState, useEffect } from 'react';
 import {
   ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock,
@@ -282,7 +283,7 @@ export default function LandingPage() {
             {stats.map((stat, idx) => (
               <motion.div key={idx} variants={fadeInUp} className="text-center">
                 <div className="text-4xl md:text-5xl font-black text-secondary tracking-tight">
-                  {stat.value}{stat.suffix}
+                  {sanitizeText(String(stat.value))}{stat.suffix}
                 </div>
                 <div className="text-xs font-black uppercase tracking-widest text-theme-muted mt-2">{stat.label}</div>
               </motion.div>
@@ -305,8 +306,8 @@ export default function LandingPage() {
                 <motion.div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20 flex items-center justify-center mb-8 group-hover:rotate-12 group-hover:scale-110 transition-all duration-500 shadow-inner" transition={{ type: "spring", stiffness: 400 }}>
                   <feature.icon className="h-8 w-8 text-secondary" />
                 </motion.div>
-                <h3 className="text-2xl font-black text-theme-main mb-4 uppercase tracking-tight">{feature.title}</h3>
-                <p className="text-theme-muted leading-relaxed font-medium opacity-80">{feature.description}</p>
+                <h3 className="text-2xl font-black text-theme-main mb-4 uppercase tracking-tight">{sanitizeText(feature.title)}</h3>
+                <p className="text-theme-muted leading-relaxed font-medium opacity-80">{sanitizeText(feature.description)}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -376,11 +377,11 @@ export default function LandingPage() {
                 <div className="flex items-center gap-4 mb-6">
                   <img src={t.avatar} alt={t.name} className="h-14 w-14 rounded-full border-2 border-secondary/30" />
                   <div>
-                    <div className="font-black text-theme-main">{t.name}</div>
-                    <div className="text-xs font-black uppercase tracking-widest text-theme-muted">{t.role}</div>
+                    <div className="font-black text-theme-main">{sanitizeText(t.name)}</div>
+                    <div className="text-xs font-black uppercase tracking-widest text-theme-muted">{sanitizeText(t.role)}</div>
                   </div>
                 </div>
-                <p className="text-theme-muted italic leading-relaxed">"{t.content}"</p>
+                <p className="text-theme-muted italic leading-relaxed">"{sanitizeText(t.content)}"</p>
                 <div className="mt-4 flex text-secondary">
                   {[...Array(5)].map((_, i) => <Star key={i} className="h-4 w-4 fill-current" />)}
                 </div>
@@ -413,8 +414,8 @@ export default function LandingPage() {
                     {plan.code === 'ENTREPRISE' ? <ShieldCheck className="h-7 w-7" /> : <Briefcase className="h-7 w-7" />}
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black uppercase tracking-tight text-theme-main">{plan.nom}</h3>
-                    <p className="mt-3 min-h-[3.5rem] text-sm font-medium leading-relaxed text-theme-muted opacity-80">{plan.audience}</p>
+                    <h3 className="text-2xl font-black uppercase tracking-tight text-theme-main">{sanitizeText(plan.nom)}</h3>
+                    <p className="mt-3 min-h-[3.5rem] text-sm font-medium leading-relaxed text-theme-muted opacity-80">{sanitizeText(plan.audience)}</p>
                     <div className="mt-6 flex items-end gap-2">
                       <span className="text-3xl font-black text-theme-main">{plan.price_label}</span>
                       {!isFree && <span className="pb-1 text-xs font-bold uppercase tracking-widest text-theme-muted">/mois</span>}
@@ -443,7 +444,7 @@ export default function LandingPage() {
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3 text-sm font-medium leading-relaxed text-theme-muted">
                         <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-secondary" />
-                        <span>{feature}</span>
+                        <span>{sanitizeText(feature)}</span>
                       </li>
                     ))}
                   </ul>

@@ -1,6 +1,7 @@
 // frontend/src/components/layout/Sidebar.tsx
 import { useState, type MouseEvent, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { sanitizeText } from '../../utils/sanitize';
 import {
   LayoutDashboard, Plus, LogOut, Crown, Users,
   ChevronDown, FolderOpen, ListTodo, Edit, Trash2,
@@ -304,8 +305,8 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                       }`}
                   >
                     <Briefcase size={isCompact ? 14 : 16} className={`${currentActiveWorkspace === ws.id ? 'text-secondary' : 'text-secondary/40 group-hover:text-secondary transition-colors'}`} />
-                    {!isCompact && <span className="text-sm truncate w-full">{ws.nom}</span>}
-                    {isCompact && <span className="text-[8px] font-black truncate text-center">{ws.nom.substring(0, 2).toUpperCase()}</span>}
+                    {!isCompact && <span className="text-sm truncate w-full">{sanitizeText(ws.nom)}</span>}
+                    {isCompact && <span className="text-[8px] font-black truncate text-center">{sanitizeText(ws.nom.substring(0, 2).toUpperCase())}</span>}
                   </div>
                 ))}
               </motion.div>
@@ -350,7 +351,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                         }`}
                     >
                       <Building2 size={16} className={`${currentActiveWorkspace === ws.id ? 'text-sky-400' : 'text-sky-400/40 group-hover:text-sky-400 transition-colors'}`} />
-                      {!isCompact && <span className="text-sm truncate w-full flex-1">{ws.nom}</span>}
+                      {!isCompact && <span className="text-sm truncate w-full flex-1">{sanitizeText(ws.nom)}</span>}
                     </div>
                   ))}
                 </motion.div>
@@ -395,8 +396,8 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-400/40 group-hover:bg-emerald-400 transition-colors" />
                       {!isCompact && (
                         <div className="flex flex-col min-w-0">
-                          <span className="text-sm truncate">{espace.nom}</span>
-                          <span className="text-[8px] font-black uppercase text-white/10 group-hover:text-white/20 transition-colors">{espace.workspace_nom}</span>
+                          <span className="text-sm truncate">{sanitizeText(espace.nom)}</span>
+                          <span className="text-[8px] font-black uppercase text-white/10 group-hover:text-white/20 transition-colors">{sanitizeText(espace.workspace_nom || '')}</span>
                         </div>
                       )}
                     </Link>
@@ -443,8 +444,8 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
                       <div className="h-1.5 w-1.5 rounded-full bg-violet-400/40 group-hover:bg-violet-400 transition-colors" />
                       {!isCompact && (
                         <div className="flex flex-col min-w-0">
-                          <span className="text-sm truncate">{list.nom}</span>
-                          <span className="text-[8px] font-black uppercase text-white/10 group-hover:text-white/20 transition-colors">{list.workspace_nom}</span>
+                          <span className="text-sm truncate">{sanitizeText(list.nom)}</span>
+                          <span className="text-[8px] font-black uppercase text-white/10 group-hover:text-white/20 transition-colors">{sanitizeText(list.workspace_nom || '')}</span>
                         </div>
                       )}
                     </Link>
@@ -554,7 +555,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
         onClose={() => setIsConfirmOpen(false)}
         onConfirm={confirmData?.onConfirm || (() => Promise.resolve())}
         title="Confirmation de Suppression"
-        message={`Attention, l'espace "${contextMenu.workspace?.nom}" ainsi que tous ses projets et membres seront définitivement supprimés. Cette action est irréversible.`}
+        message={`Attention, l'espace "${sanitizeText(contextMenu.workspace?.nom || '')}" ainsi que tous ses projets et membres seront définitivement supprimés. Cette action est irréversible.`}
         confirmText="Supprimer Définitivement"
         confirmVariant="danger"
       />

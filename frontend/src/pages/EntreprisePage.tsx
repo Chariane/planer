@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Building2, CheckCircle, CreditCard, Loader2, ShieldCheck, Sparkles } from 'lucide-react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
+import { sanitizeText, sanitizeHtml } from '../utils/sanitize';
 import { entrepriseService, type EntrepriseOverview, type EntrepriseProfilePayload } from '../services/entreprise.service';
 import { planService, type PlanUsageOverview, type SubscriptionPlan } from '../services/plan.service';
 import { sanitizeApiErrorMessage } from '../services/api';
@@ -159,14 +160,14 @@ export default function EntreprisePage() {
         </div>
         {overview?.active_subscription && overview.active_plan && (
           <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-300">
-            Plan actif : {overview.active_plan.nom}
+            Plan actif : {sanitizeText(overview.active_plan.nom)}
           </div>
         )}
       </div>
 
       {message && (
         <div className={`rounded-2xl border px-5 py-4 text-sm font-bold ${message.type === 'success' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : 'border-red-500/20 bg-red-500/10 text-red-500'}`}>
-          {message.text}
+          {sanitizeText(message.text)}
         </div>
       )}
 
@@ -179,7 +180,7 @@ export default function EntreprisePage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="space-y-1.5 md:col-span-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Nom de l'entreprise</span>
-              <input value={form.nom || ''} onChange={e => handleChange('nom', e.target.value)} className="w-full rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 text-theme-main outline-none focus:ring-2 focus:ring-secondary/20" />
+              <input value={sanitizeText(sanitizeHtml(form.nom || ''))} onChange={e => handleChange('nom', e.target.value)} className="w-full rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 text-theme-main outline-none focus:ring-2 focus:ring-secondary/20" />
             </label>
             <label className="space-y-1.5 md:col-span-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Description</span>
@@ -291,10 +292,10 @@ export default function EntreprisePage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-black uppercase tracking-tight text-theme-main">{plan.nom}</h3>
+                      <h3 className="text-lg font-black uppercase tracking-tight text-theme-main">{sanitizeText(plan.nom)}</h3>
                       {plan.highlight && <Sparkles className="h-4 w-4 text-secondary" />}
                     </div>
-                    <p className="mt-1 text-sm text-theme-muted">{plan.audience}</p>
+                    <p className="mt-1 text-sm text-theme-muted">{sanitizeText(plan.audience)}</p>
                     <p className="mt-3 text-2xl font-black text-theme-main">{plan.price_label}</p>
                   </div>
                   {activePlanCode === plan.code ? (
@@ -309,7 +310,7 @@ export default function EntreprisePage() {
                   {plan.features.slice(0, 5).map(feature => (
                     <li key={feature} className="flex items-start gap-2 text-sm text-theme-muted">
                       <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-secondary" />
-                      <span>{feature}</span>
+                      <span>{sanitizeText(feature)}</span>
                     </li>
                   ))}
                 </ul>
