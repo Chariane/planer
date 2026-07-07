@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+core/__pycache__/
+crud/__pycache__/
+routes/__pycache__/
+email_debug.log
+model.py
+schema.py
