@@ -1,6 +1,7 @@
+# backend/api_gateway/models/Utilisateur.py
 from typing import TYPE_CHECKING, List, Optional
 import datetime
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Index, LargeBinary, PrimaryKeyConstraint, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Index, LargeBinary, PrimaryKeyConstraint, String, Text, UniqueConstraint, text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .Base import Base
@@ -26,6 +27,8 @@ class Utilisateur(Base):
         UniqueConstraint('email', name='utilisateur_constr_email'),
         Index('idx_utilisateur_email', 'email'),
         Index('idx_utilisateur_username', 'username'),
+        # ✅ Index pour les requêtes de verrouillage
+        Index('idx_utilisateur_locked_until', 'locked_until'),
         {'schema': 'public'},
     )
 
@@ -66,6 +69,36 @@ class Utilisateur(Base):
     date_creation: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     date_modif: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
     date_sup: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
+    
+    # ========================================================================
+    # 🔒 SÉCURITÉ - CHAMPS AJOUTÉS POUR OWASP
+    # ========================================================================
+    
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        server_default=text('0'),
+        comment="Nombre de tentatives de connexion échouées"
+    )
+    
+    locked_until: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Date de verrouillage du compte (si verrouillé)"
+    )
+    
+    last_login: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Dernière connexion réussie"
+    )
+    
+    last_failed_login: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Dernière tentative de connexion échouée"
+    )
 
     # Relations Planer uniquement.
     planer_entreprise: Mapped[Optional['PlanerEntreprise']] = relationship('PlanerEntreprise', back_populates='utilisateur', uselist=False)

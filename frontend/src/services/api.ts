@@ -1,8 +1,5 @@
 // src/services/api.ts
 
-/**
- * Nettoie et traduit les messages d'erreur pour l'utilisateur final
- */
 export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
   // 1. Extraire le message brut
   let rawMessage: string;

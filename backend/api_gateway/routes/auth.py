@@ -1,6 +1,7 @@
+# backend/api_gateway/routes/auth.py
 import base64
 import binascii
-from datetime import timedelta
+from datetime import datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from ..core.database import get_db
@@ -74,6 +75,23 @@ from ..crud.utilisateur import (
     update_utilisateur,
 )
 from ..core.function import decode_token
+from ..core.logging import security_logger
+
+
+async def get_remote_address(request: Request):
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0]
+    if request.client:
+        return request.client.host
+    return "127.0.0.1"
+
+
+async def login_rate_limit(request: Request, response: Response):
+    rate_limiter = getattr(request.app.state, "rate_limiter", None)
+    if rate_limiter is None:
+        return
+    return await rate_limiter(request, response)
 
 router = APIRouter(prefix="/auth", tags=["Authentification"])
 
@@ -122,9 +140,18 @@ def _guess_profile_photo_mime(photo: bytes | None) -> str | None:
 def register(
     user: UtilisateurCreate,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     ensure_unique_user_identity_fields(db, email=user.email, username=user.username)
+    
+    security_logger.log_auth(
+        action="register_attempt",
+        user_id="unknown",
+        ip=request.client.host,
+        status="attempt",
+        details={"email": user.email}
+    )
     
     # Préparer les données
     user_data = user.model_dump()
@@ -142,6 +169,15 @@ def register(
         EmailSchema(email=[new_user.email]),
         new_user.code_verification_email,
     )
+    
+    security_logger.log_auth(
+        action="register_success",
+        user_id=new_user.id,
+        ip=request.client.host,
+        status="success",
+        details={"email": new_user.email}
+    )
+    
     return {
         "message": "Compte cree. Un code de verification email a ete envoye.",
         "user": new_user,
@@ -149,22 +185,85 @@ def register(
     }
 
 
-@router.post("/login", response_model=LoginResponse)
+# ============================================================================
+# ENDPOINT LOGIN AVEC RATE LIMITING + ACCOUNT LOCKOUT
+# ============================================================================
+
+@router.post("/login")
 def login(
     payload: LoginRequest,
-    response: Response,  
-    db: Session = Depends(get_db)
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    _rate_limit=Depends(login_rate_limit),
 ):
-    # Rechercher l'utilisateur par email ou username
+ 
     user = get_utilisateur_by_email_or_username(db, payload.identifier, payload.identifier)
+    
+    security_logger.log_auth(
+        action="login_attempt",
+        user_id=user.id if user else "unknown",
+        ip=request.client.host,
+        status="attempt",
+        details={"identifier": payload.identifier}
+    )
+    
     if not user:
+        security_logger.log_auth(
+            action="login_failed",
+            user_id="unknown",
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "user_not_found", "identifier": payload.identifier}
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if user.locked_until and datetime.utcnow() < user.locked_until:
+        remaining = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
+        security_logger.log_auth(
+            action="login_blocked",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "account_locked", "remaining_minutes": remaining}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Compte verrouillé. Réessayez dans {remaining} minutes."
+        )
+
     if not user.mot_de_passe or not verify_password(payload.password, user.mot_de_passe):
+        
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        user.last_failed_login = datetime.utcnow()
+        
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=30)
+            db.commit()
+            security_logger.log_auth(
+                action="account_locked",
+                user_id=user.id,
+                ip=request.client.host,
+                status="failure",
+                details={"reason": "too_many_attempts", "attempts": user.failed_login_attempts}
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Trop de tentatives. Compte verrouillé pendant 30 minutes."
+            )
+        
+        db.commit()
+        security_logger.log_auth(
+            action="login_failed",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "invalid_password", "attempts": user.failed_login_attempts}
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects",
@@ -172,15 +271,40 @@ def login(
         )
 
     if not user.is_active:
+        security_logger.log_auth(
+            action="login_failed",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "user_inactive"}
+        )
         raise HTTPException(status_code=400, detail="Utilisateur inactif")
 
     if not user.is_utilisateur_verifie:
+        security_logger.log_auth(
+            action="login_failed",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "email_not_verified"}
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=build_email_not_verified_detail(user.email),
         )
 
-    # ✅ Si 2FA n'est pas activé
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login = datetime.utcnow()
+    db.commit()
+    
+    security_logger.log_auth(
+        action="login_success",
+        user_id=user.id,
+        ip=request.client.host,
+        status="success"
+    )
+
     if not user.is_2fa_enabled:
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
@@ -188,10 +312,8 @@ def login(
             expires_delta=access_token_expires,
         )
         
-        # ✅ CRÉER LE REFRESH TOKEN
         refresh_token = create_refresh_token(data={"sub": str(user.id)})
         
-        # ✅ DÉFINIR LE COOKIE HTTPONLY
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
@@ -209,14 +331,10 @@ def login(
             "user": user,
         }
 
-    # ✅ Si 2FA est activé
     challenge_token = create_access_token(
         data={"sub": str(user.id), "purpose": "2fa_login"},
         expires_delta=timedelta(minutes=10),
     )
-    
-    # ✅ NOTA: Le refresh token n'est pas créé ici car le 2FA n'est pas encore validé
-    # Il sera créé après la vérification du code 2FA dans /verify-2fa
     
     return {
         "message": "Mot de passe valide. Veuillez renseigner le code Google Authenticator.",
@@ -228,10 +346,18 @@ def login(
 @router.post("/verify-email-code", response_model=MessageResponse)
 def verify_email_code(
     payload: EmailVerificationCodeRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     user = get_utilisateur_by_email(db, payload.email)
     if not user:
+        security_logger.log_auth(
+            action="verify_email_failed",
+            user_id="unknown",
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "user_not_found", "email": payload.email}
+        )
         raise HTTPException(
             status_code=404, 
             detail="Nous n'avons pas trouvé de compte associé à cette adresse email. Veuillez vérifier votre saisie."
@@ -241,6 +367,13 @@ def verify_email_code(
         return {"message": "Votre adresse email est deja verifiee."}
 
     if is_expired_datetime(user.date_exp_code_verification_email):
+        security_logger.log_auth(
+            action="verify_email_failed",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "code_expired"}
+        )
         raise HTTPException(
             status_code=400,
             detail="Le code de verification a expire. Veuillez demander un nouveau code.",
@@ -248,6 +381,13 @@ def verify_email_code(
 
     expected_code = user.code_verification_email
     if not expected_code or expected_code != payload.code:
+        security_logger.log_auth(
+            action="verify_email_failed",
+            user_id=user.id,
+            ip=request.client.host,
+            status="failure",
+            details={"reason": "invalid_code"}
+        )
         raise HTTPException(
             status_code=400, 
             detail="Le code de confirmation saisi est incorrect. Merci de bien vouloir vérifier le code reçu par email ou de demander un nouvel envoi."
@@ -260,6 +400,13 @@ def verify_email_code(
     commit_or_raise(
         db,
         detail="Impossible de verifier l'email a cause d'une contrainte d'integrite.",
+    )
+    
+    security_logger.log_auth(
+        action="verify_email_success",
+        user_id=user.id,
+        ip=request.client.host,
+        status="success"
     )
 
     return {"message": "Votre adresse email a ete verifiee avec succes."}
@@ -701,6 +848,7 @@ def update_me(
             detail="Une erreur est survenue lors de la mise à jour de votre profil. Veuillez vérifier les champs saisis."
         )
 
+
 @router.post("/logout")
 def logout(
     response: Response,
@@ -770,9 +918,7 @@ def refresh_token(
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
-    # 5. Optionnel: rotation du refresh token (meilleure sécurité)
-    # Désactiver l'ancien refresh token (le mettre dans une blacklist ou le supprimer)
-    # Générer un nouveau refresh token
+    # 5. Rotation du refresh token
     new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
     # Mettre à jour le cookie avec le nouveau refresh token
@@ -782,8 +928,8 @@ def refresh_token(
         httponly=True,
         secure=True,  # ✅ En production (HTTPS)
         samesite="lax",
-        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # 30 jours en secondes
-        path="/",  # Disponible sur tout le site
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # 30 jours
+        path="/",
     )
     
     return {
