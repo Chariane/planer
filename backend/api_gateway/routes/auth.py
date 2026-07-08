@@ -119,15 +119,19 @@ def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
 
 def _encode_profile_photo(photo: bytes | None) -> str | None:
     """
-    Encode une photo en base64 de manière sécurisée
+    ✅ Encode une photo en base64 de manière sécurisée
     """
     if not photo:
         return None
-
+    
     # ✅ Vérifier que c'est bien des bytes
     if not isinstance(photo, bytes):
         return None
-
+    
+    # ✅ Si la photo est vide, retourner None
+    if len(photo) == 0:
+        return None
+    
     # ✅ Encoder en base64
     try:
         return base64.b64encode(photo).decode("ascii")
@@ -135,9 +139,17 @@ def _encode_profile_photo(photo: bytes | None) -> str | None:
         return None
 
 
+def _safe_encode_photo(photo: bytes | None) -> str | None:
+    """
+    ✅ Récupère la photo de manière sécurisée (alias)
+    """
+    return _encode_profile_photo(photo)
+
+
 def _guess_profile_photo_mime(photo: bytes | None) -> str | None:
-    if not photo:
-        return None
+    if not photo or not isinstance(photo, bytes) or len(photo) < 12:
+        return "image/jpeg"  # ✅ Fallback par défaut
+    
     if photo.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
     if photo.startswith(b"\xff\xd8\xff"):
@@ -202,7 +214,7 @@ def register(
 # ENDPOINT LOGIN AVEC RATE LIMITING + ACCOUNT LOCKOUT
 # ============================================================================
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 def login(
     payload: LoginRequest,
     request: Request,
@@ -350,7 +362,7 @@ def login(
         return {
             "message": "Connexion réussie.",
             "requires_2fa": False,
-            "user": user,
+            "user": UtilisateurOut.model_validate(user),
         }
 
     challenge_token = create_access_token(
@@ -776,6 +788,9 @@ def change_password(
 
 @router.get("/me", response_model=UtilisateurOut)
 def get_me(current_user: UtilisateurOut = Depends(get_current_user)):
+    """
+    ✅ Récupère les informations de l'utilisateur connecté
+    """
     return current_user
 
 
@@ -787,8 +802,12 @@ def get_my_profile_photo(
     user = get_utilisateur_by_id(db, current_user.id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    
+    # ✅ Utiliser la fonction sécurisée
+    photo_b64 = _safe_encode_photo(user.photo)
+    
     return {
-        "photo_base64": _encode_profile_photo(user.photo),
+        "photo_base64": photo_b64,
         "mime_type": _guess_profile_photo_mime(user.photo),
     }
 
@@ -809,8 +828,12 @@ def update_my_profile_photo(
         detail="Impossible de mettre a jour la photo de profil.",
         refresh_instance=user,
     )
+    
+    # ✅ Utiliser la fonction sécurisée
+    photo_b64 = _safe_encode_photo(user.photo)
+    
     return {
-        "photo_base64": _encode_profile_photo(user.photo),
+        "photo_base64": photo_b64,
         "mime_type": _guess_profile_photo_mime(user.photo),
     }
 
@@ -824,8 +847,12 @@ def get_user_profile_photo(
     user = get_utilisateur_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+    
+    # ✅ Utiliser la fonction sécurisée
+    photo_b64 = _safe_encode_photo(user.photo)
+    
     return {
-        "photo_base64": _encode_profile_photo(user.photo),
+        "photo_base64": photo_b64,
         "mime_type": _guess_profile_photo_mime(user.photo),
     }
 
@@ -840,6 +867,9 @@ def get_user_public_profile(
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
 
+    # ✅ Utiliser la fonction sécurisée
+    photo_b64 = _safe_encode_photo(user.photo)
+
     return {
         "id": user.id,
         "username": user.username,
@@ -851,7 +881,7 @@ def get_user_public_profile(
         "genre": user.genre,
         "pays": user.pays,
         "ville": user.ville,
-        "photo_base64": _encode_profile_photo(user.photo),
+        "photo_base64": photo_b64,
     }
 
 
