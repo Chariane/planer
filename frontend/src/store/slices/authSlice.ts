@@ -48,11 +48,6 @@ const authSlice = createSlice({
     },
     setToken: (state, action: PayloadAction<string | null>) => {
       state.token = action.payload;
-      if (action.payload) {
-        localStorage.setItem('access_token', action.payload);
-      } else {
-        localStorage.removeItem('access_token');
-      }
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
@@ -69,7 +64,7 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       state.requires2FA = false;
       state.challengeToken = null;
-      localStorage.setItem('access_token', action.payload.token);
+      // ✅ Le token est maintenant stocké dans un cookie HttpOnly
     },
     logout: (state) => {
       state.user = null;
@@ -77,7 +72,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.requires2FA = false;
       state.challengeToken = null;
-      localStorage.removeItem('access_token');
+      // ✅ Le token dans le cookie HttpOnly sera supprimé par le logout endpoint
     },
     updateUser: (state, action: PayloadAction<Partial<User>>) => {
       if (state.user) {

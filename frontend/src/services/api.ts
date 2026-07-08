@@ -126,16 +126,69 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
 
   return cleanMessage || fallback;
 }
+let cachedCsrfToken: string | null = null;
+let csrfTokenExpiry: number | null = null;
+
+async function getCsrfToken(baseUrl: string): Promise<string> {
+  const now = Date.now();
+  if (cachedCsrfToken && csrfTokenExpiry && now < csrfTokenExpiry) {
+    return cachedCsrfToken as string;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/csrf-token`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch CSRF token');
+    }
+    const data = await response.json();
+    const token = data.csrf_token;
+    cachedCsrfToken = token;
+    csrfTokenExpiry = now + 5 * 60 * 1000; 
+    return token;
+  } catch (error) {
+    console.warn('Impossible de récupérer le token CSRF', error);
+    return '';
+  }
+}
+const ACCESS_TOKEN_KEY = 'kplanner_access_token';
+
+export function setAccessToken(token: string | null) {
+  if (typeof window === 'undefined') return;
+  if (token) {
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  }
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function clearAccessToken() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+}
 
 export async function apiFetch(baseUrl: string, endpoint: string, options?: RequestInit) {
-  // ✅ Sanitize l'endpoint
+  // Sanitize l'endpoint
   const sanitizedEndpoint = sanitizeUrl(endpoint);
+  if (!sanitizedEndpoint) {
+    throw new Error(`Endpoint API invalide : ${endpoint}`);
+  }
 
-  const token = localStorage.getItem('access_token');
   const method = (options?.method || 'GET').toUpperCase();
   const isFormData = options?.body instanceof FormData;
 
-  // ✅ Sanitize le body si présent
+  // Récupérer le token CSRF pour les méthodes mutatives
+  const csrfToken = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+    ? await getCsrfToken(baseUrl)
+    : '';
+
+  // Sanitize le body si présent
   let sanitizedBody = options?.body;
   if (sanitizedBody && typeof sanitizedBody === 'string') {
     try {
@@ -147,10 +200,12 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
       // Si ce n'est pas du JSON, ne pas sanitizer
     }
   }
+  const accessToken = getAccessToken();
   const headers: HeadersInit = {
     ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
-    ...(token && { Authorization: `Bearer ${token}` }),
     ...options?.headers,
+    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
   const fetchWithTimeout = async () => {
@@ -161,6 +216,7 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
         ...options,
         headers,
         signal: options?.signal || controller.signal,
+        credentials: 'include', 
       });
     } finally {
       window.clearTimeout(timeoutId);
@@ -204,7 +260,7 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
 
     if (!response.ok) {
       let errorDetail = `Erreur HTTP ${response.status}`;
-      console.error('📡 Détail erreur API:', data);
+      console.error('Détail erreur API:', data);
       
       if (Array.isArray(data.detail)) {
         // Pydantic validation errors - messages clairs

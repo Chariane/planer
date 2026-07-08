@@ -29,12 +29,22 @@ export const sanitizeText = (text: string): string => {
 
 export const sanitizeUrl = (url: string): string => {
   if (!url) return '';
+
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/')) {
+    // Autorise les chemins relatifs sécurisés comme '/auth/login'
+    if (trimmed.includes('..')) {
+      return '';
+    }
+    return trimmed.replace(/\/+/g, '/');
+  }
+
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(trimmed);
     if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
       return '';
     }
-    return url;
+    return parsed.toString();
   } catch {
     return '';
   }

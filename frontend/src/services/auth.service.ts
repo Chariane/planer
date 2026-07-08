@@ -1,5 +1,5 @@
 // src/services/auth.service.ts
-import { apiFetch } from './api';
+import { apiFetch, setAccessToken, clearAccessToken } from './api';
 
 const AUTH_BASE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';
 
@@ -78,25 +78,40 @@ export const authService = {
     }),
 
   // Mise à jour : ajout de credentials: 'include' pour le cookie
-  login: (identifier: string, password: string) =>
-    apiFetch(AUTH_BASE_URL, '/auth/login', {
+  login: async (identifier: string, password: string) => {
+    const response = await apiFetch(AUTH_BASE_URL, '/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
       credentials: 'include', // Pour recevoir le cookie refresh_token
-    }) as Promise<LoginResponse>,
+    }) as LoginResponse;
+
+    if (response.access_token) {
+      setAccessToken(response.access_token);
+    }
+
+    return response;
+  },
 
   // NOUVEAU : Rafraîchir le token
-  refreshToken: (): Promise<RefreshTokenResponse> =>
-    apiFetch(AUTH_BASE_URL, '/auth/refresh', {
+  refreshToken: async (): Promise<RefreshTokenResponse> => {
+    const response = await apiFetch(AUTH_BASE_URL, '/auth/refresh', {
       method: 'POST',
       credentials: 'include', // Envoie le cookie refresh_token
-    }),
+    }) as RefreshTokenResponse;
 
-  logout: () =>
-    apiFetch(AUTH_BASE_URL, '/auth/logout', {
+    if (response.access_token) {
+      setAccessToken(response.access_token);
+    }
+    return response;
+  },
+
+  logout: async () => {
+    clearAccessToken();
+    return apiFetch(AUTH_BASE_URL, '/auth/logout', {
       method: 'POST',
       credentials: 'include', // Pour supprimer le cookie
-    }),
+    });
+  },
 
   verifyEmail: (email: string, code: string) =>
     apiFetch(AUTH_BASE_URL, '/auth/verify-email-code', {
@@ -170,12 +185,18 @@ export const authService = {
       credentials: 'include',
     }) as Promise<PublicUserProfile>,
 
-  verify2FA: (challenge_token: string, code: string) =>
-    apiFetch(AUTH_BASE_URL, '/auth/verify-2fa', {
+  verify2FA: async (challenge_token: string, code: string) => {
+    const response = await apiFetch(AUTH_BASE_URL, '/auth/verify-2fa', {
       method: 'POST',
       body: JSON.stringify({ challenge_token, code }),
       credentials: 'include',
-    }),
+    }) as Promise<LoginResponse>;
+
+    if (response.access_token) {
+      setAccessToken(response.access_token);
+    }
+    return response;
+  },
 
   setup2FA: () =>
     apiFetch(AUTH_BASE_URL, '/auth/2fa/setup', {

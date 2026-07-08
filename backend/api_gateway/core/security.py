@@ -1,10 +1,10 @@
+# backend/api_gateway/core/security.py
 import logging
 import os
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from dotenv import dotenv_values
 from typing import Optional
@@ -20,38 +20,59 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut
+ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(config_data.get("REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/routers/auth/token")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -----------------------------
-# Blacklist des tokens
+# BLACKLIST PERSISTANTE (Redis)
 # -----------------------------
-token_blacklist = set()
+try:
+    import redis
+    REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB = int(os.getenv("REDIS_DB", "1"))
+    redis_client = redis.Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        decode_responses=True
+    )
+    redis_client.ping()
+    REDIS_AVAILABLE = True
+    logger.info("Redis connecté pour la blacklist des tokens")
+except Exception as e:
+    REDIS_AVAILABLE = False
+    logger.warning(f"Redis non disponible pour la blacklist: {e}")
+    # Fallback: blacklist en mémoire
+    token_blacklist = set()
 
 def add_to_blacklist(token: str):
-    """Ajoute un token à la blacklist"""
-    token_blacklist.add(token)
+    """Ajoute un token à la blacklist (Redis ou mémoire)"""
+    if REDIS_AVAILABLE:
+        # Persister dans Redis avec TTL (durée de vie du token)
+        redis_client.setex(
+            f"blacklist:{token}",
+            ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "true"
+        )
+    else:
+        token_blacklist.add(token)
     logger.info(f"Token ajouté à la blacklist")
 
 def is_token_blacklisted(token: str) -> bool:
-    """Vérifie si un token est blacklisté"""
+    """Vérifie si un token est blacklisté (Redis + mémoire)"""
+    if REDIS_AVAILABLE:
+        return redis_client.exists(f"blacklist:{token}") > 0
     return token in token_blacklist
 
-def cleanup_expired_tokens():
-    """Nettoie périodiquement la blacklist (optionnel)"""
-    # Cette fonction peut être appelée périodiquement pour nettoyer les anciens tokens
-    # Pour l'instant, nous gardons une blacklist simple en mémoire
-    pass
-
-# ============================================================================
+# -----------------------------
 # FONCTIONS REFRESH TOKEN
-# ============================================================================
+# -----------------------------
 
 def create_refresh_token(data: dict) -> str:
     """
@@ -104,12 +125,28 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UtilisateurOut:
+async def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db)
+) -> UtilisateurOut:
+    """
+    Récupère l'utilisateur depuis le cookie access_token
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Impossible de valider les informations d'identification",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    # Lire le token depuis le cookie (pas l'header Authorization)
+    token = request.cookies.get("access_token")
+    if not token:
+        # Fallback: essayer l'header Authorization (pour compatibilité)
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+        else:
+            raise credentials_exception
     
     # Vérifie si le token est blacklisté
     if is_token_blacklisted(token):
@@ -145,6 +182,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
     return UtilisateurOut.from_orm(user)
 
+
 async def get_current_active_user(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     """
     Vérifie que l'utilisateur est authentifié ET actif.
@@ -156,6 +194,7 @@ async def get_current_active_user(current_user: UtilisateurOut = Depends(get_cur
         )
     return current_user
 
+
 async def get_current_admin(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_admin:
         raise HTTPException(
@@ -164,7 +203,7 @@ async def get_current_admin(current_user: UtilisateurOut = Depends(get_current_u
         )
     return current_user
 
-# Dépendance unique pour livreur
+
 async def get_current_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_livreur:
         raise HTTPException(
@@ -172,6 +211,7 @@ async def get_current_livreur(current_user: UtilisateurOut = Depends(get_current
             detail="Opération non autorisée. Nécessite les privilèges de livreur."
         )
     return current_user
+
 
 async def get_current_active_livreur(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     """
@@ -189,7 +229,7 @@ async def get_current_active_livreur(current_user: UtilisateurOut = Depends(get_
         )
     return current_user
 
-# Dépendance unique pour entreprise
+
 async def get_current_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_entreprise:
         raise HTTPException(
@@ -197,6 +237,8 @@ async def get_current_entreprise(current_user: UtilisateurOut = Depends(get_curr
             detail="Opération non autorisée. Nécessite le statut de gérant d'entreprise."
         )
     return current_user
+
+
 async def get_current_active_entreprise(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     """
     Vérifie que l'utilisateur est authentifié, actif ET a le statut de gérant d'entreprise.
@@ -213,6 +255,7 @@ async def get_current_active_entreprise(current_user: UtilisateurOut = Depends(g
         )
     return current_user
 
+
 async def get_current_super_admin(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     if not current_user.is_super_admin:
         raise HTTPException(
@@ -221,7 +264,29 @@ async def get_current_super_admin(current_user: UtilisateurOut = Depends(get_cur
         )
     return current_user
 
-async def logout_user(token: str):
-    """Déconnecte un utilisateur en blacklistant son token"""
-    add_to_blacklist(token)
-    logger.info(f"Utilisateur déconnecté - token blacklisté")
+
+async def logout_user(request: Request, response: Response):
+    """
+    Déconnecte un utilisateur en blacklistant son token
+    et en supprimant les cookies
+    """
+    token = request.cookies.get("access_token")
+    if token:
+        add_to_blacklist(token)
+        logger.info(f"Utilisateur déconnecté - token blacklisté")
+    
+    # Supprimer les cookies
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        path="/auth/refresh",
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+    )
+    
+    return {"message": "Déconnexion réussie"}

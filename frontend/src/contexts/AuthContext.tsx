@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { authService } from '../services/auth.service';
 import { baseApi, clearCacheOnLogout } from '../store/api/baseApi';
+import { getAccessToken } from '../services/api';
 import type { ProfileUpdatePayload, RegisterPayload } from '../services/auth.service';
 
 interface User {
@@ -66,30 +67,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const isAuthenticated = !!token && !!user;
+  const isAuthenticated = !!user;
 
   useEffect(() => {
     const loadUser = async () => {
-      const storedToken = localStorage.getItem('access_token');
-      if (storedToken) {
-        setToken(storedToken);
-        try {
-          const userData = await authService.getMe();
-          setUser(userData);
-        } catch (error) {
-          console.error('Erreur lors du chargement de l’utilisateur', error);
-          localStorage.removeItem('access_token');
-          setToken(null);
-          setUser(null);
-          clearCacheOnLogout({ dispatch });
+      try {
+        const userData = await authService.getMe();
+        setUser(userData);
+        setToken(getAccessToken());
+      } catch (error: any) {
+        // 401 au démarrage est normal si l'utilisateur n'est pas connecté
+        if (error?.status === 401 || (error instanceof Error && error.message.includes('401'))) {
+          console.info('Utilisateur non authentifié au démarrage');
+        } else {
+          console.error('Erreur lors du chargement de l\'utilisateur', error);
         }
-      } else {
         setUser(null);
+        setToken(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     loadUser();
-  }, [dispatch]);
+  }, []);
 
   const register = async (data: RegisterPayload) => {
     await authService.register(data);
@@ -110,30 +110,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { requires2fa: true, challengeToken: response.challenge_token };
     }
 
-    if (!response.access_token || !response.user) {
+    if (!response.user) {
       throw new Error('Réponse de connexion invalide.');
     }
     
     clearCacheOnLogout({ dispatch });
     
-    localStorage.setItem('access_token', response.access_token);
-    setToken(response.access_token);
     setUser(response.user);
+    setToken(getAccessToken());
     return { requires2fa: false };
   };
 
   const verify2FA = async (challengeToken: string, code: string) => {
     const response = await authService.verify2FA(challengeToken, code);
 
-    if (!response.access_token || !response.user) {
+    if (!response.user) {
       throw new Error('Réponse de vérification 2FA invalide.');
     }
     
     clearCacheOnLogout({ dispatch });
     
-    localStorage.setItem('access_token', response.access_token);
-    setToken(response.access_token);
     setUser(response.user);
+    setToken(getAccessToken());
   };
 
   const forgotPassword = async (email: string) => {
@@ -187,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ✅ Déconnexion volontaire - message "À bientôt !"
+  // Déconnexion volontaire - message "À bientôt !"
   const logout = async () => {
     try {
       await authService.logout();
@@ -195,12 +193,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Erreur lors de la déconnexion', error);
     }
     
-    localStorage.removeItem('access_token');
     clearCacheOnLogout({ dispatch });
     setToken(null);
     setUser(null);
     
-    // ✅ Redirection avec paramètre logout pour message personnalisé
+    // Redirection avec paramètre logout pour message personnalisé
     navigate('/login?logout=true');
   };
 

@@ -262,42 +262,14 @@ export const messagerieApi = baseApi.injectEndpoints({
 // ============================================================================
 
 const getCurrentUserId = (): string => {
-  try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload.sub) return payload.sub;
-      if (payload.id) return payload.id;
-    }
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user.id) return user.id;
-      if (user.user_id) return user.user_id;
-    }
-  } catch (e) {
-    console.error("Impossible de récupérer l'ID utilisateur");
-  }
+  // ✅ ID utilisateur fourni via AuthContext
+  // Les cookies HttpOnly gèrent l'authentification
   return '';
 };
 
 const getCurrentUsername = (): string => {
-  try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload.username) return payload.username;
-      if (payload.email) return payload.email.split('@')[0];
-    }
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user.username) return user.username;
-      if (user.email) return user.email.split('@')[0];
-    }
-  } catch (e) {
-    console.error("Impossible de récupérer le nom d'utilisateur");
-  }
+  // ✅ Nom d'utilisateur fourni via AuthContext
+  // Les cookies HttpOnly gèrent l'authentification
   return 'Utilisateur';
 };
 
@@ -312,16 +284,14 @@ const wsBaseUrl = () => {
 
 export const messagerieWebSocket = {
   groupSocketUrl: (groupId: string) => {
-    const token = localStorage.getItem('access_token') || '';
-    const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}?${query.toString()}`;
+    // ✅ Cookies HttpOnly inclus automatiquement via credentials: 'include'
+    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}`;
   },
 
   privateSocketUrl: (receiverId: string) => {
-    const token = localStorage.getItem('access_token') || '';
-    const query = new URLSearchParams({ token });
+    // ✅ Cookies HttpOnly inclus automatiquement via credentials: 'include'
     const userId = getCurrentUserId();
-    return `${wsBaseUrl()}/chat/ws/private/${userId}/${receiverId}?${query.toString()}`;
+    return `${wsBaseUrl()}/chat/ws/private/${userId}/${receiverId}`;
   },
 };
 

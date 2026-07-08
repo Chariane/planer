@@ -2,35 +2,24 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { apiFetch } from '../../services/api';
+import { authService } from '../../services/auth.service';
 
 // ============================================================================
 // REFRESH TOKEN - GESTION DE FILE D'ATTENTE
 // ============================================================================
 
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshSubscribers: (() => void)[] = [];
 
-const onRefreshed = (token: string) => {
-  refreshSubscribers.forEach((callback) => callback(token));
+const onRefreshed = () => {
+  refreshSubscribers.forEach((callback) => callback());
   refreshSubscribers = [];
 };
 
 const refreshToken = async (): Promise<string | null> => {
   try {
-    const response = await apiFetch(
-      import.meta.env.VITE_AUTH_URL || 'http://localhost:8002',
-      '/auth/refresh',
-      { 
-        method: 'POST', 
-        credentials: 'include'
-      }
-    );
-    const newToken = response?.access_token;
-    if (newToken) {
-      localStorage.setItem('access_token', newToken);
-      return newToken;
-    }
-    return null;
+    const response = await authService.refreshToken();
+    return response.access_token || null;
   } catch (error) {
     console.error('[RTK Query] Refresh token failed:', error);
     return null;
@@ -68,7 +57,7 @@ const getBaseUrlFromEndpoint = (url: string): string => {
 // ============================================================================
 
 const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraOptions) => {
-  const makeRequest = async (token?: string) => {
+  const makeRequest = async () => {
     let fullUrl = url;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -88,7 +77,6 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
       method: method || 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       credentials: 'include',
     };
@@ -101,14 +89,13 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
   };
 
   try {
-    const token = localStorage.getItem('access_token') || undefined;
-    let result = await makeRequest(token);
+    let result = await makeRequest();
 
     if (result?.status === 401) {
       if (isRefreshing) {
         return new Promise((resolve) => {
-          refreshSubscribers.push((newToken: string) => {
-            makeRequest(newToken)
+          refreshSubscribers.push(() => {
+            makeRequest()
               .then((res) => resolve({ data: res }))
               .catch((err) => resolve({ error: { status: 500, data: err } }));
           });
@@ -117,21 +104,19 @@ const baseQuery: BaseQueryFn = async ({ url, method, body, params }, api, extraO
 
       isRefreshing = true;
       try {
-        const newToken = await refreshToken();
-        if (newToken) {
+        const refreshResult = await refreshToken();
+        if (refreshResult) {
           isRefreshing = false;
-          onRefreshed(newToken);
-          const retryResult = await makeRequest(newToken);
+          onRefreshed();
+          const retryResult = await makeRequest();
           return { data: retryResult };
         } else {
           isRefreshing = false;
-          localStorage.removeItem('access_token');
           window.dispatchEvent(new CustomEvent('sessionExpired'));
           return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
         }
       } catch (refreshError) {
         isRefreshing = false;
-        localStorage.removeItem('access_token');
         window.dispatchEvent(new CustomEvent('sessionExpired'));
         return { error: { status: 401, data: 'Session expirée. Veuillez vous reconnecter.' } };
       }
@@ -281,9 +266,6 @@ export const setupSessionExpiredHandler = (navigate: (path: string) => void) => 
     // Nettoyer le cache
     const { store } = await import('../store');
     clearCacheOnLogout(store);
-
-    // Supprimer le token
-    localStorage.removeItem('access_token');
 
     // ✅ Session expirée → paramètre session_expired
     // Message géré par App.tsx

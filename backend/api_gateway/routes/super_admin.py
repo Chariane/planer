@@ -1,6 +1,7 @@
 from typing import List
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from fastapi_csrf_protect import CsrfProtect
 from ..crud.super_admin import (
     create_user_with_roles,
     delete_entreprise,
@@ -25,17 +26,23 @@ from ..schemas import (
     UserRolesUpdate,
     UtilisateurOut,
 )
+from ..core.logging import security_logger
 
 router = APIRouter(prefix="/super-admin", tags=["Super Admin"])
 
 
 @router.post("/users", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-def create_user_as_super_admin(
+async def create_user_as_super_admin(
     user: SuperAdminUtilisateurCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     ensure_unique_user_identity_fields(db, email=user.email, username=user.username)
 
     user_data = user.model_dump()
@@ -50,6 +57,13 @@ def create_user_as_super_admin(
         new_user.username,
         EmailSchema(email=[new_user.email]),
         new_user.code_verification_email,
+    )
+
+    security_logger.log_super_admin_action(
+        action="create_user",
+        admin_id=current_super_admin.id,
+        target_user_id=new_user.id,
+        details={"email": new_user.email}
     )
 
     return {
@@ -81,12 +95,17 @@ def get_user(
 
 
 @router.put("/users/{user_id}/roles", response_model=UtilisateurOut)
-def update_user_role_flags_route(
+async def update_user_role_flags_route(
     user_id: str,
     roles: UserRolesUpdate,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
@@ -95,31 +114,66 @@ def update_user_role_flags_route(
     if not update_data:
         raise HTTPException(status_code=400, detail="Aucun champ de role fourni")
 
-    return update_user_role_flags(db, user, update_data)
+    updated = update_user_role_flags(db, user, update_data)
+
+    security_logger.log_super_admin_action(
+        action="update_roles",
+        admin_id=current_super_admin.id,
+        target_user_id=user_id,
+        changes=update_data
+    )
+
+    return updated
 
 
 @router.post("/users/{user_id}/activate", response_model=UtilisateurOut)
-def activate_user_as_super_admin(
+async def activate_user_as_super_admin(
     user_id: str,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    security_logger.log_super_admin_action(
+        action="activate_user",
+        admin_id=current_super_admin.id,
+        target_user_id=user_id,
+    )
 
     return set_user_account_status(db, user, True)
 
 
 @router.post("/users/{user_id}/deactivate", response_model=UtilisateurOut)
-def deactivate_user_as_super_admin(
+async def deactivate_user_as_super_admin(
     user_id: str,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    # Prevent self-deactivation
+    if user_id == current_super_admin.id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez pas desactiver votre propre compte")
+
+    security_logger.log_super_admin_action(
+        action="deactivate_user",
+        admin_id=current_super_admin.id,
+        target_user_id=user_id,
+    )
 
     return set_user_account_status(db, user, False)
 
@@ -147,12 +201,17 @@ def get_entreprise(
 
 
 @router.put("/entreprises/{entreprise_id}", response_model=EntrepriseOut)
-def update_entreprise_as_super_admin(
+async def update_entreprise_as_super_admin(
     entreprise_id: str,
     entreprise_in: EntrepriseUpdate,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     entreprise = get_entreprise_by_id(db, entreprise_id)
     if not entreprise:
         raise HTTPException(status_code=404, detail="Entreprise non trouvee")
@@ -161,18 +220,39 @@ def update_entreprise_as_super_admin(
     if not update_data:
         raise HTTPException(status_code=400, detail="Aucune donnee de mise a jour fournie")
 
-    return update_entreprise(db, entreprise, update_data)
+    updated = update_entreprise(db, entreprise, update_data)
+
+    security_logger.log_super_admin_action(
+        action="update_entreprise",
+        admin_id=current_super_admin.id,
+        target_entreprise_id=entreprise_id,
+        changes=update_data
+    )
+
+    return updated
 
 
 @router.delete("/entreprises/{entreprise_id}", status_code=204)
-def delete_entreprise_as_super_admin(
+async def delete_entreprise_as_super_admin(
     entreprise_id: str,
     db: Session = Depends(get_db),
     current_super_admin: UtilisateurOut = Depends(get_current_super_admin),
+    request: Request = None,
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     entreprise = get_entreprise_by_id(db, entreprise_id)
     if not entreprise:
         raise HTTPException(status_code=404, detail="Entreprise non trouvee")
 
     delete_entreprise(db, entreprise)
+
+    security_logger.log_super_admin_action(
+        action="delete_entreprise",
+        admin_id=current_super_admin.id,
+        target_entreprise_id=entreprise_id,
+    )
+
     return None

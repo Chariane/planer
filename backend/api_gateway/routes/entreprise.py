@@ -1,6 +1,9 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from fastapi_csrf_protect import CsrfProtect
+from fastapi import Request
+
 from ..crud.entreprise import (
     create_entreprise,
     delete_entreprise,
@@ -32,11 +35,16 @@ def _validate_unique_business_identifiers(
 
 
 @router.post("", response_model=EntrepriseOut, status_code=status.HTTP_201_CREATED)
-def create_my_entreprise(
+async def create_my_entreprise(
     entreprise_in: EntrepriseCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_active_user),
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     existing_entreprise = get_entreprise_by_user_id(db, current_user.id)
     if existing_entreprise:
         raise HTTPException(status_code=400, detail="Cet utilisateur possede deja une entreprise")
@@ -68,11 +76,16 @@ def get_my_entreprise(
 
 
 @router.put("/me", response_model=EntrepriseOut)
-def update_my_entreprise(
+async def update_my_entreprise(
     entreprise_in: EntrepriseUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_active_user),
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     entreprise = get_entreprise_by_user_id(db, current_user.id)
     if not entreprise:
         raise HTTPException(status_code=404, detail="Entreprise non trouvee")
@@ -89,10 +102,15 @@ def update_my_entreprise(
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-def delete_my_entreprise(
+async def delete_my_entreprise(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_active_user),
+    csrf_protect: CsrfProtect = Depends(),
 ):
+    # ✅ Vérifier CSRF
+    await csrf_protect.validate_csrf(request)
+
     entreprise = get_entreprise_by_user_id(db, current_user.id)
     if not entreprise:
         raise HTTPException(status_code=404, detail="Entreprise non trouvee")

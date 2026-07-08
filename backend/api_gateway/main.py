@@ -1,13 +1,17 @@
 # backend/api_gateway/main.py
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from fastapi_csrf_protect import CsrfProtect
+from pydantic import BaseModel, Field
 import sys
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
+import secrets
 
 try:
     from fastapi_limiter.depends import RateLimiter
@@ -24,6 +28,10 @@ except Exception:
 
 from core.logging import security_logger
 
+# ============================================================================
+# ROUTES IMPORTS
+# ============================================================================
+# Support pour exécution en mode module/package ou en script direct.
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[2]
     if str(project_root) not in sys.path:
@@ -40,6 +48,41 @@ else:
     from .routes.super_admin import router as super_admin_router
 
 # ============================================================================
+# ✅ CONFIGURATION CSRF - VERSION COMPATIBLE 1.0.7
+# ============================================================================
+
+# Générer une clé secrète si non définie
+CSRF_SECRET = os.getenv("CSRF_SECRET_KEY")
+if not CSRF_SECRET or len(CSRF_SECRET) < 32:
+    CSRF_SECRET = secrets.token_urlsafe(32)
+    os.environ["CSRF_SECRET_KEY"] = CSRF_SECRET
+    print(f"⚠️ Clé CSRF générée automatiquement: {CSRF_SECRET[:10]}...")
+
+# Configuration CSRF
+class CsrfSettings(BaseModel):
+    secret_key: str = CSRF_SECRET
+    cookie_key: str = "_csrf_token"
+    header_name: str = "X-CSRF-Token"
+    cookie_secure: bool = os.getenv("ENV", "Dev") == "Production"
+    cookie_httponly: bool = True
+    cookie_samesite: str = "lax"
+
+try:
+    # ✅ Configuration pour fastapi-csrf-protect 1.0.7
+    # load_config() attend une classe, pas une instance
+    CsrfProtect.load_config(CsrfSettings)
+    # ✅ Créer une instance singleton pour utiliser les méthodes
+    csrf_protect = CsrfProtect()
+    print("✅ CSRF Protection configurée avec succès")
+except Exception as e:
+    print(f"⚠️ ERREUR CSRF init: {e}")
+    # Mode fallback: les attributs seront définis directement sur CsrfProtect
+    CsrfProtect._secret_key = CSRF_SECRET
+    CsrfProtect._cookie_key = "_csrf_token"
+    CsrfProtect._header_name = "X-CSRF-Token"
+    csrf_protect = None
+
+# ============================================================================
 # LIFESPAN - GESTION DU CYCLE DE VIE AVEC RATE LIMITING
 # ============================================================================
 
@@ -47,7 +90,7 @@ else:
 async def lifespan(app: FastAPI):
     """Gestion du cycle de vie de l'application avec Redis + Rate Limiting"""
     
-    # ✅ DÉMARRAGE - Initialiser Redis et Rate Limiter
+    # DÉMARRAGE - Initialiser Redis et Rate Limiter
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     if RateLimiter is not None and RedisBucket is not None:
         try:
@@ -59,7 +102,7 @@ async def lifespan(app: FastAPI):
             )
             app.state.rate_limiter = RateLimiter(Limiter(redis_bucket), identifier=default_identifier)
             app.state.redis_client = redis_client
-            print(f"🔒 Rate Limiting activé avec Redis: {redis_url}")
+            print(f"Rate Limiting activé avec Redis: {redis_url}")
             security_logger.log_auth(
                 action="rate_limiter_startup",
                 user_id="system",
@@ -68,16 +111,16 @@ async def lifespan(app: FastAPI):
                 details={"redis_url": redis_url}
             )
         except Exception as e:
-            print(f"⚠️ ERREUR: Impossible de connecter Redis: {e}")
-            print("⚠️ Rate Limiting désactivé (fallback)")
+            print(f"ERREUR: Impossible de connecter Redis: {e}")
+            print("Rate Limiting désactivé (fallback)")
             security_logger.log_error(
                 error_type="redis_connection_failed",
                 message=str(e),
                 details={"redis_url": redis_url}
             )
     else:
-        print("⚠️ fastapi_limiter ou pyrate_limiter n'est pas disponible dans cette version.")
-        print("⚠️ Rate Limiting désactivé (fallback)")
+        print("fastapi_limiter ou pyrate_limiter n'est pas disponible dans cette version.")
+        print("Rate Limiting désactivé (fallback)")
         security_logger.log_error(
             error_type="rate_limiter_unavailable",
             message="RateLimiter or RedisBucket unavailable in installed fastapi_limiter/pyrate_limiter versions",
@@ -86,14 +129,14 @@ async def lifespan(app: FastAPI):
 
     yield  # L'application tourne ici
 
-    # ✅ ARRÊT - Fermer Redis si le client a été créé
+    # ARRÊT - Fermer Redis si le client a été créé
     if getattr(app.state, "redis_client", None) is not None:
         await app.state.redis_client.close()
         try:
             await app.state.redis_client.wait_closed()
         except Exception:
             pass
-        print("🔒 Rate Limiting arrêté")
+        print("Rate Limiting arrêté")
         security_logger.log_auth(
             action="rate_limiter_shutdown",
             user_id="system",
@@ -111,13 +154,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         
-        # 🔒 Content-Security-Policy - Protection XSS
-        # Version dev avec unsafe-inline/unsafe-eval
-        # Version prod sans (plus stricte)
         env = os.getenv("ENV", "Dev")
         
         if env == "Production":
-            # ✅ CSP STRICTE pour production
+            # CSP STRICTE pour production
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net; "
@@ -131,7 +171,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         else:
-            # ✅ CSP PERMISSIVE pour développement
+            # CSP PERMISSIVE pour développement
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
@@ -145,25 +185,25 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         
-        # 🔒 HSTS - Force HTTPS (uniquement en production)
+        # HSTS - Force HTTPS (uniquement en production)
         if env == "Production":
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains; preload"
             )
         
-        # 🔒 X-Frame-Options - Anti-clickjacking
+        # X-Frame-Options - Anti-clickjacking
         response.headers["X-Frame-Options"] = "DENY"
         
-        # 🔒 X-Content-Type-Options - Anti-MIME sniffing
+        # X-Content-Type-Options - Anti-MIME sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
         
-        # 🔒 X-XSS-Protection - Protection XSS (legacy)
+        # X-XSS-Protection - Protection XSS (legacy)
         response.headers["X-XSS-Protection"] = "1; mode=block"
         
-        # 🔒 Referrer-Policy - Limite fuite d'informations
+        # Referrer-Policy - Limite fuite d'informations
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         
-        # 🔒 Permissions-Policy - Contrôle des fonctionnalités
+        # Permissions-Policy - Contrôle des fonctionnalités
         response.headers["Permissions-Policy"] = (
             "geolocation=(), microphone=(), camera=()"
         )
@@ -178,37 +218,37 @@ app = FastAPI(
     title="Microservice Api Gateway",
     description="API pour la gestion des utilisateurs, entreprises et authentification",
     version="1.0.0",
-    lifespan=lifespan  # ✅ AJOUTÉ
+    lifespan=lifespan  
 )
 
-# ✅ Ajouter le middleware de sécurité (doit être le premier)
+# Ajouter le middleware de sécurité (doit être le premier)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # CORS CONFIGURATION SÉCURISÉE
 # ============================================================================
 
-# ✅ Lire depuis l'environnement avec fallback sécurisé
+# Lire depuis l'environnement avec fallback sécurisé
 ALLOWED_ORIGINS_STR = os.getenv("ALLOW_ORIGINS", "http://localhost:5173,http://localhost:3000")
 if ALLOWED_ORIGINS_STR == "*":
-    # ⚠️ En développement uniquement, jamais en production
+    # En développement uniquement, jamais en production
     if os.getenv("ENV", "Dev") == "Production":
-        print("⚠️ ATTENTION: CORS avec * en production est DANGEREUX!")
+        print("ATTENTION: CORS avec * en production est DANGEREUX!")
         ALLOWED_ORIGINS = ["https://k-planer.com", "https://app.k-planer.com"]
     else:
         ALLOWED_ORIGINS = ["*"]
 else:
     ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_STR.split(",")]
 
-# ✅ Méthodes autorisées (explicites, pas *)
+# Méthodes autorisées (explicites, pas *)
 ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
 
-# ✅ Headers autorisés (explicites, pas *)
+# Headers autorisés (explicites, pas *)
 ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept", "X-Requested-With"]
 
-print(f"🔒 CORS Allowed Origins: {ALLOWED_ORIGINS}")
-print(f"🔒 CORS Allowed Methods: {ALLOWED_METHODS}")
-print(f"🔒 CORS Allowed Headers: {ALLOWED_HEADERS}")
+print(f"CORS Allowed Origins: {ALLOWED_ORIGINS}")
+print(f"CORS Allowed Methods: {ALLOWED_METHODS}")
+print(f"CORS Allowed Headers: {ALLOWED_HEADERS}")
 
 # Log la configuration CORS
 security_logger.log_auth(
@@ -232,6 +272,79 @@ app.add_middleware(
     expose_headers=["X-Total-Count", "X-Page-Count"],
     max_age=86400,  # 24 heures
 )
+
+# ============================================================================
+# CSRF MIDDLEWARE
+# ============================================================================
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    """
+    Middleware CSRF : Vérifie le token pour les méthodes mutatives
+    - Skip GET, HEAD, OPTIONS
+    - Skip endpoints publics
+    - Valide token CSRF depuis header X-CSRF-Token + cookie _csrf_token
+    """
+    # Skip pour les méthodes non mutatives
+    if request.method in ["GET", "HEAD", "OPTIONS"]:
+        return await call_next(request)
+    
+    # Skip pour les endpoints publics
+    public_paths = [
+        "/auth/login", 
+        "/auth/register", 
+        "/auth/reset-password",
+        "/auth/forgot-password",
+        "/auth/refresh",
+        "/csrf-token",
+        "/health",
+        "/"
+    ]
+    if request.url.path in public_paths:
+        return await call_next(request)
+    
+    # ✅ Vérifier CSRF
+    if csrf_protect is None:
+        # CSRF non initialisée - laisser passer en mode fallback
+        security_logger.log_error(
+            error_type="csrf_protection_unavailable",
+            message="CSRF Protection non initialisée",
+            details={"path": request.url.path}
+        )
+        return await call_next(request)
+    
+    try:
+        # ✅ Valider le token CSRF
+        # validate_csrf() lit:
+        # - le cookie _csrf_token (signed_token)
+        # - le token depuis header X-CSRF-Token ou body
+        await csrf_protect.validate_csrf(request)
+        
+        security_logger.log_auth(
+            action="csrf_validation_success",
+            user_id="unknown",
+            ip=request.client.host if request.client else "unknown",
+            status="success",
+            details={"path": request.url.path, "method": request.method}
+        )
+        return await call_next(request)
+        
+    except Exception as e:
+        security_logger.log_auth(
+            action="csrf_validation_failed",
+            user_id="unknown",
+            ip=request.client.host if request.client else "unknown",
+            status="failure",
+            details={"path": request.url.path, "method": request.method, "error": str(e)}
+        )
+        
+        # Retourner une réponse 403 Forbidden
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "detail": f"Validation CSRF échouée: {str(e)}"
+            }
+        )
 
 # ============================================================================
 # ROUTES
@@ -260,6 +373,54 @@ def health():
     return {"service": "api_gateway", "status": "ok"}
 
 
+@app.get("/csrf-token")
+async def get_csrf_token(request: Request):
+    """
+    Récupère un token CSRF pour le frontend
+    
+    Le frontend doit envoyer ce token dans le header X-CSRF-Token
+    pour les requêtes mutatives (POST, PUT, DELETE, PATCH)
+    """
+    try:
+        if csrf_protect is None:
+            raise RuntimeError("CSRF Protection non initialisée")
+        
+        # ✅ Générer le token et le token signé
+        # generate_csrf_tokens() retourne (token_brut, token_signé)
+        token, signed_token = csrf_protect.generate_csrf_tokens()
+        
+        # Créer la réponse avec le cookie signé
+        response = JSONResponse(
+            content={
+                "csrf_token": token,
+                "message": "Token CSRF généré avec succès"
+            }
+        )
+        
+        # ✅ Définir le cookie signé (httponly pour sécurité)
+        csrf_protect.set_csrf_cookie(signed_token, response)
+        
+        security_logger.log_access(
+            user_id="anonymous",
+            resource_type="csrf",
+            resource_id="token_generation",
+            action="GET",
+            allowed=True
+        )
+        
+        return response
+    except Exception as e:
+        security_logger.log_error(
+            error_type="csrf_token_generation_failed",
+            message=str(e),
+            details={"ip": request.client.host if request.client else "unknown"}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erreur lors de la génération du token CSRF"
+        )
+
+
 # ============================================================================
 # STARTUP / SHUTDOWN (fallback si lifespan non supporté)
 # ============================================================================
@@ -267,19 +428,19 @@ def health():
 @app.on_event("startup")
 async def startup():
     print("🚀 API Gateway démarrée avec sécurité renforcée")
-    print(f"🔒 Security Headers activés (CSP {'strict' if os.getenv('ENV') == 'Production' else 'permissive'})")
+    print(f"🔒 CSRF Protection: ACTIVÉE (endpoint: GET /csrf-token)")
     print(f"🌐 CORS: {ALLOWED_ORIGINS}")
     security_logger.log_auth(
         action="startup",
         user_id="system",
         ip="127.0.0.1",
         status="success",
-        details={"message": "API Gateway démarrée"}
+        details={"message": "API Gateway démarrée avec CSRF Protection"}
     )
 
 @app.on_event("shutdown")
 async def shutdown():
-    print("🛑 API Gateway arrêtée")
+    print("API Gateway arrêtée")
     security_logger.log_auth(
         action="shutdown",
         user_id="system",

@@ -5,6 +5,7 @@ import { Archive, Bell, CheckCheck, Clock, Loader2, Trash2 } from 'lucide-react'
 import { GlassCard } from '../components/ui/GlassCard';
 import { notificationService, type NotificationItem, type NotificationRealtimeEvent } from '../services/notification.service';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'Date inconnue';
@@ -47,6 +48,7 @@ const getNotificationLink = (notification: NotificationItem): string | null => {
 };
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -91,8 +93,7 @@ export default function NotificationsPage() {
   }, [loadNotifications]);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return undefined;
+    if (!user) return undefined;
 
     let retryTimeout: number | undefined;
     let closedByEffect = false;

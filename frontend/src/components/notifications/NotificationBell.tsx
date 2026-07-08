@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { notificationService, type NotificationRealtimeEvent } from '../../services/notification.service';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface NotificationBellProps {
   buttonClassName?: string;
@@ -11,11 +12,11 @@ interface NotificationBellProps {
 export default function NotificationBell({
   buttonClassName = 'relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-all border border-transparent hover:border-theme-border-subtle focus:outline-none transition-all duration-300',
 }: NotificationBellProps) {
+  const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadUnreadCount = useCallback(async () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
+    if (!user) {
       setUnreadCount(0);
       return;
     }
@@ -49,8 +50,7 @@ export default function NotificationBell({
   }, [loadUnreadCount]);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return undefined;
+    if (!user) return undefined;
 
     let retryTimeout: number | undefined;
     let closedByEffect = false;

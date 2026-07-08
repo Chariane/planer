@@ -38,8 +38,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     
     // ✅ Si c'est une erreur d'authentification, déclencher la redirection
     if (this.state.isAuthError) {
-      localStorage.removeItem('access_token');
-        window.dispatchEvent(new CustomEvent('sessionExpired'));
+      // ✅ Le token est maintenant géré via cookies HttpOnly
+      // Le logout endpoint se chargera de le supprimer
+      window.dispatchEvent(new CustomEvent('sessionExpired'));
     }
   }
 

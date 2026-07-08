@@ -77,8 +77,7 @@ export const notificationService = {
     apiFetch(NOTIFICATION_BASE_URL, `/notifications/${notificationId}`, { method: 'DELETE' }),
 
   socketUrl: () => {
-    const token = localStorage.getItem('access_token') || '';
-    const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/notifications/ws?${query.toString()}`;
+    // ✅ Le token est automatiquement envoyé dans les cookies
+    return `${wsBaseUrl()}/notifications/ws`;
   },
 };

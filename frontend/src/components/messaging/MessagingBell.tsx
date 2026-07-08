@@ -3,6 +3,7 @@ import { MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { messagerieService } from '../../services/messagerie.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface MessagingBellProps {
   buttonClassName?: string;
@@ -11,11 +12,11 @@ interface MessagingBellProps {
 export default function MessagingBell({
   buttonClassName = 'relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-all border border-transparent hover:border-theme-border-subtle focus:outline-none duration-300',
 }: MessagingBellProps) {
+  const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadUnreadCount = useCallback(async () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
+    if (!user) {
       setUnreadCount(0);
       return;
     }

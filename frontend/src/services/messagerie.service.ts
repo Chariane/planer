@@ -80,42 +80,16 @@ export interface PresenceResponse {
 
 // Fonction utilitaire pour extraire le user_id localement
 const getCurrentUserId = (): string => {
-  try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload.sub) return payload.sub;
-      if (payload.id) return payload.id;
-    }
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user.id) return user.id;
-      if (user.user_id) return user.user_id;
-    }
-  } catch (e) {
-    console.error("Impossible de récupérer l'ID utilisateur");
-  }
+  // ✅ Le user_id devrait venir d'AuthContext ou du state Redux
+  // On ne peut pas l'extraire du localStorage
+  // Cette fonction est conservée pour compatibilité mais retourne vide
+  // Les appelants doivent passer l'ID explicitement
   return '';
 };
 
 const getCurrentUsername = (): string => {
-  try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload.username) return payload.username;
-      if (payload.email) return payload.email.split('@')[0];
-    }
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user.username) return user.username;
-      if (user.email) return user.email.split('@')[0];
-    }
-  } catch (e) {
-    console.error("Impossible de récupérer le nom d'utilisateur");
-  }
+  // ✅ Le username devrait venir d'AuthContext ou du state Redux
+  // On ne peut pas l'extraire du localStorage
   return 'Utilisateur';
 };
 
@@ -145,12 +119,22 @@ export const messagerieService = {
   },
 
   getUnreadSummary: async () => {
-    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/unread-summary/${getCurrentUserId()}`) as any;
-    return {
-      unread_discussions_count: res?.total_unread || 0,
-      unread_group_ids: [],
-      has_private_unread: (res?.private_unread || 0) > 0,
-    } as MessagerieUnreadSummary;
+    try {
+      const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/unread-summary/${getCurrentUserId()}`) as any;
+      return {
+        unread_discussions_count: res?.total_unread || 0,
+        unread_group_ids: [],
+        has_private_unread: (res?.private_unread || 0) > 0,
+      } as MessagerieUnreadSummary;
+    } catch (e) {
+      console.warn('Erreur getUnreadSummary:', e);
+      // Fallback sur valeurs par défaut
+      return {
+        unread_discussions_count: 0,
+        unread_group_ids: [],
+        has_private_unread: false,
+      } as MessagerieUnreadSummary;
+    }
   },
 
   getGroupMembers: async (groupId: string) => {
@@ -219,14 +203,12 @@ export const messagerieService = {
   },
 
   groupSocketUrl: (groupId: string) => {
-    const token = localStorage.getItem('access_token') || '';
-    const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}?${query.toString()}`;
+    // ✅ Le token est automatiquement envoyé dans les cookies
+    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}`;
   },
 
   privateSocketUrl: (receiverId: string) => {
-    const token = localStorage.getItem('access_token') || '';
-    const query = new URLSearchParams({ token });
-    return `${wsBaseUrl()}/chat/ws/private/${getCurrentUserId()}/${receiverId}?${query.toString()}`;
+    // ✅ Le token est automatiquement envoyé dans les cookies
+    return `${wsBaseUrl()}/chat/ws/private/${getCurrentUserId()}/${receiverId}`;
   },
 };
