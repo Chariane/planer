@@ -118,9 +118,21 @@ def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
 
 
 def _encode_profile_photo(photo: bytes | None) -> str | None:
+    """
+    Encode une photo en base64 de manière sécurisée
+    """
     if not photo:
         return None
-    return base64.b64encode(photo).decode("ascii")
+
+    # ✅ Vérifier que c'est bien des bytes
+    if not isinstance(photo, bytes):
+        return None
+
+    # ✅ Encoder en base64
+    try:
+        return base64.b64encode(photo).decode("ascii")
+    except Exception:
+        return None
 
 
 def _guess_profile_photo_mime(photo: bytes | None) -> str | None:
