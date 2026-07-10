@@ -32,7 +32,14 @@ def _get_ws_user(token: str | None):
 
 @router.websocket("/ws")
 async def notifications_ws(websocket: WebSocket):
-    user = _get_ws_user(websocket.query_params.get("token"))
+    # Lire le token depuis les cookies
+    token = websocket.cookies.get("access_token")
+    
+    # Fallback: token dans l'URL (pour compatibilité)
+    if not token:
+        token = websocket.query_params.get("token")
+    
+    user = _get_ws_user(token)
     if not user:
         await websocket.close(code=1008)
         return

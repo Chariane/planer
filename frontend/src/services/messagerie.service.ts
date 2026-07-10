@@ -1,6 +1,7 @@
+// frontend/src/services/messagerie.service.ts
+
 import { apiFetch } from './api';
 
-// On pointe désormais vers K-Chat (port 8000 par défaut ou variable d'env)
 export const MESSAGERIE_BASE_URL = import.meta.env.VITE_MESSAGERIE_URL || 'http://localhost:8000';
 
 export interface MessagePayload {
@@ -78,26 +79,9 @@ export interface PresenceResponse {
   last_seen?: string | null;
 }
 
-// Fonction utilitaire pour extraire le user_id localement
-const getCurrentUserId = (): string => {
-  // ✅ Le user_id devrait venir d'AuthContext ou du state Redux
-  // On ne peut pas l'extraire du localStorage
-  // Cette fonction est conservée pour compatibilité mais retourne vide
-  // Les appelants doivent passer l'ID explicitement
-  return '';
-};
-
-const getCurrentUsername = (): string => {
-  // ✅ Le username devrait venir d'AuthContext ou du state Redux
-  // On ne peut pas l'extraire du localStorage
-  return 'Utilisateur';
-};
-
 const wsBaseUrl = () => MESSAGERIE_BASE_URL.replace(/^http/, 'ws');
 
-// ✅ NOUVEAU : Garantir un groupe via K-Planner
 export const ensureChatGroup = async (resourceType: string, resourceId: string): Promise<{ success: boolean; group_id: string }> => {
-  // Choisir le bon microservice selon le type
   const baseUrlMap: Record<string, string> = {
     workspace: import.meta.env.VITE_WORKSPACE_URL || 'http://localhost:8003',
     espace: import.meta.env.VITE_ESPACE_URL || 'http://localhost:8001',
@@ -113,25 +97,42 @@ export const ensureChatGroup = async (resourceType: string, resourceId: string):
 };
 
 export const messagerieService = {
-  listGroups: async () => {
-    const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/user-groups/${getCurrentUserId()}`);
+  listGroups: async (userId: string) => {
+    if (!userId) {
+      console.warn('⚠️ listGroups: Pas d\'ID utilisateur');
+      return { groups: [] };
+    }
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/group/user-groups/${userId}`);
     return Array.isArray(res) ? { groups: res } : res;
   },
 
-  getUnreadSummary: async () => {
+  getUnreadSummary: async (userId: string) => {
+    if (!userId) {
+      console.warn('⚠️ getUnreadSummary: Pas d\'ID utilisateur');
+      return {
+        unread_discussions_count: 0,
+        unread_group_ids: [],
+        has_private_unread: false,
+      } as MessagerieUnreadSummary;
+    }
     try {
-      const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/unread-summary/${getCurrentUserId()}`) as any;
+      const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/unread-summary/${userId}`) as any;
       return {
         unread_discussions_count: res?.total_unread || 0,
-        unread_group_ids: [],
+        unread_group_ids: res?.unread_group_ids || [],
+        unread_group_counts: res?.unread_group_counts || {},
+        unread_private_user_ids: res?.unread_private_user_ids || [],
+        unread_private_counts: res?.unread_private_counts || {},
         has_private_unread: (res?.private_unread || 0) > 0,
       } as MessagerieUnreadSummary;
     } catch (e) {
       console.warn('Erreur getUnreadSummary:', e);
-      // Fallback sur valeurs par défaut
       return {
         unread_discussions_count: 0,
         unread_group_ids: [],
+        unread_group_counts: {},
+        unread_private_user_ids: [],
+        unread_private_counts: {},
         has_private_unread: false,
       } as MessagerieUnreadSummary;
     }
@@ -147,11 +148,13 @@ export const messagerieService = {
     return Array.isArray(res) ? { messages: res } : res;
   },
 
-  updateGroupClosedState: async (groupId: string, isClosed: boolean) => {
-    const actor = getCurrentUserId();
+  updateGroupClosedState: async (groupId: string, isClosed: boolean, actorId: string) => {
+    if (!actorId) {
+      throw new Error('Utilisateur non authentifié');
+    }
     return apiFetch(MESSAGERIE_BASE_URL, `/group/group/${groupId}/toggle-closed`, {
       method: 'PUT',
-      body: JSON.stringify({ is_closed: isClosed, actor }),
+      body: JSON.stringify({ is_closed: isClosed, actor: actorId }),
     }) as Promise<MessagerieGroup>;
   },
 
@@ -160,13 +163,21 @@ export const messagerieService = {
     return { id: "temp", ...payload } as unknown as MessageItem;
   },
 
-  getPrivateMessages: async (otherUserId: string) => {
-    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/messages/${getCurrentUserId()}/${otherUserId}`);
+  getPrivateMessages: async (otherUserId: string, currentUserId: string) => {
+    if (!currentUserId || !otherUserId) {
+      console.warn('⚠️ getPrivateMessages: IDs invalides');
+      return { messages: [] };
+    }
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/messages/${currentUserId}/${otherUserId}`);
     return Array.isArray(res) ? { messages: res } : res;
   },
 
-  listPrivateConversations: async () => {
-    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/conversations/${getCurrentUserId()}`) as any;
+  listPrivateConversations: async (userId: string) => {
+    if (!userId) {
+      console.warn('⚠️ listPrivateConversations: Pas d\'ID utilisateur');
+      return { conversations: [] };
+    }
+    const res = await apiFetch(MESSAGERIE_BASE_URL, `/chat/conversations/${userId}`) as any;
     if (res && res.conversations) {
       const mapped = res.conversations.map((conv: any) => ({
         room_id: conv.room_id,
@@ -202,13 +213,19 @@ export const messagerieService = {
     return apiFetch(MESSAGERIE_BASE_URL, `/chat/presence/${userId}`) as Promise<PresenceResponse>;
   },
 
-  groupSocketUrl: (groupId: string) => {
-    // ✅ Le token est automatiquement envoyé dans les cookies
-    return `${wsBaseUrl()}/group/ws/group/${groupId}/${getCurrentUsername()}`;
+  groupSocketUrl: (groupId: string, username: string) => {
+    if (!groupId || !username) {
+      console.error('❌ groupSocketUrl: paramètres invalides:', { groupId, username });
+      return null;
+    }
+    return `${wsBaseUrl()}/group/ws/group/${groupId}/${username}`;
   },
 
-  privateSocketUrl: (receiverId: string) => {
-    // ✅ Le token est automatiquement envoyé dans les cookies
-    return `${wsBaseUrl()}/chat/ws/private/${getCurrentUserId()}/${receiverId}`;
+  privateSocketUrl: (senderId: string, receiverId: string) => {
+    if (!senderId || !receiverId) {
+      console.error('❌ privateSocketUrl: IDs invalides:', { senderId, receiverId });
+      return null;
+    }
+    return `${wsBaseUrl()}/chat/ws/private/${senderId}/${receiverId}`;
   },
 };

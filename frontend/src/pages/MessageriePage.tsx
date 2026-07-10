@@ -491,6 +491,8 @@ export default function MessageriePage() {
 
   // ✅ loadGroups MODIFIÉE avec ensureChatGroup
   const loadGroups = useCallback(async () => {
+    if (!user?.id) return;
+
     setLoadingGroups(true);
     setError(null);
     try {
@@ -505,8 +507,8 @@ export default function MessageriePage() {
       }
       
       const [groupsResponse, privateResponse] = await Promise.all([
-        messagerieService.listGroups(),
-        messagerieService.listPrivateConversations(),
+        messagerieService.listGroups(user.id),
+        messagerieService.listPrivateConversations(user.id),
       ]);
       
       const nextGroups = groupsResponse.groups || [];
@@ -518,7 +520,7 @@ export default function MessageriePage() {
       setPrivateConversations(privateResponse.conversations || []);
       setActiveGroupId(current => privateUserId ? current : requestedGroup?.id || current || nextGroups[0]?.id || null);
       
-      messagerieService.getUnreadSummary()
+      messagerieService.getUnreadSummary(user.id)
         .then(summary => setUnreadSummary({ ...emptyUnreadSummary, ...summary }))
         .catch(() => setUnreadSummary(emptyUnreadSummary));
     } catch (err: unknown) {
@@ -529,7 +531,7 @@ export default function MessageriePage() {
     } finally {
       setLoadingGroups(false);
     }
-  }, [desiredResourceId, desiredResourceType, privateUserId]);
+  }, [desiredResourceId, desiredResourceType, privateUserId, user?.id]);
 
   useEffect(() => {
     if (desiredPrivateUserId) {
@@ -580,7 +582,7 @@ export default function MessageriePage() {
       const [profileData, presenceData, messagesResponse] = await Promise.all([
         authService.getUserProfile(otherUserId),
         messagerieService.getPresence(otherUserId).catch(() => ({ is_online: false, last_seen: null })),
-        messagerieService.getPrivateMessages(otherUserId),
+        messagerieService.getPrivateMessages(otherUserId, user?.id || ''),
       ]);
       setPrivateProfile(profileData);
       setPrivateOnline(Boolean(presenceData.is_online));
@@ -602,7 +604,7 @@ export default function MessageriePage() {
     } finally {
       setLoadingThread(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     loadGroups();
@@ -636,7 +638,9 @@ export default function MessageriePage() {
     socketRef.current?.close();
     setIsRealtime(false);
 
-    const socket = new WebSocket(messagerieService.groupSocketUrl(activeGroupId));
+    const wsUrl = messagerieService.groupSocketUrl(activeGroupId, user?.username || 'Utilisateur');
+    if (!wsUrl) return;
+    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -772,7 +776,9 @@ export default function MessageriePage() {
     socketRef.current?.close();
     setIsRealtime(false);
 
-    const socket = new WebSocket(messagerieService.privateSocketUrl(privateUserId));
+    const wsUrl = user?.id ? messagerieService.privateSocketUrl(user.id, privateUserId) : null;
+    if (!wsUrl) return;
+    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -1480,8 +1486,7 @@ export default function MessageriePage() {
     }));
     
     try {
-      const response = await messagerieService.updateGroupClosedState(groupId, nextClosedState);
-      
+      const response = await messagerieService.updateGroupClosedState(groupId, nextClosedState, user?.id || '');
       // ✅ La réponse peut être { group: ... } ou directement le groupe
       const updatedGroup = (response as any).group || response;
       

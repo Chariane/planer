@@ -17,7 +17,7 @@ import { ROLES } from '../../../lib/roleHierarchy';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Task, UserAvailabilityOut } from '../../../types';
 import { AvailabilityBadge } from '../../../components/ui/AvailabilityBadge';
-import { toast } from '../../../components/ui/Toast'; // ✅ Import du toast maison
+import { toast } from '../../../components/ui/Toast';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 
@@ -57,6 +57,23 @@ interface ListMemberRecord {
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
   return new Date(value).toLocaleDateString('fr-FR');
+};
+
+// ============================================================
+// UTILITAIRE POUR LE CALCUL DE LA DURÉE
+// ============================================================
+const getDurationDisplay = (startDate: string, endDate?: string | null) => {
+  const start = new Date(startDate);
+  const end = endDate ? new Date(endDate) : new Date(startDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  if (diffDays === 1) return '1 jour';
+  if (diffDays < 7) return `${diffDays} jours`;
+  const weeks = Math.floor(diffDays / 7);
+  const remainder = diffDays % 7;
+  if (remainder === 0) return `${weeks} semaine${weeks > 1 ? 's' : ''}`;
+  return `${weeks} sem. ${remainder} j.`;
 };
 
 export default function PlannerToolsPanel({
@@ -135,6 +152,7 @@ export default function PlannerToolsPanel({
   const [decisionAction, setDecisionAction] = useState<'approve' | 'reject' | null>(null);
   const [decisionComment, setDecisionComment] = useState('');
   const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -288,7 +306,7 @@ export default function PlannerToolsPanel({
   };
 
   const loadMembers = async () => {
-    if (!workspaceId && !espaceId && !listeId) return;
+    if (!workspaceId && !espaceId && !listeId) return [];
     try {
       const workspacePromise = workspaceId ? workspaceService.getMembers(workspaceId).catch(() => []) : Promise.resolve([]);
       const espacePromise = espaceId ? espaceService.getMembers(espaceId).catch(() => []) : Promise.resolve([]);
@@ -491,24 +509,37 @@ export default function PlannerToolsPanel({
   const loadAbsences = async (customMembers?: ListMemberRecord[]) => {
     if (!listeId && !espaceId && !workspaceId) return;
     try {
-      const data = await absenceService.list({
-        liste_id: listeId || undefined,
-        espace_id: espaceId || undefined,
-        workspace_id: workspaceId || undefined,
-        limit: 100
-      });
-      setAbsences(Array.isArray(data) ? data : []);
-
       const currentMembers = customMembers || members;
-      const userIds = currentMembers.map(m => m.id_utilisateur).filter(Boolean);
-
-      if (userIds.length > 0) {
-        const resourceId = listeId || espaceId || workspaceId || '';
-        const availability = await absenceService.getAvailability(resourceId, userIds);
-        setListAvailability(availability);
+      
+      if (currentMembers.length === 0) {
+        return;
       }
+      
+      const userIds = currentMembers.map(m => m.id_utilisateur).filter(Boolean);
+      const resourceId = listeId || espaceId || workspaceId || '';
+      
+      setAvailabilityLoading(true);
+      
+      const [data, availability] = await Promise.all([
+        absenceService.list({
+          liste_id: listeId || undefined,
+          espace_id: espaceId || undefined,
+          workspace_id: workspaceId || undefined,
+          limit: 100
+        }),
+        userIds.length > 0 
+          ? absenceService.getAvailability(resourceId, userIds)
+          : Promise.resolve([])
+      ]);
+
+      setAbsences(Array.isArray(data) ? data : []);
+      setListAvailability(Array.isArray(availability) ? availability : []);
+      setAvailabilityLoading(false);
     } catch (err) {
       console.error('Failed to load absences:', err);
+      setAbsences([]);
+      setListAvailability([]);
+      setAvailabilityLoading(false);
     }
   };
 
@@ -516,9 +547,14 @@ export default function PlannerToolsPanel({
     setLoading(true);
     try {
       const loadedMembers = await loadMembers();
-      if (activeTool === 'files' && canViewFiles) await loadFiles();
-      if (activeTool === 'reports') await loadReports();
-      if (activeTool === 'absences') await loadAbsences(loadedMembers);
+      
+      if (activeTool === 'files' && canViewFiles) {
+        await loadFiles();
+      } else if (activeTool === 'reports') {
+        await loadReports();
+      } else if (activeTool === 'absences') {
+        await loadAbsences(loadedMembers);
+      }
     } catch (err: any) {
       toast.error(getErrorMessage(err) || 'Impossible de charger les données.');
     } finally {
@@ -1075,8 +1111,12 @@ export default function PlannerToolsPanel({
     );
   };
 
+  // ============================================================
+  // DÉCLARATIONS useMemo (dans le bon ordre)
+  // ============================================================
+
   const absencesWithAuthors = useMemo(() => {
-    return (absences || [])
+    const result = (absences || [])
       .filter(Boolean)
       .filter(a => a.statut !== 'annulee')
       .map(a => ({
@@ -1088,6 +1128,7 @@ export default function PlannerToolsPanel({
         authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
         author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
       }));
+    return result;
   }, [absences, members, currentUserId]);
 
   const ownAbsences = useMemo(
@@ -1098,9 +1139,14 @@ export default function PlannerToolsPanel({
     [absencesWithAuthors, archivedAbsenceIds, currentUserId, isDirectMemberRecord?.id],
   );
 
+  // ✅ CORRECTION : accessibleAbsences ne filtre plus par id_membre
+  // mais par owner_user_id pour éviter que la demande du Membre disparaisse
   const accessibleAbsences = useMemo(
-    () => absencesWithAuthors.filter(a => a.owner_user_id !== currentUserId && a.id_membre !== isDirectMemberRecord?.id && !archivedAbsenceIds.includes(a.id)),
-    [absencesWithAuthors, archivedAbsenceIds, currentUserId, isDirectMemberRecord?.id],
+    () => absencesWithAuthors.filter(a => {
+      const isOwn = a.owner_user_id === currentUserId;
+      return !isOwn && !archivedAbsenceIds.includes(a.id);
+    }),
+    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
   );
 
   const archivedAbsences = useMemo(() => {
@@ -1130,8 +1176,11 @@ export default function PlannerToolsPanel({
     return aStart <= bEnd && bStart <= aEnd;
   };
 
+  // ============================================================
+  // ✅ FILTRE PENDING ABSENCES CORRIGÉ
+  // ============================================================
   const pendingAbsences = useMemo(() => {
-    return accessibleAbsences.filter(absence => {
+    const result = accessibleAbsences.filter(absence => {
       if (!absence || absence.statut !== 'en_attente') return false;
 
       if (listeId) {
@@ -1140,10 +1189,18 @@ export default function PlannerToolsPanel({
         }
         if (isDirectResourceCreator) {
           if (absence.author_role === 'Administrateur') return true;
-          const hasAvailableAdmin = listAvailability.some(a =>
-            a.is_available &&
-            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === 'Administrateur'
+          
+          // ✅ CORRECTION : Utiliser directMembers au lieu de members
+          // ✅ Si listAvailability est vide, on garde la demande visible
+          if (availabilityLoading || listAvailability.length === 0) {
+            return absence.author_role === 'Membre';
+          }
+          
+          const hasAvailableAdmin = directMembers.some(m => 
+            m.role === ROLES.ADMIN && 
+            listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
           );
+          
           return absence.author_role === 'Membre' && !hasAvailableAdmin;
         }
       }
@@ -1154,9 +1211,12 @@ export default function PlannerToolsPanel({
         }
         if (isDirectResourceCreator) {
           if (absence.author_role === 'Administrateur') return true;
-          const hasAvailableAdmin = listAvailability.some(a =>
-            a.is_available &&
-            members.find(m => m.id_utilisateur === a.id_utilisateur)?.role === 'Administrateur'
+          if (availabilityLoading || listAvailability.length === 0) {
+            return absence.author_role === 'Membre';
+          }
+          const hasAvailableAdmin = directMembers.some(m => 
+            m.role === ROLES.ADMIN && 
+            listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
           );
           return absence.author_role === 'Membre' && !hasAvailableAdmin;
         }
@@ -1173,7 +1233,9 @@ export default function PlannerToolsPanel({
 
       return false;
     });
-  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, members, listeId, espaceId, workspaceId]);
+    
+    return result;
+  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, directMembers, listeId, espaceId, workspaceId, availabilityLoading]);
 
   const calendarAbsences = useMemo(
     () => [...visibleAbsences]
@@ -2244,51 +2306,57 @@ export default function PlannerToolsPanel({
                   <Calendar className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
                   <p className="font-black text-[10px] uppercase tracking-widest">Calendrier vide</p>
                 </div>
-              ) : calendarAbsences.filter(a => a && a.statut === 'approuvee').map(absence => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const start = new Date(absence.date_debut);
-                const end = new Date(absence.date_fin);
-                start.setHours(0, 0, 0, 0);
-                end.setHours(0, 0, 0, 0);
-                const isCurrent = today >= start && today <= end;
-                const diffTime = Math.abs(end.getTime() - start.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+              ) : (
+                calendarAbsences.filter(a => a && a.statut === 'approuvee').map(absence => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const start = new Date(absence.date_debut);
+                  const end = absence.date_fin ? new Date(absence.date_fin) : new Date(absence.date_debut);
+                  start.setHours(0, 0, 0, 0);
+                  end.setHours(0, 0, 0, 0);
+                  const isCurrent = today >= start && today <= end;
+                  
+                  // ✅ Calcul dynamique du nombre de jours
+                  const durationDisplay = getDurationDisplay(absence.date_debut, absence.date_fin);
 
-                return (
-                  <GlassCard key={absence.id} className={`p-4 border-theme-border-subtle bg-theme-surface/70 ${isCurrent ? 'ring-2 ring-emerald-500/30 bg-emerald-500/5' : ''}`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
-                          {absence.is_absence ? <AlertTriangle className="h-5 w-5" /> : <Calendar className="h-5 w-5" />}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <AvailabilityBadge availability={listAvailability.find(avail => avail.id_utilisateur === absence.owner_user_id)} />
-                            <p className="text-sm font-black text-theme-main truncate">{absence.authorName}</p>
-                            {isCurrent && (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse">
-                                En cours
-                              </span>
+                  return (
+                    <GlassCard key={absence.id} className={`p-4 border-theme-border-subtle bg-theme-surface/70 ${isCurrent ? 'ring-2 ring-emerald-500/30 bg-emerald-500/5' : ''}`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
+                            {absence.is_absence ? <AlertTriangle className="h-5 w-5" /> : <Calendar className="h-5 w-5" />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <AvailabilityBadge availability={listAvailability.find(avail => avail.id_utilisateur === absence.owner_user_id)} />
+                              <p className="text-sm font-black text-theme-main truncate">{absence.authorName}</p>
+                              {isCurrent && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse">
+                                  En cours
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">
+                              {absence.is_absence ? 'Absence' : 'Congé'} · {durationDisplay}
+                            </p>
+                            {absence.decision_by_name && (
+                              <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                                Approuvé par {absence.decision_by_name}
+                              </p>
+                            )}
+                            {absence.motif && (
+                              <p className="mt-1 text-[10px] text-theme-muted/60 italic line-clamp-1">"{absence.motif}"</p>
                             )}
                           </div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted">
-                            {absence.is_absence ? 'Absence' : 'Congé'} · {diffDays} jour(s)
-                          </p>
-                          {absence.decision_by_name && (
-                            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                              Approuvé par {absence.decision_by_name}
-                            </p>
-                          )}
+                        </div>
+                        <div className="text-xs font-black text-theme-main bg-theme-surface-hover/50 px-3 py-1.5 rounded-xl border border-theme-border-subtle whitespace-nowrap">
+                          {formatDate(absence.date_debut)} → {formatDate(absence.date_fin || absence.date_debut)}
                         </div>
                       </div>
-                      <div className="text-xs font-black text-theme-main bg-theme-surface-hover/50 px-3 py-1.5 rounded-xl border border-theme-border-subtle">
-                        {formatDate(absence.date_debut)} → {formatDate(absence.date_fin)}
-                      </div>
-                    </div>
-                  </GlassCard>
-                );
-              })}
+                    </GlassCard>
+                  );
+                })
+              )}
             </div>
           )}
         </motion.div>
@@ -2493,7 +2561,6 @@ export default function PlannerToolsPanel({
             && isDirectResourceCreator
             && !isOwn;
 
-          // ✅ UTILISATION DES DONNÉES D'IMPACT POUR LE BESOIN D'ADMIN DE SECOURS
           const needsBackupAdmin = isPendingAdminRequest &&
             impactData.sole_admin_resources && impactData.sole_admin_resources.length > 0;
 

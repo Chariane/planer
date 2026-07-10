@@ -1,3 +1,4 @@
+// frontend/src/components/ui/AvailabilityBadge.tsx
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { UserAvailabilityOut } from '../../types';
@@ -7,6 +8,22 @@ interface AvailabilityBadgeProps {
     size?: 'sm' | 'md' | 'lg';
     showText?: boolean;
 }
+
+// ✅ Fonction de formatage sécurisée avec fallback
+const formatDate = (date?: string | null) => {
+    if (!date) return null;
+    try {
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+    } catch {
+        return null;
+    }
+};
 
 export const AvailabilityBadge: React.FC<AvailabilityBadgeProps> = ({
     availability,
@@ -30,6 +47,32 @@ export const AvailabilityBadge: React.FC<AvailabilityBadgeProps> = ({
         }
     };
 
+    // ✅ Règle métier : si date_fin est null, on utilise date_debut
+    const getEndDate = () => {
+        if (!current_absence) return null;
+        // Priorité à date_fin, sinon date_debut
+        const endDate = current_absence.date_fin || current_absence.date_debut;
+        return formatDate(endDate);
+    };
+
+    const endDate = getEndDate();
+
+    const getTooltipText = () => {
+        if (is_available) return 'Disponible';
+        if (!current_absence) return 'Indisponible';
+        const type = current_absence.is_absence ? 'Absence' : 'Congé';
+        if (endDate) {
+            return `${type} - Indisponible jusqu'au ${endDate}`;
+        }
+        return `${type} - Indisponible (date non définie)`;
+    };
+
+    // ✅ Texte affiché : juste "Disponible" ou "Indisponible" (sans date)
+    const getStatusText = () => {
+        if (is_available) return 'Disponible';
+        return 'Indisponible';
+    };
+
     return (
         <div className="flex items-center gap-2 group relative">
             <motion.div
@@ -49,7 +92,7 @@ export const AvailabilityBadge: React.FC<AvailabilityBadgeProps> = ({
                     ease: "easeInOut"
                 }}
                 className={`${getSizeClasses()} rounded-full ${getBadgeColor()} shadow-sm ring-2 ring-white dark:ring-slate-900`}
-                title={is_available ? 'Disponible' : `Absent: ${current_absence?.motif || 'Sans motif'}`}
+                title={getTooltipText()}
             />
 
             {showText && (
@@ -57,20 +100,30 @@ export const AvailabilityBadge: React.FC<AvailabilityBadgeProps> = ({
                     ? 'text-emerald-600 bg-emerald-500/10 border border-emerald-500/20'
                     : 'text-rose-600 bg-rose-500/10 border border-rose-500/20 animate-pulse'
                     }`}>
-                    {is_available ? 'Disponible' : 'Indisponible'}
+                    {getStatusText()}
                 </span>
             )}
 
-            {/* Tooltip on hover if absent */}
+            {/* ✅ Tooltip on hover if absent - affiche la date de fin */}
             {!is_available && current_absence && (
                 <AnimatePresence>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block transition-all z-50">
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap"
+                            className="bg-slate-900 text-white text-[10px] px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap max-w-[220px]"
                         >
-                            Indisponible jusqu'au {new Date(current_absence.date_fin).toLocaleDateString()}
+                            <div className="font-bold">{current_absence.is_absence ? 'Absence' : 'Congé'}</div>
+                            {endDate ? (
+                                <div className="text-slate-300">Indisponible jusqu'au {endDate}</div>
+                            ) : (
+                                <div className="text-slate-300">Date de fin non définie</div>
+                            )}
+                            {current_absence.motif && (
+                                <div className="text-slate-400 text-[9px] italic mt-0.5 truncate max-w-[180px]">
+                                    "{current_absence.motif}"
+                                </div>
+                            )}
                             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
                         </motion.div>
                     </div>
