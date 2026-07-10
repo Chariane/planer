@@ -192,3 +192,11 @@ async def logout_user(token: str):
     """Déconnecte un utilisateur en blacklistant son token"""
     add_to_blacklist(token)
     logger.info(f"Utilisateur déconnecté - token blacklisté")
+
+def get_access_token_from_request(request: Request) -> Optional[str]:
+    """
+    Extrait le token JWT du cookie 'access_token' dans la requête.
+    Utilisé comme dépendance FastAPI pour injecter le token dans les routes.
+    """
+    token = request.cookies.get("access_token")
+    return token

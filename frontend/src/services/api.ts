@@ -126,17 +126,28 @@ export function sanitizeApiErrorMessage(error: unknown, fallback = 'Une erreur e
 
   return cleanMessage || fallback;
 }
+
 let cachedCsrfToken: string | null = null;
 let csrfTokenExpiry: number | null = null;
 
-async function getCsrfToken(baseUrl: string): Promise<string> {
+// ✅ URL de l'API Gateway
+const API_GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8002';
+
+// ✅ Fonction pour détecter si on appelle le Gateway
+function isGatewayRequest(baseUrl: string): boolean {
+  return baseUrl === API_GATEWAY_URL;
+}
+
+// ✅ MODIFICATION : getCsrfToken ne prend plus de paramètre
+async function getCsrfToken(): Promise<string> {
   const now = Date.now();
   if (cachedCsrfToken && csrfTokenExpiry && now < csrfTokenExpiry) {
     return cachedCsrfToken as string;
   }
 
   try {
-    const response = await fetch(`${baseUrl}/csrf-token`, {
+    // ✅ TOUJOURS appeler l'API Gateway
+    const response = await fetch(`${API_GATEWAY_URL}/csrf-token`, {
       credentials: 'include',
     });
     if (!response.ok) {
@@ -152,6 +163,7 @@ async function getCsrfToken(baseUrl: string): Promise<string> {
     return '';
   }
 }
+
 const ACCESS_TOKEN_KEY = 'kplanner_access_token';
 
 export function setAccessToken(token: string | null) {
@@ -183,10 +195,9 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
   const method = (options?.method || 'GET').toUpperCase();
   const isFormData = options?.body instanceof FormData;
 
-  // Récupérer le token CSRF pour les méthodes mutatives
-  const csrfToken = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
-    ? await getCsrfToken(baseUrl)
-    : '';
+  // ✅ MODIFICATION : CSRF UNIQUEMENT pour les requêtes mutatives VERS LE GATEWAY
+  const needsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && isGatewayRequest(baseUrl);
+  const csrfToken = needsCsrf ? await getCsrfToken() : '';
 
   // Sanitize le body si présent
   let sanitizedBody = options?.body;
@@ -200,12 +211,10 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
       // Si ce n'est pas du JSON, ne pas sanitizer
     }
   }
-  const accessToken = getAccessToken();
   const headers: HeadersInit = {
     ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...options?.headers,
     ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
   const fetchWithTimeout = async () => {
@@ -260,7 +269,11 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
 
     if (!response.ok) {
       let errorDetail = `Erreur HTTP ${response.status}`;
-      console.error('Détail erreur API:', data);
+      
+      // Log UNIQUEMENT en développement
+      if (import.meta.env.DEV) {
+        console.error('Détail erreur API:', data);
+      }
       
       if (Array.isArray(data.detail)) {
         // Pydantic validation errors - messages clairs

@@ -211,3 +211,12 @@ def decode_invitation_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def get_access_token_from_request(request: Request) -> Optional[str]:
+    """
+    Extrait le token JWT du cookie 'access_token' dans la requête.
+    Utilisé comme dépendance FastAPI pour injecter le token dans les routes.
+    """
+    token = request.cookies.get("access_token")
+    return token

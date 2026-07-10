@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
@@ -15,6 +15,7 @@ from ..core.function import (
 from ..core.security import (
     get_current_active_entreprise,
     get_current_user,
+    get_access_token_from_request,
 )
 from ..crud.entreprise import (
     cancel_entreprise_workspace_invitation,
@@ -54,8 +55,9 @@ def create_entreprise_workspace_endpoint(
     workspace_in: WorkspaceCreate,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: str | None = Depends(get_access_token_from_request),
 ):
-    workspace = create_entreprise_workspace(db, workspace_in, current_entreprise.id)
+    workspace = create_entreprise_workspace(db, workspace_in, current_entreprise.id, token=token)
     membre = get_member(db, workspace.id, current_entreprise.id)
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
@@ -81,9 +83,10 @@ def update_entreprise_workspace_endpoint(
     workspace_in: WorkspaceUpdate,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     _, membre, _ = _require_workspace_owner_access(db, workspace_id, current_entreprise.id)
-    workspace = update_entreprise_workspace(db, workspace_id, workspace_in)
+    workspace = update_entreprise_workspace(db, workspace_id, workspace_in, token=token)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouve")
     return _serialize_workspace(workspace, membre=membre)
@@ -181,12 +184,14 @@ def accept_entreprise_workspace_invitation_endpoint(
     invitation_in: WorkspaceInvitationAcceptRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     membre = accept_workspace_invitation(
         db,
         workspace_id=None,
         user_id=current_user.id,
         invitation_token=invitation_in.token,
+        token=token,
     )
     return _serialize_member(membre)
 
@@ -211,6 +216,7 @@ def update_entreprise_workspace_member_endpoint(
     membre_in: WorkspaceMemberUpdate,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     _require_workspace_member_management_access(
         db,
@@ -220,7 +226,7 @@ def update_entreprise_workspace_member_endpoint(
     )
 
     updated = update_entreprise_workspace_member(
-        db, current_entreprise.id, workspace_id, user_id, membre_in
+        db, current_entreprise.id, workspace_id, user_id, membre_in, token=token
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Workspace ou membre introuvable")
@@ -233,6 +239,7 @@ def remove_entreprise_workspace_member_endpoint(
     user_id: str,
     db: Session = Depends(get_db),
     current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     _require_workspace_member_management_access(
         db,
@@ -242,7 +249,7 @@ def remove_entreprise_workspace_member_endpoint(
     )
 
     success = remove_entreprise_workspace_member(
-        db, current_entreprise.id, workspace_id, user_id
+        db, current_entreprise.id, workspace_id, user_id, token=token
     )
     if success is None:
         raise HTTPException(status_code=404, detail="Workspace introuvable")

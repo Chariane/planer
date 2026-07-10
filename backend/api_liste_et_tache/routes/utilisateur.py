@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
-from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, Request
 import shutil
 import os
 from pathlib import Path
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..core.emails import send_liste_invitation_email
 from ..core.database import get_db
 from ..crud.canevas_enhanced import get_enhanced_canevas
-from ..core.security import get_current_user, decode_invitation_token, config_data
+from ..core.security import get_current_user, decode_invitation_token, config_data, get_access_token_from_request
 from ..core.function import (
     LISTE_OWNER_ROLE,
     LISTE_MEMBER_ROLE,
@@ -240,7 +240,8 @@ def _validate_search_scope(
 def create_liste_endpoint(
     liste_in: ListeCreate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     """Créer une liste dans un workspace ou un espace."""
     if liste_in.id_workspace:
@@ -256,6 +257,7 @@ def create_liste_endpoint(
         id_espace=liste_in.id_espace, 
         id_workspace=liste_in.id_workspace,
         creator_user_id=current_user.id,
+        token=token,
     )
 
 @router.get("/list_projets", response_model=List[ListeOut])
@@ -297,10 +299,11 @@ def update_liste_endpoint(
     liste_id: str,
     liste_in: ListeUpdate,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     _require_list_admin_access(db, liste_id, current_user.id)
-    upd = update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
+    upd = update_liste(db, liste_id, token=token, **liste_in.model_dump(exclude_unset=True))
     if not upd:
         raise HTTPException(status_code=404, detail="Liste non trouvee")
     return upd
@@ -322,7 +325,8 @@ def assign_liste_endpoint(
     utilisateur_id: str,
     role: str = Body(LISTE_MEMBER_ROLE, embed=True),
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     _require_list_member_management_access(db, liste_id, current_user.id)
     _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
@@ -336,14 +340,15 @@ def assign_liste_endpoint(
         target_member=_get_liste_member_record(db, liste_id, utilisateur_id),
         new_role=role,
     )
-    return assign_member_to_liste(db, liste_id, utilisateur_id, role)
+    return assign_member_to_liste(db, liste_id, utilisateur_id, role, token=token)
 
 @router.delete("/{liste_id}/unassign/{utilisateur_id}/unassign_liste", status_code=status.HTTP_204_NO_CONTENT)
 def unassign_liste_endpoint(
     liste_id: str,
     utilisateur_id: str,
     db: Session = Depends(get_db),
-    current_user: UtilisateurOut = Depends(get_current_user)
+    current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     if utilisateur_id == current_user.id:
         raise HTTPException(
@@ -369,7 +374,7 @@ def unassign_liste_endpoint(
         actor_source_id=actor_source_id,
         target_member=target_member,
     )
-    unassign_member_from_liste(db, liste_id, utilisateur_id)
+    unassign_member_from_liste(db, liste_id, utilisateur_id, token=token)
     return None
 
 @router.get("/{liste_id}/list_members_liste", response_model=List[WorkspaceMemberOut])
@@ -1447,6 +1452,7 @@ def invite_liste_member(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     """Invite un utilisateur dans une liste via email et token (existant ou guest)."""
     liste = get_liste_by_id(db, liste_id)

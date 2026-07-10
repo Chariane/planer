@@ -108,6 +108,7 @@ def create_liste(
     id_espace: str = None,
     id_workspace: str = None,
     creator_user_id: str | None = None,
+    token: str | None = None,
 ) -> Liste:
     owner_id = resolve_workspace_owner_id(db, workspace_id=id_workspace, espace_id=id_espace)
     if owner_id:
@@ -151,6 +152,7 @@ def create_liste(
             name=liste.nom,
             creator_id=creator_user_id,
             members=[creator_user_id],
+            token=token,
         )
     
     # 3. Commit final
@@ -167,7 +169,7 @@ def create_liste(
     return liste
 
 
-def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
+def update_liste(db: Session, liste_id: str, token: str | None = None, **kwargs) -> Optional[Liste]:
     liste = get_liste_by_id(db, liste_id)
     if not liste:
         return None
@@ -203,6 +205,7 @@ def update_liste(db: Session, liste_id: str, **kwargs) -> Optional[Liste]:
             resource_id=liste_id,
             name=liste.nom,
             creator_id=creator_id,
+            token=token,
         )
             
     try:
@@ -296,6 +299,7 @@ def assign_member_to_liste(
     liste_id: str,
     utilisateur_id: str,
     role: str = LISTE_MEMBER_ROLE,
+    token: str | None = None,
 ) -> Membre:
     """Ajoute ou met a jour un utilisateur sur une liste avec un role local explicite."""
     liste = _get_liste_with_scope(db, liste_id)
@@ -356,7 +360,8 @@ def assign_member_to_liste(
                 )
                 .scalar()
             ),
-            role=role,  # ✅ Ajout du rôle
+            role=role,
+            token=token,
         )
         try:
             db.commit()
@@ -391,7 +396,8 @@ def assign_member_to_liste(
             )
             .scalar()
         ),
-        role=role,  # ✅ Ajout du rôle
+        role=role,
+        token=token,
     )
     try:
         db.commit()
@@ -405,7 +411,7 @@ def assign_member_to_liste(
     return assignation
 
 
-def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) -> bool:
+def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str, token: str | None = None) -> bool:
     """Retire l'assignation directe d'un membre sur une liste."""
     assignation = (
         db.query(Membre)
@@ -424,6 +430,7 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str) 
         resource_type="liste",
         resource_id=liste_id,
         user_id=utilisateur_id,
+        token=token,
     )
     db.delete(assignation)
     db.commit()

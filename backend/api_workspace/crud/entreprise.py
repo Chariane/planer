@@ -49,16 +49,18 @@ def create_entreprise_workspace(
     db: Session,
     workspace_in: WorkspaceCreate,
     entreprise_user_id: str,
+    token: str | None = None,
 ) -> Workspace:
-    return create_workspace(db, workspace_in, entreprise_user_id)
+    return create_workspace(db, workspace_in, entreprise_user_id, token=token)
 
 
 def update_entreprise_workspace(
     db: Session,
     workspace_id: str,
     workspace_in: WorkspaceUpdate,
+    token: str | None = None,
 ) -> Optional[Workspace]:
-    return update_workspace(db, workspace_id, workspace_in)
+    return update_workspace(db, workspace_id, workspace_in, token=token)
 
 
 def delete_entreprise_workspace(db: Session, workspace_id: str) -> bool:
@@ -109,11 +111,12 @@ def update_entreprise_workspace_member(
     workspace_id: str,
     user_id: str,
     membre_in: WorkspaceMemberUpdate,
+    token: str | None = None,
 ) -> Optional[Membre]:
     workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
     if not workspace:
         return None
-    return update_member_role(db, workspace_id, user_id, membre_in)
+    return update_member_role(db, workspace_id, user_id, membre_in, token=token)
 
 
 def remove_entreprise_workspace_member(
@@ -121,11 +124,12 @@ def remove_entreprise_workspace_member(
     entreprise_user_id: str,
     workspace_id: str,
     user_id: str,
+    token: str | None = None,
 ) -> Optional[bool]:
     workspace = get_entreprise_workspace(db, entreprise_user_id, workspace_id)
     if not workspace:
         return None
-    return remove_member_from_workspace(db, workspace_id, user_id)
+    return remove_member_from_workspace(db, workspace_id, user_id, token=token)
 
 
 def cancel_entreprise_workspace_invitation(
@@ -140,8 +144,9 @@ def leave_entreprise_workspace(
     db: Session,
     workspace_id: str,
     user_id: str,
+    token: str | None = None,
 ) -> Optional[bool]:
     workspace = get_entreprise_workspace(db, user_id, workspace_id)
     if not workspace:
         return None
-    return leave_workspace(db, workspace_id, user_id)
+    return leave_workspace(db, workspace_id, user_id, token=token)

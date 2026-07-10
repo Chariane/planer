@@ -1,7 +1,7 @@
 # backend/api_workspace/routes/utilisateur.py
 
 from typing import List
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -20,7 +20,7 @@ from ..core.function import (
     get_workspace_local_resources,
     render_invitation_html_page
 )
-from ..core.security import get_current_user, decode_invitation_token, config_data
+from ..core.security import get_current_user, decode_invitation_token, get_access_token_from_request, config_data
 from ..crud.utilisateur import (
     accept_workspace_invitation,
     cancel_workspace_invitation,
@@ -63,9 +63,10 @@ def create_workspace_endpoint(
     workspace_in: WorkspaceCreate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """Crée un workspace, l'utilisateur devient automatiquement créateur et membre actif."""
-    workspace = create_workspace(db, workspace_in, current_user.id)
+    workspace = create_workspace(db, workspace_in, current_user.id, token=token)
     membre = get_member(db, workspace.id, current_user.id)
     return _serialize_workspace(workspace, membre=membre, member_count=1)
 
@@ -76,10 +77,11 @@ def update_workspace_endpoint(
     workspace_in: WorkspaceUpdate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """Modifie un workspace (réservé au créateur)."""
     _, membre, _ = _require_workspace_owner_access(db, workspace_id, current_user.id)
-    workspace = update_workspace(db, workspace_id, workspace_in)
+    workspace = update_workspace(db, workspace_id, workspace_in, token=token)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace non trouvé")
     return _serialize_workspace(workspace, membre=membre)
@@ -241,6 +243,7 @@ def accept_workspace_invitation_endpoint(
     invitation_in: WorkspaceInvitationAcceptRequest,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """Accepte une invitation a un workspace (classique ou JWT guest)."""
     # On délègue toute la logique de validation et de creation au CRUD
@@ -248,7 +251,8 @@ def accept_workspace_invitation_endpoint(
         db, 
         workspace_id=None, # Sera extrait du token par le CRUD
         user_id=current_user.id,
-        invitation_token=invitation_in.token
+        invitation_token=invitation_in.token,
+        token=token,
     )
     return _serialize_member(membre)
 
@@ -257,6 +261,7 @@ def accept_workspace_invitation_endpoint(
 def accept_workspace_invitation_from_email(
     token: str,
     db: Session = Depends(get_db),
+    access_token: str | None = Depends(get_access_token_from_request),
 ):
     """
     Accepte une invitation a un espace directement depuis le lien email.
@@ -302,7 +307,8 @@ def accept_workspace_invitation_from_email(
             db,
             workspace_id=None,
             user_id=user_id,
-            invitation_token=token
+            invitation_token=token,
+            token=access_token,
         )
         return RedirectResponse(url=accepted_redirect_url, status_code=302)
     except HTTPException as e:
@@ -356,6 +362,7 @@ def update_workspace_member_endpoint(
     membre_in: WorkspaceMemberUpdate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """Modifie le rôle ou le statut d'un membre."""
     _require_workspace_member_management_access(
@@ -366,7 +373,7 @@ def update_workspace_member_endpoint(
         membre_in.role
     )
 
-    updated = update_member_role(db, workspace_id, user_id, membre_in)
+    updated = update_member_role(db, workspace_id, user_id, membre_in, token=token)
     if not updated:
         raise HTTPException(status_code=400, detail="Erreur lors de la mise à jour")
     return _serialize_member(updated)
@@ -378,6 +385,7 @@ def remove_workspace_member_endpoint(
     user_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """Supprime ou retire un membre d'un workspace."""
     if user_id == current_user.id:
@@ -387,7 +395,7 @@ def remove_workspace_member_endpoint(
         )
     _require_workspace_owner_access(db, workspace_id, current_user.id)
 
-    success = remove_member_from_workspace(db, workspace_id, user_id)
+    success = remove_member_from_workspace(db, workspace_id, user_id, token=token)
     if not success:
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression")
     return None
@@ -402,9 +410,10 @@ def leave_workspace_endpoint(
     workspace_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """L'utilisateur connecté quitte le workspace (interdit au créateur)."""
-    result = leave_workspace(db, workspace_id, current_user.id)
+    result = leave_workspace(db, workspace_id, current_user.id, token=token)
     if result is False:
         workspace = get_workspace_by_id(db, workspace_id)
         if not workspace:

@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
-from ..core.security import get_current_active_entreprise
+from ..core.security import get_current_active_entreprise, get_access_token_from_request
 from ..core.function import (
     LISTE_MEMBER_ROLE,
     _get_workspace_or_404,
@@ -160,7 +160,8 @@ def _validate_search_scope(
 def create_entreprise_liste_endpoint(
     liste_in: ListeCreate,
     db: Session = Depends(get_db),
-    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     """Créer une liste (contexte entreprise)."""
     if liste_in.id_workspace:
@@ -176,6 +177,7 @@ def create_entreprise_liste_endpoint(
         id_espace=liste_in.id_espace, 
         id_workspace=liste_in.id_workspace,
         creator_user_id=current_entreprise.id,
+        token=token,
     )
 
 @router.get("", response_model=List[ListeOut])
@@ -216,10 +218,11 @@ def update_entreprise_liste_endpoint(
     liste_id: str,
     liste_in: ListeUpdate,
     db: Session = Depends(get_db),
-    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     _require_list_admin_access(db, liste_id, current_entreprise.id)
-    return update_liste(db, liste_id, **liste_in.model_dump(exclude_unset=True))
+    return update_liste(db, liste_id, token=token, **liste_in.model_dump(exclude_unset=True))
 
 @router.delete("/{liste_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_entreprise_liste_endpoint(
@@ -238,7 +241,8 @@ def assign_entreprise_liste_endpoint(
     utilisateur_id: str,
     role: str = LISTE_MEMBER_ROLE,
     db: Session = Depends(get_db),
-    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     _require_list_member_management_access(db, liste_id, current_entreprise.id)
     _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
@@ -252,7 +256,7 @@ def assign_entreprise_liste_endpoint(
         target_member=_get_liste_member_record(db, liste_id, utilisateur_id),
         new_role=role,
     )
-    return assign_member_to_liste(db, liste_id, utilisateur_id, role)
+    return assign_member_to_liste(db, liste_id, utilisateur_id, role, token=token)
 
 
 @router.delete("/{liste_id}/unassign/{utilisateur_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -260,7 +264,8 @@ def unassign_entreprise_liste_endpoint(
     liste_id: str,
     utilisateur_id: str,
     db: Session = Depends(get_db),
-    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise)
+    current_entreprise: UtilisateurOut = Depends(get_current_active_entreprise),
+    token: Optional[str] = Depends(get_access_token_from_request)
 ):
     _require_list_member_management_access(db, liste_id, current_entreprise.id)
     target_member = _get_liste_member_record(db, liste_id, utilisateur_id)
@@ -276,7 +281,7 @@ def unassign_entreprise_liste_endpoint(
         actor_source_id=actor_source_id,
         target_member=target_member,
     )
-    unassign_member_from_liste(db, liste_id, utilisateur_id)
+    unassign_member_from_liste(db, liste_id, utilisateur_id, token=token)
     return None
 
 

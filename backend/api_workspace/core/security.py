@@ -127,6 +127,14 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
 
     return UtilisateurOut.from_orm(user)
 
+def get_access_token_from_request(request: Request) -> Optional[str]:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    return token
+
 async def get_current_active_user(current_user: UtilisateurOut = Depends(get_current_user)) -> UtilisateurOut:
     """
     Vérifie que l'utilisateur est authentifié ET actif.

@@ -1,6 +1,6 @@
 # backend/api_espace/routes/utilisateur.py
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ..core.database import get_db
@@ -22,7 +22,7 @@ from ..core.function import (
     _require_workspace_read_access,
     render_invitation_html_page,
 )
-from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM, config_data
+from ..core.security import get_current_user, decode_invitation_token, SECRET_KEY, ALGORITHM, config_data, get_access_token_from_request
 from ..core.emails import send_espace_invitation_email
 from ..crud.utilisateur import (
     create_espace,
@@ -68,13 +68,14 @@ def create_espace_endpoint(
     espace_in: EspaceCreate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     """Créer un espace rattaché à un workspace."""
     workspace = _get_workspace_or_404(db, workspace_id)
     _require_workspace_management_access(db, workspace_id, current_user.id)
 
     espace_payload = espace_in.model_copy(update={"id_workspace": workspace_id, "id_espace_parent": None})
-    return create_espace(db, espace_payload, current_user.id)
+    return create_espace(db, espace_payload, current_user.id, token=token)
 
 #creer un espace rattaché à un espace parent (sous-espace)
 @router.post("/espaces/{espace_id}/create_sous_espace", response_model=EspaceOut, status_code=status.HTTP_201_CREATED)
@@ -83,6 +84,7 @@ def create_sous_espace_endpoint(
     espace_in: EspaceCreate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     """Créer un sous-espace rattaché à un espace parent."""
     parent_espace = get_espace_by_id(db, espace_id)
@@ -95,7 +97,7 @@ def create_sous_espace_endpoint(
         "id_espace_parent": espace_id,
         "id_workspace": parent_espace.id_workspace,
     })
-    return create_espace(db, espace_payload, current_user.id)
+    return create_espace(db, espace_payload, current_user.id, token=token)
 
 # Récupérer l'arborescence complète des espaces d'un workspace
 @router.get("/workspaces/{workspace_id}/list_workspace_espaces", response_model=List[EspaceOut])
@@ -180,6 +182,7 @@ def update_espace_endpoint(
     espace_in: EspaceUpdate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     espace = get_espace_by_id(db, espace_id)
     if not espace:
@@ -198,7 +201,7 @@ def update_espace_endpoint(
         if parent_espace.id == espace.id:
             raise HTTPException(status_code=400, detail="Un espace ne peut pas etre son propre parent")
 
-    updated = update_espace(db, espace_id, espace_in)
+    updated = update_espace(db, espace_id, espace_in, token=token)
     if not updated:
         raise HTTPException(status_code=404, detail="Espace non trouve")  
     return updated
@@ -239,6 +242,7 @@ def invite_espace_member(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     """Invite un utilisateur dans un espace via email et token (existant ou guest)."""
     espace = get_espace_by_id(db, espace_id)
@@ -253,7 +257,7 @@ def invite_espace_member(
     )
 
     # Delegation de la logique d'invitation au CRUD
-    result = invite_member_to_espace(db, espace_id, membre_in)
+    result = invite_member_to_espace(db, espace_id, membre_in, token=token)
     email_target = membre_in.email or membre_in.username 
 
     if "membre" in result:
@@ -395,6 +399,7 @@ def update_espace_member_endpoint(
     membre_in: WorkspaceMemberUpdate,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     espace = get_espace_by_id(db, espace_id)
     if not espace:
@@ -409,7 +414,7 @@ def update_espace_member_endpoint(
     )
 
     try:
-        updated = update_espace_member(db, espace_id, user_id, membre_in)
+        updated = update_espace_member(db, espace_id, user_id, membre_in, token=token)
         if not updated:
             raise HTTPException(status_code=404, detail="Membre non trouve")
         return _serialize_member(updated)
@@ -430,6 +435,7 @@ def remove_espace_member_endpoint(
     user_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: Optional[str] = Depends(get_access_token_from_request),
 ):
     """
     ✅ Supprime un membre d'un espace.
@@ -448,6 +454,6 @@ def remove_espace_member_endpoint(
         )
     
     # ✅ Délégation complète au CRUD qui vérifiera que current_user est le créateur
-    if not remove_espace_member(db, espace_id, user_id, current_user.id):
+    if not remove_espace_member(db, espace_id, user_id, current_user.id, token=token):
         raise HTTPException(status_code=400, detail="Erreur lors de la suppression du membre")
     return None

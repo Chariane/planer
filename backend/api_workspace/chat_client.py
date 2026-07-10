@@ -17,14 +17,19 @@ def _get_group_id_by_resource(db, resource_type: str, resource_id: str):
     return row[0] if row else None
 
 
-def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
+def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None, token: str | None = None):
     existing_group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if existing_group_id:
         return existing_group_id
+    if not token:
+        logger.error("❌ Token manquant pour créer un groupe")
+        return None
+    cookies = {"access_token": token}
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/create-group",
             json={"name": name, "creator": creator_id, "members": members or [], "resource_type": resource_type, "resource_id": resource_id},
+            cookies=cookies,
             timeout=5
         )
         if response.status_code == 200:
@@ -44,17 +49,21 @@ def _convert_role_to_messenger(role: str) -> str:
         return "member"
 
 
-def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, messenger_role: str):
+def _sync_single_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, messenger_role: str, token: str | None = None):
     """Synchronise un utilisateur sur un seul groupe de ressource."""
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
-        ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id])
+        ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id], token=token)
         return
-    
+    if not token:
+        logger.error("❌ Token manquant pour ajouter un membre")
+        return
+    cookies = {"access_token": token}
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/group/{group_id}/add-member",
             json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
+            cookies=cookies,
             timeout=5
         )
         if response.status_code == 200:
@@ -183,7 +192,7 @@ def _get_sub_espaces(db, parent_id: str) -> List[Tuple[str, str, str, str]]:
     return results
 
 
-def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member", cascade: bool = False):
+def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member", cascade: bool = False, token: str | None = None):
     """
     Synchronise un membre vers K-Messenger.
     
@@ -196,7 +205,7 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
     
     # 1. Synchroniser sur la ressource cible
     _sync_single_resource_member(
-        db, resource_type, resource_id, user_id, name, creator_id, messenger_role
+        db, resource_type, resource_id, user_id, name, creator_id, messenger_role, token=token
     )
     
     # 2. Si cascade=True, synchroniser sur toutes les ressources enfants
@@ -204,11 +213,11 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
         children = _get_child_resources(db, resource_type, resource_id)
         for child_type, child_id, child_name, child_creator_id in children:
             _sync_single_resource_member(
-                db, child_type, child_id, user_id, child_name, child_creator_id, messenger_role
+                db, child_type, child_id, user_id, child_name, child_creator_id, messenger_role, token=token
             )
 
 
-def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, cascade: bool = False):
+def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, cascade: bool = False, token: str | None = None):
     """
     Retire un membre d'un groupe de ressource K-Messenger.
     
@@ -216,20 +225,24 @@ def remove_resource_member(db, resource_type: str, resource_id: str, user_id: st
         cascade: Si True, retire aussi de toutes les ressources enfants
     """
     # 1. Retirer de la ressource cible
-    _remove_single_resource_member(db, resource_type, resource_id, user_id, actor_id)
+    _remove_single_resource_member(db, resource_type, resource_id, user_id, actor_id, token=token)
     
     # 2. Si cascade=True, retirer de toutes les ressources enfants
     if cascade:
         children = _get_child_resources(db, resource_type, resource_id)
         for child_type, child_id, _, _ in children:
-            _remove_single_resource_member(db, child_type, child_id, user_id, actor_id)
+            _remove_single_resource_member(db, child_type, child_id, user_id, actor_id, token=token)
 
 
-def _remove_single_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None):
+def _remove_single_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, token: str | None = None):
     """Retire un utilisateur d'un seul groupe de ressource."""
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
         return
+    if not token:
+        logger.error("❌ Token manquant pour retirer un membre")
+        return
+    cookies = {"access_token": token}
     try:
         if not actor_id:
             row = db.execute(text("SELECT creator FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id}).first()
@@ -237,6 +250,7 @@ def _remove_single_resource_member(db, resource_type: str, resource_id: str, use
         requests.delete(
             f"{K_CHAT_URL}/group/group/{group_id}/remove-member",
             json={"user_id": user_id, "actor": actor_id},
+            cookies=cookies,
             timeout=5
         )
     except Exception as e:
@@ -244,7 +258,7 @@ def _remove_single_resource_member(db, resource_type: str, resource_id: str, use
 
 
 # ✅ NOUVELLE FONCTION : Garantir qu'un utilisateur est membre du groupe d'un workspace
-def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id: str, role: str = "Membre"):
+def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id: str, role: str = "Membre", token: str | None = None):
     """
     Garantit qu'un utilisateur est membre du groupe de discussion d'un workspace.
     Si le groupe n'existe pas, il est créé.
@@ -258,6 +272,9 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
     """
     if resource_type != "workspace":
         logger.warning(f"ensure_chat_group_for_user appelé avec resource_type={resource_type} mais ne gère que 'workspace'")
+        return None
+    if not token:
+        logger.error("❌ Token manquant pour ensure_chat_group_for_user")
         return None
     
     # Récupérer les informations du workspace
@@ -283,7 +300,8 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
             resource_id=resource_id,
             name=resource_name,
             creator_id=creator_id,
-            members=[creator_id]
+            members=[creator_id],
+            token=token
         )
     
     # Ajouter l'utilisateur au groupe
@@ -296,10 +314,12 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
         
         if not row:
             messenger_role = _convert_role_to_messenger(role)
+            cookies = {"access_token": token}
             try:
                 response = requests.post(
                     f"{K_CHAT_URL}/group/group/{group_id}/add-member",
                     json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
+                    cookies=cookies,
                     timeout=5
                 )
                 if response.status_code == 200:

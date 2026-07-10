@@ -307,7 +307,7 @@ def get_espaces_where_admin(db: Session, user_id: str) -> List[Espace]:
     )
 
 
-def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) -> Espace:
+def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str, token: str | None = None) -> Espace:
     owner_id = resolve_workspace_owner_id(db, workspace_id=espace_in.id_workspace)
     if owner_id:
         require_plan_capacity(db, owner_id, "espaces")
@@ -340,6 +340,7 @@ def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) ->
             name=espace.nom,
             creator_id=creator_user_id,
             members=[creator_user_id],
+            token=token,
         )
         commit_or_raise(
             db,
@@ -352,7 +353,7 @@ def create_espace(db: Session, espace_in: EspaceCreate, creator_user_id: str) ->
     return espace
 
 
-def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate) -> Optional[Espace]:
+def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate, token: str | None = None) -> Optional[Espace]:
     espace = get_espace_by_id(db, espace_id)
     if not espace:
         return None
@@ -386,6 +387,7 @@ def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate) -> Optio
             resource_id=espace.id,
             name=espace.nom,
             creator_id=createur_id,
+            token=token,
         )
     commit_or_raise(
         db,
@@ -458,7 +460,7 @@ def get_espace_members(db: Session, espace_id: str) -> List[Membre]:
     )
 
 
-def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -> Membre:
+def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate, token: str | None = None) -> Membre:
     validate_role_hierarchy(
         db,
         membre_in.id_utilisateur,
@@ -490,7 +492,8 @@ def add_member_to_espace(db: Session, espace_id: str, membre_in: MembreCreate) -
             name=espace.nom if espace else None,
             creator_id=createur_id,
             role=membre.role,
-            cascade=True
+            cascade=True,
+            token=token,
         )
     commit_or_raise(
         db,
@@ -505,6 +508,7 @@ def update_espace_member(
     espace_id: str,
     user_id: str,
     membre_in: WorkspaceMemberUpdate,
+    token: str | None = None,
 ) -> Optional[Membre]:
     membre = get_espace_member(db, espace_id, user_id)
     if not membre:
@@ -541,7 +545,8 @@ def update_espace_member(
             name=espace.nom if espace else None,
             creator_id=str(createur_id) if createur_id else None,
             role=membre.role,
-            cascade=True
+            cascade=True,
+            token=token,
         )
     elif "statut" in update_data:
         remove_resource_member(
@@ -549,6 +554,7 @@ def update_espace_member(
             resource_type="espace",
             resource_id=espace_id,
             user_id=user_id,
+            token=token,
         )
     commit_or_raise(
         db,
@@ -558,7 +564,7 @@ def update_espace_member(
     return membre
 
 
-def remove_espace_member(db: Session, espace_id: str, user_id: str, current_user_id: str) -> bool:
+def remove_espace_member(db: Session, espace_id: str, user_id: str, current_user_id: str, token: str | None = None) -> bool:
     """
     Supprime un membre d'un espace.
     Seul le créateur de l'espace peut retirer un membre.
@@ -590,6 +596,7 @@ def remove_espace_member(db: Session, espace_id: str, user_id: str, current_user
         resource_type="espace",
         resource_id=espace_id,
         user_id=user_id,
+        token=token,
     )
     db.delete(membre)
     commit_or_raise(
@@ -699,6 +706,7 @@ def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMem
                 name=espace.nom,
                 creator_id=createur_id,
                 role=membre_in.role,  # ✅ Correction : utiliser membre_in.role
+                token=token,
             )
         
         # Token pour utilisateur existant (Contrainte 2)
@@ -740,7 +748,8 @@ def accept_espace_invitation(
     db: Session, 
     espace_id: Optional[str], 
     user_id: str,
-    invitation_token: str
+    invitation_token: str,
+    token: str | None = None,
 ) -> Membre:
     """
     Accepte une invitation a un espace via token JWT.
@@ -830,6 +839,7 @@ def accept_espace_invitation(
             name=espace.nom,
             creator_id=createur_id,
             role=invited_role,
+            token=token,
         )
         commit_or_raise(
             db,
@@ -863,6 +873,7 @@ def accept_espace_invitation(
         name=espace.nom,
         creator_id=createur_id,
         role=invited_role,
+        token=token,
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion a l'espace.", refresh_instance=new_member)
     

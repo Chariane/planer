@@ -60,7 +60,7 @@ def get_all_workspaces(db: Session, skip: int = 0, limit: int = 100) -> List[Wor
     return db.query(Workspace).offset(skip).limit(limit).all()
 
 
-def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -> Workspace:
+def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str, token: str | None = None) -> Workspace:
     """Crée un nouveau workspace et ajoute le créateur comme membre actif."""
     require_plan_capacity(db, user_id, "workspaces")
     workspace_data = workspace_in.model_dump(exclude={"id_utilisateur"}, exclude_none=True)
@@ -88,6 +88,7 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
             name=workspace.nom,
             creator_id=user_id,
             members=[user_id],
+            token=token,
         )
 
         commit_or_raise(
@@ -102,7 +103,7 @@ def create_workspace(db: Session, workspace_in: WorkspaceCreate, user_id: str) -
     return workspace
 
 
-def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpdate) -> Optional[Workspace]:
+def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpdate, token: str | None = None) -> Optional[Workspace]:
     """Met à jour un workspace existant."""
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:
@@ -119,6 +120,7 @@ def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpda
             resource_id=workspace.id,
             name=workspace.nom,
             creator_id=workspace.id_utilisateur,
+            token=token,
         )
 
     commit_or_raise(
@@ -323,6 +325,7 @@ def update_member_role(
     workspace_id: str,
     user_id: str,
     membre_in: WorkspaceMemberUpdate,
+    token: str | None = None,
 ) -> Optional[Membre]:
     """Met à jour le rôle ou le statut d'un membre."""
     membre = get_member(db, workspace_id, user_id)
@@ -343,6 +346,7 @@ def update_member_role(
             name=workspace.nom if workspace else None,
             creator_id=workspace.id_utilisateur if workspace else None,
             role=membre.role,  # ✅ Ajout du rôle
+            token=token,
         )
     elif "statut" in update_data:
         remove_resource_member(
@@ -350,6 +354,7 @@ def update_member_role(
             resource_type="workspace",
             resource_id=workspace_id,
             user_id=user_id,
+            token=token,
         )
 
     commit_or_raise(
@@ -360,7 +365,7 @@ def update_member_role(
     return membre
 
 
-def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
+def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str, token: str | None = None) -> bool:
     """Supprime un membre d'un workspace et ses dépendances."""
     membre = get_member(db, workspace_id, user_id)
     if not membre:
@@ -377,6 +382,7 @@ def remove_member_from_workspace(db: Session, workspace_id: str, user_id: str) -
         resource_type="workspace",
         resource_id=workspace_id,
         user_id=user_id,
+        token=token,
     )
     db.delete(membre)
     commit_or_raise(
@@ -471,7 +477,8 @@ def accept_workspace_invitation(
     db: Session, 
     workspace_id: Optional[str], 
     user_id: str,
-    invitation_token: str
+    invitation_token: str,
+    token: str | None = None,
 ) -> Membre:
     """
     Accepte une invitation a un workspace via token JWT.
@@ -543,7 +550,8 @@ def accept_workspace_invitation(
             name=workspace.nom,
             creator_id=workspace.id_utilisateur,
             role=existing_member.role, 
-            cascade=True # ✅ Ajout du rôle
+            cascade=True, # ✅ Ajout du rôle
+            token=token,
         )
         commit_or_raise(
             db,
@@ -568,7 +576,8 @@ def accept_workspace_invitation(
         name=workspace.nom,
         creator_id=workspace.id_utilisateur,
         role=invited_role,  # ✅ Ajout du rôle
-        cascade=True
+        cascade=True,
+        token=token,
     )
     commit_or_raise(db, detail="Impossible de finaliser votre adhesion au workspace.", refresh_instance=new_member)
     
@@ -607,7 +616,7 @@ def cancel_workspace_invitation(db: Session, workspace_id: str, user_id: str) ->
 # ACTIONS UTILISATEUR
 # ============================================================================
 
-def leave_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
+def leave_workspace(db: Session, workspace_id: str, user_id: str, token: str | None = None) -> bool:
     """Un membre actif quitte le workspace (interdit au propriétaire)."""
     workspace = get_workspace_by_id(db, workspace_id)
     if not workspace:
@@ -629,6 +638,7 @@ def leave_workspace(db: Session, workspace_id: str, user_id: str) -> bool:
         resource_type="workspace",
         resource_id=workspace_id,
         user_id=user_id,
+        token=token,
     )
     db.delete(membre)
     commit_or_raise(db, detail="Impossible de quitter le workspace.")

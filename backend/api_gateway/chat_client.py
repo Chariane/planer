@@ -60,7 +60,7 @@ def _get_creator_for_resource(db, resource_type: str, resource_id: str) -> Optio
     return None
 
 
-def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None):
+def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, creator_id: str, members: list = None, token: str | None = None):
     """
     Crée un groupe de discussion dans K-Messenger pour une ressource (workspace, espace, liste).
     
@@ -71,6 +71,7 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         name: Nom du groupe
         creator_id: ID du créateur (doit exister dans public.utilisateur)
         members: Liste des membres à ajouter
+        token: Token d'authentification pour K-Messenger
     
     Returns:
         group_id: ID du groupe créé ou existant, None si erreur
@@ -81,10 +82,16 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         logger.info(f"🔍 Groupe existant trouvé: {existing_group_id} pour {resource_type}/{resource_id}")
         return existing_group_id
     
+    if not token:
+        logger.error("❌ Token manquant pour créer un groupe")
+        return None
+    
     # Préparer les membres
     members_list = members or []
     if creator_id not in members_list:
         members_list = [creator_id] + members_list
+    
+    cookies = {"access_token": token}
     
     try:
         logger.info(f"📤 Création du groupe pour {resource_type}/{resource_id} avec creator={creator_id}")
@@ -98,6 +105,7 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
                 "resource_type": resource_type,
                 "resource_id": resource_id
             },
+            cookies=cookies,
             timeout=5
         )
         
@@ -131,14 +139,19 @@ def _convert_role_to_messenger(role: str) -> str:
         return "member"
 
 
-def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member"):
+def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member", token: str | None = None):
     """
     Synchronise un membre vers K-Messenger.
     
     Args:
         role: Rôle K-Planner ("Créateur", "Administrateur", "Membre", "Invité")
               → Converti en rôle K-Messenger ("admin", "member", "guest")
+        token: Token d'authentification pour les requêtes K-Messenger
     """
+    if not token:
+        logger.error("❌ Token manquant pour synchroniser un membre")
+        return
+    
     messenger_role = _convert_role_to_messenger(role)
     
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
@@ -146,13 +159,16 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
         # Si creator_id n'est pas fourni, on le récupère
         if not creator_id:
             creator_id = _get_creator_for_resource(db, resource_type, resource_id) or user_id
-        ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id])
+        ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id], token=token)
         return
+    
+    cookies = {"access_token": token}
     
     try:
         response = requests.post(
             f"{K_CHAT_URL}/group/group/{group_id}/add-member",
             json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
+            cookies=cookies,
             timeout=5
         )
         if response.status_code == 200:
@@ -163,10 +179,17 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
         logger.error(f"Error adding member to K-Chat group: {e}")
 
 
-def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None):
+def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, token: str | None = None):
+    if not token:
+        logger.error("❌ Token manquant pour retirer un membre")
+        return
+    
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
         return
+    
+    cookies = {"access_token": token}
+    
     try:
         if not actor_id:
             row = db.execute(text("SELECT creator FROM messagerie.groupe WHERE id = :group_id"), {"group_id": group_id}).first()
@@ -174,6 +197,7 @@ def remove_resource_member(db, resource_type: str, resource_id: str, user_id: st
         requests.delete(
             f"{K_CHAT_URL}/group/group/{group_id}/remove-member",
             json={"user_id": user_id, "actor": actor_id},
+            cookies=cookies,
             timeout=5
         )
     except Exception as e:
