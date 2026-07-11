@@ -945,6 +945,7 @@ def _get_list_member_management_grant(
     return _get_list_management_grant(db, liste_id, current_user_id)
 
 
+# ✅ FONCTION MODIFIÉE POUR RÉSOUDRE LE PROBLÈME DU CRÉATEUR DIRECT
 def _validate_list_member_management_permissions(
     *,
     liste_id: str,
@@ -954,76 +955,316 @@ def _validate_list_member_management_permissions(
     target_member: Membre | None,
     new_role: str | None = None,
 ) -> None:
-    """Valide les permissions de gestion des membres d'une liste."""
+    """
+    Valide les permissions de gestion des membres d'une liste.
+    
+    Règles UNIQUEMENT pour les LISTES :
+    1. Le Créateur DIRECT de la liste peut TOUT gérer (ajouter, modifier, retirer)
+    2. Un Administrateur DIRECT de la liste ne peut RIEN gérer (ni ajouter, ni modifier)
+    3. Un Administrateur par HÉRITAGE (workspace ou espace parent) peut PROMOUVOIR uniquement
+    4. Un Administrateur par HÉRITAGE ne peut PAS rétrograder ni retirer
+    """
 
-    # Ajout d'un nouveau membre (target_member None)
-    if target_member is None:
-        if actor_role not in LISTE_MANAGEMENT_ROLES:
-            raise HTTPException(
-                status_code=403,
-                detail="Permissions insuffisantes pour ajouter un membre."
-            )
-        if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur direct de la liste ne peut pas ajouter de membres. Seul le créateur peut le faire."
-            )
-        return
+    # ✅ Vérifier si l'acteur est le créateur DIRECT de la liste
+    is_direct_creator = (
+        actor_role == LISTE_OWNER_ROLE
+        and actor_source_type == ResourceType.LISTE
+        and actor_source_id == liste_id
+    )
 
-    # RÈGLE 1 : Le Créateur de la liste ne peut pas être modifié ou retiré
-    if target_member.role == LISTE_OWNER_ROLE:
-        is_creator_parent = (
-            actor_role == LISTE_OWNER_ROLE
-            and (
-                actor_source_type == ResourceType.WORKSPACE
-                or actor_source_type == ResourceType.ESPACE
-                or actor_source_id != liste_id
-            )
-        )
-        if not is_creator_parent:
-            raise HTTPException(
-                status_code=403,
-                detail="Le créateur de la liste ne peut pas être modifié ou retiré.",
-            )
-
-    # RÈGLE 2 : Un administrateur direct d'une liste ne peut modifier AUCUN membre
-    if actor_role == LISTE_ADMIN_ROLE and actor_source_type == ResourceType.LISTE and actor_source_id == liste_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Un administrateur direct de la liste ne peut pas modifier les membres de cette liste. Seul le créateur peut le faire.",
-        )
-
-    # RÈGLE 3 : Un administrateur par héritage (workspace ou espace parent) 
-    # peut modifier des membres, mais avec des restrictions spécifiques
-    if actor_role == LISTE_ADMIN_ROLE:
-        if actor_source_type != ResourceType.LISTE or actor_source_id != liste_id:
-            if new_role and new_role != target_member.role:
-                if _get_role_rank(new_role) > _get_role_rank(target_member.role):
-                    return
-                else:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
-                    )
-            return
-
-    # RÈGLE 4 : Le Créateur direct peut tout modifier (sauf se modifier lui-même)
-    if actor_role == LISTE_OWNER_ROLE:
-        if target_member.role == LISTE_OWNER_ROLE:
+    # ✅ RÈGLE 1 : Le Créateur DIRECT peut tout gérer
+    if is_direct_creator:
+        # Empêcher de se modifier soi-même
+        if target_member and target_member.role == LISTE_OWNER_ROLE:
             raise HTTPException(
                 status_code=403,
                 detail="Le créateur ne peut pas modifier son propre rôle.",
             )
         return
 
-    # RÈGLE 5 : Seul un manager (Admin par héritage ou Créateur) peut accéder à cette fonction
+    # ✅ Vérifier si l'acteur est un administrateur direct de la liste
+    is_direct_admin = (
+        actor_role == LISTE_ADMIN_ROLE
+        and actor_source_type == ResourceType.LISTE
+        and actor_source_id == liste_id
+    )
+
+    # ✅ RÈGLE 2 : Un administrateur direct de la liste ne peut RIEN gérer
+    if is_direct_admin:
+        if target_member is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de la liste ne peut pas ajouter de membres. Seul le créateur peut le faire.",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur direct de la liste ne peut pas modifier les membres de cette liste. Seul le créateur peut le faire.",
+        )
+
+    # ✅ RÈGLE 3 & 4 : Administrateur par héritage (workspace ou espace parent)
+    # Ne peut que PROMOUVOIR (Invité → Membre/Admin, Membre → Admin)
+    # Ne peut PAS rétrograder ni retirer
+    if actor_role == LISTE_ADMIN_ROLE and actor_source_type != ResourceType.LISTE:
+        if target_member is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur par héritage ne peut pas ajouter de membres. Seul le créateur peut le faire.",
+            )
+
+        # Vérifier qu'on ne touche pas au créateur
+        if target_member.role == LISTE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur de la liste ne peut pas être modifié ou retiré.",
+            )
+
+        # Vérifier qu'on ne touche pas à un administrateur direct
+        is_target_direct_admin = (
+            target_member.role == LISTE_ADMIN_ROLE
+            and target_member.id_liste == liste_id
+        )
+        if is_target_direct_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de la liste ne peut pas être modifié par un administrateur par héritage.",
+            )
+
+        # Vérifier que c'est une promotion (pas une rétrogradation)
+        if new_role and new_role != target_member.role:
+            current_rank = _get_role_rank(target_member.role)
+            new_rank = _get_role_rank(new_role)
+            if new_rank < current_rank:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
+                )
+        return
+
+    # ✅ RÈGLE 5 : Si l'acteur est le créateur PAR HÉRITAGE (pas direct)
+    if actor_role == LISTE_OWNER_ROLE and actor_source_type != ResourceType.LISTE:
+        # Empêcher de modifier le créateur direct de la liste
+        if target_member and target_member.role == LISTE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur direct de la liste ne peut pas être modifié par un créateur hérité.",
+            )
+        # Vérifier que c'est une promotion (pas une rétrogradation)
+        if target_member and new_role and new_role != target_member.role:
+            current_rank = _get_role_rank(target_member.role)
+            new_rank = _get_role_rank(new_role)
+            if new_rank < current_rank and target_member.role != LISTE_OWNER_ROLE:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un créateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
+                )
+        return
+
+    # ✅ RÈGLE 6 : Si l'acteur n'est pas dans les rôles de gestion
     if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
             detail="Permissions insuffisantes pour gérer les membres de cette liste.",
         )
 
+    # Fallback
+    return
 
+# ============================================================
+# ✅ GESTION DES MEMBRES D'UN ESPACE
+# ============================================================
+
+def _validate_espace_member_management_permissions(
+    *,
+    espace_id: str,
+    actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
+    target_member: Membre | None,
+    new_role: str | None = None,
+) -> None:
+    """
+    Valide les permissions de gestion des membres d'un espace.
+    
+    Règles UNIQUEMENT pour les ESPACES :
+    1. Le Créateur DIRECT de l'espace peut TOUT gérer (ajouter, modifier, retirer)
+    2. Un Administrateur DIRECT de l'espace ne peut RIEN gérer (ni ajouter, ni modifier)
+    3. Un Administrateur par HÉRITAGE (workspace parent) peut PROMOUVOIR uniquement
+    4. Un Administrateur par HÉRITAGE ne peut PAS rétrograder ni retirer
+    """
+
+    # ✅ Vérifier si l'acteur est le créateur DIRECT de l'espace
+    is_direct_creator = (
+        actor_role == ESPACE_OWNER_ROLE
+        and actor_source_type == ResourceType.ESPACE
+        and actor_source_id == espace_id
+    )
+
+    # ✅ RÈGLE 1 : Le Créateur DIRECT peut tout gérer
+    if is_direct_creator:
+        # Empêcher de se modifier soi-même
+        if target_member and target_member.role == ESPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur ne peut pas modifier son propre rôle.",
+            )
+        return
+
+    # ✅ Vérifier si l'acteur est un administrateur direct de l'espace
+    is_direct_admin = (
+        actor_role == ESPACE_ADMIN_ROLE
+        and actor_source_type == ResourceType.ESPACE
+        and actor_source_id == espace_id
+    )
+
+    # ✅ RÈGLE 2 : Un administrateur direct de l'espace ne peut RIEN gérer
+    if is_direct_admin:
+        if target_member is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de l'espace ne peut pas ajouter de membres. Seul le créateur peut le faire.",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Un administrateur direct de l'espace ne peut pas modifier les membres de cet espace. Seul le créateur peut le faire.",
+        )
+
+    # ✅ RÈGLE 3 & 4 : Administrateur par héritage (workspace parent)
+    # Ne peut que PROMOUVOIR (Invité → Membre/Admin, Membre → Admin)
+    # Ne peut PAS rétrograder ni retirer
+    if actor_role == ESPACE_ADMIN_ROLE and actor_source_type != ResourceType.ESPACE:
+        if target_member is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur par héritage ne peut pas ajouter de membres. Seul le créateur peut le faire.",
+            )
+
+        # Vérifier qu'on ne touche pas au créateur
+        if target_member.role == ESPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur de l'espace ne peut pas être modifié ou retiré.",
+            )
+
+        # Vérifier qu'on ne touche pas à un administrateur direct
+        is_target_direct_admin = (
+            target_member.role == ESPACE_ADMIN_ROLE
+            and target_member.id_espace == espace_id
+        )
+        if is_target_direct_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de l'espace ne peut pas être modifié par un administrateur par héritage.",
+            )
+
+        # Vérifier que c'est une promotion (pas une rétrogradation)
+        if new_role and new_role != target_member.role:
+            current_rank = _get_role_rank(target_member.role)
+            new_rank = _get_role_rank(new_role)
+            if new_rank < current_rank:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un administrateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
+                )
+        return
+
+    # ✅ RÈGLE 5 : Si l'acteur est le créateur PAR HÉRITAGE (pas direct)
+    if actor_role == ESPACE_OWNER_ROLE and actor_source_type != ResourceType.ESPACE:
+        # Empêcher de modifier le créateur direct de l'espace
+        if target_member and target_member.role == ESPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur direct de l'espace ne peut pas être modifié par un créateur hérité.",
+            )
+        # Vérifier que c'est une promotion (pas une rétrogradation)
+        if target_member and new_role and new_role != target_member.role:
+            current_rank = _get_role_rank(target_member.role)
+            new_rank = _get_role_rank(new_role)
+            if new_rank < current_rank and target_member.role != ESPACE_OWNER_ROLE:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un créateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
+                )
+        return
+
+    # ✅ RÈGLE 6 : Si l'acteur n'est pas dans les rôles de gestion
+    if actor_role not in ESPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Permissions insuffisantes pour gérer les membres de cet espace.",
+        )
+
+    # Fallback
+    return
+
+
+def _validate_espace_invitation_permissions(
+    *,
+    espace_id: str,
+    actor_role: str,
+    actor_source_type: str,
+    actor_source_id: str,
+    invited_role: str,
+) -> None:
+    """Valide les permissions d'invitation dans un espace."""
+
+    # Vérifier si l'acteur est le créateur DIRECT de l'espace
+    is_direct_creator = (
+        actor_role == ESPACE_OWNER_ROLE
+        and actor_source_type == ResourceType.ESPACE
+        and actor_source_id == espace_id
+    )
+
+    # ✅ RÈGLE 1 : Le Créateur DIRECT peut inviter avec n'importe quel rôle
+    if is_direct_creator:
+        return
+
+    # ✅ RÈGLE 2 : L'Administrateur DIRECT peut inviter avec Membre ou Invité
+    is_direct_admin = (
+        actor_role == ESPACE_ADMIN_ROLE
+        and actor_source_type == ResourceType.ESPACE
+        and actor_source_id == espace_id
+    )
+    if is_direct_admin:
+        if invited_role not in {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur direct de l'espace ne peut inviter qu'avec les rôles 'Membre' ou 'Invité'.",
+            )
+        return
+
+    # ✅ RÈGLE 3 : Administrateur par héritage (créateur hérité + admin hérité)
+    # ✅ CORRECTION : Peut inviter avec Membre, Invité OU Administrateur
+    if actor_role in {ESPACE_ADMIN_ROLE, ESPACE_OWNER_ROLE} and actor_source_type != ResourceType.ESPACE:
+        if invited_role not in {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE, ESPACE_ADMIN_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+            )
+        return
+
+    # ✅ RÈGLE 4 : Le Créateur par héritage peut inviter avec n'importe quel rôle
+    if actor_role == ESPACE_OWNER_ROLE and actor_source_type != ResourceType.ESPACE:
+        if invited_role not in {ESPACE_MEMBER_ROLE, ESPACE_ADMIN_ROLE, ESPACE_GUEST_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+            )
+        return
+
+    # ✅ RÈGLE 5 : Si l'acteur n'est pas dans les rôles de gestion
+    if actor_role not in ESPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul un administrateur ou le créateur peut inviter des membres.",
+        )
+
+    if invited_role not in {ESPACE_MEMBER_ROLE, ESPACE_GUEST_ROLE}:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+        )
+
+        
 def _validate_liste_invitation_permissions(
     *,
     liste_id: str,
@@ -1743,7 +1984,90 @@ def _require_direct_workspace_admin_grant(db: Session, workspace_id: str, curren
 
 # ========== GESTION DES RAPPORTS ==========
 # (aucune modification)
+# ============================================================
+# ✅ GESTION DES MEMBRES D'UN WORKSPACE
+# ============================================================
 
+def _validate_workspace_member_management_permissions(
+    *,
+    workspace_id: str,
+    actor_role: str,
+    target_member: Membre | None,
+    new_role: str | None = None,
+) -> None:
+    """
+    Valide les permissions de gestion des membres d'un workspace.
+    
+    Règles pour les WORKSPACES :
+    1. Le Créateur du workspace peut TOUT gérer (ajouter, modifier, retirer)
+    2. L'Administrateur du workspace peut gérer les membres (modifier, retirer)
+    """
+    # ✅ RÈGLE 1 : Le Créateur peut tout gérer
+    if actor_role == WORKSPACE_OWNER_ROLE:
+        # Empêcher de se modifier soi-même
+        if target_member and target_member.role == WORKSPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le créateur ne peut pas modifier son propre rôle.",
+            )
+        return
+
+    # ✅ RÈGLE 2 : L'Administrateur peut gérer les membres
+    if actor_role == WORKSPACE_ADMIN_ROLE:
+        if target_member is None:
+            return
+        if target_member.role == WORKSPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="L'administrateur ne peut pas modifier le créateur du workspace.",
+            )
+        if target_member.role == WORKSPACE_ADMIN_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="L'administrateur ne peut pas modifier un autre administrateur.",
+            )
+        return
+
+    # ✅ RÈGLE 3 : Si l'acteur n'est pas dans les rôles de gestion
+    if actor_role not in WORKSPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Permissions insuffisantes pour gérer les membres de ce workspace.",
+        )
+
+
+def _validate_workspace_invitation_permissions(
+    *,
+    workspace_id: str,
+    actor_role: str,
+    invited_role: str,
+) -> None:
+    """Valide les permissions d'invitation dans un workspace."""
+
+    # ✅ RÈGLE 1 : Le Créateur peut inviter avec n'importe quel rôle
+    if actor_role == WORKSPACE_OWNER_ROLE:
+        if invited_role not in {WORKSPACE_ADMIN_ROLE, WORKSPACE_MEMBER_ROLE, WORKSPACE_GUEST_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Rôle '{invited_role}' non autorisé pour cette invitation.",
+            )
+        return
+
+    # ✅ RÈGLE 2 : L'Administrateur peut inviter avec Membre ou Invité
+    if actor_role == WORKSPACE_ADMIN_ROLE:
+        if invited_role not in {WORKSPACE_MEMBER_ROLE, WORKSPACE_GUEST_ROLE}:
+            raise HTTPException(
+                status_code=403,
+                detail="Un administrateur ne peut inviter qu'avec les rôles 'Membre' ou 'Invité'.",
+            )
+        return
+
+    # ✅ RÈGLE 3 : Si l'acteur n'est pas dans les rôles de gestion
+    if actor_role not in WORKSPACE_MANAGEMENT_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul un administrateur ou le créateur peut inviter des membres.",
+        )
 def _report_scope_and_author(db: Session, rapport: Rapport) -> tuple[str, str, str | None, str | None]:
     membre = _get_member_or_404(db, rapport.id_membre) if rapport.id_membre else None
     liste_id = getattr(rapport, "id_liste", None) or (membre.id_liste if membre else None)

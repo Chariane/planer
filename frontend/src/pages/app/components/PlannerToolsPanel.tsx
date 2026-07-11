@@ -154,6 +154,10 @@ export default function PlannerToolsPanel({
   const [listAvailability, setListAvailability] = useState<UserAvailabilityOut[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState<boolean>(false);
 
+  // ✅ NOUVEAU : États pour la notification "Aucun remplaçant"
+  const [showNoReplacementNotification, setShowNoReplacementNotification] = useState(false);
+  const [noReplacementTaskId, setNoReplacementTaskId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -1290,27 +1294,73 @@ export default function PlannerToolsPanel({
     });
   };
 
+  // ✅ NOUVELLE VERSION : getTaskReplacementCandidates avec vérification de disponibilité
   const getTaskReplacementCandidates = (task: Task, absence: any) => {
     if (!absence) return [];
-    return directMembers.filter(member =>
+    
+    // 1. Filtrer les membres éligibles
+    const eligible = directMembers.filter(member =>
       member.role === ROLES.MEMBER
       && member.id_utilisateur !== absence.owner_user_id
       && !task.assignees?.some(assignee => assignee.id === member.id_utilisateur)
     );
+    
+    // 2. Enrichir avec les données de disponibilité
+    return eligible.map(member => {
+      const availability = listAvailability.find(
+        a => a.id_utilisateur === member.id_utilisateur
+      );
+      return {
+        ...member,
+        isAvailable: availability?.is_available ?? true,
+        currentAbsence: availability?.current_absence ?? null,
+      };
+    });
   };
 
+  // ✅ NOUVELLE FONCTION : Trier les candidats par disponibilité
+  const getSortedReplacementCandidates = (task: Task, absence: any) => {
+    const candidates = getTaskReplacementCandidates(task, absence);
+    
+    // Trier par disponibilité (disponibles en premier)
+    return candidates.sort((a, b) => {
+      if (a.isAvailable && !b.isAvailable) return -1;
+      if (!a.isAvailable && b.isAvailable) return 1;
+      return 0;
+    });
+  };
+
+  // ✅ MODIFIÉ : handleAssignTaskReplacement avec notification "Aucun remplaçant"
   const handleAssignTaskReplacement = async (task: Task, _absence: any) => {
     const replacementUserId = taskReplacementByTaskId[task.id];
+    
+    // Vérifier si un remplaçant a été sélectionné
     if (!replacementUserId) {
+      // Vérifier s'il y a des candidats disponibles
+      const candidates = getSortedReplacementCandidates(task, _absence);
+      const availableCandidates = candidates.filter(c => c.isAvailable);
+      
+      // ✅ SI AUCUN CANDIDAT DISPONIBLE → NOTIFICATION
+      if (availableCandidates.length === 0) {
+        setNoReplacementTaskId(task.id);
+        setShowNoReplacementNotification(true);
+        return;
+      }
+      
       toast.error('Choisissez un membre à ajouter sur cette tâche.');
       return;
     }
+    
     setLoading(true);
     try {
       await tacheService.assignMember(task.id, replacementUserId);
       const replacement = directMembers.find(member => member.id_utilisateur === replacementUserId);
       toast.success(`${replacement?.name || 'Le membre'} a été ajouté sur "${task.title}".`);
       setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: '' }));
+      
+      // ✅ Réinitialiser la notification si elle était affichée
+      setShowNoReplacementNotification(false);
+      setNoReplacementTaskId(null);
     } catch (err: any) {
       toast.error(getErrorMessage(err) || "Impossible d'ajouter ce membre sur la tâche.");
     } finally {
@@ -1495,27 +1545,60 @@ export default function PlannerToolsPanel({
                               <div className="flex items-center gap-2 px-3">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Assignation alternative :</span>
                               </div>
+                              {/* ✅ SECTION MODIFIÉE : Affichage des candidats avec disponibilité */}
                               <div className="grid grid-cols-1 gap-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-3 md:grid-cols-[1fr_auto]">
-                                <select
-                                  value={taskReplacementByTaskId[task.id] || ''}
-                                  onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                  className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
-                                >
-                                  <option value="">Choisir un remplaçant ou renfort</option>
-                                  {candidates.map(candidate => (
-                                    <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
-                                      {candidate.name} · {candidate.role}
-                                    </option>
-                                  ))}
-                                </select>
-                                <Button
-                                  type="button"
-                                  onClick={() => handleAssignTaskReplacement(task, absence)}
-                                  disabled={loading || candidates.length === 0}
-                                  className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
-                                >
-                                  {candidates.length === 0 ? 'Aucun candidat' : 'Réaffecter / Renforcer'}
-                                </Button>
+                                {availabilityLoading ? (
+                                  <div className="flex items-center gap-2 col-span-2 py-2">
+                                    <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                                    <span className="text-xs text-theme-muted">Vérification des disponibilités...</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <select
+                                      value={taskReplacementByTaskId[task.id] || ''}
+                                      onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                      className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                                    >
+                                      <option value="">Choisir un remplaçant ou renfort</option>
+                                      {getSortedReplacementCandidates(task, absence).map(candidate => {
+                                        const isAvailable = candidate.isAvailable;
+                                        return (
+                                          <option 
+                                            key={candidate.id_utilisateur} 
+                                            value={candidate.id_utilisateur}
+                                            disabled={!isAvailable}
+                                            className={!isAvailable ? 'text-theme-muted/50' : ''}
+                                          >
+                                            {candidate.name} 
+                                            {isAvailable 
+                                              ? ' ✅ Disponible' 
+                                              : ` ⚠️ Absent(e)`
+                                            }
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                    <Button
+                                      type="button"
+                                      onClick={() => handleAssignTaskReplacement(task, absence)}
+                                      disabled={loading || !taskReplacementByTaskId[task.id]}
+                                      className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
+                                    >
+                                      {(() => {
+                                        const candidates = getSortedReplacementCandidates(task, absence);
+                                        const availableCount = candidates.filter(c => c.isAvailable).length;
+                                        
+                                        if (candidates.length === 0) {
+                                          return 'Aucun membre';
+                                        }
+                                        if (availableCount === 0) {
+                                          return 'Tous indisponibles';
+                                        }
+                                        return 'Assigner';
+                                      })()}
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           )}
@@ -2733,25 +2816,54 @@ export default function PlannerToolsPanel({
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 pt-2">
-                            <select
-                              value={taskReplacementByTaskId[task.id] || ''}
-                              onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
-                              className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
-                            >
-                              <option value="">Remplaçant / Renfort...</option>
-                              {candidates.map(candidate => (
-                                <option key={candidate.id_utilisateur} value={candidate.id_utilisateur}>
-                                  {candidate.name} ({candidate.role})
-                                </option>
-                              ))}
-                            </select>
-                            <Button
-                              onClick={() => handleAssignTaskReplacement(task, selectedAbsenceForImpact)}
-                              disabled={loading || !taskReplacementByTaskId[task.id]}
-                              className="h-10 rounded-xl bg-secondary px-4 text-[9px] font-black uppercase tracking-widest"
-                            >
-                              Assigner
-                            </Button>
+                            {availabilityLoading ? (
+                              <div className="flex items-center gap-2 col-span-2 py-2">
+                                <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                                <span className="text-xs text-theme-muted">Vérification des disponibilités...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <select
+                                  value={taskReplacementByTaskId[task.id] || ''}
+                                  onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                  className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                                >
+                                  <option value="">Remplaçant / Renfort...</option>
+                                  {getSortedReplacementCandidates(task, selectedAbsenceForImpact).map(candidate => (
+                                    <option 
+                                      key={candidate.id_utilisateur} 
+                                      value={candidate.id_utilisateur}
+                                      disabled={!candidate.isAvailable}
+                                      className={!candidate.isAvailable ? 'text-theme-muted/50' : ''}
+                                    >
+                                      {candidate.name} 
+                                      {candidate.isAvailable 
+                                        ? ' ✅ Disponible' 
+                                        : ` ⚠️ Absent(e)`
+                                      }
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  onClick={() => handleAssignTaskReplacement(task, selectedAbsenceForImpact)}
+                                  disabled={loading || !taskReplacementByTaskId[task.id]}
+                                  className="h-10 rounded-xl bg-secondary px-4 text-[9px] font-black uppercase tracking-widest"
+                                >
+                                  {(() => {
+                                    const candidates = getSortedReplacementCandidates(task, selectedAbsenceForImpact);
+                                    const availableCount = candidates.filter(c => c.isAvailable).length;
+                                    
+                                    if (candidates.length === 0) {
+                                      return 'Aucun membre';
+                                    }
+                                    if (availableCount === 0) {
+                                      return 'Tous indisponibles';
+                                    }
+                                    return 'Assigner';
+                                  })()}
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -2777,6 +2889,151 @@ export default function PlannerToolsPanel({
             </div>
           );
         })() : null}
+      </Modal>
+
+      {/* ✅ NOUVELLE NOTIFICATION : Aucun remplaçant disponible */}
+      <Modal
+        isOpen={showNoReplacementNotification}
+        onClose={() => {
+          setShowNoReplacementNotification(false);
+          setNoReplacementTaskId(null);
+        }}
+        title="👥 Aucun remplaçant disponible"
+        size="lg"
+      >
+        <div className="space-y-6 pt-2">
+          {/* Message principal */}
+          <div className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-6">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 flex-shrink-0">
+                <Users size={24} />
+              </div>
+              <div>
+                <h4 className="text-base font-black text-theme-main">Aucun membre disponible pour remplacer</h4>
+                <p className="mt-1 text-sm text-theme-muted leading-relaxed">
+                  Tous les membres de votre équipe sont déjà en absence ou en congé sur cette période.
+                  Pour assurer la continuité du travail, nous vous recommandons d'ajouter de nouveaux collaborateurs à ce projet.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions recommandées */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Actions recommandées</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Option 1 : Inviter un nouveau membre */}
+              <button
+                onClick={() => {
+                  setShowNoReplacementNotification(false);
+                  // ✅ Ouvrir la modale d'invitation de la liste
+                  if (listeId) {
+                    toast.info('Vous pouvez inviter un nouveau membre via le bouton "Membres" de la liste.');
+                  }
+                  setNoReplacementTaskId(null);
+                }}
+                className="p-5 rounded-2xl border border-secondary/20 bg-secondary/5 hover:bg-secondary/10 transition-all text-left group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
+                    <Plus size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-theme-main">Inviter un nouveau membre</p>
+                    <p className="text-[10px] text-theme-muted font-medium">Ajouter un collaborateur à la liste</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2 : Voir les membres hérités */}
+              {inheritedMembers.length > 0 && (
+                <button
+                  onClick={() => {
+                    setShowNoReplacementNotification(false);
+                    toast.info(`Vous avez ${inheritedMembers.length} membre(s) hérité(s) du workspace/espace parent.`);
+                    setNoReplacementTaskId(null);
+                  }}
+                  className="p-5 rounded-2xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                      <Users size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-theme-main">Membres hérités disponibles</p>
+                      <p className="text-[10px] text-theme-muted font-medium">
+                        {inheritedMembers.length} membre(s) du parent
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {/* Option 3 : Reporter la tâche */}
+              <button
+                onClick={() => {
+                  setShowNoReplacementNotification(false);
+                  const task = noReplacementTaskId ? taskById.get(noReplacementTaskId) : null;
+                  if (task) {
+                    toast.info(`Vous pouvez reporter l'échéance de "${task.title}" ou la déprioriser.`);
+                  }
+                  setNoReplacementTaskId(null);
+                }}
+                className="p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 transition-all text-left group md:col-span-2"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                    <Calendar size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-theme-main">Reporter ou déprioriser la tâche</p>
+                    <p className="text-[10px] text-theme-muted font-medium">Ajuster l'échéance en fonction de l'absence</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Conseil bonus */}
+          <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-4">
+            <div className="flex items-start gap-3">
+              <Info size={16} className="text-theme-muted flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-theme-muted leading-relaxed">
+                <span className="font-black text-theme-main">Conseil :</span> Pour éviter ce type de situation, 
+                pensez à maintenir une équipe de secours ou à former vos membres sur les compétences critiques.
+              </p>
+            </div>
+          </div>
+
+          {/* Boutons d'action */}
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowNoReplacementNotification(false);
+                setNoReplacementTaskId(null);
+              }}
+              className="flex-1 h-12 rounded-2xl border-theme-border-subtle text-theme-main"
+            >
+              Fermer
+            </Button>
+            {listeId && (
+              <Button
+                onClick={() => {
+                  setShowNoReplacementNotification(false);
+                  // ✅ Ouvrir la page des membres de la liste
+                  window.location.href = `/liste/${listeId}/membres`;
+                  setNoReplacementTaskId(null);
+                }}
+                className="flex-1 h-12 rounded-2xl bg-secondary shadow-premium-sm"
+              >
+                <Users size={18} className="mr-2" />
+                Gérer les membres
+              </Button>
+            )}
+          </div>
+        </div>
       </Modal>
 
       <Modal
