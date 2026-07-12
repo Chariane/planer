@@ -34,6 +34,8 @@ class AbsenceEtCongeOut(AbsenceEtCongeBase):
     id_membre: Optional[str] = None
     owner_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+    owner_user_id: Optional[str] = None  # ✅ AJOUTER CETTE LIGNE
+    author_role: Optional[str] = None    # ✅ AUSSI AJOUTER (utile pour le frontend)
 
 class AbsenceEtCongeDelete(BaseModel):
     id: str

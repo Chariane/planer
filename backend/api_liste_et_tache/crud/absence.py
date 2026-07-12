@@ -78,14 +78,17 @@ def _normalize_absence_status(value: Optional[str], *, default: str = "en_attent
 def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
     owner_name = "Utilisateur supprimé"
     author_role = "Membre"
+    owner_user_id = None 
     
     if absence.membres:
         author_role = absence.membres.role
         if absence.membres.utilisateur:
             user = absence.membres.utilisateur
             owner_name = f"{user.nom or ''} {user.prenoms or ''}".strip() or user.username
+            owner_user_id = user.id
         else:
             owner_name = "Utilisateur supprimé"
+            owner_user_id = absence.membres.id_utilisateur  # ✅ Fallback
 
     return {
         "id": absence.id,
@@ -101,6 +104,7 @@ def _serialize_absence(db: Session, absence: AbsenceEtConge) -> dict:
         "decision_commentaire": absence.decision_commentaire,
         "id_membre": absence.id_membre,
         "owner_name": owner_name,
+        "owner_user_id": owner_user_id,
         "author_role": author_role
     }
 
@@ -468,6 +472,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         response["sole_admin_resources"] = sole_admin_projects
         response["sole_creator_resources"] = sole_creator_projects
 
+    response["absence"] = _serialize_absence(db, absence)
     return response
 
 
@@ -702,7 +707,7 @@ def create_leave_request(
     )
     notify_absence_created(db, absence_member=membre, actor_user_id=current_user_id, is_absence=is_absence)
     commit_notification_events(db)
-    return absence
+    return _serialize_absence(db, absence) 
 
 
 def list_accessible_absences(
@@ -755,12 +760,11 @@ def list_accessible_absences(
             _require_absence_read_access(db, absence.id, current_user_id)
         except HTTPException:
             continue
-            
+        
         payload = _serialize_absence(db, absence)
         payload["liste_id"] = membre.id_liste
         payload["espace_id"] = membre.id_espace
         payload["workspace_id"] = membre.id_workspace
-        payload["owner_user_id"] = membre.id_utilisateur
         results.append(payload)
         if len(results) >= limit:
             break
@@ -769,7 +773,7 @@ def list_accessible_absences(
 
 def get_absence(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
     absence, _membre = _require_absence_read_access(db, absence_id, current_user_id)
-    return absence
+    return _serialize_absence(db, absence)
 
 
 def update_absence(
@@ -827,7 +831,7 @@ def update_absence(
         detail="Impossible de mettre a jour cette demande d'absence.",
         refresh_instance=absence,
     )
-    return absence
+    return _serialize_absence(db, absence) 
 
 
 def approve_leave(db: Session, *, absence_id: str, current_user_id: str, commentaire: Optional[str] = None) -> AbsenceEtConge:
@@ -922,7 +926,7 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=True)
     commit_notification_events(db)
-    return absence
+    return _serialize_absence(db, absence)
 
 
 def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_rejet: Optional[str] = None) -> AbsenceEtConge:
@@ -1007,7 +1011,7 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
-    return absence
+    return _serialize_absence(db, absence)
 
 
 def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> AbsenceEtConge:
@@ -1015,7 +1019,7 @@ def finish_leave(db: Session, *, absence_id: str, current_user_id: str) -> Absen
     absence.statut = "terminee"
     absence.statut_date = datetime.utcnow()
     commit_or_raise(db, detail="Impossible de cloturer cette demande.", refresh_instance=absence)
-    return absence
+    return _serialize_absence(db, absence) 
 
 
 def cancel_leave(db: Session, *, absence_id: str, current_user_id: str) -> dict:
