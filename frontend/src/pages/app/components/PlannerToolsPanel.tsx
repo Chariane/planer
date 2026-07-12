@@ -1184,62 +1184,94 @@ export default function PlannerToolsPanel({
   // ✅ FILTRE PENDING ABSENCES CORRIGÉ
   // ============================================================
   const pendingAbsences = useMemo(() => {
-    const result = accessibleAbsences.filter(absence => {
-      if (!absence || absence.statut !== 'en_attente') return false;
+  const result = accessibleAbsences.filter(absence => {
+    if (!absence || absence.statut !== 'en_attente') return false;
 
-      if (listeId) {
-        if (isDirectResourceAdmin) {
+    // --- LISTE ---
+    if (listeId) {
+      if (isDirectResourceAdmin) {
+        return absence.author_role === 'Membre';
+      }
+      if (isDirectResourceCreator) {
+        if (absence.author_role === 'Administrateur') return true;
+        
+        if (availabilityLoading || listAvailability.length === 0) {
           return absence.author_role === 'Membre';
         }
-        if (isDirectResourceCreator) {
-          if (absence.author_role === 'Administrateur') return true;
-          
-          // ✅ CORRECTION : Utiliser directMembers au lieu de members
-          // ✅ Si listAvailability est vide, on garde la demande visible
-          if (availabilityLoading || listAvailability.length === 0) {
-            return absence.author_role === 'Membre';
-          }
+        
+        const hasAvailableAdmin = directMembers.some(m => 
+          m.role === ROLES.ADMIN && 
+          listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+        );
+        
+        return absence.author_role === 'Membre' && !hasAvailableAdmin;
+      }
+    }
+
+    // --- ESPACE ---
+    if (espaceId) {
+      if (isDirectResourceAdmin) {
+        return absence.author_role === 'Membre';
+      }
+      if (isDirectResourceCreator) {
+        if (absence.author_role === 'Administrateur') return true;
+        if (availabilityLoading || listAvailability.length === 0) {
+          return absence.author_role === 'Membre';
+        }
+        const hasAvailableAdmin = directMembers.some(m => 
+          m.role === ROLES.ADMIN && 
+          listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+        );
+        return absence.author_role === 'Membre' && !hasAvailableAdmin;
+      }
+    }
+
+    // --- WORKSPACE ---
+    if (workspaceId) {
+      // ✅ Si l'utilisateur est le créateur du workspace
+      if (isDirectResourceCreator) {
+        // Peut voir les demandes des administrateurs
+        if (absence.author_role === 'Administrateur') return true;
+        
+        // Peut voir les demandes des membres SI aucun admin n'est disponible
+        if (absence.author_role === 'Membre') {
+          // Vérifier s'il y a un admin disponible sur la période
+          const absenceStart = new Date(absence.date_debut);
+          const absenceEnd = absence.date_fin ? new Date(absence.date_fin) : absenceStart;
           
           const hasAvailableAdmin = directMembers.some(m => 
             m.role === ROLES.ADMIN && 
-            listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+            m.id_utilisateur !== absence.owner_user_id &&
+            listAvailability.some(a => 
+              a.id_utilisateur === m.id_utilisateur && 
+              a.is_available &&
+              (!a.current_absence || 
+               new Date(a.current_absence.date_debut) > absenceEnd ||
+               new Date(a.current_absence.date_fin || a.current_absence.date_debut) < absenceStart)
+            )
           );
           
-          return absence.author_role === 'Membre' && !hasAvailableAdmin;
+          // Afficher la demande uniquement si le créateur est le fallback
+          return !hasAvailableAdmin;
         }
+        return false;
       }
-
-      if (espaceId) {
-        if (isDirectResourceAdmin) {
-          return absence.author_role === 'Membre';
-        }
-        if (isDirectResourceCreator) {
-          if (absence.author_role === 'Administrateur') return true;
-          if (availabilityLoading || listAvailability.length === 0) {
-            return absence.author_role === 'Membre';
-          }
-          const hasAvailableAdmin = directMembers.some(m => 
-            m.role === ROLES.ADMIN && 
-            listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
-          );
-          return absence.author_role === 'Membre' && !hasAvailableAdmin;
-        }
+      
+      // ✅ Si l'utilisateur est un administrateur du workspace
+      if (isDirectResourceAdmin) {
+        // Peut voir les demandes des membres seulement
+        return absence.author_role === 'Membre';
       }
-
-      if (workspaceId) {
-        if (isDirectResourceAdmin) {
-          return absence.author_role === 'Membre';
-        }
-        if (isDirectResourceCreator) {
-          return absence.author_role === 'Administrateur';
-        }
-      }
-
+      
       return false;
-    });
-    
-    return result;
-  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, directMembers, listeId, espaceId, workspaceId, availabilityLoading]);
+    }
+
+    return false;
+  });
+  
+  return result;
+}, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, directMembers, listeId, espaceId, workspaceId, availabilityLoading]);
+
 
   const calendarAbsences = useMemo(
     () => [...visibleAbsences]

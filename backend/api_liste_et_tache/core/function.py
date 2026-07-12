@@ -2142,6 +2142,41 @@ def _require_report_management_access(db: Session, rapport_id: str, current_user
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a ce rapport.")
 
 
+def _has_available_direct_admin_for_workspace(
+    db: Session, 
+    workspace_id: str, 
+    date_debut, 
+    date_fin
+) -> bool:
+    """
+    Vérifie s'il existe au moins un administrateur direct du workspace
+    qui est disponible sur la période donnée.
+    """
+    admins = db.query(Membre).filter(
+        Membre.id_workspace == workspace_id,
+        Membre.id_espace.is_(None),
+        Membre.id_liste.is_(None),
+        Membre.id_tache.is_(None),
+        Membre.statut == "Actif",
+        Membre.role == WORKSPACE_ADMIN_ROLE,
+    ).all()
+    
+    if not admins:
+        return False
+    
+    for admin in admins:
+        if admin.id_utilisateur:
+            if not _has_overlapping_approved_leave(
+                db,
+                user_id=admin.id_utilisateur,
+                date_debut=date_debut,
+                date_fin=date_fin,
+                scope_type=ResourceType.WORKSPACE,
+                scope_id=workspace_id,
+            ):
+                return True
+    return False
+
 def _require_member_workflow_read_access(db: Session, member_id: str, current_user_id: str):
     """
     Accès lecture pour absences/congés :
@@ -2207,22 +2242,43 @@ def _require_member_workflow_read_access(db: Session, member_id: str, current_us
         )
 
     # --- WORKSPACE ---
-    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_MEMBER_ROLE:
-        try:
-            _require_direct_workspace_admin_grant(db, membre.id_workspace, current_user_id)
-        except HTTPException:
-            raise HTTPException(status_code=403, detail="Seul un administrateur direct du workspace peut voir les demandes des membres.")
-        return membre
-
-    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_ADMIN_ROLE:
-        _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
-        return membre
-
-    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None and membre.role == WORKSPACE_OWNER_ROLE:
-        raise HTTPException(
-            status_code=403,
-            detail="Le createur direct du workspace ne fait pas de demande dans son propre workspace.",
-        )
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None:
+        # ✅ Si le membre est le créateur → pas de demande dans son propre workspace
+        if membre.role == WORKSPACE_OWNER_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Le createur direct du workspace ne fait pas de demande dans son propre workspace.",
+            )
+        
+        # ✅ Si le membre est un administrateur → seul le créateur peut voir
+        if membre.role == WORKSPACE_ADMIN_ROLE:
+            _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
+            return membre
+        
+        # ✅ Si le membre est un membre direct → admin disponible OU créateur
+        if membre.role == WORKSPACE_MEMBER_ROLE:
+            # Récupérer l'absence pour connaître la période
+            absence = db.query(AbsenceEtConge).filter(
+                AbsenceEtConge.id_membre == membre.id,
+                AbsenceEtConge.statut == "en_attente"
+            ).first()
+            
+            # Vérifier s'il y a un admin disponible sur la période
+            has_admin = False
+            if absence:
+                has_admin = _has_available_direct_admin_for_workspace(
+                    db,
+                    workspace_id=membre.id_workspace,
+                    date_debut=absence.date_debut,
+                    date_fin=absence.date_fin
+                )
+            
+            # Si admin disponible → admin, sinon → créateur
+            if has_admin:
+                _require_direct_workspace_admin_grant(db, membre.id_workspace, current_user_id)
+            else:
+                _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
+            return membre
 
     raise HTTPException(status_code=403, detail="Vous n'avez pas acces a cette demande.")
 
@@ -2231,7 +2287,37 @@ def _require_member_workflow_evaluation_access(db: Session, member_id: str, curr
     membre = _get_member_or_404(db, member_id)
     if membre.id_utilisateur == current_user_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez pas evaluer votre propre demande.")
+    
+    # ✅ Si c'est un workspace, appliquer la même logique que pour la lecture
+    if membre.id_workspace and membre.id_espace is None and membre.id_liste is None:
+        # Si le membre est administrateur → seul le créateur peut évaluer
+        if membre.role == WORKSPACE_ADMIN_ROLE:
+            _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
+            return membre
+        
+        # Si le membre est membre direct → admin disponible ou créateur
+        if membre.role == WORKSPACE_MEMBER_ROLE:
+            absence = db.query(AbsenceEtConge).filter(
+                AbsenceEtConge.id_membre == membre.id,
+                AbsenceEtConge.statut == "en_attente"
+            ).first()
+            
+            has_admin = False
+            if absence:
+                has_admin = _has_available_direct_admin_for_workspace(
+                    db,
+                    workspace_id=membre.id_workspace,
+                    date_debut=absence.date_debut,
+                    date_fin=absence.date_fin
+                )
+            
+            if has_admin:
+                _require_direct_workspace_admin_grant(db, membre.id_workspace, current_user_id)
+            else:
+                _require_workspace_creator_grant(db, membre.id_workspace, current_user_id)
+            return membre
 
+    # Pour les listes et espaces, on utilise la même logique
     return _require_member_workflow_read_access(db, member_id, current_user_id)
 
 

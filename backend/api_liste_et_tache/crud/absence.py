@@ -27,6 +27,7 @@ from ..core.function import (
     _get_liste_member_record,
     LISTE_OWNER_ROLE,
     LISTE_ADMIN_ROLE,
+    WORKSPACE_OWNER_ROLE,
     _has_overlapping_approved_leave,
     ResourceType,
 )
@@ -867,6 +868,20 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
             Membre.id_utilisateur == current_user_id,
             Membre.statut == "Actif"
         ).first()
+        
+        # ✅ SI l'acteur n'est pas un membre direct du workspace, vérifier s'il est le créateur
+        if not actor_direct_member:
+            workspace = db.query(Workspace).filter(
+                Workspace.id == target_membre.id_workspace,
+                Workspace.id_utilisateur == current_user_id
+            ).first()
+            if workspace:
+                actor_direct_member = Membre(
+                    id_utilisateur=current_user_id,
+                    id_workspace=target_membre.id_workspace,
+                    role=WORKSPACE_OWNER_ROLE,
+                    statut="Actif"
+                )
 
     if not actor_direct_member:
         res_label = "le workspace" if target_membre.id_workspace else ("l'espace" if target_membre.id_espace else "la liste")
@@ -961,6 +976,20 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
             Membre.id_utilisateur == current_user_id,
             Membre.statut == "Actif"
         ).first()
+        
+        # ✅ SI l'acteur n'est pas un membre direct du workspace, vérifier s'il est le créateur
+        if not actor_direct_member:
+            workspace = db.query(Workspace).filter(
+                Workspace.id == target_membre.id_workspace,
+                Workspace.id_utilisateur == current_user_id
+            ).first()
+            if workspace:
+                actor_direct_member = Membre(
+                    id_utilisateur=current_user_id,
+                    id_workspace=target_membre.id_workspace,
+                    role=WORKSPACE_OWNER_ROLE,
+                    statut="Actif"
+                )
 
     if not actor_direct_member:
         res_label = "le workspace" if target_membre.id_workspace else ("l'espace" if target_membre.id_espace else "la liste")
