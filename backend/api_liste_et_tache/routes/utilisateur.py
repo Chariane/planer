@@ -30,6 +30,7 @@ from ..core.function import (
     _require_list_delete_access,
     _require_list_member_management_access,
     _require_list_read_access,
+    _validate_liste_invitation_permissions,
     _get_tache_or_404,
     _require_assigned_task_operational_access,
     _require_task_management_access,
@@ -1030,7 +1031,7 @@ def search_members_endpoint(
         role=role,
         statut=statut,
         limit=limit,
-    )
+    )gi
 
 
 @router.get("/search/files")
@@ -1468,13 +1469,12 @@ def invite_liste_member(
         target_user = db.query(Utilisateur).filter(Utilisateur.email == membre_in.email).first()
     elif membre_in.username:
         target_user = db.query(Utilisateur).filter(Utilisateur.username == membre_in.username).first()
-    _validate_list_member_management_permissions(
+    _validate_liste_invitation_permissions(
         liste_id=liste_id,
         actor_role=actor_role,
         actor_source_type=actor_source_type,
         actor_source_id=actor_source_id,
-        target_member=_get_liste_member_record(db, liste_id, target_user.id) if target_user else None,
-        new_role=membre_in.role,
+        invited_role=membre_in.role,
     )
     
     result = invite_member_to_liste(db, liste_id, membre_in)

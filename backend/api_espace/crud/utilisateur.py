@@ -631,7 +631,7 @@ def _user_has_active_membership_in_hierarchical_parents(db: Session, user_id: st
     return False
 
 
-def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite) -> dict:
+def invite_member_to_espace(db: Session, espace_id: str, membre_in: WorkspaceMemberInvite, token: str | None = None ) -> dict:
     """
     Invite un utilisateur a un espace.
     Supporte les utilisateurs existants (statut 'En attente') et les nouveaux (Token JWT).
