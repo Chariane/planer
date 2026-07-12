@@ -1031,7 +1031,7 @@ def search_members_endpoint(
         role=role,
         statut=statut,
         limit=limit,
-    )gi
+    )
 
 
 @router.get("/search/files")
