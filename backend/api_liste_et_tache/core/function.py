@@ -945,7 +945,7 @@ def _get_list_member_management_grant(
     return _get_list_management_grant(db, liste_id, current_user_id)
 
 
-# ✅ FONCTION MODIFIÉE POUR RÉSOUDRE LE PROBLÈME DU CRÉATEUR DIRECT
+# ✅ FONCTION CORRIGÉE
 def _validate_list_member_management_permissions(
     *,
     liste_id: str,
@@ -959,10 +959,11 @@ def _validate_list_member_management_permissions(
     Valide les permissions de gestion des membres d'une liste.
     
     Règles UNIQUEMENT pour les LISTES :
-    1. Le Créateur DIRECT de la liste peut TOUT gérer (ajouter, modifier, retirer)
-    2. Un Administrateur DIRECT de la liste ne peut RIEN gérer (ni ajouter, ni modifier)
-    3. Un Administrateur par HÉRITAGE (workspace ou espace parent) peut PROMOUVOIR uniquement
+    1. Le Créateur DIRECT de la liste peut TOUT gérer (ajouter, modifier, retirer) sauf lui-même
+    2. Un Administrateur DIRECT de la liste peut AJOUTER des membres (Membre/Invité) mais ne peut pas modifier/supprimer
+    3. Un Administrateur par HÉRITAGE (workspace ou espace parent) peut AJOUTER des membres (Admin/Membre/Invité) et PROMOUVOIR uniquement
     4. Un Administrateur par HÉRITAGE ne peut PAS rétrograder ni retirer
+    5. Les Membres et Invités directs ne peuvent ni ajouter ni gérer les membres
     """
 
     # ✅ Vérifier si l'acteur est le créateur DIRECT de la liste
@@ -989,28 +990,37 @@ def _validate_list_member_management_permissions(
         and actor_source_id == liste_id
     )
 
-    # ✅ RÈGLE 2 : Un administrateur direct de la liste ne peut RIEN gérer
+    # ✅ RÈGLE 2 : Administrateur DIRECT - Peut AJOUTER des membres (Membre/Invité)
+    # Mais ne peut PAS modifier (promotion/rétrogradation) ni supprimer
     if is_direct_admin:
+        # Si target_member est None, c'est une invitation (ajout) → autorisé avec Membre/Invite
         if target_member is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur direct de la liste ne peut pas ajouter de membres. Seul le créateur peut le faire.",
-            )
+            # L'admin direct ne peut ajouter qu'avec les rôles Membre ou Invité
+            if new_role and new_role not in {LISTE_MEMBER_ROLE, LISTE_GUEST_ROLE}:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Un administrateur direct de la liste ne peut ajouter qu'avec les rôles 'Membre' ou 'Invité'.",
+                )
+            return
+        
+        # Si target_member existe, l'admin direct ne peut RIEN modifier
         raise HTTPException(
             status_code=403,
             detail="Un administrateur direct de la liste ne peut pas modifier les membres de cette liste. Seul le créateur peut le faire.",
         )
 
-    # ✅ RÈGLE 3 & 4 : Administrateur par héritage (workspace ou espace parent)
-    # Ne peut que PROMOUVOIR (Invité → Membre/Admin, Membre → Admin)
-    # Ne peut PAS rétrograder ni retirer
-    if actor_role == LISTE_ADMIN_ROLE and actor_source_type != ResourceType.LISTE:
-        if target_member is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Un administrateur par héritage ne peut pas ajouter de membres. Seul le créateur peut le faire.",
-            )
+    # ✅ RÈGLE 3 & 4 : Administrateur par HÉRITAGE (fusionné)
+    # Inclut à la fois l'admin hérité ET le créateur hérité
+    is_inherited_manager = (
+        actor_role in LISTE_MANAGEMENT_ROLES  # Créateur ou Administrateur
+        and actor_source_type != ResourceType.LISTE  # Hérité (workspace ou espace parent)
+    )
 
+    if is_inherited_manager:
+        # L'admin hérité peut AJOUTER des membres avec tous les rôles (Admin/Membre/Invite)
+        if target_member is None:
+            return
+        
         # Vérifier qu'on ne touche pas au créateur
         if target_member.role == LISTE_OWNER_ROLE:
             raise HTTPException(
@@ -1040,33 +1050,13 @@ def _validate_list_member_management_permissions(
                 )
         return
 
-    # ✅ RÈGLE 5 : Si l'acteur est le créateur PAR HÉRITAGE (pas direct)
-    if actor_role == LISTE_OWNER_ROLE and actor_source_type != ResourceType.LISTE:
-        # Empêcher de modifier le créateur direct de la liste
-        if target_member and target_member.role == LISTE_OWNER_ROLE:
-            raise HTTPException(
-                status_code=403,
-                detail="Le créateur direct de la liste ne peut pas être modifié par un créateur hérité.",
-            )
-        # Vérifier que c'est une promotion (pas une rétrogradation)
-        if target_member and new_role and new_role != target_member.role:
-            current_rank = _get_role_rank(target_member.role)
-            new_rank = _get_role_rank(new_role)
-            if new_rank < current_rank and target_member.role != LISTE_OWNER_ROLE:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Un créateur par héritage ne peut que promouvoir un membre, pas le rétrograder.",
-                )
-        return
-
-    # ✅ RÈGLE 6 : Si l'acteur n'est pas dans les rôles de gestion
+    # ✅ RÈGLE 5 : Si l'acteur n'est pas dans les rôles de gestion
     if actor_role not in LISTE_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=403,
             detail="Permissions insuffisantes pour gérer les membres de cette liste.",
         )
 
-    # Fallback
     return
 
 # ============================================================
