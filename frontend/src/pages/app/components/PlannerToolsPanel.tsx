@@ -1464,238 +1464,293 @@ export default function PlannerToolsPanel({
     </div>
   );
 
-  const renderImpactPanel = () => {
-    const impactAbsences = visibleAbsences.filter(absence => absence.statut === 'approuvee');
+const renderImpactPanel = () => {
+  const impactAbsences = visibleAbsences.filter(absence => absence.statut === 'approuvee');
 
-    if (impactAbsences.length === 0) {
-      return (
-        <div className="py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
-          <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
-          <p className="font-black text-[10px] uppercase tracking-widest">Aucun impact à surveiller</p>
-        </div>
-      );
-    }
-
+  if (impactAbsences.length === 0) {
     return (
-      <div className="space-y-5">
-        {impactAbsences.map(absence => {
-          const absenceImpact = absenceImpacts[absence.id];
-          const impactedProjects = absenceImpact?.impacted_projects || [];
-          const soleAdminProjects = absenceImpact?.sole_admin_projects || [];
-          const soleCreatorProjects = absenceImpact?.sole_creator_projects || [];
-
-          const isOwn = absence.owner_user_id === currentUserId;
-          const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
-
-          const impactedTasks = listeId ? getTasksImpactedByAbsence(absence) : [];
-          const showTasks = listeId && (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
-          const showProjects = !listeId && impactedProjects.length > 0;
-          const hasGovernanceRisk = soleAdminProjects.length > 0 || soleCreatorProjects.length > 0;
-
-          if (!showTasks && !showProjects && !hasGovernanceRisk) return null;
-
-          return (
-            <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
-                      {absence.is_absence ? 'Absence' : 'Congé'}
-                    </span>
-                    <span className="rounded-full border border-theme-border-subtle bg-theme-surface-hover/50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
-                      {absence.statut.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <p className="text-base font-black text-theme-main">{absence.authorName}</p>
-                  <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-theme-muted">
-                    {formatDate(absence.date_debut)} → {formatDate(absence.date_fin)}
-                  </p>
-                </div>
-                <div className={`rounded-2xl border px-4 py-3 text-right ${(showTasks || showProjects || hasGovernanceRisk) ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
-                  <p className={`text-[9px] font-black uppercase tracking-widest ${(showTasks || showProjects || hasGovernanceRisk) ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    {(showTasks || showProjects || hasGovernanceRisk) ? 'Action recommandée' : 'Impact faible'}
-                  </p>
-                  <p className="mt-1 text-xs font-bold text-theme-main">
-                    {showTasks ? `${impactedTasks.length} tâche(s) touchée(s)` :
-                     showProjects ? `${impactedProjects.length} projet(s) impacté(s)` :
-                     hasGovernanceRisk ? 'Risque de gouvernance' : 'Aucun impact'}
-                  </p>
-                </div>
-              </div>
-
-              {absence.motif && (
-                <p className="mt-4 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/30 p-4 text-xs font-medium italic text-theme-muted">
-                  "{absence.motif}"
-                </p>
-              )}
-
-              {(absence.decision_commentaire || absence.decision_by_name) && (
-                <div className="mt-4 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/30 p-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted">
-                    Décision {absence.decision_by_name ? `par ${absence.decision_by_name}` : ''}
-                    {absence.decision_at ? ` · ${formatDate(absence.decision_at)}` : ''}
-                  </p>
-                  {absence.decision_commentaire && (
-                    <p className="mt-2 text-xs font-bold text-theme-main">{absence.decision_commentaire}</p>
-                  )}
-                </div>
-              )}
-
-              {showTasks && (
-                <div className="mt-5 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches impactées</p>
-                  {impactedTasks.length === 0 ? (
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs font-bold text-emerald-600">
-                      Aucune tâche assignée à cette personne ne chevauche la période demandée.
-                    </div>
-                  ) : (
-                    impactedTasks.map(task => {
-                      const candidates = getTaskReplacementCandidates(task, absence);
-                      return (
-                        <div key={task.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="min-w-0">
-                              <Link to={`/tache/${task.id}`} className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2">
-                                {task.title}
-                                <Eye size={12} className="shrink-0" />
-                              </Link>
-                              <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-theme-muted">
-                                Échéance {formatDate(task.dueDate)} · {task.priority}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {task.assignees?.map(assignee => (
-                                <span key={assignee.id} className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-main">
-                                  {assignee.name}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          {canManageThisImpact && (
-                            <div className="mt-4 space-y-3">
-                              <div className="flex items-center gap-2 px-3">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Assignation alternative :</span>
-                              </div>
-                              {/* ✅ SECTION MODIFIÉE : Affichage des candidats avec disponibilité */}
-                              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-3 md:grid-cols-[1fr_auto]">
-                                {availabilityLoading ? (
-                                  <div className="flex items-center gap-2 col-span-2 py-2">
-                                    <Loader2 className="h-4 w-4 animate-spin text-secondary" />
-                                    <span className="text-xs text-theme-muted">Vérification des disponibilités...</span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <select
-                                      value={taskReplacementByTaskId[task.id] || ''}
-                                      onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                      className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
-                                    >
-                                      <option value="">Choisir un remplaçant ou renfort</option>
-                                      {getSortedReplacementCandidates(task, absence).map(candidate => {
-                                        const isAvailable = candidate.isAvailable;
-                                        return (
-                                          <option 
-                                            key={candidate.id_utilisateur} 
-                                            value={candidate.id_utilisateur}
-                                            disabled={!isAvailable}
-                                            className={!isAvailable ? 'text-theme-muted/50' : ''}
-                                          >
-                                            {candidate.name} 
-                                            {isAvailable 
-                                              ? ' ✅ Disponible' 
-                                              : ` ⚠️ Absent(e)`
-                                            }
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
-                                    <Button
-                                      type="button"
-                                      onClick={() => handleAssignTaskReplacement(task, absence)}
-                                      disabled={loading || !taskReplacementByTaskId[task.id]}
-                                      className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
-                                    >
-                                      {(() => {
-                                        const candidates = getSortedReplacementCandidates(task, absence);
-                                        const availableCount = candidates.filter(c => c.isAvailable).length;
-                                        
-                                        if (candidates.length === 0) {
-                                          return 'Aucun membre';
-                                        }
-                                        if (availableCount === 0) {
-                                          return 'Tous indisponibles';
-                                        }
-                                        return 'Assigner';
-                                      })()}
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-
-              {showProjects && (
-                <div className="mt-5 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Projets impactés</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {impactedProjects.map((project: any) => (
-                      <div key={project.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-sm font-black text-theme-main">{project.nom}</p>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted mt-1">
-                              Rôle : {project.role}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-sm font-black text-theme-main">{project.progression}%</span>
-                            <div className="w-20 h-1.5 bg-theme-border-subtle rounded-full mt-1 overflow-hidden">
-                              <div className="h-full bg-secondary rounded-full" style={{ width: `${project.progression}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {hasGovernanceRisk && (
-                <div className="mt-5 space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance critique</p>
-                  {soleAdminProjects.map((p: any) => (
-                    <div key={p.id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
-                      <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-black text-theme-main">Admin unique : {p.nom}</p>
-                        <p className="text-[11px] text-theme-muted">Ce projet n'aura plus d'administrateur actif durant l'absence.</p>
-                      </div>
-                    </div>
-                  ))}
-                  {soleCreatorProjects.map((p: any) => (
-                    <div key={p.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 flex items-start gap-3">
-                      <ShieldAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-black text-theme-main">Créateur unique : {p.nom}</p>
-                        <p className="text-[11px] text-theme-muted">Ce projet n'aura plus de créateur direct actif.</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </GlassCard>
-          );
-        })}
+      <div className="py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
+        <p className="font-black text-[10px] uppercase tracking-widest">Aucun impact à surveiller</p>
       </div>
     );
-  };
+  }
+
+  return (
+    <div className="space-y-5">
+      {impactAbsences.map(absence => {
+        const absenceImpact = absenceImpacts[absence.id];
+        const impactedProjects = absenceImpact?.impacted_projects || [];
+        const soleAdminProjects = absenceImpact?.sole_admin_projects || [];
+        const soleCreatorProjects = absenceImpact?.sole_creator_projects || [];
+
+        const isOwn = absence.owner_user_id === currentUserId;
+        const canManageThisImpact = absence.statut === 'en_attente' && isManager && !isOwn;
+
+        const impactedTasks = listeId ? getTasksImpactedByAbsence(absence) : [];
+        const showTasks = listeId && (isDirectResourceAdmin || isDirectResourceCreator) && impactedTasks.length > 0;
+        const showProjects = !listeId && impactedProjects.length > 0;
+        const hasGovernanceRisk = soleAdminProjects.length > 0 || soleCreatorProjects.length > 0;
+
+        if (!showTasks && !showProjects && !hasGovernanceRisk) return null;
+
+        return (
+          <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
+                    {absence.is_absence ? 'Absence' : 'Congé'}
+                  </span>
+                  <span className="rounded-full border border-theme-border-subtle bg-theme-surface-hover/50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                    {absence.statut.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="text-base font-black text-theme-main">{absence.authorName}</p>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-theme-muted">
+                  {formatDate(absence.date_debut)} → {formatDate(absence.date_fin)}
+                </p>
+              </div>
+              <div className={`rounded-2xl border px-4 py-3 text-right ${(showTasks || showProjects || hasGovernanceRisk) ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
+                <p className={`text-[9px] font-black uppercase tracking-widest ${(showTasks || showProjects || hasGovernanceRisk) ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  {(showTasks || showProjects || hasGovernanceRisk) ? 'Action recommandée' : 'Impact faible'}
+                </p>
+                <p className="mt-1 text-xs font-bold text-theme-main">
+                  {showTasks ? `${impactedTasks.length} tâche(s) touchée(s)` :
+                   showProjects ? `${impactedProjects.length} projet(s) impacté(s)` :
+                   hasGovernanceRisk ? 'Risque de gouvernance' : 'Aucun impact'}
+                </p>
+              </div>
+            </div>
+
+            {absence.motif && (
+              <p className="mt-4 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/30 p-4 text-xs font-medium italic text-theme-muted">
+                "{absence.motif}"
+              </p>
+            )}
+
+            {(absence.decision_commentaire || absence.decision_by_name) && (
+              <div className="mt-4 rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/30 p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                  Décision {absence.decision_by_name ? `par ${absence.decision_by_name}` : ''}
+                  {absence.decision_at ? ` · ${formatDate(absence.decision_at)}` : ''}
+                </p>
+                {absence.decision_commentaire && (
+                  <p className="mt-2 text-xs font-bold text-theme-main">{absence.decision_commentaire}</p>
+                )}
+              </div>
+            )}
+
+            {showTasks && (
+              <div className="mt-5 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Tâches impactées</p>
+                {impactedTasks.length === 0 ? (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs font-bold text-emerald-600">
+                    Aucune tâche assignée à cette personne ne chevauche la période demandée.
+                  </div>
+                ) : (
+                  impactedTasks.map(task => {
+                    const candidates = getTaskReplacementCandidates(task, absence);
+                    return (
+                      <div key={task.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="min-w-0">
+                            <Link to={`/tache/${task.id}`} className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2">
+                              {task.title}
+                              <Eye size={12} className="shrink-0" />
+                            </Link>
+                            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-theme-muted">
+                              Échéance {formatDate(task.dueDate)} · {task.priority}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {task.assignees?.map(assignee => (
+                              <span key={assignee.id} className="rounded-full border border-theme-border-subtle bg-theme-surface px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-main">
+                                {assignee.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {canManageThisImpact && (
+                          <div className="mt-4 space-y-3">
+                            <div className="flex items-center gap-2 px-3">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Assignation alternative :</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 rounded-2xl border border-secondary/20 bg-secondary/5 p-3 md:grid-cols-[1fr_auto]">
+                              {availabilityLoading ? (
+                                <div className="flex items-center gap-2 col-span-2 py-2">
+                                  <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                                  <span className="text-xs text-theme-muted">Vérification des disponibilités...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <select
+                                    value={taskReplacementByTaskId[task.id] || ''}
+                                    onChange={e => setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                    className="h-11 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-xs font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                                  >
+                                    <option value="">Choisir un remplaçant ou renfort</option>
+                                    {getSortedReplacementCandidates(task, absence).map(candidate => {
+                                      const isAvailable = candidate.isAvailable;
+                                      return (
+                                        <option 
+                                          key={candidate.id_utilisateur} 
+                                          value={candidate.id_utilisateur}
+                                          disabled={!isAvailable}
+                                          className={!isAvailable ? 'text-theme-muted/50' : ''}
+                                        >
+                                          {candidate.name} 
+                                          {isAvailable 
+                                            ? ' ✅ Disponible' 
+                                            : ` ⚠️ Absent(e)`
+                                          }
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                  <Button
+                                    type="button"
+                                    onClick={() => handleAssignTaskReplacement(task, absence)}
+                                    disabled={loading || !taskReplacementByTaskId[task.id]}
+                                    className="h-11 rounded-xl bg-secondary px-6 text-[10px] font-black uppercase tracking-widest hover:bg-secondary/80 shadow-premium-sm active:scale-95 transition-all"
+                                  >
+                                    {(() => {
+                                      const candidates = getSortedReplacementCandidates(task, absence);
+                                      const availableCount = candidates.filter(c => c.isAvailable).length;
+                                      
+                                      if (candidates.length === 0) {
+                                        return 'Aucun membre';
+                                      }
+                                      if (availableCount === 0) {
+                                        return 'Tous indisponibles';
+                                      }
+                                      return 'Assigner';
+                                    })()}
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {showProjects && (
+              <div className="mt-5 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Projets impactés</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {impactedProjects.map((project: any) => (
+                    <div key={project.id} className="rounded-2xl border border-theme-border-subtle bg-theme-surface-hover/20 p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-black text-theme-main">{project.nom}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-theme-muted mt-1">
+                            Rôle : {project.role}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-black text-theme-main">{project.progression}%</span>
+                          <div className="w-20 h-1.5 bg-theme-border-subtle rounded-full mt-1 overflow-hidden">
+                            <div className="h-full bg-secondary rounded-full" style={{ width: `${project.progression}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasGovernanceRisk && (
+              <div className="mt-5 space-y-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Gouvernance critique</p>
+                
+                {/* ✅ ADMIN UNIQUE - avec progression et statut d'impact */}
+                {soleAdminProjects.map((p: any) => {
+                  const isImpacted = p.impact === true;
+                  return (
+                    <div 
+                      key={p.id} 
+                      className={`rounded-2xl border p-4 flex items-start gap-3 ${
+                        isImpacted 
+                          ? 'border-red-500/20 bg-red-500/5' 
+                          : 'border-amber-500/20 bg-amber-500/5'
+                      }`}
+                    >
+                      <ShieldAlert className={`h-5 w-5 shrink-0 mt-0.5 ${isImpacted ? 'text-red-500' : 'text-amber-500'}`} />
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-black text-theme-main">{p.nom}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-theme-main">{p.progression}%</span>
+                            <div className="w-16 h-1.5 bg-theme-border-subtle rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${isImpacted ? 'bg-red-500' : 'bg-amber-500'}`} 
+                                style={{ width: `${Math.min(p.progression, 100)}%` }} 
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-theme-muted mt-1">
+                          {isImpacted 
+                            ? `⚠️ Admin unique (progression ${p.progression}% < 50%) → ❌ PROJET IMPACTÉ` 
+                            : `✅ Admin unique (progression ${p.progression}% ≥ 50%) → Projet non impacté`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* ✅ CRÉATEUR UNIQUE - avec progression et statut d'impact */}
+                {soleCreatorProjects.map((p: any) => {
+                  const isImpacted = p.impact === true;
+                  return (
+                    <div 
+                      key={p.id} 
+                      className={`rounded-2xl border p-4 flex items-start gap-3 ${
+                        isImpacted 
+                          ? 'border-red-500/20 bg-red-500/5' 
+                          : 'border-amber-500/20 bg-amber-500/5'
+                      }`}
+                    >
+                      <ShieldAlert className={`h-5 w-5 shrink-0 mt-0.5 ${isImpacted ? 'text-red-500' : 'text-amber-500'}`} />
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-black text-theme-main">{p.nom}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-theme-main">{p.progression}%</span>
+                            <div className="w-16 h-1.5 bg-theme-border-subtle rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${isImpacted ? 'bg-red-500' : 'bg-amber-500'}`} 
+                                style={{ width: `${Math.min(p.progression, 100)}%` }} 
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-theme-muted mt-1">
+                          {isImpacted 
+                            ? `⚠️ Créateur unique (progression ${p.progression}% < 30%) → ❌ PROJET IMPACTÉ` 
+                            : `✅ Créateur unique (progression ${p.progression}% ≥ 30%) → Projet non impacté`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </GlassCard>
+        );
+      })}
+    </div>
+  );
+};
 
   const reportsWithAuthors = useMemo(() => {
     return (reports || []).filter(Boolean).map(report => ({

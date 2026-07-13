@@ -294,12 +294,12 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
     sole_admin_projects = []
     sole_creator_projects = []
 
-    # ⚠️ NOUVEAU : variables pour la gouvernance des listes
+    # Variables pour la gouvernance des listes
     sole_admin_resources = []
     sole_creator_resources = []
 
     if scope_type == "liste":
-        # --- Analyse des tâches assignées (inchangé) ---
+        # --- Analyse des tâches assignées ---
         assigned_tasks = (
             db.query(Tache)
             .join(Membre, Tache.id == Membre.id_tache)
@@ -320,9 +320,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
                 overdue_tasks.append(task)
 
-        # ============================================================
-        # Détection de la gouvernance pour une liste
-        # ============================================================
+        # --- Détection de la gouvernance pour une liste ---
         admins = _direct_resource_members(db, resource_type="liste", resource_id=scope_id, role=LISTE_ADMIN_ROLE)
         
         if target_membre.role == LISTE_ADMIN_ROLE and admins:
@@ -339,46 +337,99 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
                 )
             ]
             if len(available_admins) == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
+                # Récupérer la progression de la liste
+                progress = _calculate_list_progress(db, scope_id)
                 sole_admin_resources.append({
                     "id": scope_id,
                     "nom": _get_liste_or_404(db, scope_id).nom,
-                    "type": "liste"
+                    "type": "liste",
+                    "progression": progress,
+                    "impact": progress < 50  # Impact si progression < 50%
                 })
 
     else:
-        # --- Gestion des espaces et workspaces (modifié) ---
+        # ============================================================
+        # 🚀 GESTION DES ESPACES ET WORKSPACES - OPTIMISÉ
+        # ============================================================
+        
+        # 1. Récupérer TOUS les projets (listes) de l'espace/workspace (profondeur)
         listes = []
         if scope_type == "espace":
-            listes = db.query(Liste).filter(Liste.id_espace == scope_id).all()
+            # Récupérer toutes les listes de l'espace et de ses sous-espaces
+            listes = _get_all_descendant_lists(db, scope_id)
         elif scope_type == "workspace":
+            # Récupérer toutes les listes du workspace
             listes = db.query(Liste).filter(Liste.id_workspace == scope_id).all()
+            # Ajouter les listes des espaces du workspace
+            espaces = db.query(Espace).filter(Espace.id_workspace == scope_id).all()
+            for espace in espaces:
+                listes.extend(_get_all_descendant_lists(db, espace.id))
 
+        # 2. Pour chaque projet, analyser le rôle de l'utilisateur
         for liste in listes:
+            # Récupérer le rôle direct du membre sur cette liste
             member_role = _get_liste_member_record(db, liste.id, target_membre.id_utilisateur)
-            if member_role and member_role.role in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]:
-                progress = _calculate_list_progress(db, liste.id)
-                impacted_projects.append({
-                    "id": liste.id,
-                    "nom": liste.nom,
-                    "progression": progress,
-                    "role": member_role.role
-                })
-                admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
-                available_admins = [
-                    a for a in admins
-                    if a.id_utilisateur and not _has_overlapping_approved_leave(
-                        db,
-                        user_id=a.id_utilisateur,
-                        date_debut=absence.date_debut,
-                        date_fin=absence.date_fin,
-                        scope_type=ResourceType.LISTE,
-                        scope_id=liste.id,
-                    )
-                ]
-                if member_role.role == LISTE_ADMIN_ROLE and len(available_admins) == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
-                    sole_admin_projects.append({"id": liste.id, "nom": liste.nom})
-                elif member_role.role == LISTE_OWNER_ROLE and not available_admins:
-                    sole_creator_projects.append({"id": liste.id, "nom": liste.nom})
+            
+            # Si l'utilisateur n'a pas de rôle direct sur cette liste, passer
+            if not member_role or member_role.role not in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]:
+                continue
+            
+            # Calculer la progression du projet
+            progress = _calculate_list_progress(db, liste.id)
+            
+            # Récupérer tous les administrateurs de cette liste
+            admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
+            
+            # Filtrer les administrateurs disponibles sur la période
+            available_admins = [
+                a for a in admins
+                if a.id_utilisateur and not _has_overlapping_approved_leave(
+                    db,
+                    user_id=a.id_utilisateur,
+                    date_debut=absence.date_debut,
+                    date_fin=absence.date_fin,
+                    scope_type=ResourceType.LISTE,
+                    scope_id=liste.id,
+                )
+            ]
+            
+            # Ajouter le projet à la liste des projets impactés
+            impacted_projects.append({
+                "id": liste.id,
+                "nom": liste.nom,
+                "progression": progress,
+                "role": member_role.role
+            })
+            
+            # ✅ NOUVELLE LOGIQUE : Détection d'impact basée sur progression et gouvernance
+            
+            # Cas 1 : L'utilisateur est administrateur de la liste
+            if member_role.role == LISTE_ADMIN_ROLE:
+                # Vérifier s'il est le SEUL administrateur disponible
+                available_admin_count = len(available_admins)
+                
+                # Si c'est le seul admin disponible ET progression < 50% → projet impacté
+                if available_admin_count == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
+                    sole_admin_projects.append({
+                        "id": liste.id, 
+                        "nom": liste.nom,
+                        "progression": progress,
+                        "impact": progress < 50  # True si progression < 50%
+                    })
+            
+            # Cas 2 : L'utilisateur est créateur de la liste
+            elif member_role.role == LISTE_OWNER_ROLE:
+                # Vérifier s'il est le SEUL créateur (pas d'admin disponible)
+                no_admin_available = len(available_admins) == 0
+                
+                # Si c'est le seul créateur (pas d'admin) ET progression < 30% → projet impacté
+                if no_admin_available:
+                    sole_creator_projects.append({
+                        "id": liste.id, 
+                        "nom": liste.nom,
+                        "progression": progress,
+                        "impact": progress < 30  # True si progression < 30%
+                    })
 
     conflicts = detect_leave_conflicts_for_member(
         db,
@@ -406,8 +457,12 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         elif conflicts:
             risk_level = "moyen"
     else:
-        if sole_admin_projects or sole_creator_projects:
+        # ✅ Vérifier s'il y a des projets avec impact réel (True)
+        has_impact = any(p.get("impact", False) for p in sole_admin_projects) or any(p.get("impact", False) for p in sole_creator_projects)
+        if has_impact:
             risk_level = "eleve"
+        elif sole_admin_projects or sole_creator_projects:
+            risk_level = "moyen"
         elif conflicts:
             risk_level = "moyen"
 
@@ -420,14 +475,30 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         if overlapping_tasks:
             risk_reasons.append(f"{len(overlapping_tasks)} tâche(s) chevauchent la période")
         if sole_admin_resources:
-            risk_reasons.append("Seul administrateur disponible dans la liste")
+            for res in sole_admin_resources:
+                if res.get("impact", False):
+                    risk_reasons.append(f"Admin unique sur '{res['nom']}' (progression {res['progression']}% < 50%)")
+                else:
+                    risk_reasons.append(f"Admin unique sur '{res['nom']}' (progression {res['progression']}% ≥ 50%)")
         if sole_creator_resources:
-            risk_reasons.append("Créateur unique sans administrateur disponible")
+            for res in sole_creator_resources:
+                if res.get("impact", False):
+                    risk_reasons.append(f"Créateur unique sur '{res['nom']}' (progression {res['progression']}% < 30%)")
+                else:
+                    risk_reasons.append(f"Créateur unique sur '{res['nom']}' (progression {res['progression']}% ≥ 30%)")
     else:
         if sole_admin_projects:
-            risk_reasons.append(f"Seul administrateur disponible dans {len(sole_admin_projects)} projet(s)")
+            for p in sole_admin_projects:
+                if p.get("impact", False):
+                    risk_reasons.append(f"Admin unique sur '{p['nom']}' (progression {p['progression']}% < 50%) → IMPACTÉ")
+                else:
+                    risk_reasons.append(f"Admin unique sur '{p['nom']}' (progression {p['progression']}% ≥ 50%) → NON IMPACTÉ")
         if sole_creator_projects:
-            risk_reasons.append(f"Créateur unique sans administrateur disponible dans {len(sole_creator_projects)} projet(s)")
+            for p in sole_creator_projects:
+                if p.get("impact", False):
+                    risk_reasons.append(f"Créateur unique sur '{p['nom']}' (progression {p['progression']}% < 30%) → IMPACTÉ")
+                else:
+                    risk_reasons.append(f"Créateur unique sur '{p['nom']}' (progression {p['progression']}% ≥ 30%) → NON IMPACTÉ")
     if conflicts:
         risk_reasons.append(f"{len(conflicts)} autre(s) demande(s) sur la même période")
     if approved_count > 3:
@@ -440,11 +511,20 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         if scope_type == "liste":
             recommendation = "Impact élevé : sécurisez les tâches critiques ou la gouvernance avant d'approuver."
         else:
-            recommendation = "Impact élevé : sécurisez la gouvernance des projets avant d'approuver."
+            recommendation = "Impact élevé : certains projets critiques risquent d'être bloqués. Envisagez un remplaçant ou reportez l'absence."
     elif risk_level == "moyen":
-        recommendation = "Impact modéré : vérifiez les chevauchements avant décision."
+        if scope_type == "liste":
+            recommendation = "Impact modéré : vérifiez les chevauchements avant décision."
+        else:
+            if sole_admin_projects or sole_creator_projects:
+                recommendation = "Impact modéré : des projets ont un admin/créateur unique mais leur progression est suffisante."
+            else:
+                recommendation = "Impact modéré : vérifiez les conflits avant décision."
     else:
-        recommendation = "Impact faible : aucun risque opérationnel majeur détecté."
+        if scope_type == "liste":
+            recommendation = "Impact faible : aucun risque opérationnel majeur détecté."
+        else:
+            recommendation = "Impact faible : tous les projets critiques sont correctement encadrés."
 
     # Construction de la réponse
     response = {
@@ -470,6 +550,7 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             "sole_admin_projects": sole_admin_projects,
             "sole_creator_projects": sole_creator_projects,
         })
+        # Pour compatibilité avec le frontend
         response["sole_admin_resources"] = sole_admin_projects
         response["sole_creator_resources"] = sole_creator_projects
 
