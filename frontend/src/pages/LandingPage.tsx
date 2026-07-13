@@ -5,7 +5,8 @@ import {
   ArrowRight, CheckCircle, Calendar, Users, BarChart3, Clock,
   FileText, Play, Menu, X, ChevronDown, Hash, Briefcase,
   ShieldCheck, Star, Zap, Layers, TrendingUp, Award,
-  MessageCircle, Mail
+  MessageCircle, Mail, Building2, Handshake, Sparkles, Globe,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,22 +28,22 @@ const staggerContainer = {
 
 export default function LandingPage() {
   const featuresRef = useRef(null);
-  const demoRef = useRef(null);
   const stepsRef = useRef(null);
   const pricingRef = useRef(null);
-  const statsRef = useRef(null);
-  const testimonialsRef = useRef(null);
+  const partnersRef = useRef(null);
 
   const isFeaturesInView = useInView(featuresRef, { once: true, margin: "-100px" });
-  const isDemoInView = useInView(demoRef, { once: true, margin: "-100px" });
   const isStepsInView = useInView(stepsRef, { once: true, margin: "-100px" });
-  const isStatsInView = useInView(statsRef, { once: true, margin: "-100px" });
-  const isTestimonialsInView = useInView(testimonialsRef, { once: true, margin: "-100px" });
+  const isPartnersInView = useInView(partnersRef, { once: true, margin: "-100px" });
 
   const [scrolled, setScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [plans, setPlans] = useState<SubscriptionPlan[]>(fallbackPlans);
+
+  // ✅ État pour le carrousel des partenaires
+  const [partnerIndex, setPartnerIndex] = useState(0);
+  const [isPartnerAutoScroll, setIsPartnerAutoScroll] = useState(true);
 
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -60,6 +61,15 @@ export default function LandingPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // ✅ Auto-scroll des partenaires
+  useEffect(() => {
+    if (!isPartnerAutoScroll) return;
+    const interval = setInterval(() => {
+      setPartnerIndex((prev) => (prev + 1) % getVisiblePartnerGroups().length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isPartnerAutoScroll]);
 
   useEffect(() => {
     let isMounted = true;
@@ -86,20 +96,64 @@ export default function LandingPage() {
     value === null || value === undefined ? `Illimité${label ? ` ${label}` : ''}` : `${value}${label ? ` ${label}` : ''}`
   );
 
-  // Statistiques factices
-  const stats = [
-    { label: 'Utilisateurs actifs', value: 1200, suffix: '+' },
-    { label: 'Projets gérés', value: 3400, suffix: '+' },
-    { label: 'Heures économisées', value: 45000, suffix: '+' },
-    { label: 'Équipes', value: 280, suffix: '+' },
+  // ✅ PARTENAIRES
+  const partners = [
+    { 
+      name: 'TechCorp', 
+      logo: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=100&h=100&fit=crop&auto=format',
+      description: 'Leader européen des solutions cloud'
+    },
+    { 
+      name: 'InnovateLab', 
+      logo: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop&auto=format',
+      description: 'Accélérateur de startups innovantes'
+    },
+    { 
+      name: 'DataMind', 
+      logo: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=100&h=100&fit=crop&auto=format',
+      description: 'Expert en intelligence artificielle'
+    },
+    { 
+      name: 'EcoSystems', 
+      logo: 'https://images.unsplash.com/photo-1541746972996-4e0b0f43e02a?w=100&h=100&fit=crop&auto=format',
+      description: 'Solutions durables et responsables'
+    },
+    { 
+      name: 'FinSecure', 
+      logo: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=100&h=100&fit=crop&auto=format',
+      description: 'Sécurité et conformité financière'
+    },
+    { 
+      name: 'GlobalNet', 
+      logo: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=100&h=100&fit=crop&auto=format',
+      description: 'Infrastructure réseau mondiale'
+    },
   ];
 
-  // Témoignages
-  const testimonials = [
-    { name: 'Alice M.', role: 'CTO, TechStart', content: 'Planer a révolutionné notre façon de gérer les projets. Interface intuitive et puissante !', avatar: 'https://i.pravatar.cc/100?img=1' },
-    { name: 'Jean D.', role: 'Chef de projet', content: 'Le suivi du temps et les rapports nous ont permis d\'optimiser nos ressources de 30 %.', avatar: 'https://i.pravatar.cc/100?img=2' },
-    { name: 'Sophie L.', role: 'CEO, DesignLab', content: 'Une plateforme complète qui rassemble tout ce dont une équipe créative a besoin.', avatar: 'https://i.pravatar.cc/100?img=3' },
-  ];
+  // ✅ Fonction pour grouper les partenaires par lots de 3 (responsive)
+  const getVisiblePartnerGroups = () => {
+    const groupSize = window.innerWidth < 768 ? 2 : window.innerWidth < 1024 ? 3 : 4;
+    const groups = [];
+    for (let i = 0; i < partners.length; i += groupSize) {
+      groups.push(partners.slice(i, i + groupSize));
+    }
+    return groups;
+  };
+
+  const partnerGroups = getVisiblePartnerGroups();
+  const totalGroups = partnerGroups.length;
+
+  const nextPartnerSlide = () => {
+    setIsPartnerAutoScroll(false);
+    setPartnerIndex((prev) => (prev + 1) % totalGroups);
+    setTimeout(() => setIsPartnerAutoScroll(true), 5000);
+  };
+
+  const prevPartnerSlide = () => {
+    setIsPartnerAutoScroll(false);
+    setPartnerIndex((prev) => (prev - 1 + totalGroups) % totalGroups);
+    setTimeout(() => setIsPartnerAutoScroll(true), 5000);
+  };
 
   return (
     <div className="min-h-screen bg-theme-page text-theme-main overflow-x-hidden selection:bg-secondary/30">
@@ -131,9 +185,9 @@ export default function LandingPage() {
 
           {/* Menu desktop */}
           <nav className="hidden md:flex items-center gap-8">
-            {['features', 'demo', 'how-it-works', 'plans'].map((id) => (
+            {['features', 'how-it-works', 'partners', 'plans'].map((id) => (
               <a key={id} href={`#${id}`} className="text-xs font-black uppercase tracking-widest text-theme-muted hover:text-secondary transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-secondary after:transition-all hover:after:w-full">
-                {id === 'features' ? 'Fonctionnalités' : id === 'demo' ? 'Démo' : id === 'how-it-works' ? 'Guide' : 'Plans'}
+                {id === 'features' ? 'Fonctionnalités' : id === 'how-it-works' ? 'Guide' : id === 'partners' ? 'Partenaires' : 'Plans'}
               </a>
             ))}
 
@@ -184,8 +238,8 @@ export default function LandingPage() {
                 </div>
                 <nav className="flex flex-col gap-4 text-sm font-bold uppercase tracking-widest">
                   <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-theme-main hover:text-secondary">Fonctionnalités</a>
-                  <a href="#demo" onClick={() => setIsMenuOpen(false)} className="text-theme-main hover:text-secondary">Démo</a>
                   <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-theme-main hover:text-secondary">Guide</a>
+                  <a href="#partners" onClick={() => setIsMenuOpen(false)} className="text-theme-main hover:text-secondary">Partenaires</a>
                   <a href="#plans" onClick={() => setIsMenuOpen(false)} className="text-theme-main hover:text-secondary">Plans</a>
                   {user ? (
                     <>
@@ -211,7 +265,6 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, type: 'spring', stiffness: 100 }}>
-              {/* Badge supprimé */}
               <h1 className="text-5xl md:text-7xl font-black leading-[1.1] tracking-tighter uppercase mb-6">
                 Gérer l'avenir <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-orange-400">de vos projets</span>
@@ -276,22 +329,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats section */}
-      <section ref={statsRef} className="py-20 border-y border-theme-border-subtle/50 bg-theme-surface/20">
-        <div className="container mx-auto px-6">
-          <motion.div variants={staggerContainer} initial="hidden" animate={isStatsInView ? "visible" : "hidden"} className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, idx) => (
-              <motion.div key={idx} variants={fadeInUp} className="text-center">
-                <div className="text-4xl md:text-5xl font-black text-secondary tracking-tight">
-                  {sanitizeText(String(stat.value))}{stat.suffix}
-                </div>
-                <div className="text-xs font-black uppercase tracking-widest text-theme-muted mt-2">{stat.label}</div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
       {/* Features section */}
       <section id="features" ref={featuresRef} className="py-32 relative">
         <div className="container mx-auto px-6">
@@ -310,30 +347,6 @@ export default function LandingPage() {
                 <p className="text-theme-muted leading-relaxed font-medium opacity-80">{sanitizeText(feature.description)}</p>
               </motion.div>
             ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Demo section */}
-      <section id="demo" ref={demoRef} className="py-32 bg-theme-surface/20">
-        <div className="container mx-auto px-6">
-          <motion.div variants={fadeInUp} initial="hidden" animate={isDemoInView ? "visible" : "hidden"} className="text-center mb-20">
-            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Voir Planer en action</h2>
-            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Découvrez comment notre plateforme transforme votre quotidien.</p>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 50 }} animate={isDemoInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, type: "spring", delay: 0.2 }} className="relative max-w-5xl mx-auto rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.3)] border border-theme-border-subtle bg-theme-surface p-4">
-            <div className="aspect-video bg-gradient-to-br from-primary to-[#0f172a] rounded-[2.5rem] overflow-hidden flex items-center justify-center relative group cursor-pointer border border-theme-border-subtle/50">
-              <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <motion.div whileHover={{ scale: 1.1, rotate: 5 }} whileTap={{ scale: 0.9 }} className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center shadow-2xl shadow-secondary/50 border-4 border-white/20">
-                  <Play className="h-10 w-10 text-white ml-1" />
-                </motion.div>
-              </div>
-              {/* Éléments décoratifs */}
-              <motion.div className="absolute top-10 left-10 w-48 h-32 bg-white/5 rounded-3xl backdrop-blur-xl border border-white/10" animate={{ y: [0, -20, 0], rotate: [0, 2, 0] }} transition={{ duration: 6, repeat: Infinity }} />
-              <motion.div className="absolute bottom-10 right-10 w-64 h-40 bg-white/5 rounded-3xl backdrop-blur-xl border border-white/10" animate={{ y: [0, 20, 0], rotate: [0, -2, 0] }} transition={{ duration: 8, repeat: Infinity }} />
-            </div>
-            <div className="p-4 text-center text-theme-muted text-xs font-bold uppercase tracking-widest opacity-40">Démo Interactive (Simulation)</div>
           </motion.div>
         </div>
       </section>
@@ -364,29 +377,131 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section ref={testimonialsRef} className="py-32 bg-theme-surface/10">
+      {/* ✅ SECTION PARTENARIATS - CARROUSSEL HORIZONTAL */}
+      <section id="partners" ref={partnersRef} className="py-32 bg-theme-surface/20 overflow-hidden">
         <div className="container mx-auto px-6">
-          <motion.div variants={fadeInUp} initial="hidden" animate={isTestimonialsInView ? "visible" : "hidden"} className="text-center mb-20">
-            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">Ils nous font confiance</h2>
-            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">Des retours de nos utilisateurs passionnés.</p>
+          <motion.div 
+            variants={fadeInUp} 
+            initial="hidden" 
+            animate={isPartnersInView ? "visible" : "hidden"} 
+            className="text-center mb-16"
+          >
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Handshake className="h-8 w-8 text-secondary" />
+              <span className="text-xs font-black uppercase tracking-[0.3em] text-secondary">Nos Partenaires</span>
+            </div>
+            <h2 className="text-4xl md:text-6xl font-black text-theme-main mb-6 uppercase tracking-tighter">
+              Ils nous <span className="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-orange-400">font confiance</span>
+            </h2>
+            <p className="text-xl text-theme-muted max-w-2xl mx-auto font-medium opacity-60">
+              Des partenaires de confiance qui accompagnent notre croissance et notre innovation.
+            </p>
           </motion.div>
-          <motion.div variants={staggerContainer} initial="hidden" animate={isTestimonialsInView ? "visible" : "hidden"} className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((t, idx) => (
-              <motion.div key={idx} variants={fadeInUp} className="bg-theme-surface/40 backdrop-blur-md p-8 rounded-3xl border border-theme-border-subtle shadow-theme-sm hover:shadow-theme-lg transition-all">
-                <div className="flex items-center gap-4 mb-6">
-                  <img src={t.avatar} alt={t.name} className="h-14 w-14 rounded-full border-2 border-secondary/30" />
-                  <div>
-                    <div className="font-black text-theme-main">{sanitizeText(t.name)}</div>
-                    <div className="text-xs font-black uppercase tracking-widest text-theme-muted">{sanitizeText(t.role)}</div>
+
+          {/* Carrousel */}
+          <div className="relative">
+            {/* Conteneur du carrousel */}
+            <div className="overflow-hidden">
+              <motion.div 
+                className="flex transition-all duration-700 ease-out"
+                animate={{ x: `-${partnerIndex * 100}%` }}
+                transition={{ duration: 0.7, ease: "easeInOut" }}
+              >
+                {partnerGroups.map((group, groupIdx) => (
+                  <div 
+                    key={groupIdx} 
+                    className="w-full flex-shrink-0 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 px-2"
+                  >
+                    {group.map((partner, idx) => (
+                      <motion.div 
+                        key={`${groupIdx}-${idx}`} 
+                        variants={fadeInUp}
+                        whileHover={{ y: -8, scale: 1.02 }}
+                        className="group bg-theme-surface/60 backdrop-blur-sm p-6 rounded-3xl border border-theme-border-subtle hover:border-secondary/30 transition-all duration-500 shadow-theme-sm hover:shadow-theme-lg text-center"
+                      >
+                        <div className="relative mx-auto mb-4 h-20 w-20 overflow-hidden rounded-2xl bg-theme-surface-hover shadow-inner border border-theme-border-subtle group-hover:border-secondary/20 transition-all">
+                          <img 
+                            src={partner.logo} 
+                            alt={partner.name} 
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <h4 className="text-sm font-black text-theme-main uppercase tracking-tight group-hover:text-secondary transition-colors">
+                          {sanitizeText(partner.name)}
+                        </h4>
+                        <p className="mt-1 text-[10px] font-medium text-theme-muted opacity-60 leading-tight">
+                          {sanitizeText(partner.description)}
+                        </p>
+                        <div className="mt-3 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Sparkles className="h-3 w-3 text-secondary" />
+                          <span className="text-[8px] font-black uppercase tracking-widest text-secondary">Partenaire</span>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                </div>
-                <p className="text-theme-muted italic leading-relaxed">"{sanitizeText(t.content)}"</p>
-                <div className="mt-4 flex text-secondary">
-                  {[...Array(5)].map((_, i) => <Star key={i} className="h-4 w-4 fill-current" />)}
-                </div>
+                ))}
               </motion.div>
-            ))}
+            </div>
+
+            {/* Boutons de navigation */}
+            {totalGroups > 1 && (
+              <>
+                <button
+                  onClick={prevPartnerSlide}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-6 p-3 rounded-full bg-theme-surface/80 backdrop-blur-md border border-theme-border-subtle shadow-theme-lg hover:bg-secondary hover:text-white hover:border-secondary transition-all z-10"
+                  aria-label="Partenaire précédent"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={nextPartnerSlide}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-6 p-3 rounded-full bg-theme-surface/80 backdrop-blur-md border border-theme-border-subtle shadow-theme-lg hover:bg-secondary hover:text-white hover:border-secondary transition-all z-10"
+                  aria-label="Partenaire suivant"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+
+            {/* Indicateurs de progression */}
+            {totalGroups > 1 && (
+              <div className="flex justify-center gap-2 mt-8">
+                {Array.from({ length: totalGroups }).map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setIsPartnerAutoScroll(false);
+                      setPartnerIndex(idx);
+                      setTimeout(() => setIsPartnerAutoScroll(true), 5000);
+                    }}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      idx === partnerIndex 
+                        ? 'w-8 bg-secondary' 
+                        : 'w-4 bg-theme-border-subtle hover:bg-secondary/50'
+                    }`}
+                    aria-label={`Aller au groupe ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Badge de partenariat */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={isPartnersInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.6, duration: 0.6 }}
+            className="mt-16 text-center"
+          >
+            <div className="inline-flex items-center gap-4 rounded-2xl border border-theme-border-subtle bg-theme-surface/40 px-8 py-4 shadow-theme-sm hover:border-secondary/30 transition-all cursor-pointer group">
+              <Building2 className="h-5 w-5 text-secondary" />
+              <span className="text-xs font-black uppercase tracking-widest text-theme-muted group-hover:text-secondary transition-colors">
+                Rejoignez notre réseau de partenaires
+              </span>
+              <ArrowRight className="h-4 w-4 text-secondary group-hover:translate-x-1 transition-transform" />
+            </div>
           </motion.div>
         </div>
       </section>
@@ -503,7 +618,7 @@ export default function LandingPage() {
               <h3 className="text-[10px] font-black text-theme-main uppercase tracking-[0.3em] mb-8">Produit</h3>
               <ul className="space-y-4 text-xs font-bold uppercase tracking-widest text-theme-muted">
                 <li><a href="#features" className="hover:text-secondary transition-colors">Fonctionnalités</a></li>
-                <li><a href="#demo" className="hover:text-secondary transition-colors">Démo</a></li>
+                <li><a href="#how-it-works" className="hover:text-secondary transition-colors">Guide</a></li>
                 <li><a href="#plans" className="hover:text-secondary transition-colors">Tarifs</a></li>
               </ul>
             </div>
