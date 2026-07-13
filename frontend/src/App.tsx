@@ -23,6 +23,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import MessageriePage from './pages/MessageriePage';
 import EntreprisePage from './pages/EntreprisePage';
 import InvitationAccept from './pages/InvitationAccept';
+import SearchPage from './pages/app/SearchPage';
 import InvitationError from './pages/InvitationError';
 import ResourceGuard from './components/guards/ResourceGuard';
 import { ActiveResourceProvider } from './contexts/ActiveResourceContext';
@@ -147,6 +148,7 @@ function AppContent() {
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/absences" element={<AbsencesPage />} />
+              <Route path="/recherche" element={<SearchPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/users/:userId" element={<UserProfilePage />} />

@@ -584,11 +584,90 @@ export interface SearchRequest {
   espace_id?: string;
   liste_id?: string;
 }
+// ============================================================================
+// RECHERCHE - TYPES
+// ============================================================================
 
-export interface SearchResults {
-  tasks: TacheFullResponse[];
-  lists: ListeResponse[];
-  espaces: EspaceResponse[];
-  members: Member[];
-  files: FichierResponse[];
+export interface SearchTaskResult {
+  id: string;
+  titre: string;
+  description?: string;
+  statut: string;
+  priorite?: string;
+  date_fin_prevue?: string;
+  created_at: string;
+  id_liste: string;
+  progression?: number;
 }
+
+export interface SearchListResult {
+  id: string;
+  nom: string;
+  description?: string;
+  created_at: string;
+  id_workspace?: string;
+  id_espace?: string;
+}
+
+export interface SearchEspaceResult {
+  id: string;
+  nom: string;
+  description?: string;
+  created_at: string;
+  id_workspace: string;
+  id_espace_parent?: string | null;
+}
+
+export interface SearchSectionResult {
+  id: string;
+  titre: string;
+  created_at: string;
+  id_canevas: string;
+}
+
+export interface SearchChecklistResult {
+  id: string;
+  texte: string;
+  is_checked: boolean;
+  created_at: string;
+  id_section?: string | null;
+  id_tache?: string | null;
+}
+
+export interface SearchMemberResult {
+  id: string;
+  id_utilisateur: string;
+  role: string;
+  statut: string;
+  utilisateur?: {
+    id: string;
+    username: string;
+    email: string;
+    nom?: string;
+    prenoms?: string;
+    photo?: string | null;
+  };
+}
+
+export interface SearchFileResult {
+  id: string;
+  nom: string;
+  url_fichier?: string;
+  type_fichier?: string;
+  created_at: string;
+  id_membre?: string | null;
+  meta_donnees?: Record<string, any>;
+}
+
+// ✅ Nouvelle interface pour les résultats de recherche (sans conflit)
+export interface SearchResultsData {
+  tasks: SearchTaskResult[];
+  lists: SearchListResult[];
+  espaces: SearchEspaceResult[];
+  sections: SearchSectionResult[];
+  checklists: SearchChecklistResult[];
+  members: SearchMemberResult[];
+  files: SearchFileResult[];
+}
+
+// ❌ Supprime l'ancienne interface SearchResults en double (ligne ~440)
