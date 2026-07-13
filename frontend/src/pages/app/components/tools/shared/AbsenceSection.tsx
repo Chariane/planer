@@ -11,6 +11,8 @@ import Modal from '../../../../../components/ui/Modal';
 import { AbsenceList } from './AbsenceList';
 import { toast } from '../../../../../components/ui/Toast';
 import { ROLES } from '../../../../../lib/roleHierarchy';
+import { CalendarView } from './CalendarView';
+import { ImpactedTasksList } from './ImpactedTasksList';
 
 interface AbsenceSectionProps {
   // Données
@@ -147,9 +149,8 @@ export const AbsenceSection = ({
   getDurationDisplay,
 }: AbsenceSectionProps) => {
   
-  // ✅ CORRECTION : Fonction renderAbsenceList avec type correct
+  // Fonction renderAbsenceList avec type correct
   const renderAbsenceList = (items: any[], emptyLabel: string) => {
-    // ✅ Déterminer le type en fonction de la vue actuelle
     let listType: 'personal' | 'pending' | 'calendar' | 'impact' | 'archive' = 'personal';
     
     if (absenceView === 'pending') {
@@ -167,7 +168,7 @@ export const AbsenceSection = ({
     return (
       <AbsenceList
         absences={items}
-        type={listType}  // ✅ Maintenant 'pending' pour l'onglet pending
+        type={listType}
         onApprove={isPendingView ? onApprove : undefined}
         onReject={isPendingView ? onReject : undefined}
         onCancel={onCancel}
@@ -258,69 +259,126 @@ export const AbsenceSection = ({
         </button>
       </div>
 
-      {/* Contenu */}
+      {/* Contenu - Mes demandes */}
       {absenceView === 'mine' && renderAbsenceList(ownAbsences, 'Aucune demande personnelle')}
+
+      {/* Contenu - Demandes à traiter */}
       {absenceView === 'pending' && renderAbsenceList(pendingAbsences, 'Aucune demande à traiter')}
+
+      {/* Contenu - Calendrier */}
       {absenceView === 'calendar' && (
-        <AbsenceList
+        <CalendarView
           absences={calendarAbsences.filter(a => a && a.statut === 'approuvee')}
-          type="calendar"
           listAvailability={listAvailability}
           currentUserId={currentUserId}
-          isManager={isManager}
+          members={directMembers}
           formatDate={formatDate}
           getDurationDisplay={getDurationDisplay}
-          emptyTitle="Calendrier vide"
-          emptyDescription="Aucune absence approuvée à venir."
+          onViewAbsence={(absence) => {
+            onViewImpact?.(absence);
+          }}
         />
       )}
+
+      {/* Contenu - Impact */}
       {absenceView === 'impact' && (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {visibleAbsences.filter(a => a.statut === 'approuvee').length === 0 ? (
             <div className="py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
               <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
               <p className="font-black text-[10px] uppercase tracking-widest">Aucun impact à surveiller</p>
+              <p className="text-[10px] text-theme-muted/50 mt-1">Aucune absence approuvée en cours.</p>
             </div>
           ) : (
-            visibleAbsences.filter(a => a.statut === 'approuvee').map(absence => {
-              const impactedTasks = resourceType === 'liste' ? getTasksImpactedByAbsence(absence) : [];
-              const showTasks = resourceType === 'liste' && impactedTasks.length > 0;
-              
-              return (
-                <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
-                          absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'
-                        }`}>
-                          {absence.is_absence ? 'Absence' : 'Congé'}
-                        </span>
-                        <span className="rounded-full border border-theme-border-subtle bg-theme-surface-hover/50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
-                          {absence.statut.replace('_', ' ')}
-                        </span>
+            visibleAbsences
+              .filter(a => a.statut === 'approuvee')
+              .map(absence => {
+                const impactedTasks = resourceType === 'liste' ? getTasksImpactedByAbsence(absence) : [];
+                const showTasks = impactedTasks.length > 0;
+
+                return (
+                  <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70 hover:border-secondary/20 transition-all">
+                    {/* En-tête de l'absence */}
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
+                            absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'
+                          }`}>
+                            {absence.is_absence ? 'Absence' : 'Congé'}
+                          </span>
+                          <span className="rounded-full border border-theme-border-subtle bg-theme-surface-hover/50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                            {absence.statut.replace('_', ' ')}
+                          </span>
+                          {absence.motif && (
+                            <span className="text-[10px] text-theme-muted/60 italic truncate max-w-[200px]">
+                              "{absence.motif}"
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-black text-theme-main flex items-center gap-2">
+                          {absence.authorName || absence.owner_name || 'Utilisateur'}
+                          <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest">
+                            · {getDurationDisplay?.(absence.date_debut, absence.date_fin) || ''}
+                          </span>
+                        </p>
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-theme-muted">
+                          {formatDate?.(absence.date_debut)} → {formatDate?.(absence.date_fin)}
+                        </p>
                       </div>
-                      <p className="text-base font-black text-theme-main">{absence.authorName}</p>
-                      <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-theme-muted">
-                        {formatDate?.(absence.date_debut)} → {formatDate?.(absence.date_fin)}
-                      </p>
-                    </div>
-                    <div className={`rounded-2xl border px-4 py-3 text-right ${
-                      showTasks ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
-                    }`}>
-                      <p className={`text-[9px] font-black uppercase tracking-widest ${
-                        showTasks ? 'text-amber-500' : 'text-emerald-500'
+                      
+                      {/* Indicateur d'impact */}
+                      <div className={`rounded-2xl border px-4 py-3 text-right ${
+                        showTasks ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
                       }`}>
-                        {showTasks ? 'Action recommandée' : 'Impact faible'}
-                      </p>
-                      <p className="mt-1 text-xs font-bold text-theme-main">
-                        {showTasks ? `${impactedTasks.length} tâche(s) touchée(s)` : 'Aucun impact'}
-                      </p>
+                        <p className={`text-[9px] font-black uppercase tracking-widest ${
+                          showTasks ? 'text-amber-500' : 'text-emerald-500'
+                        }`}>
+                          {showTasks ? '⚠️ Action recommandée' : 'Impact faible'}
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-theme-main">
+                          {showTasks 
+                            ? `${impactedTasks.length} tâche(s) impactée(s)` 
+                            : 'Aucune tâche impactée'
+                          }
+                        </p>
+                        {showTasks && (
+                          <p className="text-[9px] text-theme-muted/60 mt-0.5">
+                            {impactedTasks.filter(t => t.priority === 'critique' || t.priority === 'haute').length} prioritaire(s)
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </GlassCard>
-              );
-            })
+
+                    {/* Liste des tâches impactées */}
+                    {showTasks && (
+                      <div className="mt-4 pt-4 border-t border-theme-border-subtle">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                            Tâches impactées par l'absence
+                          </p>
+                          <span className="ml-auto text-[10px] font-black text-theme-muted/50">
+                            {impactedTasks.length} tâche{impactedTasks.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <ImpactedTasksList
+                          tasks={impactedTasks}
+                          absence={absence}
+                          onAssignReplacement={(task) => {
+                            onAssignReplacement?.(task, absence);
+                          }}
+                          onViewTask={(task) => {
+                            window.open(`/tache/${task.id}`, '_blank');
+                          }}
+                          isLoading={availabilityLoading}
+                        />
+                      </div>
+                    )}
+                  </GlassCard>
+                );
+              })
           )}
         </div>
       )}
@@ -683,7 +741,8 @@ export const AbsenceSection = ({
                                     </option>
                                   ))}
                                 </select>
-                                <Button                                  onClick={() => onAssignReplacement(task, selectedAbsenceForImpact)}
+                                <Button
+                                  onClick={() => onAssignReplacement(task, selectedAbsenceForImpact)}
                                   disabled={loading || !taskReplacementByTaskId[task.id]}
                                   className="h-10 rounded-xl bg-secondary px-4 text-[9px] font-black uppercase tracking-widest"
                                 >
