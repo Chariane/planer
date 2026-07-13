@@ -1,5 +1,5 @@
 // frontend/src/pages/app/CenterContent.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, UserPlus, LayoutGrid, KanbanSquare, GitBranch, Users, ListTodo, Wrench, Search, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, MessageCircle, Download, Loader2 } from 'lucide-react';
@@ -105,12 +105,12 @@ export default function CenterContent() {
   const canAssignToList = (isAdmin || isCreator || isListeAdmin || isListeCreator || isEspaceAdmin || isEspaceCreator || isWorkspaceAdmin || isWorkspaceCreator) && !!listId;
 
   // Définir les onglets disponibles selon le rôle
-  const getAvailableTabs = (): ('liste' | 'kanban' | 'gantt' | 'membres' | 'outils')[] => {
+  const getAvailableTabs = useCallback((): ('liste' | 'kanban' | 'gantt' | 'membres' | 'outils')[] => {
     if (isGuest) {
       return ['liste', 'kanban', 'gantt', 'membres', 'outils'];
     }
     return ['liste', 'kanban', 'gantt', 'membres', 'outils'];
-  };
+  }, [isGuest]);
 
   const availableTabs = getAvailableTabs();
 
@@ -143,6 +143,9 @@ export default function CenterContent() {
     }
     return true;
   });
+
+  // ✅ AJOUT : État pour contrôler l'affichage des outils
+  const [isToolsReady, setIsToolsReady] = useState(false);
 
   // Hooks
   const { tasks, loading, error, loadTasks, addTask, updateTask, updateTaskStatus, deleteTask, addChecklistToTask, toggleTaskChecklist, deleteTaskChecklist } = useTasks(listId);
@@ -294,6 +297,17 @@ export default function CenterContent() {
     }
   }, [spaceId, isGuest]);
 
+  // ✅ EFFET : Gérer l'état de préparation des outils
+  useEffect(() => {
+    if (!loading && tasks !== undefined) {
+      // Petit délai pour que les données se stabilisent
+      const timer = setTimeout(() => setIsToolsReady(true), 150);
+      return () => clearTimeout(timer);
+    } else {
+      setIsToolsReady(false);
+    }
+  }, [loading, tasks]);
+
   const getTaskProgress = (task: Task): number => {
     if (typeof task.progression === 'number') {
       return Math.round(task.progression);
@@ -406,7 +420,6 @@ export default function CenterContent() {
 
     return (
       <div className="mb-5 rounded-xl border border-theme-border-subtle bg-theme-surface p-4 shadow-sm transition-colors duration-200">
-        {/* ✅ Sanitize la description avant affichage */}
         <p className="text-sm text-theme-muted leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentListDescription) }} />
       </div>
     );
@@ -417,12 +430,9 @@ export default function CenterContent() {
 
     return (
       <div className="mb-5 flex flex-wrap items-center justify-stretch gap-2 sm:justify-end">
-        {/* Toggle pour le créateur DIRECT de la liste */}
         {effectiveIsDirectListCreator && (
           <div className="flex items-center gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/80 px-3 py-2 shadow-sm">
-            <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
-              Export
-            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Export</span>
             <button
               onClick={() => setExportVisible(!exportVisible)}
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
@@ -442,7 +452,6 @@ export default function CenterContent() {
           </div>
         )}
 
-        {/* Bouton Exporter le projet (visible uniquement si exportVisible est true) */}
         {exportVisible && (
           <Button
             onClick={exportProject}
@@ -494,16 +503,13 @@ export default function CenterContent() {
         }
       });
 
-      // Créateur et membres directs
       const creator = membersData.find((m: any) => m.role === ROLES.CREATOR);
       const directMembers = membersData.filter((m: any) => m.role !== ROLES.CREATOR);
 
-      // Calcul de l'avancement
       const totalTasks = tasksData.length;
       const doneTasks = tasksData.filter((t: any) => t.statut === 'terminé').length;
       const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
-      // Fonction récursive pour afficher les tâches avec checklists
       const renderTaskHTML = (task: any, level: number = 0): string => {
         const statusLabels: Record<string, string> = {
           'en attente': 'En attente',
@@ -548,7 +554,6 @@ export default function CenterContent() {
 
       const tasksHTML = rootTasks.map((task: any) => renderTaskHTML(task, 0)).join('');
 
-      // Canevas (placeholder)
       const canevasHTML = '<p style="color: #6b7280; font-style: italic;">Aucun canevas associé à ce projet.</p>';
 
       const docTitle = `Projet: ${sanitizeText(listeData.nom || 'Projet')}`;
@@ -568,7 +573,6 @@ export default function CenterContent() {
               .section { margin-bottom: 30px; }
               .section-title { font-size: 14px; font-weight: 900; color: #059669; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
               .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
-              .info-item { display: flex; flex-direction: column; }
               .info-item .label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
               .info-item .value { font-weight: 600; color: #0f172a; }
               .member-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
@@ -809,10 +813,9 @@ export default function CenterContent() {
   if (loading) return <div className="p-4 sm:p-6 flex justify-center">Chargement des tâches...</div>;
   if (error) return <div className="p-4 sm:p-6 flex justify-center text-red-500">{error}</div>;
 
-  // Si l'utilisateur est invité ou n'a pas de rôle sur la liste, on affiche le dashboard en lecture seule
   const isListGuest = effectiveRole === ROLES.GUEST;
 
-  // Vue invité (lecture seule) - vues projet et membres consultables, outils limités aux fichiers.
+  // Vue invité (lecture seule)
   if (isGuest || isListGuest) {
     return (
       <div className="p-4 sm:p-6">
@@ -830,7 +833,6 @@ export default function CenterContent() {
         {renderListProgressSummary()}
         {renderListDescription()}
 
-        {/* Onglets pour les invités */}
         <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
           {availableTabs.map(tab => (
             <button
@@ -853,21 +855,20 @@ export default function CenterContent() {
           ))}
         </div>
 
-        {/* Contenu selon l'onglet pour les invités */}
         {activeTab === 'liste' && (
           <ListView
             tasks={tasks}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            onEditTask={() => { }}
-            onDeleteTask={() => { }}
-            onAssignTask={() => { }}
+            onEditTask={() => {}}
+            onDeleteTask={() => {}}
+            onAssignTask={() => {}}
             getTaskProgress={getTaskProgress}
             readOnly={true}
           />
         )}
 
-        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => { }} />}
+        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => {}} />}
         {activeTab === 'gantt' && <GanttView tasks={tasks} />}
         {activeTab === 'membres' && (
           <MemberManagement
@@ -899,7 +900,6 @@ export default function CenterContent() {
       {renderListProgressSummary()}
       {renderListDescription()}
 
-      {/* Onglets */}
       <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
         {availableTabs.map(tab => (
           <button
@@ -922,7 +922,6 @@ export default function CenterContent() {
         ))}
       </div>
 
-      {/* Barre de recherche enrichie - Visible pour toutes les vues sauf Membres et Outils */}
       {activeTab !== 'membres' && activeTab !== 'outils' && (
         <div className="mb-6 space-y-4 bg-theme-surface p-4 rounded-xl border border-theme-border-subtle shadow-sm transition-colors duration-200">
           <div className="flex gap-2">
@@ -974,7 +973,6 @@ export default function CenterContent() {
         </div>
       )}
 
-      {/* Boutons d'action - Visibilité contextuelle */}
       <div className="flex flex-col gap-2 mb-6 sm:flex-row sm:flex-wrap">
         {(isAdmin || isCreator) && activeTab !== 'membres' && activeTab !== 'outils' && (
           <Button variant="primary" size="sm" onClick={openCreateTask} className="w-full sm:w-auto">
@@ -1002,7 +1000,6 @@ export default function CenterContent() {
         )}
       </div>
 
-      {/* Contenu selon l'onglet avec Transitions */}
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
@@ -1014,8 +1011,8 @@ export default function CenterContent() {
           {activeTab === 'liste' && (
             <ListView
               tasks={filteredTasks}
-              searchTerm="" // Géré maintenant par CenterContent via filteredTasks
-              onSearchChange={() => { }}
+              searchTerm=""
+              onSearchChange={() => {}}
               onEditTask={openEditTask}
               onDeleteTask={deleteTask}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
@@ -1035,18 +1032,28 @@ export default function CenterContent() {
             />
           )}
 
-          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => { }} />}
+          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => {}} />}
           {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
+          
           {activeTab === 'outils' && (
-            <PlannerToolsPanel
-              workspaceId={currentListWorkspaceId || workspaceId}
-              espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
-              listeId={listId}
-              currentUserId={user?.id}
-              effectiveRole={effectiveRole}
-              tasks={tasks}
-              initialTool={requestedTool}
-            />
+            // ✅ Utilisation de isToolsReady pour éviter le clignotement
+            <div className="tools-panel">
+              {isToolsReady ? (
+                <PlannerToolsPanel
+                  workspaceId={currentListWorkspaceId || workspaceId}
+                  espaceId={currentListEspaceId || (spaceId && spaceId !== 'list' ? spaceId : undefined)}
+                  listeId={listId}
+                  currentUserId={user?.id}
+                  effectiveRole={effectiveRole}
+                  tasks={tasks}
+                  initialTool={requestedTool}
+                />
+              ) : (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-secondary/40" />
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'membres' && (
@@ -1061,7 +1068,6 @@ export default function CenterContent() {
         </motion.div>
       </AnimatePresence>
 
-      {/* Modales */}
       {(isAdmin || isCreator || isTaskModalLimited || parentTaskForCreation) && (
         <>
           <TaskFormModal
