@@ -1,7 +1,7 @@
 // frontend/src/pages/app/views/ListView.tsx
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X, User } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Plus, Trash, Upload, UserPlus, CheckCircle, Circle, X, User, Edit } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -11,6 +11,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { sanitizeApiErrorMessage } from '../../../services/api';
 import { MemberAvatar } from '../../../components/ui/MemberAvatar';
 import { plannerToolsService } from '../../../services/plannerTools.service';
+import { tacheService } from '../../../services/tache.service';
 import type { Task } from '../../../types';
 
 const statusLabels: Record<string, string> = {
@@ -91,7 +92,6 @@ const getShortFileType = (file: File): string => {
 
 // ✅ Fonction pour récupérer le nom du créateur d'une tâche
 const getTaskCreator = (task: Task): { name: string; id: string } | null => {
-  // ✅ Priorité : utiliser le champ createur s'il existe
   if (task.createur) {
     const prenoms = task.createur.prenoms?.trim() || '';
     const nom = task.createur.nom?.trim() || '';
@@ -101,8 +101,6 @@ const getTaskCreator = (task: Task): { name: string; id: string } | null => {
     else if (nom) name = nom;
     return { name, id: task.createur.id };
   }
-  
-  // Fallback : chercher le membre avec le rôle "Créateur" dans les assignees
   const creator = task.assignees?.find(a => a.role === 'Créateur');
   if (creator) {
     return { name: creator.name, id: creator.id };
@@ -186,7 +184,6 @@ function TaskFilesSection({
     }
   };
 
-  // ✅ RÈGLE : Seul le propriétaire du fichier peut le supprimer
   const canDeleteFile = (file: TaskFile): boolean => {
     const ownerId = file.meta_donnees?.owner_user_id;
     return ownerId === user?.id;
@@ -383,7 +380,6 @@ function TaskDetailModal({
               </span>
               <p className="text-lg font-bold text-theme-main leading-tight">{task.title}</p>
             </div>
-            {/* ✅ Affichage du créateur avec lien vers le profil */}
             {creator && (
               <Link 
                 to={`/users/${creator.id}`}
@@ -542,7 +538,6 @@ function TaskDetailModal({
                           }`}>
                           {childTask.title}
                         </p>
-                        {/* ✅ Affichage du créateur sur la sous-tâche avec lien */}
                         {childCreator && (
                           <Link 
                             to={`/users/${childCreator.id}`}
@@ -589,6 +584,7 @@ function TaskDetailModal({
 export default function ListView({
   tasks,
   searchTerm,
+  onEditTask,
   onDeleteTask,
   onAssignTask,
   onUpdateTaskStatus,
@@ -633,6 +629,23 @@ export default function ListView({
     confirmText: 'Confirmer',
     onConfirm: () => { },
   });
+
+  // === États pour l'édition ===
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    titre: string;
+    description: string;
+    date_fin_prevue: string;
+    priorite: string;
+  }>({
+    titre: '',
+    description: '',
+    date_fin_prevue: '',
+    priorite: 'moyenne',
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   const taskHasChildren = (taskId: string) => tasks.some(task => task.parentTaskId === taskId);
   const getTaskMode = (task: Task) => task.contentMode || ((task.checklists || []).length > 0 ? 'checklist' : taskHasChildren(task.id) ? 'subtasks' : 'leaf');
@@ -803,6 +816,71 @@ export default function ListView({
     }
   };
 
+  // === Gestion de l'ouverture du modal d'édition ===
+  const openEditModal = (task: Task) => {
+    if (!canEditTask || !canEditTask(task)) {
+      setActionError("Vous n'avez pas les droits pour modifier cette tâche.");
+      return;
+    }
+    setEditingTask(task);
+    setEditFormData({
+      titre: task.title || '',
+      description: task.description || '',
+      date_fin_prevue: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '',
+      priorite: task.priority || 'moyenne',
+    });
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  // === Soumission du formulaire d'édition ===
+  const handleEditSubmit = async () => {
+    if (!editingTask) return;
+    setEditError(null);
+    setEditLoading(true);
+
+    const { titre, date_fin_prevue } = editFormData;
+    if (!titre.trim()) {
+      setEditError('Le titre est obligatoire.');
+      setEditLoading(false);
+      return;
+    }
+
+    // Vérification d'unicité du titre au même niveau
+    const sameLevelTasks = tasks.filter(t =>
+      t.id !== editingTask.id &&
+      t.parentTaskId === editingTask.parentTaskId &&
+      t.listId === editingTask.listId
+    );
+    if (sameLevelTasks.some(t => t.title.trim().toLowerCase() === titre.trim().toLowerCase())) {
+      setEditError('Une tâche du même niveau porte déjà ce nom. Veuillez choisir un autre titre.');
+      setEditLoading(false);
+      return;
+    }
+
+    try {
+      const payload: any = {
+        titre: titre.trim(),
+        description: editFormData.description.trim() || null,
+        priorite: editFormData.priorite,
+      };
+      if (date_fin_prevue) {
+        payload.date_fin_prevue = new Date(date_fin_prevue).toISOString();
+      } else {
+        payload.date_fin_prevue = null;
+      }
+      const updated = await tacheService.update(editingTask.id, payload);
+      onEditTask(updated);
+      setIsEditModalOpen(false);
+      setEditingTask(null);
+    } catch (err: any) {
+      const msg = sanitizeApiErrorMessage(err, 'Erreur lors de la modification de la tâche.');
+      setEditError(msg);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const filteredTasks = tasks.filter(task =>
     task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     task.description?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -891,7 +969,6 @@ export default function ListView({
                 {task.title}
               </h4>
             </div>
-            {/* ✅ Affichage du créateur sur la sous-tâche avec lien */}
             {creator && (
               <Link 
                 to={`/users/${creator.id}`}
@@ -947,6 +1024,18 @@ export default function ListView({
                 title="Supprimer la sous-tâche"
               >
                 {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={15} />}
+              </button>
+            )}
+            {canOperateTask && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditModal(task);
+                }}
+                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                title="Modifier la sous-tâche"
+              >
+                <Edit size={15} />
               </button>
             )}
           </div>
@@ -1206,7 +1295,6 @@ export default function ListView({
                             <h4 className={`text-sm font-bold tracking-tight mb-1 group-hover:text-theme-main transition-colors ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
                               {task.title}
                             </h4>
-                            {/* ✅ Affichage du créateur avec lien */}
                             {creator && (
                               <Link 
                                 to={`/users/${creator.id}`}
@@ -1278,6 +1366,18 @@ export default function ListView({
                                 title="Supprimer"
                               >
                                 {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={16} />}
+                              </button>
+                            )}
+                            {canOperateTask && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(task);
+                                }}
+                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
+                                title="Modifier"
+                              >
+                                <Edit size={16} />
                               </button>
                             )}
                           </div>
@@ -1469,6 +1569,81 @@ export default function ListView({
         confirmVariant="danger"
         isLoading={actionLoading?.startsWith('delete-') || false}
       />
+
+      {/* Modal d'édition */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => { setIsEditModalOpen(false); setEditingTask(null); setEditError(null); }}
+        title={`Modifier la tâche`}
+        size="md"
+      >
+        <div className="space-y-4 py-2">
+          {editError && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-500">
+              {editError}
+            </div>
+          )}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted ml-1">Titre *</label>
+            <input
+              type="text"
+              value={editFormData.titre}
+              onChange={(e) => setEditFormData(prev => ({ ...prev, titre: e.target.value }))}
+              className="w-full rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
+              placeholder="Titre de la tâche"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted ml-1">Description</label>
+            <textarea
+              value={editFormData.description}
+              onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+              className="w-full rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 resize-none"
+              rows={3}
+              placeholder="Description détaillée"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted ml-1">Échéance</label>
+            <input
+              type="datetime-local"
+              value={editFormData.date_fin_prevue}
+              onChange={(e) => setEditFormData(prev => ({ ...prev, date_fin_prevue: e.target.value }))}
+              className="w-full rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted ml-1">Priorité</label>
+            <select
+              value={editFormData.priorite}
+              onChange={(e) => setEditFormData(prev => ({ ...prev, priorite: e.target.value }))}
+              className="w-full rounded-xl border border-theme-border-subtle bg-theme-surface px-3 py-2 text-sm font-medium text-theme-main outline-none focus:ring-2 focus:ring-secondary/20"
+            >
+              <option value="basse">Basse</option>
+              <option value="moyenne">Moyenne</option>
+              <option value="haute">Haute</option>
+              <option value="critique">Critique</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => { setIsEditModalOpen(false); setEditingTask(null); setEditError(null); }}
+              className="rounded-xl font-bold"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={editLoading}
+              className="rounded-xl font-bold"
+            >
+              {editLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
