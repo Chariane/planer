@@ -357,7 +357,7 @@ function TaskDetailModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Détails de la tâche`} size="lg">
-      <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
+      <div className="max-h-[calc(92dvh-7rem)] space-y-5 overflow-y-auto px-1 sm:max-h-[70vh] sm:space-y-6">
         {canGoBack && (
           <button
             type="button"
@@ -374,11 +374,11 @@ function TaskDetailModal({
         <div className="space-y-1">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Titre de la mission</label>
           <div className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
                 {contentModeLabels[contentMode] || 'Libre'}
               </span>
-              <p className="text-lg font-bold text-theme-main leading-tight">{task.title}</p>
+              <p className="min-w-0 break-words text-base font-bold leading-tight text-theme-main sm:text-lg">{task.title}</p>
             </div>
             {creator && (
               <Link 
@@ -403,7 +403,7 @@ function TaskDetailModal({
         )}
 
         {/* Dates */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <div className="space-y-1">
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Début</label>
             <div className="p-3 bg-theme-surface/50 border border-theme-border-subtle rounded-xl text-theme-main font-bold text-sm">
@@ -419,7 +419,7 @@ function TaskDetailModal({
         </div>
 
         {/* Statut et Priorité */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <div className="space-y-1">
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">État actuel</label>
             <div className={`p-3 rounded-xl font-bold text-sm capitalize ${task.status === 'en attente' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
@@ -490,7 +490,7 @@ function TaskDetailModal({
                   ) : (
                     <Circle className="h-4 w-4 text-theme-border-strong shrink-0" />
                   )}
-                  <span className={`text-sm tracking-tight ${checklist.is_checked ? 'line-through text-theme-muted opacity-40' : 'text-theme-main font-medium'}`}>
+                  <span className={`min-w-0 break-words text-sm tracking-tight ${checklist.is_checked ? 'line-through text-theme-muted opacity-40' : 'text-theme-main font-medium'}`}>
                     {checklist.texte}
                   </span>
                 </div>
@@ -524,7 +524,7 @@ function TaskDetailModal({
                     onClick={() => onOpenTask(childTask)}
                     className="w-full rounded-2xl border border-theme-border-subtle/40 bg-theme-surface/40 p-3 text-left transition-all hover:border-secondary/30 hover:bg-theme-surface-hover"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
                       <div className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${childTask.status === 'terminé'
                           ? 'bg-emerald-500/10 text-emerald-500'
                           : 'bg-secondary/10 text-secondary'
@@ -532,7 +532,7 @@ function TaskDetailModal({
                         {childTask.status === 'terminé' ? <CheckCircle size={18} /> : <FileText size={17} />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-sm font-black ${childTask.status === 'terminé'
+                        <p className={`break-words text-sm font-black ${childTask.status === 'terminé'
                             ? 'line-through text-theme-muted opacity-60'
                             : 'text-theme-main'
                           }`}>
@@ -574,7 +574,7 @@ function TaskDetailModal({
         />
 
         <div className="flex justify-end pt-4 pb-2">
-          <Button variant="outline" className="px-8 rounded-xl font-bold uppercase tracking-widest text-[10px]" onClick={onClose}>Fermer</Button>
+          <Button variant="outline" className="w-full rounded-xl px-8 font-bold uppercase tracking-widest text-[10px] sm:w-auto" onClick={onClose}>Fermer</Button>
         </div>
       </div>
     </Modal>
@@ -605,8 +605,8 @@ export default function ListView({
   const [expandedStatus, setExpandedStatus] = useState<Record<string, boolean>>({
     'en attente': true,
     'en cours': true,
-    terminé: false,
-    bloqué: false,
+    terminé: true,
+    bloqué: true,
   });
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [detailTaskHistory, setDetailTaskHistory] = useState<Task[]>([]);
@@ -928,116 +928,125 @@ export default function ListView({
     return (
       <div key={task.id} className="space-y-2">
         <GlassCard
-          className="group flex flex-wrap items-center gap-3 border-theme-border-subtle/40 bg-theme-surface/50 p-3 transition-all hover:border-secondary/25 hover:bg-theme-surface-hover"
+          className="group flex flex-col justify-between gap-3 border-theme-border-subtle/40 bg-theme-surface/50 p-3 transition-all hover:border-secondary/25 hover:bg-theme-surface-hover sm:flex-row sm:items-start"
           onClick={() => openTaskDetail(task)}
         >
-          <div className="hidden h-8 w-1 rounded-full bg-secondary/40 sm:block" />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (canOperateTask) {
-                handleCompleteTask(task);
-              }
-            }}
-            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
-            className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
-            title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
-          >
-            {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
-          </button>
+          <div className="flex items-start gap-3 flex-1 min-w-0 w-full sm:w-auto">
+            <div className="hidden h-8 w-1 rounded-full bg-secondary/40 sm:block shrink-0" />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (canOperateTask) {
+                  handleCompleteTask(task);
+                }
+              }}
+              disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
+              className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
+              title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
+            >
+              {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
+            </button>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleTaskOpen(task.id);
-            }}
-            className="h-9 w-9 flex-shrink-0 rounded-xl border border-theme-border-subtle/40 bg-theme-surface-hover text-theme-muted transition-all hover:bg-theme-surface hover:text-theme-main"
-            title={isTaskExpanded ? 'Fermer la sous-tâche' : 'Ouvrir la sous-tâche'}
-          >
-            {isTaskExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTaskOpen(task.id);
+              }}
+              className="h-9 w-9 flex-shrink-0 rounded-xl border border-theme-border-subtle/40 bg-theme-surface-hover text-theme-muted transition-all hover:bg-theme-surface hover:text-theme-main flex items-center justify-center shrink-0"
+              title={isTaskExpanded ? 'Fermer la sous-tâche' : 'Ouvrir la sous-tâche'}
+            >
+              {isTaskExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+            </button>
 
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
-                Niveau {depth}
-              </span>
-              <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
-                {contentModeLabels[contentMode] || 'Libre'}
-              </span>
-              <h4 className={`text-sm font-black tracking-tight ${task.status === 'terminé' ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
-                {task.title}
-              </h4>
-            </div>
-            {creator && (
-              <Link 
-                to={`/users/${creator.id}`}
-                className="mb-1 flex items-center gap-1 text-[9px] text-theme-muted hover:text-primary transition-colors"
-              >
-                <span className="opacity-50">Créé par</span>
-                <span className="font-bold hover:underline">{creator.name}</span>
-              </Link>
-            )}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
-                {priorityLabels[task.priority]}
-              </span>
-              <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
-                {structureSummary}
-              </span>
-              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
-                {progress}%
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <span className="rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
+                  Niveau {depth}
+                </span>
+                <span className={`rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
+                  {contentModeLabels[contentMode] || 'Libre'}
+                </span>
+                <h4 className={`min-w-0 break-words text-sm font-black tracking-tight ${task.status === 'terminé' ? 'line-through text-theme-muted opacity-60' : 'text-theme-main'}`}>
+                  {task.title}
+                </h4>
+              </div>
+              {task.description && (
+                <p className="mb-2 break-words text-xs font-medium leading-relaxed text-theme-muted/80">
+                  {task.description}
+                </p>
+              )}
+              {creator && (
+                <Link 
+                  to={`/users/${creator.id}`}
+                  className="mb-1 flex items-center gap-1 text-[9px] text-theme-muted hover:text-primary transition-colors"
+                >
+                  <span className="opacity-50">Créé par</span>
+                  <span className="font-bold hover:underline">{creator.name}</span>
+                </Link>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
+                  {priorityLabels[task.priority]}
+                </span>
+                <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
+                  {structureSummary}
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                  {progress}%
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center -space-x-2">
-            {task.assignees.slice(0, 3).map((a, i) => (
-              <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
-            ))}
-          </div>
+          <div className="flex w-full flex-col gap-3 border-t border-theme-border-subtle/30 pt-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
+            <div className="flex items-center -space-x-2">
+              {task.assignees.slice(0, 3).map((a, i) => (
+                <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
+              ))}
+            </div>
 
-          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-            {canAttachCurrentTaskFiles && (
-              <button
-                onClick={() => setExpandedTasks(prev => ({ ...prev, [task.id]: true }))}
-                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
-                title="Fichiers de la sous-tâche"
-              >
-                <Paperclip size={15} />
-              </button>
-            )}
-            {canAssignCurrentTask && (
-              <button
-                onClick={() => onAssignTask(task)}
-                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
-                title="Assigner la sous-tâche"
-              >
-                <UserPlus size={15} />
-              </button>
-            )}
-            {canDeleteCurrentTask && (
-              <button
-                onClick={() => requestDeleteTask(task)}
-                disabled={actionLoading === `delete-task-${task.id}`}
-                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
-                title="Supprimer la sous-tâche"
-              >
-                {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={15} />}
-              </button>
-            )}
-            {canOperateTask && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openEditModal(task);
-                }}
-                className="rounded-lg p-2 text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
-                title="Modifier la sous-tâche"
-              >
-                <Edit size={15} />
-              </button>
-            )}
+            <div className="grid grid-cols-4 gap-1 sm:flex sm:items-center" onClick={e => e.stopPropagation()}>
+              {canAttachCurrentTaskFiles && (
+                <button
+                  onClick={() => setExpandedTasks(prev => ({ ...prev, [task.id]: true }))}
+                  className="flex h-9 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                  title="Fichiers de la sous-tâche"
+                >
+                  <Paperclip size={15} />
+                </button>
+              )}
+              {canAssignCurrentTask && (
+                <button
+                  onClick={() => onAssignTask(task)}
+                  className="flex h-9 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                  title="Assigner la sous-tâche"
+                >
+                  <UserPlus size={15} />
+                </button>
+              )}
+              {canDeleteCurrentTask && (
+                <button
+                  onClick={() => requestDeleteTask(task)}
+                  disabled={actionLoading === `delete-task-${task.id}`}
+                  className="flex h-9 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500"
+                  title="Supprimer la sous-tâche"
+                >
+                  {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={15} />}
+                </button>
+              )}
+              {canOperateTask && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditModal(task);
+                  }}
+                  className="flex h-9 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary"
+                  title="Modifier la sous-tâche"
+                >
+                  <Edit size={15} />
+                </button>
+              )}
+            </div>
           </div>
         </GlassCard>
 
@@ -1049,7 +1058,7 @@ export default function ListView({
               exit={{ height: 0, opacity: 0, y: -6 }}
               className="overflow-hidden"
             >
-              <div className="ml-4 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-4 space-y-3 sm:ml-10">
+              <div className="ml-0 space-y-3 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-3 sm:ml-10 sm:p-4">
                 {isChecklistMode && canOperateTask && onCreateSubtask && (
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
                     Sous-tâches indisponibles : cette tâche contient déjà des checklists.
@@ -1188,7 +1197,7 @@ export default function ListView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-6">
       {actionError && (
         <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-500 shadow-theme-sm">
           <span>{actionError}</span>
@@ -1206,7 +1215,7 @@ export default function ListView({
         <div key={status} className="space-y-3">
           <button
             onClick={() => toggleStatus(status)}
-            className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-theme-muted hover:text-theme-main transition-colors group px-1"
+            className="group flex w-full items-center gap-2 rounded-2xl border border-theme-border-subtle/60 bg-theme-surface/50 px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em] text-theme-muted transition-colors hover:text-theme-main sm:w-auto sm:border-0 sm:bg-transparent sm:px-1 sm:py-0 sm:text-xs sm:tracking-[0.2em]"
           >
             <AnimatePresence mode="wait">
               <motion.div key={expandedStatus[status] ? 'open' : 'closed'} initial={{ rotate: -90 }} animate={{ rotate: 0 }}>
@@ -1263,123 +1272,139 @@ export default function ListView({
                         className="space-y-2"
                       >
                         <GlassCard
-                          className="group flex flex-wrap items-center gap-3 p-4 hover:border-secondary/30 hover:bg-theme-surface-hover transition-all cursor-pointer border-theme-border-subtle/50 shadow-theme-sm hover:shadow-theme-md"
+                          className="group flex cursor-pointer flex-col justify-between gap-4 border-theme-border-subtle/50 p-3 shadow-theme-sm transition-all hover:border-secondary/30 hover:bg-theme-surface-hover hover:shadow-theme-md sm:p-4 lg:flex-row lg:items-start"
                           onClick={() => openTaskDetail(task)}
                         >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (canOperateTask) {
-                                handleCompleteTask(task);
-                              }
-                            }}
-                            disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
-                            className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
-                            title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
-                          >
-                            {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
-                          </button>
+                          <div className="flex w-full min-w-0 flex-1 items-start gap-2.5 sm:gap-3 lg:w-auto">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (canOperateTask) {
+                                  handleCompleteTask(task);
+                                }
+                              }}
+                              disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
+                              className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
+                              title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
+                            >
+                              {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
+                            </button>
 
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleTaskOpen(task.id);
-                            }}
-                            className="h-10 w-10 flex-shrink-0 rounded-xl bg-theme-surface-hover text-theme-muted hover:bg-theme-surface hover:text-theme-main transition-all flex items-center justify-center border border-theme-border-subtle/40"
-                            title={isTaskExpanded ? 'Fermer la tâche' : 'Ouvrir la tâche'}
-                          >
-                            {isTaskExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleTaskOpen(task.id);
+                              }}
+                              className="h-10 w-10 flex-shrink-0 rounded-xl bg-theme-surface-hover text-theme-muted hover:bg-theme-surface hover:text-theme-main transition-all flex items-center justify-center border border-theme-border-subtle/40 shrink-0"
+                              title={isTaskExpanded ? 'Fermer la tâche' : 'Ouvrir la tâche'}
+                            >
+                              {isTaskExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </button>
 
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`text-sm font-bold tracking-tight mb-1 group-hover:text-theme-main transition-colors ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
-                              {task.title}
-                            </h4>
-                            {creator && (
-                              <Link 
-                                to={`/users/${creator.id}`}
-                                className="mb-1 flex items-center gap-1 text-[10px] text-theme-muted hover:text-primary transition-colors"
-                              >
-                                <User size={12} className="opacity-50" />
-                                <span className="opacity-50">Créé par</span>
-                                <span className="font-bold hover:underline">{creator.name}</span>
-                              </Link>
-                            )}
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
-                                {contentModeLabels[contentMode] || 'Libre'}
-                              </span>
-                              <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
-                                {priorityLabels[task.priority]}
-                              </span>
-                              <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
-                                {structureSummary}
-                              </span>
-                              <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
-                                {progress}%
-                              </span>
-                              {task.dueDate && (
-                                <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
-                                  {task.dueDate}
-                                </span>
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`mb-1 break-words text-sm font-bold tracking-tight transition-colors group-hover:text-theme-main sm:text-base ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
+                                {task.title}
+                              </h4>
+                              {task.description && (
+                                <p className="mb-2 break-words text-xs font-medium leading-relaxed text-theme-muted/80">
+                                  {task.description}
+                                </p>
                               )}
+                              {creator && (
+                                <Link 
+                                  to={`/users/${creator.id}`}
+                                  className="mb-1 flex items-center gap-1 text-[10px] text-theme-muted hover:text-primary transition-colors"
+                                >
+                                  <User size={12} className="opacity-50" />
+                                  <span className="opacity-50">Créé par</span>
+                                  <span className="font-bold hover:underline">{creator.name}</span>
+                                </Link>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${contentModeClasses[contentMode] || contentModeClasses.leaf}`}>
+                                  {contentModeLabels[contentMode] || 'Libre'}
+                                </span>
+                                <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-widest border ${priorityColors[task.priority]}`}>
+                                  {priorityLabels[task.priority]}
+                                </span>
+                                <span className={`text-[10px] font-black uppercase tracking-tighter ${isSubtaskMode ? 'text-secondary' : 'text-theme-muted opacity-50'}`}>
+                                  {structureSummary}
+                                </span>
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-theme-muted opacity-50">
+                                  {progress}%
+                                </span>
+                                {task.dueDate && (
+                                  <span className="text-[10px] font-black text-theme-muted opacity-40 uppercase tracking-tighter">
+                                    {task.dueDate}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center -space-x-2">
-                            {task.assignees.slice(0, 3).map((a, i) => (
-                              <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
-                            ))}
-                            {task.assignees.length > 3 && (
-                              <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">
-                                +{task.assignees.length - 3}
+                          <div className="flex w-full flex-col gap-3 border-t border-theme-border-subtle/30 pt-3 lg:w-auto lg:flex-row lg:items-center lg:justify-end lg:border-t-0 lg:pt-0">
+                            <div className="flex items-center justify-between gap-3 lg:justify-end">
+                              <div className="flex items-center -space-x-2">
+                              {task.assignees.slice(0, 3).map((a, i) => (
+                                <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
+                              ))}
+                              {task.assignees.length > 3 && (
+                                <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">
+                                  +{task.assignees.length - 3}
+                                </div>
+                              )}
                               </div>
-                            )}
-                          </div>
+                              {task.assignees.length === 0 && (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted/50">
+                                  Non assignée
+                                </span>
+                              )}
+                            </div>
 
-                          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                            {canAttachCurrentTaskFiles && (
-                              <button
-                                onClick={() => {
-                                  setExpandedTasks(prev => ({ ...prev, [task.id]: true }));
-                                }}
-                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
-                                title="Fichiers de la tâche"
-                              >
-                                <Paperclip size={16} />
-                              </button>
-                            )}
-                            {canAssignCurrentTask && (
-                              <button
-                                onClick={() => onAssignTask(task)}
-                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
-                                title="Assigner"
-                              >
-                                <UserPlus size={16} />
-                              </button>
-                            )}
-                            {canDeleteCurrentTask && (
-                              <button
-                                onClick={() => requestDeleteTask(task)}
-                                disabled={actionLoading === `delete-task-${task.id}`}
-                                className="p-2 rounded-lg text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-all"
-                                title="Supprimer"
-                              >
-                                {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={16} />}
-                              </button>
-                            )}
-                            {canOperateTask && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditModal(task);
-                                }}
-                                className="p-2 rounded-lg text-theme-muted hover:bg-secondary/10 hover:text-secondary transition-all"
-                                title="Modifier"
-                              >
-                                <Edit size={16} />
-                              </button>
-                            )}
+                            <div className="grid grid-cols-4 gap-1 lg:flex lg:items-center" onClick={e => e.stopPropagation()}>
+                              {canAttachCurrentTaskFiles && (
+                                <button
+                                  onClick={() => {
+                                    setExpandedTasks(prev => ({ ...prev, [task.id]: true }));
+                                  }}
+                                  className="flex h-10 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary lg:h-auto lg:p-2"
+                                  title="Fichiers de la tâche"
+                                >
+                                  <Paperclip size={16} />
+                                </button>
+                              )}
+                              {canAssignCurrentTask && (
+                                <button
+                                  onClick={() => onAssignTask(task)}
+                                  className="flex h-10 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary lg:h-auto lg:p-2"
+                                  title="Assigner"
+                                >
+                                  <UserPlus size={16} />
+                                </button>
+                              )}
+                              {canDeleteCurrentTask && (
+                                <button
+                                  onClick={() => requestDeleteTask(task)}
+                                  disabled={actionLoading === `delete-task-${task.id}`}
+                                  className="flex h-10 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-red-500/10 hover:text-red-500 lg:h-auto lg:p-2"
+                                  title="Supprimer"
+                                >
+                                  {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={16} />}
+                                </button>
+                              )}
+                              {canOperateTask && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditModal(task);
+                                  }}
+                                  className="flex h-10 items-center justify-center rounded-lg text-theme-muted transition-all hover:bg-secondary/10 hover:text-secondary lg:h-auto lg:p-2"
+                                  title="Modifier"
+                                >
+                                  <Edit size={16} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </GlassCard>
 
@@ -1391,7 +1416,7 @@ export default function ListView({
                               exit={{ height: 0, opacity: 0, y: -6 }}
                               className="overflow-hidden"
                             >
-                              <div className="ml-0 sm:ml-28 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-4 space-y-3">
+                              <div className="ml-0 space-y-3 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-3 sm:p-4 xl:ml-28">
                                 {isChecklistMode && canOperateTask && onCreateSubtask && (
                                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
                                     Sous-tâches indisponibles : cette tâche contient déjà des checklists.
@@ -1468,7 +1493,7 @@ export default function ListView({
                                             <Circle className="h-4 w-4" />
                                           )}
                                         </button>
-                                        <span className={`flex-1 text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
+                                        <span className={`min-w-0 flex-1 break-words text-sm font-medium ${checklist.is_checked ? 'line-through text-theme-muted opacity-50' : 'text-theme-main'}`}>
                                           {checklist.texte}
                                         </span>
                                         {canDeleteCurrentTask && onDeleteChecklist && (
@@ -1625,18 +1650,18 @@ export default function ListView({
               <option value="critique">Critique</option>
             </select>
           </div>
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
               onClick={() => { setIsEditModalOpen(false); setEditingTask(null); setEditError(null); }}
-              className="rounded-xl font-bold"
+              className="w-full rounded-xl font-bold sm:w-auto"
             >
               Annuler
             </Button>
             <Button
               onClick={handleEditSubmit}
               disabled={editLoading}
-              className="rounded-xl font-bold"
+              className="w-full rounded-xl font-bold sm:w-auto"
             >
               {editLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Enregistrer

@@ -87,11 +87,11 @@ interface HeaderProps {
 export default function Header({ onMenuClick, onToggleSidebar, isCompact = false }: HeaderProps) {
   const { user, logout, getProfilePhoto } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
-  
+
   // NOUVEAU: Utilisation des hooks Redux
   const { toggleSidebar: toggleReduxSidebar, setSidebarOpen } = useUI();
   const { activeWorkspaceId } = useNavigation();
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,18 +144,20 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
   const handleForward = () => navigate(1);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 px-2 py-2 sm:px-4 sm:py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
-      <div className="flex items-center justify-between gap-2 sm:gap-4">
+    <header className="sticky top-0 z-40 min-w-0 bg-white/80 backdrop-blur-md border-b border-gray-200 px-2 py-2 sm:px-4 sm:py-3 shadow-sm dark:bg-slate-950/85 dark:border-slate-800">
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
         <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2 md:gap-4">
           <div className="flex items-center gap-1">
             <button
               onClick={onMenuClick}
+              aria-label="Ouvrir le menu"
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-600 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
               <Menu className="h-5 w-5" />
             </button>
             <button
               onClick={handleToggleSidebar}
+              aria-label="Basculer la barre latérale"
               className="hidden lg:inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
               <ChevronsLeft className={`h-5 w-5 transition-transform duration-300 ${isCompact ? 'rotate-180' : ''}`} />
@@ -168,14 +170,16 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
             <button
               onClick={handleBack}
               disabled={historyState.index <= 0}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              aria-label="Retour"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 sm:inline-flex dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
             <button
               onClick={handleForward}
               disabled={historyState.index >= historyState.maxIndex}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              aria-label="Suivant"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 sm:inline-flex dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
               <ArrowRight className="h-4 w-4" />
             </button>
@@ -200,6 +204,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
           {/* Bouton recherche mobile */}
           <button
             onClick={() => setIsSearchOpen(!isSearchOpen)}
+            aria-label="Rechercher"
             className="md:hidden rounded-lg p-2 text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <Search className="h-5 w-5" />
@@ -214,21 +219,24 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
         <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-3">
           <button
             onClick={toggleDarkMode}
+            aria-label={isDarkMode ? 'Activer le mode clair' : 'Activer le mode sombre'}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
             {isDarkMode ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5 text-slate-700" />}
           </button>
 
-          <div className="h-6 w-px bg-gray-200 dark:bg-slate-800" />
+          <div className="hidden sm:block h-6 w-px bg-gray-200 dark:bg-slate-800" />
 
-          <LanguageSwitcher />
+          <div className="hidden sm:block">
+            <LanguageSwitcher />
+          </div>
 
           <div className="flex items-center gap-1 sm:gap-2">
             <MessagingBell />
             <NotificationBell />
           </div>
 
-          <div className="h-6 w-px bg-gray-200 dark:bg-slate-800" />
+          <div className="hidden sm:block h-6 w-px bg-gray-200 dark:bg-slate-800" />
 
           <div className="flex items-center gap-2 sm:gap-3">
             <button
@@ -241,6 +249,7 @@ export default function Header({ onMenuClick, onToggleSidebar, isCompact = false
             <div className="relative">
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
+                aria-label="Ouvrir le menu profil"
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-white shadow-md transition-all hover:scale-105 active:scale-95 overflow-hidden border-2 border-transparent hover:border-primary/20"
               >
                 {profilePhoto ? (

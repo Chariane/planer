@@ -1094,7 +1094,7 @@ export default function LeftSidebar() {
               </Link>
             </div>
 
-            <div className="flex items-center gap-0.5 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-0.5 pr-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
               {canManageCurrentSpace && (
                 <>
                   <button
@@ -1185,7 +1185,7 @@ export default function LeftSidebar() {
                         {canManageListContext(item.id, false) && (
                           <button
                             onClick={(e) => openListOptionsMenu(e, list, item.id, false)}
-                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-theme-muted hover:text-secondary hover:bg-theme-surface rounded-lg opacity-0 group-hover/list:opacity-100 transition-all"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-theme-muted hover:text-secondary hover:bg-theme-surface rounded-lg opacity-100 transition-all sm:opacity-0 sm:group-hover/list:opacity-100"
                             title="Options du projet"
                           >
                             <MoreHorizontal className="h-3 w-3" />
@@ -1417,7 +1417,7 @@ export default function LeftSidebar() {
                   {canManageListContext(null, true) && (
                     <button
                       onClick={(e) => openListOptionsMenu(e, list, null, true)}
-                      className="p-1 text-theme-muted hover:text-secondary hover:bg-theme-surface rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-1 text-theme-muted hover:text-secondary hover:bg-theme-surface rounded-lg opacity-100 transition-all sm:opacity-0 sm:group-hover:opacity-100"
                       title="Options du projet"
                     >
                       <MoreHorizontal className="h-3 w-3" />
@@ -1598,9 +1598,9 @@ export default function LeftSidebar() {
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-theme-muted">Description</label>
             <textarea placeholder="Objectif, périmètre ou contexte de cet espace..." value={newSpaceDesc} onChange={e => setNewSpaceDesc(e.target.value)} rows={3} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsCreateSpaceModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleCreateSpace}>Créer</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsCreateSpaceModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleCreateSpace} className="w-full sm:w-auto">Créer</Button>
           </div>
         </div>
       </Modal>
@@ -1609,9 +1609,9 @@ export default function LeftSidebar() {
         <div className="space-y-4">
           <input type="text" placeholder="Nom" value={editSpaceName} onChange={e => setEditSpaceName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
           <textarea placeholder="Description" value={editSpaceDesc} onChange={e => setEditSpaceDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsEditSpaceModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleEditSpace}>Enregistrer</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsEditSpaceModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleEditSpace} className="w-full sm:w-auto">Enregistrer</Button>
           </div>
         </div>
       </Modal>
@@ -1650,9 +1650,9 @@ export default function LeftSidebar() {
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-theme-muted">Description</label>
             <textarea placeholder="Objectif, livrables ou notes utiles pour ce projet..." value={newListDesc} onChange={e => setNewListDesc(e.target.value)} rows={3} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsCreateListModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleCreateList}>Créer</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsCreateListModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleCreateList} className="w-full sm:w-auto">Créer</Button>
           </div>
         </div>
       </Modal>
@@ -1661,9 +1661,9 @@ export default function LeftSidebar() {
         <div className="space-y-4">
           <input type="text" placeholder="Nom" value={editListName} onChange={e => setEditListName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
           <textarea placeholder="Description" value={editListDesc} onChange={e => setEditListDesc(e.target.value)} rows={2} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsEditListModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleEditList}>Enregistrer</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsEditListModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleEditList} className="w-full sm:w-auto">Enregistrer</Button>
           </div>
         </div>
       </Modal>
@@ -1672,9 +1672,9 @@ export default function LeftSidebar() {
         <div className="space-y-4">
           <input type="text" placeholder="Nom" value={editWorkspaceName} onChange={e => setEditWorkspaceName(e.target.value)} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all" />
           <textarea placeholder="Description" value={editWorkspaceDesc} onChange={e => setEditWorkspaceDesc(e.target.value)} rows={3} className="w-full p-2.5 bg-theme-surface border border-theme-border rounded-lg text-theme-main focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none" />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsEditWorkspaceModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleEditWorkspace}>Enregistrer</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsEditWorkspaceModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleEditWorkspace} className="w-full sm:w-auto">Enregistrer</Button>
           </div>
         </div>
       </Modal>
@@ -1724,9 +1724,9 @@ export default function LeftSidebar() {
               )}
             </p>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
-            <Button onClick={handleInviteMember}>Inviter</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+            <Button onClick={handleInviteMember} className="w-full sm:w-auto">Inviter</Button>
           </div>
         </div>
       </Modal>

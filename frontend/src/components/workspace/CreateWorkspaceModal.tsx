@@ -60,9 +60,9 @@ export default function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: Cre
             placeholder="Décrivez brièvement ce workspace..."
           />
         </div>
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} type="button">Annuler</Button>
-          <Button type="submit" loading={loading}>Créer</Button>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} type="button" className="w-full sm:w-auto">Annuler</Button>
+          <Button type="submit" loading={loading} className="w-full sm:w-auto">Créer</Button>
         </div>
       </form>
     </Modal>

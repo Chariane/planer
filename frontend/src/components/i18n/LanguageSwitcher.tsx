@@ -1,9 +1,21 @@
 import { Languages } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import type { SupportedLanguage } from '../../i18n/languages';
+import { useEffect, useState } from 'react';
 
 export default function LanguageSwitcher() {
   const { language, languages, setLanguage, t } = useLanguage();
+  const [isMobile, setIsMobile] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  ));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <label
@@ -15,16 +27,15 @@ export default function LanguageSwitcher() {
       <select
         value={language}
         onChange={event => setLanguage(event.target.value as SupportedLanguage)}
-        className="h-full min-w-[44px] cursor-pointer appearance-none bg-transparent pr-2 text-xs font-semibold uppercase outline-none sm:min-w-[92px] sm:text-sm sm:normal-case"
+        className="h-full min-w-[32px] cursor-pointer appearance-none bg-transparent pr-2 text-xs font-semibold uppercase outline-none sm:min-w-[92px] sm:text-sm sm:normal-case"
       >
         {languages.map(option => (
           <option key={option.code} value={option.code}>
-            {option.shortLabel}
-            {' - '}
-            {option.nativeLabel}
+            {isMobile ? option.shortLabel : `${option.shortLabel} - ${option.nativeLabel}`}
           </option>
         ))}
       </select>
     </label>
   );
 }
+

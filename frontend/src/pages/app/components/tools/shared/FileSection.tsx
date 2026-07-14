@@ -13,11 +13,11 @@ interface FileSectionProps {
   onDelete: (fileId: string) => void;
   onDownload: (file: any) => void;
   fileForm: { nom: string; url_fichier: string; type_fichier: string };
-  setFileForm: (form: any) => void;
+  setFileForm: React.Dispatch<React.SetStateAction<any>>;
   isUploading: boolean;
   currentUserId?: string | null;
   isCreator: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
 export const FileSection = ({
@@ -70,7 +70,7 @@ export const FileSection = ({
               </div>
               <input
                 value={fileForm.nom}
-                onChange={(e) => setFileForm(prev => ({ ...prev, nom: e.target.value }))}
+                onChange={(e) => setFileForm((prev: any) => ({ ...prev, nom: e.target.value }))}
                 placeholder="Nom du document..."
                 className="w-full h-[56px] bg-theme-surface/50 border border-theme-border-subtle rounded-2xl pl-14 pr-4 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold placeholder:text-theme-muted/30 transition-all"
                 disabled={!canAddFiles || isUploading}

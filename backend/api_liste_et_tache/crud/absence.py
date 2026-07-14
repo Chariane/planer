@@ -173,11 +173,11 @@ def _require_self_leave_request_access(db: Session, *, membre: Membre, current_u
         and membre.id_espace is None
         and membre.id_liste is None
         and membre.id_tache is None
-        and membre.role not in ["Administrateur", "Membre"]
+        and membre.role not in {"Administrateur", "Membre"}
     ):
         raise HTTPException(
             status_code=403,
-            detail="Dans un workspace, seuls les administrateurs et les membres directs peuvent créer une demande d'absence ou de congé.",
+            detail="Dans un workspace, seuls les administrateurs et membres directs peuvent créer une demande d'absence ou de congé.",
         )
 
     return _get_absence_scope_for_member(db, membre)

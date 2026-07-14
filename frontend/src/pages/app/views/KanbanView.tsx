@@ -106,7 +106,7 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4, boxShadow: 'var(--shadow-lg)', borderColor: 'var(--secondary)' }}
-      className={`group relative rounded-2xl bg-theme-surface p-4 shadow-theme-sm border border-theme-border-subtle cursor-grab active:cursor-grabbing transition-all duration-300 ${depth > 0 ? 'ml-4 border-l-4 border-l-secondary/30' : ''
+      className={`group relative rounded-2xl bg-theme-surface p-3 shadow-theme-sm border border-theme-border-subtle cursor-grab active:cursor-grabbing transition-all duration-300 sm:p-4 ${depth > 0 ? 'sm:ml-4 border-l-4 border-l-secondary/30' : ''
         } ${overdue ? 'border-red-500/30 bg-red-500/[0.03]' : ''} ${isDragging ? 'opacity-40 scale-95' : ''
         } ${isOverlay ? 'shadow-theme-lg ring-2 ring-secondary opacity-100' : ''}`}
       onMouseDown={() => setIsDragging(true)}
@@ -123,10 +123,10 @@ function KanbanCard({ task, depth = 0, childCount = 0, parentTitle = null, isOve
         )}
 
         <div className="flex items-start justify-between gap-3">
-          <p className={`text-sm font-bold tracking-tight line-clamp-2 leading-snug transition-colors group-hover:text-theme-main ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
+          <p className={`break-words text-sm font-bold leading-snug tracking-tight transition-colors group-hover:text-theme-main ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-60' : 'text-theme-main'}`}>
             {task.title}
           </p>
-          <GripVertical className="h-4 w-4 text-theme-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
+          <GripVertical className="h-4 w-4 text-theme-muted opacity-60 transition-opacity group-hover:opacity-100 sm:opacity-0 shrink-0 mt-1" />
         </div>
 
         {/* ✅ Affichage du créateur sur la carte Kanban */}
@@ -251,7 +251,7 @@ function KanbanColumn({ title, tasks, status, color, tasksByParent, tasksById, g
   return (
     <div
       ref={setNodeRef}
-      className={`w-80 flex-shrink-0 rounded-2xl bg-theme-surface/30 p-4 border transition-all duration-300 ${isOver ? 'border-secondary bg-secondary/5 shadow-theme-md' : 'border-theme-border-subtle/30'}`}
+      className={`w-[min(84vw,20rem)] flex-shrink-0 rounded-2xl border bg-theme-surface/30 p-3 transition-all duration-300 sm:w-80 sm:p-4 ${isOver ? 'border-secondary bg-secondary/5 shadow-theme-md' : 'border-theme-border-subtle/30'}`}
     >
       <div className="flex justify-between items-center mb-6 px-1">
         <div className="flex items-center gap-3">
@@ -274,7 +274,7 @@ function KanbanColumn({ title, tasks, status, color, tasksByParent, tasksById, g
         </div>
       </div>
 
-      <div className="min-h-[600px] space-y-4">
+      <div className="min-h-[55dvh] space-y-3 sm:min-h-[600px] sm:space-y-4">
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           <AnimatePresence mode="popLayout">
             {tasks.map(task => (
@@ -369,9 +369,9 @@ export default function KanbanView({ tasks, onUpdateTask }: KanbanViewProps) {
 
   return (
     <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-6 overflow-x-auto pb-8 custom-scrollbar-hidden">
+      <div className="-mx-3 flex gap-3 overflow-x-auto px-3 pb-6 sm:mx-0 sm:gap-6 sm:px-0 sm:pb-8 custom-scrollbar-hidden">
         {columns.map(col => (
-          <div key={col.id} id={col.id} className="w-80 flex-shrink-0">
+          <div key={col.id} id={col.id} className="w-[min(84vw,20rem)] flex-shrink-0 sm:w-80">
             <KanbanColumn
               title={col.title}
               tasks={getTasksByStatus(col.id)}

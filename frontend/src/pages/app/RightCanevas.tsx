@@ -690,7 +690,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 custom-scrollbar">
         {actionError && (
           <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm font-semibold text-red-500 dark:text-red-300">
             <span>{actionError}</span>
@@ -840,7 +840,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                           )}
 
                           {canModify && !canevas.is_verrouille && (
-                            <div className="ml-auto flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                            <div className="ml-auto flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                               {editingChecklistId !== checklist.id && (
                                 <button
                                   onClick={() => {
@@ -937,7 +937,7 @@ export default function RightCanevas({ onClose }: RightCanevasProps) {
                                   ) : (
                                     <div className="min-w-0 space-y-3">
                                       <div className="max-h-72 overflow-auto rounded-2xl border border-theme-border-subtle bg-theme-surface p-2 custom-scrollbar">
-                                        <div className="min-w-[340px] space-y-1">
+                                        <div className="min-w-[min(100%,19rem)] space-y-1">
                                         {taskChecklistOptions.map(option => {
                                           const isSelected = selectedTaskChecklistId === option.id;
                                           return (

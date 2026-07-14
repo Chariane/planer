@@ -82,28 +82,28 @@ export default function AbsencesPage() {
     };
 
     return (
-        <div className="space-y-8 pb-12">
+        <div className="min-w-0 space-y-6 overflow-x-hidden px-3 py-5 pb-12 sm:space-y-8 sm:px-6 sm:py-8">
             {/* Header Premium */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                        <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary border border-primary/20 shadow-xl shadow-primary/10">
-                            <Plane size={28} className="rotate-[-15deg] group-hover:rotate-0 transition-transform duration-500" />
+            <div className="flex min-w-0 flex-col justify-between gap-5 md:flex-row md:items-end">
+                <div className="min-w-0 space-y-2">
+                    <div className="flex min-w-0 items-start gap-3 sm:items-center">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-xl shadow-primary/10 sm:h-14 sm:w-14">
+                            <Plane className="h-6 w-6 rotate-[-15deg] transition-transform duration-500 group-hover:rotate-0 sm:h-7 sm:w-7" />
                         </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-4xl font-black tracking-tight text-white">Gestion du Temps</h1>
-                                <span className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] font-bold text-theme-muted uppercase tracking-widest">Enterprise</span>
+                        <div className="min-w-0">
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                                <h1 className="text-2xl font-black tracking-tight text-theme-main sm:text-4xl">Gestion du Temps</h1>
+                                <span className="w-fit rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-theme-muted">Enterprise</span>
                             </div>
-                            <p className="text-theme-muted font-medium mt-1">Coordination des absences et optimisation de la charge d'équipe</p>
+                            <p className="mt-1 text-sm font-medium text-theme-muted sm:text-base">Coordination des absences et optimisation de la charge d'équipe</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex w-full items-center gap-3 sm:w-auto">
                     <Button
                         onClick={() => setIsRequestModalOpen(true)}
-                        className="bg-primary hover:bg-primary-hover text-white shadow-xl shadow-primary/20 h-12 px-8 rounded-2xl flex items-center gap-3 group transition-all duration-300 hover:scale-[1.02]"
+                        className="group flex h-12 w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 text-white shadow-xl shadow-primary/20 transition-all duration-300 hover:scale-[1.02] hover:bg-primary-hover sm:w-auto sm:px-8"
                     >
                         <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                         <span className="font-bold tracking-tight">Soumettre une Demande</span>
@@ -112,7 +112,7 @@ export default function AbsencesPage() {
             </div>
 
             {/* Navigation Tabs (Glassmorphism) */}
-            <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-[22px] w-fit border border-white/5 backdrop-blur-md">
+            <div className="-mx-3 flex items-center gap-2 overflow-x-auto border-y border-white/5 bg-white/5 px-3 py-2 backdrop-blur-md sm:mx-0 sm:w-fit sm:rounded-[22px] sm:border sm:p-1.5 custom-scrollbar-hidden">
                 {[
                     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                     { id: 'my-requests', label: 'Historique', icon: History },
@@ -121,7 +121,7 @@ export default function AbsencesPage() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as TabType)}
-                        className={`flex items-center gap-2.5 px-6 py-3 rounded-[18px] text-xs font-black uppercase tracking-wider transition-all duration-300 ${activeTab === tab.id
+                        className={`flex shrink-0 items-center gap-2.5 rounded-[18px] px-4 py-3 text-xs font-black uppercase tracking-wide transition-all duration-300 sm:px-6 sm:tracking-wider ${activeTab === tab.id
                             ? 'bg-primary text-white shadow-xl shadow-primary/30 scale-100'
                             : 'text-theme-muted hover:text-white hover:bg-white/5'
                             }`}
@@ -142,8 +142,8 @@ export default function AbsencesPage() {
                         className="space-y-8"
                     >
                         {/* Dynamic Stats Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                            <GlassCard className="p-8 relative group overflow-hidden border-emerald-500/10">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 sm:gap-6">
+                            <GlassCard className="relative group overflow-hidden border-emerald-500/10 p-5 sm:p-8">
                                 <div className="absolute -right-4 -bottom-4 text-emerald-500/5 rotate-12 group-hover:rotate-0 transition-transform duration-700">
                                     <TrendingDown size={120} />
                                 </div>
@@ -158,7 +158,7 @@ export default function AbsencesPage() {
                                 </div>
                             </GlassCard>
 
-                            <GlassCard className="p-8 relative group overflow-hidden border-amber-500/10">
+                            <GlassCard className="relative group overflow-hidden border-amber-500/10 p-5 sm:p-8">
                                 <div className="absolute -right-4 -bottom-4 text-amber-500/5 rotate-12 group-hover:rotate-0 transition-transform duration-700">
                                     <Clock size={120} />
                                 </div>
@@ -173,7 +173,7 @@ export default function AbsencesPage() {
                                 </div>
                             </GlassCard>
 
-                            <GlassCard className="p-8 relative group overflow-hidden border-primary/10">
+                            <GlassCard className="relative group overflow-hidden border-primary/10 p-5 sm:p-8">
                                 <div className="absolute -right-4 -bottom-4 text-primary/5 rotate-12 group-hover:rotate-0 transition-transform duration-700">
                                     <Plane size={120} />
                                 </div>
@@ -188,7 +188,7 @@ export default function AbsencesPage() {
                                 </div>
                             </GlassCard>
 
-                            <GlassCard className="p-8 bg-gradient-to-br from-primary to-primary-hover border-none shadow-2xl shadow-primary/20 relative overflow-hidden">
+                            <GlassCard className="relative overflow-hidden border-none bg-gradient-to-br from-primary to-primary-hover p-5 shadow-2xl shadow-primary/20 sm:p-8">
                                 <div className="absolute top-0 right-0 p-2 opacity-20">
                                     <ShieldCheck size={40} className="text-white" />
                                 </div>
@@ -211,9 +211,9 @@ export default function AbsencesPage() {
                         </div>
 
                         {/* Risk Analysis View (The "Ideal" View) */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <GlassCard className="lg:col-span-2 p-8 border-white/10">
-                                <div className="flex items-center justify-between mb-8">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+                            <GlassCard className="border-white/10 p-5 sm:p-8 lg:col-span-2">
+                                <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="space-y-1">
                                         <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
                                             <AlertTriangle className="text-amber-500" size={24} />
@@ -303,36 +303,36 @@ export default function AbsencesPage() {
                             </div>
                         ) : (
                             requests.map((req) => (
-                                <GlassCard key={req.id} className={`p-6 flex items-center justify-between group transition-all duration-300 hover:translate-x-1 ${req.is_absence ? 'hover:border-amber-500/40' : 'hover:border-primary/40'}`}>
-                                    <div className="flex items-center gap-6">
-                                        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center border-2 transition-transform group-hover:scale-105 ${getStatusTheme(req.statut, req.is_absence)}`}>
+                                <GlassCard key={req.id} className={`p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group transition-all duration-300 hover:translate-x-1 ${req.is_absence ? 'hover:border-amber-500/40' : 'hover:border-primary/40'}`}>
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 w-full sm:w-auto">
+                                        <div className={`h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center border-2 transition-transform group-hover:scale-105 shrink-0 ${getStatusTheme(req.statut, req.is_absence)}`}>
                                             {req.is_absence ? (
-                                                <AlertCircle size={28} />
+                                                <AlertCircle size={24} className="sm:size-[28px]" />
                                             ) : (
-                                                <Umbrella size={28} />
+                                                <Umbrella size={24} className="sm:size-[28px]" />
                                             )}
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center gap-4">
-                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{sanitizeText(req.motif || (req.is_absence ? 'Absence urgente' : 'Congé planifié'))}</h4>
-                                                <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-[0.2em] shadow-sm ${getStatusTheme(req.statut, req.is_absence)}`}>
+                                        <div className="space-y-1 w-full sm:w-auto min-w-0">
+                                            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                                <h4 className="text-base sm:text-lg font-black text-white uppercase tracking-tighter italic truncate">{sanitizeText(req.motif || (req.is_absence ? 'Absence urgente' : 'Congé planifié'))}</h4>
+                                                <span className={`text-[8.5px] sm:text-[9px] font-black px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border uppercase tracking-[0.2em] shadow-sm shrink-0 ${getStatusTheme(req.statut, req.is_absence)}`}>
                                                     {sanitizeText(req.is_absence ? 'Absence' : 'Congé')} • {sanitizeText(req.statut)}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-5 text-[11px] text-theme-muted font-bold uppercase tracking-tight">
-                                                <span className="flex items-center gap-2 text-white/50"><CalendarIcon size={14} className={req.is_absence ? 'text-amber-500' : 'text-primary'} /> du {new Date(req.date_debut).toLocaleDateString()} au {new Date(req.date_fin).toLocaleDateString()}</span>
-                                                <div className="h-1 w-1 rounded-full bg-white/20" />
-                                                <span className="flex items-center gap-2 font-black text-white/80">{req.duree_demandee_en_jours} Jours</span>
+                                            <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-[10px] sm:text-[11px] text-theme-muted font-bold uppercase tracking-tight">
+                                                <span className="flex items-center gap-1.5 sm:gap-2 text-white/50"><CalendarIcon size={12} className={req.is_absence ? 'text-amber-500' : 'text-primary'} /> du {new Date(req.date_debut).toLocaleDateString()} au {new Date(req.date_fin).toLocaleDateString()}</span>
+                                                <div className="hidden sm:block h-1 w-1 rounded-full bg-white/20" />
+                                                <span className="flex items-center gap-1.5 sm:gap-2 font-black text-white/80">{req.duree_demandee_en_jours} Jours</span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-right hidden md:block">
-                                            <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Soumis le</p>
+                                    <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-white/5 pt-3 sm:border-t-0 sm:pt-0 w-full sm:w-auto">
+                                        <div className="text-left sm:text-right">
+                                            <p className="text-[9px] sm:text-[10px] font-black text-theme-muted uppercase tracking-widest">Soumis le</p>
                                             <p className="text-xs font-bold text-white">{new Date(req.created_at).toLocaleDateString()}</p>
                                         </div>
-                                        <button className={`h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-theme-muted transition-all border border-transparent ${req.is_absence ? 'group-hover:text-white group-hover:bg-amber-500/20 group-hover:border-amber-500/30' : 'group-hover:text-white group-hover:bg-primary/20 group-hover:border-primary/30'}`}>
-                                            <ChevronRight size={22} />
+                                        <button className={`h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-white/5 flex items-center justify-center text-theme-muted transition-all border border-transparent ${req.is_absence ? 'group-hover:text-white group-hover:bg-amber-500/20 group-hover:border-amber-500/30' : 'group-hover:text-white group-hover:bg-primary/20 group-hover:border-primary/30'}`}>
+                                            <ChevronRight size={18} className="sm:size-[22px]" />
                                         </button>
                                     </div>
                                 </GlassCard>

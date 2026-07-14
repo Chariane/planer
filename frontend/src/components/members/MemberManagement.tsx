@@ -693,8 +693,8 @@ const canRemoveMember = (member: Member) => {
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ delay: i * 0.05 }}
                     >
-                      <GlassCard className="p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all">
-                        <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
+                      <GlassCard className="p-4 flex flex-col gap-4 group hover:bg-white/5 transition-all sm:flex-row sm:items-center sm:justify-between">
+                        <Link to={`/users/${member.id}`} className="flex min-w-0 items-center gap-4 hover:opacity-90">
                           <MemberAvatar
                             member={member}
                             size="md"
@@ -703,9 +703,9 @@ const canRemoveMember = (member: Member) => {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                               <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
-                              <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
+                              <p className="font-black text-theme-main break-words tracking-tighter text-sm uppercase sm:truncate">{member.name}</p>
                             </div>
-                            <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider mb-1">{member.email}</p>
+                            <p className="text-[10px] text-theme-muted font-medium break-all uppercase opacity-60 tracking-wider mb-1 sm:truncate">{member.email}</p>
                             <span className={`text-[9px] px-2 py-0.5 rounded-lg font-black uppercase tracking-wider ${getRoleBadgeClass(member.role)}`}>
                               {getRoleLabel(member.role)}
                             </span>
@@ -713,7 +713,7 @@ const canRemoveMember = (member: Member) => {
                         </Link>
 
                         {member.role !== ROLES.CREATOR && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             {canEditMemberRoleInList(member) && (
                               <>
                                 {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
@@ -721,7 +721,7 @@ const canRemoveMember = (member: Member) => {
                                   value={member.role}
                                   onChange={(e) => handleChangeRole(member.id, e.target.value)}
                                   disabled={updatingMemberId === member.id}
-                                  className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
+                                  className="min-w-0 flex-1 bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50 sm:flex-none"
                                 >
                                   {getManageableRoles(member.role).map(r => (
                                     <option key={r} value={r} className="bg-theme-surface text-theme-main">
@@ -760,15 +760,15 @@ const canRemoveMember = (member: Member) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {filteredGuests.map(member => (
-                    <GlassCard key={member.id} className="p-4 flex items-center justify-between gap-4 border-dashed opacity-85">
+                    <GlassCard key={member.id} className="p-4 flex flex-col gap-4 border-dashed opacity-85 sm:flex-row sm:items-center sm:justify-between">
                       <Link to={`/users/${member.id}`} className="flex items-center gap-4 min-w-0 hover:opacity-90">
                         <MemberAvatar member={member} size="md" />
                         <div className="min-w-0">
-                          <p className="font-black text-theme-main truncate tracking-tighter text-sm uppercase">{member.name}</p>
-                          <p className="text-[10px] text-theme-muted font-medium truncate uppercase opacity-60 tracking-wider">{member.email}</p>
+                          <p className="font-black text-theme-main break-words tracking-tighter text-sm uppercase sm:truncate">{member.name}</p>
+                          <p className="text-[10px] text-theme-muted font-medium break-all uppercase opacity-60 tracking-wider sm:truncate">{member.email}</p>
                         </div>
                       </Link>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                         {canEditMemberRoleInList(member) && (
                           <>
                             {updatingMemberId === member.id && <Loader2 className="h-3 w-3 animate-spin text-secondary" />}
@@ -776,7 +776,7 @@ const canRemoveMember = (member: Member) => {
                               value={member.role}
                               onChange={(e) => handleChangeRole(member.id, e.target.value)}
                               disabled={updatingMemberId === member.id}
-                              className="bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50"
+                              className="min-w-0 flex-1 bg-transparent text-[10px] font-black text-theme-main uppercase tracking-widest border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-secondary transition-all cursor-pointer hover:bg-white/5 disabled:opacity-50 sm:flex-none"
                             >
                               {getManageableRoles(member.role).map(r => (
                                 <option key={r} value={r} className="bg-theme-surface text-theme-main">
@@ -833,7 +833,7 @@ const canRemoveMember = (member: Member) => {
                 ))}
               </select>
             </div>
-            <div className="flex gap-3 pt-4">
+            <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row">
               <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="flex-1 rounded-2xl py-6 font-bold tracking-tight uppercase">Annuler</Button>
               <Button onClick={handleInvite} className="flex-1 rounded-2xl py-6 font-bold tracking-tight shadow-theme-md uppercase">Inviter</Button>
             </div>

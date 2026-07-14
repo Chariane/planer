@@ -40,7 +40,7 @@ export default function PlannerToolsPanel({
         key={`liste-${listeId}`}
         workspaceId={context.workspaceId}
         espaceId={context.espaceId}
-        listeId={context.listeId}
+        listeId={listeId}
         currentUserId={context.currentUserId}
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}
@@ -54,7 +54,7 @@ export default function PlannerToolsPanel({
       <EspaceToolsPanel
         key={`espace-${espaceId}`}
         workspaceId={context.workspaceId}
-        espaceId={context.espaceId}
+        espaceId={espaceId}
         currentUserId={context.currentUserId}
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}
@@ -67,7 +67,7 @@ export default function PlannerToolsPanel({
     return (
       <WorkspaceToolsPanel
         key={`workspace-${workspaceId}`}
-        workspaceId={context.workspaceId}
+        workspaceId={workspaceId}
         currentUserId={context.currentUserId}
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}

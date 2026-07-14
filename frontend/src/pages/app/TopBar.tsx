@@ -49,8 +49,8 @@ function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: Rea
   const canGoBack = typeof window !== 'undefined' && window.history.length > 1;
 
   return (
-    <div className="bg-theme-surface border-b border-theme-border-subtle px-2 py-2 sm:px-4 flex items-center justify-between gap-2 shadow-sm transition-colors duration-200">
-      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+    <div className="bg-theme-surface border-b border-theme-border-subtle px-2 py-2 sm:px-4 flex min-w-0 items-center justify-between gap-2 shadow-sm transition-colors duration-200">
+      <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -77,6 +77,7 @@ function TopBarShell({ children, isSidebarOpen, toggleSidebar }: { children: Rea
           onClick={toggleSidebar}
           className="p-2 rounded-xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle shadow-theme-sm hover:shadow-primary/20 hover:bg-theme-surface-hover hover:border-primary/50 text-theme-muted hover:text-primary transition-all duration-300 group relative overflow-hidden"
           title={isSidebarOpen ? "Fermer la barre latérale" : "Ouvrir la barre latérale"}
+          aria-label={isSidebarOpen ? "Fermer la barre latérale" : "Ouvrir la barre latérale"}
         >
           <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <motion.div
@@ -235,7 +236,7 @@ export default function TopBar({ isSidebarOpen, toggleSidebar }: { isSidebarOpen
 
   return (
     <TopBarShell isSidebarOpen={isSidebarOpen} toggleSidebar={toggleSidebar}>
-      <div className="ml-1 sm:ml-2 max-w-[calc(100vw-84px)] text-xs sm:text-sm text-theme-muted font-mono bg-theme-surface-hover px-2 sm:px-3 py-1 rounded flex items-center gap-1 min-w-0 overflow-x-auto transition-colors duration-200">
+      <div className="ml-1 sm:ml-2 w-full min-w-0 text-xs sm:text-sm text-theme-muted font-mono bg-theme-surface-hover px-2 sm:px-3 py-1 rounded flex items-center gap-1 overflow-x-auto whitespace-nowrap transition-colors duration-200 custom-scrollbar-hidden">
         {visibleBreadcrumb.map((item, idx) => (
           <span key={`${item.path}-${idx}`} className="flex items-center shrink-0">
             {idx > 0 && <ChevronRight className="h-3 w-3 mx-1 opacity-50" />}

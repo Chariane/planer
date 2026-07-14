@@ -334,11 +334,11 @@ export default function CenterContent() {
     );
 
     return (
-      <div className="mb-6 sm:mb-8 grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4">
+      <div className="mb-6 grid min-w-0 grid-cols-1 gap-3 sm:mb-8 sm:gap-4 xl:grid-cols-4">
         {/* Main Gauge Widget */}
-        <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-4 sm:p-6 shadow-theme-md hover:shadow-theme-lg transition-all duration-300">
-          <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0">
-            <svg className="h-full w-full -rotate-90">
+        <div className="flex flex-col gap-4 rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-4 shadow-theme-md transition-all duration-300 hover:shadow-theme-lg sm:flex-row sm:items-center sm:gap-6 sm:p-6 xl:col-span-2">
+          <div className="relative h-20 w-20 shrink-0 self-center sm:h-24 sm:w-24 sm:self-auto">
+            <svg className="h-full w-full -rotate-90" viewBox="0 0 96 96" aria-hidden="true">
               <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-theme-border-subtle" />
               <circle
                 cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent"
@@ -353,8 +353,8 @@ export default function CenterContent() {
               <span className="text-[10px] text-theme-muted uppercase font-bold">Total</span>
             </div>
           </div>
-          <div className="flex-1">
-            <h3 className="text-base sm:text-lg font-black text-theme-main tracking-tight flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="flex items-center gap-2 text-base font-black tracking-tight text-theme-main sm:text-lg">
               <BarChart3 className="h-4 w-4 text-secondary" />
               Etat du projet
             </h3>
@@ -366,12 +366,12 @@ export default function CenterContent() {
                 <span className="text-xs font-bold text-theme-main">{tasks.length}</span>
                 <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Tâches</span>
               </div>
-              <div className="w-px bg-theme-border-subtle h-6 mt-1" />
+              <div className="mt-1 hidden h-6 w-px bg-theme-border-subtle sm:block" />
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-emerald-500">{doneCount}</span>
                 <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Succès</span>
               </div>
-              <div className="w-px bg-theme-border-subtle h-6 mt-1" />
+              <div className="mt-1 hidden h-6 w-px bg-theme-border-subtle sm:block" />
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-amber-500">{inProgressCount}</span>
                 <span className="text-[9px] uppercase text-theme-muted font-bold tracking-widest">Actif</span>
@@ -381,7 +381,7 @@ export default function CenterContent() {
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="md:col-span-2 grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:col-span-2">
           <div className="bg-theme-surface p-3 sm:p-4 rounded-2xl border border-theme-border-subtle shadow-theme-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <Clock className="h-4 w-4 text-theme-muted" />
@@ -429,9 +429,9 @@ export default function CenterContent() {
     if (!listId) return null;
 
     return (
-      <div className="mb-5 flex flex-wrap items-center justify-stretch gap-2 sm:justify-end">
+      <div className="mb-5 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         {effectiveIsDirectListCreator && (
-          <div className="flex items-center gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/80 px-3 py-2 shadow-sm">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-theme-border-subtle bg-theme-surface/80 px-3 py-2 shadow-sm sm:justify-start">
             <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Export</span>
             <button
               onClick={() => setExportVisible(!exportVisible)}
@@ -456,7 +456,7 @@ export default function CenterContent() {
           <Button
             onClick={exportProject}
             disabled={exporting}
-            className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-800 shadow-sm transition-all hover:bg-emerald-100 hover:border-emerald-400 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-800 shadow-sm transition-all hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-50 sm:w-auto"
           >
             {exporting ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -768,7 +768,7 @@ export default function CenterContent() {
   if (!listId) {
     if (spaceId && spaceId !== 'list') {
       return (
-        <div className="p-4 sm:p-6 space-y-6">
+        <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden p-3 sm:p-6">
           <SpaceDashboard spaceId={spaceId} />
           <div id="resource-files-panel" className="scroll-mt-6">
             <PlannerToolsPanel
@@ -785,7 +785,7 @@ export default function CenterContent() {
     }
     if (workspaceId) {
       return (
-        <div className="p-4 sm:p-6 space-y-6">
+        <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden p-3 sm:p-6">
           <WorkspaceDashboardPanel workspaceId={workspaceId} />
           <div id="resource-files-panel" className="scroll-mt-6">
             <PlannerToolsPanel
@@ -800,7 +800,7 @@ export default function CenterContent() {
       );
     }
     return (
-      <div className="p-4 sm:p-6 flex items-center justify-center h-full">
+      <div className="flex h-full min-w-0 max-w-full items-center justify-center overflow-x-hidden p-3 sm:p-6">
         <div className="text-center text-theme-muted">
           <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-20" />
           <p className="text-lg font-medium text-theme-main">Aucune liste sélectionnée</p>
@@ -818,7 +818,7 @@ export default function CenterContent() {
   // Vue invité (lecture seule)
   if (isGuest || isListGuest) {
     return (
-      <div className="p-4 sm:p-6">
+      <div className="min-w-0 max-w-full overflow-x-hidden p-3 sm:p-6">
         <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-4 sm:p-6 mb-6 shadow-theme-sm">
           <p className="text-sm text-theme-main font-bold uppercase tracking-widest text-[11px] flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(255,102,0,0.6)]" />
@@ -833,12 +833,12 @@ export default function CenterContent() {
         {renderListProgressSummary()}
         {renderListDescription()}
 
-        <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
+        <div className="mb-5 grid grid-cols-2 gap-2 border-b border-theme-border-subtle pb-3 sm:flex sm:overflow-x-auto custom-scrollbar-hidden">
           {availableTabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all shrink-0 ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
+              className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all sm:min-h-0 sm:shrink-0 sm:justify-start sm:px-4 sm:text-sm sm:font-medium ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
                 }`}
             >
               {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
@@ -846,9 +846,24 @@ export default function CenterContent() {
               {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
               {tab === 'membres' && <Users className="w-4 h-4" />}
               {tab === 'outils' && <Wrench className="w-4 h-4" />}
-              {tab === 'liste' && 'Vue liste'}
-              {tab === 'kanban' && 'Vue Kanban'}
-              {tab === 'gantt' && 'Diagramme de Gantt'}
+              {tab === 'liste' && (
+                <>
+                  <span className="sm:hidden">Liste</span>
+                  <span className="hidden sm:inline">Vue liste</span>
+                </>
+              )}
+              {tab === 'kanban' && (
+                <>
+                  <span className="sm:hidden">Kanban</span>
+                  <span className="hidden sm:inline">Vue Kanban</span>
+                </>
+              )}
+              {tab === 'gantt' && (
+                <>
+                  <span className="sm:hidden">Gantt</span>
+                  <span className="hidden sm:inline">Diagramme de Gantt</span>
+                </>
+              )}
               {tab === 'membres' && 'Membres'}
               {tab === 'outils' && 'Outils'}
             </button>
@@ -895,17 +910,17 @@ export default function CenterContent() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="min-w-0 max-w-full overflow-x-hidden p-3 sm:p-6">
       {renderListDiscussionButton()}
       {renderListProgressSummary()}
       {renderListDescription()}
 
-      <div className="flex gap-2 border-b border-theme-border-subtle pb-3 mb-5 overflow-x-auto">
+      <div className="mb-5 grid grid-cols-2 gap-2 border-b border-theme-border-subtle pb-3 sm:flex sm:overflow-x-auto custom-scrollbar-hidden">
         {availableTabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all shrink-0 ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all sm:min-h-0 sm:shrink-0 sm:justify-start sm:px-4 sm:text-sm sm:font-medium ${activeTab === tab ? 'bg-secondary text-white shadow-md' : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
               }`}
           >
             {tab === 'liste' && <LayoutGrid className="w-4 h-4" />}
@@ -913,9 +928,24 @@ export default function CenterContent() {
             {tab === 'gantt' && <GitBranch className="w-4 h-4" />}
             {tab === 'membres' && <Users className="w-4 h-4" />}
             {tab === 'outils' && <Wrench className="w-4 h-4" />}
-            {tab === 'liste' && 'Vue liste'}
-            {tab === 'kanban' && 'Vue Kanban'}
-            {tab === 'gantt' && 'Diagramme de Gantt'}
+            {tab === 'liste' && (
+              <>
+                <span className="sm:hidden">Liste</span>
+                <span className="hidden sm:inline">Vue liste</span>
+              </>
+            )}
+            {tab === 'kanban' && (
+              <>
+                <span className="sm:hidden">Kanban</span>
+                <span className="hidden sm:inline">Vue Kanban</span>
+              </>
+            )}
+            {tab === 'gantt' && (
+              <>
+                <span className="sm:hidden">Gantt</span>
+                <span className="hidden sm:inline">Diagramme de Gantt</span>
+              </>
+            )}
             {tab === 'membres' && 'Membres'}
             {tab === 'outils' && 'Outils'}
           </button>
@@ -923,7 +953,7 @@ export default function CenterContent() {
       </div>
 
       {activeTab !== 'membres' && activeTab !== 'outils' && (
-        <div className="mb-6 space-y-4 bg-theme-surface p-4 rounded-xl border border-theme-border-subtle shadow-sm transition-colors duration-200">
+        <div className="mb-6 space-y-3 rounded-xl border border-theme-border-subtle bg-theme-surface p-3 shadow-sm transition-colors duration-200 sm:space-y-4 sm:p-4">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted" />

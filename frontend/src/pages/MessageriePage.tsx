@@ -33,6 +33,7 @@ import {
   FolderTree,
   ListTodo,
   X,
+  ArrowLeft,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -1585,7 +1586,7 @@ export default function MessageriePage() {
                 initial={{ opacity: 0, y: 18, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 18, scale: 0.96 }}
-                className="w-full max-w-md rounded-3xl border border-theme-subtle bg-theme-surface p-5 shadow-2xl"
+                className="w-full max-w-md rounded-3xl border border-theme-subtle bg-theme-surface p-4 shadow-2xl sm:p-5"
               >
                 <div className="flex items-start gap-4">
                   <div className="h-11 w-11 shrink-0 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center">
@@ -1596,7 +1597,7 @@ export default function MessageriePage() {
                     <p className="mt-1 text-sm font-medium text-theme-muted">
                       Cette action retirera le message de la conversation. Elle ne pourra pas être annulée.
                     </p>
-                    <div className="mt-4 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2 text-sm text-theme-muted">
+                    <div className="mt-4 break-words rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2 text-sm text-theme-muted">
                       {messageToDelete.audio ? 'Message vocal'
                         : messageToDelete.image ? 'Image'
                           : messageToDelete.video ? 'Vidéo'
@@ -1605,12 +1606,12 @@ export default function MessageriePage() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setMessageToDelete(null)}
                     disabled={messageActionLoading === `delete-${messageToDelete.id}`}
-                    className="h-10 rounded-2xl border border-theme-subtle px-4 text-sm font-black text-theme-muted hover:bg-theme-surface-hover transition disabled:opacity-50"
+                    className="h-10 w-full rounded-2xl border border-theme-subtle px-4 text-sm font-black text-theme-muted hover:bg-theme-surface-hover transition disabled:opacity-50 sm:w-auto"
                   >
                     Annuler
                   </button>
@@ -1618,7 +1619,7 @@ export default function MessageriePage() {
                     type="button"
                     onClick={confirmRemoveMessage}
                     disabled={messageActionLoading === `delete-${messageToDelete.id}`}
-                    className="h-10 rounded-2xl bg-red-500 px-4 text-sm font-black text-white hover:bg-red-600 transition disabled:opacity-60 flex items-center gap-2"
+                    className="h-10 w-full rounded-2xl bg-red-500 px-4 text-sm font-black text-white hover:bg-red-600 transition disabled:opacity-60 flex items-center justify-center gap-2 sm:w-auto"
                   >
                     {messageActionLoading === `delete-${messageToDelete.id}` && <Loader2 size={16} className="animate-spin" />}
                     Supprimer
@@ -1737,7 +1738,7 @@ export default function MessageriePage() {
             ? 'xl:grid-cols-[340px_minmax(0,1fr)_300px]'
             : 'xl:grid-cols-[340px_minmax(0,1fr)]'
         } gap-4 sm:gap-5 xl:overflow-hidden`}>
-          <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[380px] sm:h-[440px] xl:h-full" hover={false}>
+          <GlassCard className={`!p-0 overflow-hidden flex min-h-0 flex-col h-[380px] sm:h-[440px] xl:h-full ${(activeGroupId || selectedPrivateUserId) ? 'hidden xl:flex' : 'flex'}`} hover={false}>
             <div className="p-4 border-b border-theme-subtle">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
@@ -1903,50 +1904,65 @@ export default function MessageriePage() {
             </div>
           </GlassCard>
 
-          <GlassCard className="!p-0 overflow-hidden flex min-h-0 flex-col h-[620px] xl:h-full" hover={false}>
+          <GlassCard className={`!p-0 overflow-hidden flex min-h-0 flex-col h-[620px] xl:h-full ${(activeGroupId || selectedPrivateUserId) ? 'flex' : 'hidden xl:flex'}`} hover={false}>
             {activeGroup || isPrivateMode ? (
               <>
                 <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-theme-subtle flex items-center justify-between gap-3 sm:gap-4 bg-theme-surface/90">
-                  <div className="min-w-0">
-                    {isPrivateMode && privateProfile ? (
-                      <Link
-                        to={`/users/${privateProfile.id}`}
-                        className="flex items-center gap-3 min-w-0 -m-2 p-2 rounded-2xl hover:bg-theme-surface-hover transition"
-                        title="Voir le profil"
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    {(activeGroupId || selectedPrivateUserId) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveGroupId(null);
+                          setSelectedPrivateUserId(null);
+                        }}
+                        className="xl:hidden h-9 w-9 rounded-xl border border-theme-border-subtle bg-theme-surface-hover text-theme-muted hover:text-theme-main transition flex items-center justify-center shrink-0"
+                        title="Retour aux discussions"
                       >
-                        <UserAvatar member={privateMember} label={threadTitle || 'Utilisateur'} className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl text-base shadow-lg" />
-                        <div className="min-w-0">
-                          <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
-                          <p className="text-xs text-theme-muted font-medium">
-                            {threadSubtitle}
-                          </p>
-                        </div>
-                      </Link>
-                    ) : isPrivateMode ? (
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary/10 text-primary dark:text-sky-200 flex items-center justify-center font-black shadow-lg">
-                          {initials(threadTitle)}
-                        </div>
-                        <div className="min-w-0">
-                          <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
-                          <p className="text-xs text-theme-muted font-medium">
-                            {loadingThread ? 'Chargement du profil...' : threadSubtitle || 'Discussion privée'}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary text-white flex items-center justify-center font-black shadow-lg">
-                          {initials(activeGroup?.name)}
-                        </div>
-                        <div className="min-w-0">
-                          <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
-                          <p className="text-xs text-theme-muted font-medium">
-                            {threadSubtitle}
-                          </p>
-                        </div>
-                      </div>
+                        <ArrowLeft size={16} />
+                      </button>
                     )}
+                    <div className="min-w-0 flex-1">
+                      {isPrivateMode && privateProfile ? (
+                        <Link
+                          to={`/users/${privateProfile.id}`}
+                          className="flex items-center gap-3 min-w-0 -m-2 p-2 rounded-2xl hover:bg-theme-surface-hover transition"
+                          title="Voir le profil"
+                        >
+                          <UserAvatar member={privateMember} label={threadTitle || 'Utilisateur'} className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl text-base shadow-lg" />
+                          <div className="min-w-0">
+                            <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
+                            <p className="text-xs text-theme-muted font-medium">
+                              {threadSubtitle}
+                            </p>
+                          </div>
+                        </Link>
+                      ) : isPrivateMode ? (
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary/10 text-primary dark:text-sky-200 flex items-center justify-center font-black shadow-lg">
+                            {initials(threadTitle)}
+                          </div>
+                          <div className="min-w-0">
+                            <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
+                            <p className="text-xs text-theme-muted font-medium">
+                              {loadingThread ? 'Chargement du profil...' : threadSubtitle || 'Discussion privée'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl bg-primary text-white flex items-center justify-center font-black shadow-lg">
+                            {initials(activeGroup?.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <h2 className="text-base sm:text-lg font-black text-theme-main truncate">{threadTitle}</h2>
+                            <p className="text-xs text-theme-muted font-medium">
+                              {threadSubtitle}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {!isPrivateMode && activeGroup && (

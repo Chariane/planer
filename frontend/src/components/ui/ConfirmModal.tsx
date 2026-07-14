@@ -41,15 +41,15 @@ export default function ConfirmModal({
           <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-theme-main leading-relaxed">{sanitizeText(message)}</p>
         </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} disabled={isLoading} className="w-full sm:w-auto">
             {cancelText}
           </Button>
           <Button
             variant={confirmVariant === 'danger' ? 'primary' : 'secondary'}
             onClick={handleConfirm}
             loading={isLoading}
-            className={confirmVariant === 'danger' ? 'bg-red-500 hover:bg-red-600' : ''}
+            className={`${confirmVariant === 'danger' ? 'bg-red-500 hover:bg-red-600' : ''} w-full sm:w-auto`}
           >
             {confirmText}
           </Button>

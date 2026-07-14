@@ -72,9 +72,9 @@ export default function GanttView({ tasks }: GanttViewProps) {
 
   if (validTasks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-20 text-theme-muted">
-        <div className="p-8 rounded-full bg-theme-surface-hover mb-6 border border-theme-border-subtle shadow-inner">
-          <GanttChartSquare size={48} className="opacity-10" />
+      <div className="flex flex-col items-center justify-center p-8 text-theme-muted sm:p-20">
+        <div className="mb-6 rounded-full border border-theme-border-subtle bg-theme-surface-hover p-6 shadow-inner sm:p-8">
+          <GanttChartSquare className="h-10 w-10 opacity-10 sm:h-12 sm:w-12" />
         </div>
         <p className="text-sm font-black text-theme-main uppercase tracking-widest text-center opacity-60">
           Planning Vide
@@ -163,7 +163,7 @@ export default function GanttView({ tasks }: GanttViewProps) {
   const selectedProgress = selectedTask ? getTaskProgressInfo(selectedTask, selectedChildren.length) : null;
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="mt-4 min-w-0 space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 shadow-theme-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Éléments planifiés</p>
@@ -191,167 +191,173 @@ export default function GanttView({ tasks }: GanttViewProps) {
         ))}
       </div>
 
-    <div className="overflow-x-auto rounded-2xl border border-theme-border-subtle bg-theme-surface/30 shadow-inner group/gantt">
-      <div className="min-w-[1000px] p-6">
-        {/* Timeline Header */}
-        <div className="flex border-b border-theme-border-subtle/30 pb-6 mb-6">
-          <div className="w-80 flex-shrink-0 font-black text-[10px] uppercase tracking-widest text-theme-muted flex items-center gap-3 opacity-60 group-hover/gantt:opacity-100 transition-opacity">
-            <div className="h-4 w-4 rounded bg-secondary/20 flex items-center justify-center">
-              <ChevronRight size={12} className="text-secondary" />
-            </div>
-            Chronologie des Missions
-          </div>
-          <div className="flex-1 flex px-2 relative">
-            {days.map((day, idx) => (
-              <div key={idx} className={`flex-1 text-center text-[9px] font-black uppercase tracking-tighter border-l border-theme-border-subtle/20 py-1 ${day.isWeekend ? 'text-theme-muted opacity-20' : 'text-theme-muted opacity-60'}`}>
-                {day.label}
+      {/* Scroll indicator for mobile/tablet */}
+      <div className="flex items-center gap-2 text-[10px] text-theme-muted uppercase tracking-widest font-black opacity-60 sm:hidden bg-theme-surface/30 border border-theme-border-subtle/50 px-3 py-2 rounded-xl">
+        <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+        Faites glisser horizontalement pour parcourir la chronologie
+      </div>
+
+      <div className="-mx-3 overflow-x-auto rounded-2xl border border-theme-border-subtle bg-theme-surface/30 shadow-inner sm:mx-0 group/gantt">
+        <div className="min-w-[760px] p-3 sm:min-w-[1000px] sm:p-6">
+          {/* Timeline Header */}
+          <div className="flex border-b border-theme-border-subtle/30 pb-6 mb-6">
+            <div className="flex w-56 flex-shrink-0 items-center gap-3 text-[10px] font-black uppercase tracking-widest text-theme-muted opacity-60 transition-opacity group-hover/gantt:opacity-100 sm:w-80">
+              <div className="h-4 w-4 rounded bg-secondary/20 flex items-center justify-center">
+                <ChevronRight size={12} className="text-secondary" />
               </div>
-            ))}
-            {todayPosition && (
-              <div
-                className="absolute top-0 bottom-0 z-20 w-px bg-secondary shadow-[0_0_10px_rgba(255,102,0,0.55)]"
-                style={{ left: todayPosition }}
-                title="Aujourd'hui"
-              />
-            )}
+              Chronologie des Missions
+            </div>
+            <div className="flex-1 flex px-2 relative">
+              {days.map((day, idx) => (
+                <div key={idx} className={`flex-1 text-center text-[9px] font-black uppercase tracking-tighter border-l border-theme-border-subtle/20 py-1 ${day.isWeekend ? 'text-theme-muted opacity-20' : 'text-theme-muted opacity-60'}`}>
+                  {day.label}
+                </div>
+              ))}
+              {todayPosition && (
+                <div
+                  className="absolute top-0 bottom-0 z-20 w-px bg-secondary shadow-[0_0_10px_rgba(255,102,0,0.55)]"
+                  style={{ left: todayPosition }}
+                  title="Aujourd'hui"
+                />
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Task Rows */}
-        <div className="space-y-2">
-          {sortedTasks.map(({ task, depth }, idx) => {
-            const position = getTaskPosition(task);
-            const childCount = (allTasksByParent[task.id] || []).length;
-            const progressInfo = getTaskProgressInfo(task, childCount);
-            const overdue = isOverdue(task);
-            const parentTitle = task.parentTaskId ? tasksById[task.parentTaskId]?.title : null;
-            return (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                key={task.id}
-                className="flex items-center group relative py-2"
-              >
-                {/* Hover Background */}
-                <div className="absolute inset-x-0 inset-y-0 bg-theme-surface-hover/20 opacity-0 group-hover:opacity-100 rounded-xl transition-all duration-300 -z-10" />
+          {/* Task Rows */}
+          <div className="space-y-2">
+            {sortedTasks.map(({ task, depth }, idx) => {
+              const position = getTaskPosition(task);
+              const childCount = (allTasksByParent[task.id] || []).length;
+              const progressInfo = getTaskProgressInfo(task, childCount);
+              const overdue = isOverdue(task);
+              const parentTitle = task.parentTaskId ? tasksById[task.parentTaskId]?.title : null;
+              return (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  key={task.id}
+                  className="flex items-center group relative py-2"
+                >
+                  {/* Hover Background */}
+                  <div className="absolute inset-x-0 inset-y-0 bg-theme-surface-hover/20 opacity-0 group-hover:opacity-100 rounded-xl transition-all duration-300 -z-10" />
 
-                <div className="w-80 flex-shrink-0 pr-6 pl-4" style={{ paddingLeft: `${16 + depth * 18}px` }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTask(task)}
-                    className="flex min-w-0 items-center gap-2 text-left transition-colors hover:text-secondary"
-                    title="Voir les détails de cette tâche"
-                  >
-                    {depth > 0 ? (
-                      <GitBranch size={14} className="shrink-0 text-secondary" />
-                    ) : (
-                      <ChevronRight size={14} className="shrink-0 text-theme-muted opacity-50" />
+                  <div className="w-56 flex-shrink-0 pl-3 pr-4 sm:w-80 sm:pl-4 sm:pr-6" style={{ paddingLeft: `${12 + depth * 14}px` }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTask(task)}
+                      className="flex min-w-0 items-center gap-2 text-left transition-colors hover:text-secondary"
+                      title="Voir les détails de cette tâche"
+                    >
+                      {depth > 0 ? (
+                        <GitBranch size={14} className="shrink-0 text-secondary" />
+                      ) : (
+                        <ChevronRight size={14} className="shrink-0 text-theme-muted opacity-50" />
+                      )}
+                      <div className={`truncate text-xs font-black tracking-tight transition-colors group-hover:text-secondary sm:text-sm ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-40' : 'text-theme-main'}`}>
+                        {task.title}
+                      </div>
+                    </button>
+                    {parentTitle && (
+                      <p className="mt-1 truncate text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-40">
+                        sous {parentTitle}
+                      </p>
                     )}
-                    <div className={`truncate text-sm font-black tracking-tight transition-colors group-hover:text-secondary ${task.status === 'terminé' ? 'text-theme-muted line-through opacity-40' : 'text-theme-main'}`}>
-                      {task.title}
-                    </div>
-                  </button>
-                  {parentTitle && (
-                    <p className="mt-1 truncate text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-40">
-                      sous {parentTitle}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${priorityColors[task.priority]}`}>
-                      <span className="h-1 w-1 rounded-full bg-current" />
-                      {priorityLabels[task.priority]}
-                    </span>
-                    {/* ✅ Remplacement de AssigneeInitials par MemberAvatar */}
-                    <div className="flex items-center -space-x-1.5">
-                      {task.assignees.slice(0, 2).map((a) => (
-                        <MemberAvatar key={a.id} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
-                      ))}
-                      {task.assignees.length > 2 && (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-md border border-theme-border-subtle bg-theme-surface-hover text-[8px] font-black text-theme-muted shadow-sm">
-                          +{task.assignees.length - 2}
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${priorityColors[task.priority]}`}>
+                        <span className="h-1 w-1 rounded-full bg-current" />
+                        {priorityLabels[task.priority]}
+                      </span>
+                      {/* ✅ Remplacement de AssigneeInitials par MemberAvatar */}
+                      <div className="flex items-center -space-x-1.5">
+                        {task.assignees.slice(0, 2).map((a) => (
+                          <MemberAvatar key={a.id} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
+                        ))}
+                        {task.assignees.length > 2 && (
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md border border-theme-border-subtle bg-theme-surface-hover text-[8px] font-black text-theme-muted shadow-sm">
+                            +{task.assignees.length - 2}
+                          </span>
+                        )}
+                      </div>
+                      {progressInfo.mode === 'checklist' && progressInfo.total > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
+                          <ListChecks size={11} />
+                          {progressInfo.done}/{progressInfo.total}
+                        </span>
+                      )}
+                      {progressInfo.mode === 'subtasks' && (
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
+                          <GitBranch size={11} />
+                          {childCount} sous-tâche{childCount > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {overdue && (
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-500">
+                          <AlertCircle size={11} />
+                          retard
                         </span>
                       )}
                     </div>
-                    {progressInfo.mode === 'checklist' && progressInfo.total > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-lg border border-theme-border-subtle bg-theme-surface-hover px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-theme-muted">
-                        <ListChecks size={11} />
-                        {progressInfo.done}/{progressInfo.total}
-                      </span>
-                    )}
-                    {progressInfo.mode === 'subtasks' && (
-                      <span className="inline-flex items-center gap-1 rounded-lg border border-secondary/15 bg-secondary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-secondary">
-                        <GitBranch size={11} />
-                        {childCount} sous-tâche{childCount > 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {overdue && (
-                      <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-500">
-                        <AlertCircle size={11} />
-                        retard
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 relative h-12 flex items-center px-2">
-                  {/* Grid overlay */}
-                  <div className="absolute inset-0 flex pointer-events-none px-2 opacity-10">
-                    {days.map((_, i) => (
-                      <div key={i} className="flex-1 border-l border-theme-border-subtle/10" />
-                    ))}
                   </div>
 
-                  {/* Task Timeline Bar */}
-                  <motion.div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedTask(task)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        setSelectedTask(task);
-                      }
-                    }}
-                    initial={{ width: 0, scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    className={`absolute h-9 rounded-xl flex items-center justify-between text-[10px] text-white font-black shadow-lg px-3 border border-white/10 z-10 transition-all duration-300 cursor-pointer pointer-events-auto hover:scale-[1.02] hover:ring-2 hover:ring-white/30 focus:outline-none focus:ring-2 focus:ring-secondary/60 ${statusColors[task.status] || 'bg-secondary'}`}
-                    style={{
-                      left: position.left,
-                      width: position.width,
-                      minWidth: '96px',
-                    }}
-                  >
-                    <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-xl bg-black/15">
-                      <div className="h-full bg-white/70" style={{ width: `${progressInfo.percent}%` }} />
+                  <div className="flex-1 relative h-12 flex items-center px-2">
+                    {/* Grid overlay */}
+                    <div className="absolute inset-0 flex pointer-events-none px-2 opacity-10">
+                      {days.map((_, i) => (
+                        <div key={i} className="flex-1 border-l border-theme-border-subtle/10" />
+                      ))}
                     </div>
-                    <Calendar size={12} className="opacity-70" />
-                    <span className="truncate px-2">
-                      {task.startDate ? `${task.startDate.split('-').reverse().slice(0, 2).join('/')} - ` : ''}
-                      {task.dueDate.split('-').reverse().slice(0, 2).join('/')}
-                    </span>
-                    {task.assignees.length > 0 && (
-                      <span className="ml-1 hidden max-w-[54px] items-center -space-x-1.5 sm:flex">
-                        {task.assignees.slice(0, 2).map((a) => (
-                          <span
-                            key={a.id}
-                            className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-white/20 text-[8px] font-black text-white shadow-sm backdrop-blur"
-                            title={a.name}
-                          >
-                            {a.name.charAt(0).toUpperCase()}
-                          </span>
-                        ))}
+
+                    {/* Task Timeline Bar */}
+                    <motion.div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTask(task)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedTask(task);
+                        }
+                      }}
+                      initial={{ width: 0, scale: 0.8 }}
+                      animate={{ scale: 1 }}
+                      className={`absolute h-9 rounded-xl flex items-center justify-between text-[10px] text-white font-black shadow-lg px-3 border border-white/10 z-10 transition-all duration-300 cursor-pointer pointer-events-auto hover:scale-[1.02] hover:ring-2 hover:ring-white/30 focus:outline-none focus:ring-2 focus:ring-secondary/60 ${statusColors[task.status] || 'bg-secondary'}`}
+                      style={{
+                        left: position.left,
+                        width: position.width,
+                        minWidth: '96px',
+                      }}
+                    >
+                      <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-xl bg-black/15">
+                        <div className="h-full bg-white/70" style={{ width: `${progressInfo.percent}%` }} />
+                      </div>
+                      <Calendar size={12} className="opacity-70" />
+                      <span className="truncate px-2">
+                        {task.startDate ? `${task.startDate.split('-').reverse().slice(0, 2).join('/')} - ` : ''}
+                        {task.dueDate.split('-').reverse().slice(0, 2).join('/')}
                       </span>
-                    )}
-                    {task.status === 'terminé' && <CheckCircle size={12} className="opacity-80" />}
-                  </motion.div>
-                </div>
-              </motion.div>
-            );
-          })}
+                      {task.assignees.length > 0 && (
+                        <span className="ml-1 hidden max-w-[54px] items-center -space-x-1.5 sm:flex">
+                          {task.assignees.slice(0, 2).map((a) => (
+                            <span
+                              key={a.id}
+                              className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-white/20 text-[8px] font-black text-white shadow-sm backdrop-blur"
+                              title={a.name}
+                            >
+                              {a.name.charAt(0).toUpperCase()}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {task.status === 'terminé' && <CheckCircle size={12} className="opacity-80" />}
+                    </motion.div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
 
       <Modal
         isOpen={!!selectedTask}

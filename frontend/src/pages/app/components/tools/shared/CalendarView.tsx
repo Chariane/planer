@@ -115,7 +115,7 @@ export const CalendarView = ({
         if (currentDate >= checkStart && currentDate <= checkEnd) {
           const absences = map.get(dateKey) || [];
           // Éviter les doublons
-          if (!absences.find(a => a.id === absence.id)) {
+          if (!absences.find((a: any) => a.id === absence.id)) {
             absences.push(absence);
             map.set(dateKey, absences);
           }

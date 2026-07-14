@@ -338,7 +338,7 @@ export default function AssignListMemberModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Ajouter des membres à la liste" size="lg">
       <div className="space-y-5">
-        <div className="text-sm text-theme-main bg-secondary/5 border border-secondary/20 p-4 rounded-2xl">
+        <div className="text-sm text-theme-main bg-secondary/5 border border-secondary/20 p-3 rounded-2xl sm:p-4">
           <p className="font-black mb-2 uppercase tracking-widest text-[10px] text-secondary">À propos des rôles</p>
           <ul className="space-y-1.5 text-xs text-theme-muted">
             <li><strong className="text-theme-main">Créateur</strong> : rôle automatique attribué à la personne qui a créé la liste.</li>
@@ -350,12 +350,12 @@ export default function AssignListMemberModal({
           </p>
         </div>
 
-        <div className="flex border-b border-theme-border-subtle">
+        <div className="grid grid-cols-1 gap-2 border-b border-theme-border-subtle pb-3 sm:flex sm:gap-0 sm:pb-0">
           {canUseParentMemberZone && (
             <button
               onClick={() => setActiveTab('parent')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${activeTab === 'parent'
-                  ? 'border-b-2 border-secondary text-secondary'
+              className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all sm:justify-start sm:rounded-none sm:px-4 sm:text-sm sm:font-medium ${activeTab === 'parent'
+                  ? 'bg-secondary/10 text-secondary sm:border-b-2 sm:border-secondary sm:bg-transparent'
                   : 'text-theme-muted hover:text-theme-main'
                 }`}
             >
@@ -365,8 +365,8 @@ export default function AssignListMemberModal({
           )}
           <button
             onClick={() => setActiveTab('external')}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${activeTab === 'external'
-                ? 'border-b-2 border-secondary text-secondary'
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all sm:justify-start sm:rounded-none sm:px-4 sm:text-sm sm:font-medium ${activeTab === 'external'
+                ? 'bg-secondary/10 text-secondary sm:border-b-2 sm:border-secondary sm:bg-transparent'
                 : 'text-theme-muted hover:text-theme-main'
               }`}
           >
@@ -501,16 +501,20 @@ export default function AssignListMemberModal({
             <label className="block text-sm font-semibold text-theme-main mb-2">
               Membres déjà dans la liste ({directListMembers.length})
             </label>
-            <div className="space-y-1 max-h-40 overflow-y-auto">
+            <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
               {directListMembers.map(member => (
-                <div key={member.id} className="flex items-center justify-between p-2 bg-theme-surface-hover/50 border border-theme-border-subtle rounded-xl">
-                  <div className="flex items-center gap-2">
+                <div key={member.id} className="flex flex-col gap-3 p-2 bg-theme-surface-hover/50 border border-theme-border-subtle rounded-xl sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2 sm:items-center">
                     <MemberAvatar member={member} size="xs" />
-                    <span className="text-sm font-medium text-theme-main">{sanitizeText(member.name)}</span>
-                    <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
-                    <span className="text-xs text-theme-muted italic">({sanitizeText(member.email)})</span>
+                    <div className="min-w-0">
+                      <span className="block break-words text-sm font-medium text-theme-main">{sanitizeText(member.name)}</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} size="sm" showText />
+                        <span className="break-all text-xs text-theme-muted italic">({sanitizeText(member.email)})</span>
+                      </div>
+                    </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${member.role === 'Créateur' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' :
+                  <span className={`w-fit shrink-0 text-xs px-2 py-0.5 rounded-full ${member.role === 'Créateur' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' :
                       member.role === 'Administrateur' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' :
                         'bg-secondary/10 text-secondary border border-secondary/20'
                     }`}>
@@ -522,8 +526,8 @@ export default function AssignListMemberModal({
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
-          <Button variant="outline" onClick={handleClose}>
+        <div className="flex pt-2 sm:justify-end">
+          <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Fermer
           </Button>
         </div>

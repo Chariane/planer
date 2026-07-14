@@ -37,7 +37,7 @@ interface AbsenceSectionProps {
   absenceView: 'mine' | 'pending' | 'calendar' | 'impact';
   setAbsenceView: (view: 'mine' | 'pending' | 'calendar' | 'impact') => void;
   absenceForm: any;
-  setAbsenceForm: (form: any) => void;
+  setAbsenceForm: React.Dispatch<React.SetStateAction<any>>;
   isAbsentModalOpen: boolean;
   setIsAbsentModalOpen: (open: boolean) => void;
   isAbsenceArchiveOpen: boolean;
@@ -450,11 +450,11 @@ export const AbsenceSection = ({
       {/* ✅ MODALE - Création d'absence/congé */}
       <Modal isOpen={isAbsentModalOpen} onClose={() => setIsAbsentModalOpen(false)} title="Signaler une Absence ou Demander un Congé" size="lg">
         <div className="pt-2">
-          <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl bg-primary/5 border border-primary/10">
-            <div className="p-3 bg-primary rounded-xl text-white shadow-lg">
+          <div className="mb-6 flex items-start gap-3 rounded-2xl bg-primary/5 border border-primary/10 p-3 sm:mb-8 sm:items-center sm:gap-4 sm:p-4">
+            <div className="shrink-0 p-3 bg-primary rounded-xl text-white shadow-lg">
               <Calendar size={24} />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-primary">Formulaire de demande</p>
               <p className="text-xs font-medium text-theme-muted mt-1">Veuillez renseigner vos dates et le motif pour validation.</p>
             </div>
@@ -465,7 +465,7 @@ export const AbsenceSection = ({
               <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Nature de la demande</label>
               <div className="flex gap-2 p-1 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
                 <button
-                  onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: true, is_conge_planifie: false }))}
+                  onClick={() => setAbsenceForm((prev: any) => ({ ...prev, is_absence: true, is_conge_planifie: false }))}
                   className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                     absenceForm.is_absence ? 'bg-amber-500 text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
                   }`}
@@ -473,7 +473,7 @@ export const AbsenceSection = ({
                   Absence
                 </button>
                 <button
-                  onClick={() => setAbsenceForm(prev => ({ ...prev, is_absence: false, is_conge_planifie: true }))}
+                  onClick={() => setAbsenceForm((prev: any) => ({ ...prev, is_absence: false, is_conge_planifie: true }))}
                   className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                     !absenceForm.is_absence ? 'bg-primary text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
                   }`}
@@ -487,7 +487,7 @@ export const AbsenceSection = ({
               <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Motif / Justification</label>
               <input
                 value={absenceForm.motif}
-                onChange={e => setAbsenceForm(prev => ({ ...prev, motif: e.target.value }))}
+                onChange={e => setAbsenceForm((prev: any) => ({ ...prev, motif: e.target.value }))}
                 placeholder={absenceForm.is_absence ? "Maladie, urgence..." : "Repos, personnel..."}
                 className="w-full h-14 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold"
               />
@@ -498,7 +498,7 @@ export const AbsenceSection = ({
               <input
                 type="date"
                 value={absenceForm.date_debut}
-                onChange={e => setAbsenceForm(prev => ({ ...prev, date_debut: e.target.value }))}
+                onChange={e => setAbsenceForm((prev: any) => ({ ...prev, date_debut: e.target.value }))}
                 className="w-full h-14 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold appearance-none cursor-pointer"
               />
             </div>
@@ -508,13 +508,13 @@ export const AbsenceSection = ({
               <input
                 type="date"
                 value={absenceForm.date_fin}
-                onChange={e => setAbsenceForm(prev => ({ ...prev, date_fin: e.target.value }))}
+                onChange={e => setAbsenceForm((prev: any) => ({ ...prev, date_fin: e.target.value }))}
                 className="w-full h-14 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 text-sm text-theme-main focus:ring-2 focus:ring-primary/20 outline-none font-bold appearance-none cursor-pointer"
               />
             </div>
           </div>
 
-          <div className="mt-8 flex gap-3">
+          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row">
             <Button variant="outline" onClick={() => setIsAbsentModalOpen(false)} className="flex-1 h-14 rounded-2xl border-theme-border-subtle text-theme-muted font-black uppercase tracking-widest text-[10px]">Annuler</Button>
             <Button
               onClick={onCreate}
@@ -579,8 +579,8 @@ export const AbsenceSection = ({
         title="Archives des Demandes"
         size="lg"
       >
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar pt-2">
-          <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1 sm:pr-3 custom-scrollbar pt-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
               { label: 'Archivées', value: archivedAbsences.length },
               { label: 'Approuvées', value: archivedAbsences.filter(a => a.statut === 'approuvee').length },
@@ -774,7 +774,7 @@ export const AbsenceSection = ({
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 pt-2">
+                          <div className="grid grid-cols-1 gap-3 pt-2 md:grid-cols-[1fr_auto]">
                             {availabilityLoading ? (
                               <div className="flex items-center gap-2 col-span-2 py-2">
                                 <Loader2 className="h-4 w-4 animate-spin text-secondary" />
@@ -788,7 +788,7 @@ export const AbsenceSection = ({
                                     const newValue = e.target.value;
                                     setTaskReplacementByTaskId((prev: Record<string, string>) => ({ ...prev, [task.id]: newValue }));
                                   }}
-                                  className="h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
+                                  className="min-w-0 h-10 rounded-xl border border-theme-border-subtle bg-theme-surface px-4 text-[11px] font-bold text-theme-main outline-none focus:ring-2 focus:ring-secondary/20 transition-all"
                                 >
                                   <option value="">Remplaçant / Renfort...</option>
                                   {candidates.map((candidate: any) => (

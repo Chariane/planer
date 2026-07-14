@@ -534,9 +534,9 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
                 ⚡ Le rôle <strong>Membre</strong> sera attribué automatiquement lors de l'assignation à une tâche.
               </p>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>Annuler</Button>
-              <Button onClick={handleInvite}>Inviter</Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setIsInviteModalOpen(false)} className="w-full sm:w-auto">Annuler</Button>
+              <Button onClick={handleInvite} className="w-full sm:w-auto">Inviter</Button>
             </div>
           </div>
         </Modal>
@@ -553,4 +553,3 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     </div>
   );
 }
-

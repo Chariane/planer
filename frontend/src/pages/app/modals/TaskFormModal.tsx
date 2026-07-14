@@ -124,7 +124,7 @@ export default function TaskFormModal({
       title={editingTask ? "Modifier la tâche" : parentTask ? `Nouvelle sous-tâche de ${parentTask.title}` : "Nouvelle tâche"}
       size="lg"
     >
-      <div className="space-y-6 max-h-[75vh] overflow-y-auto px-1 scrollbar-thin scrollbar-thumb-theme-border-subtle scrollbar-track-transparent">
+      <div className="max-h-[calc(92dvh-7rem)] space-y-5 overflow-y-auto px-1 sm:max-h-[75vh] sm:space-y-6 scrollbar-thin scrollbar-thumb-theme-border-subtle scrollbar-track-transparent">
         {(submitError || actionError) && (
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-500">
             {submitError || actionError}
@@ -133,7 +133,7 @@ export default function TaskFormModal({
 
         {/* Section Titre & Mode */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">
               Titre de la mission <span className="text-red-500">*</span>
             </label>
@@ -158,13 +158,13 @@ export default function TaskFormModal({
         {/* Équipe assignée */}
         {editingTask && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between px-1">
+            <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
               <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest opacity-60">Équipe assignée</label>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onAssignMemberTrigger}
-                className="h-7 border-secondary/30 text-secondary hover:bg-secondary hover:text-white px-3 text-[10px] uppercase font-black tracking-widest rounded-lg transition-all"
+                className="h-9 w-full rounded-lg border-secondary/30 px-3 text-[10px] font-black uppercase tracking-widest text-secondary transition-all hover:bg-secondary hover:text-white sm:h-7 sm:w-auto"
               >
                 <UserPlus className="h-3 w-3 mr-1.5" />
                 Gérer l'équipe
@@ -177,7 +177,7 @@ export default function TaskFormModal({
                     <div className="h-5 w-5 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center text-[9px] font-black">
                       {assignee.name.charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-xs font-bold text-theme-main">{assignee.name}</span>
+                  <span className="min-w-0 break-words text-xs font-bold text-theme-main">{assignee.name}</span>
                   </div>
                 ))
               ) : (
@@ -291,12 +291,13 @@ export default function TaskFormModal({
                       <Circle className="h-5 w-5 text-theme-border-strong opacity-40 hover:opacity-100" />
                     )}
                   </button>
-                  <span className={`text-sm flex-1 tracking-tight ${checklist.is_checked ? 'line-through text-theme-muted opacity-40' : 'text-theme-main font-bold'}`}>
+                  <span className={`min-w-0 flex-1 break-words text-sm tracking-tight ${checklist.is_checked ? 'line-through text-theme-muted opacity-40' : 'text-theme-main font-bold'}`}>
                     {sanitizeHtml(checklist.texte)}
                   </span>
                   <button
                     onClick={() => onDeleteChecklist(checklist.id)}
-                    className="p-1.5 opacity-0 group-hover:opacity-100 text-theme-muted hover:text-red-500 transition-all"
+                    className="p-1.5 text-theme-muted opacity-100 transition-all hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+                    title="Supprimer la checklist"
                   >
                     <Trash size={14} />
                   </button>
@@ -336,7 +337,7 @@ export default function TaskFormModal({
                   <div className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${child.status === 'terminé' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-theme-surface text-theme-muted'}`}>
                     {child.status === 'terminé' ? <CheckCircle size={14} /> : <Circle size={14} />}
                   </div>
-                  <span className={`text-[11px] font-bold truncate ${child.status === 'terminé' ? 'line-through text-theme-muted opacity-40' : 'text-theme-main'}`}>
+                  <span className={`min-w-0 break-words text-[11px] font-bold ${child.status === 'terminé' ? 'line-through text-theme-muted opacity-40' : 'text-theme-main'}`}>
                     {child.title}
                   </span>
                 </div>
@@ -345,9 +346,9 @@ export default function TaskFormModal({
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-6 border-t border-theme-border-subtle/10">
-          <Button variant="outline" className="px-6 rounded-xl font-bold uppercase tracking-widest text-[10px]" onClick={onClose}>Annuler</Button>
-          <Button className="px-8 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-secondary/20 shadow-lg" onClick={handleSubmit}>
+        <div className="flex flex-col-reverse gap-3 border-t border-theme-border-subtle/10 pt-6 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="w-full rounded-xl px-6 font-bold uppercase tracking-widest text-[10px] sm:w-auto" onClick={onClose}>Annuler</Button>
+          <Button className="w-full rounded-xl px-8 font-bold uppercase tracking-widest text-[10px] shadow-lg shadow-secondary/20 sm:w-auto" onClick={handleSubmit}>
             {editingTask ? "Mettre à jour" : "Lancer la mission"}
           </Button>
         </div>

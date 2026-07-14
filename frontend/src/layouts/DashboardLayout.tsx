@@ -1,5 +1,6 @@
 // frontend/src/layouts/DashboardLayout.tsx
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
@@ -35,24 +36,16 @@ export default function DashboardLayout() {
 
       {/* Contenu principal */}
       <div
-        className="transition-all duration-300"
-        style={{ paddingLeft: `calc(${sidebarWidth}px + 0.375rem)` }}
+        className="min-w-0 transition-all duration-300 lg:pl-[var(--sidebar-offset)]"
+        style={{ '--sidebar-offset': `${sidebarWidth + 6}px` } as CSSProperties}
       >
         <Header onMenuClick={() => setMobileMenuOpen(true)} onToggleSidebar={toggleSidebar} isCompact={isCompact} />
-        <main className="h-[calc(100dvh-64px)] min-h-0 overflow-y-auto overflow-x-hidden">
+        <main className="h-[calc(100dvh-64px)] min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
           <ErrorBoundary label="la page active">
             <Outlet />
           </ErrorBoundary>
         </main>
       </div>
-
-      <style>{`
-        @media (max-width: 1023px) {
-          .transition-all[style*="paddingLeft"] {
-            padding-left: 0 !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

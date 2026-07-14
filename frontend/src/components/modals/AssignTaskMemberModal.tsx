@@ -162,21 +162,26 @@ export default function AssignTaskMemberModal({
             </label>
             <div className="space-y-1">
               {assignedMembers.map(member => (
-                <div key={member.id} className="flex items-center justify-between p-2.5 bg-theme-surface/50 border border-theme-border-subtle rounded-xl shadow-sm">
-                  <div className="flex items-center gap-2">
+                <div key={member.id} className="flex flex-col gap-3 p-2.5 bg-theme-surface/50 border border-theme-border-subtle rounded-xl shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2 sm:items-center">
                     <MemberAvatar member={member} size="xs" />
-                    <span className="text-sm font-bold text-theme-main">{sanitizeText(member.name)}</span>
-                    <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} showText size="sm" />
+                    <div className="min-w-0">
+                      <span className="block break-words text-sm font-bold text-theme-main">{sanitizeText(member.name)}</span>
+                      <div className="mt-1">
+                        <AvailabilityBadge availability={listAvailability.find(a => a.id_utilisateur === member.id)} showText size="sm" />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs text-secondary font-bold ml-2 uppercase tracking-tighter">({member.role})</span>
-                    {member.source && <span className="text-[10px] text-theme-muted ml-2 italic tracking-tight">{sanitizeText(member.source)}</span>}
+                  <div className="min-w-0 sm:text-right">
+                    <span className="text-xs text-secondary font-bold uppercase tracking-tighter">({member.role})</span>
+                    {member.source && <span className="ml-2 text-[10px] text-theme-muted italic tracking-tight">{sanitizeText(member.source)}</span>}
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleUnassign(member.id)}
                     disabled={loading}
+                    className="w-full sm:w-auto"
                   >
                     Retirer
                   </Button>
@@ -192,11 +197,11 @@ export default function AssignTaskMemberModal({
             <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2 opacity-60">
               Ajouter un membre
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <select
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="flex-1 p-2 border border-theme-border-subtle bg-theme-surface rounded-lg text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
+                className="min-w-0 flex-1 p-2 border border-theme-border-subtle bg-theme-surface rounded-lg text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all"
               >
                 <option value="">Sélectionner un membre...</option>
                 {availableMembers.map(member => (
@@ -205,7 +210,7 @@ export default function AssignTaskMemberModal({
                   </option>
                 ))}
               </select>
-              <Button onClick={handleAssign} disabled={!selectedMemberId || loading}>
+              <Button onClick={handleAssign} disabled={!selectedMemberId || loading} className="w-full sm:w-auto">
                 Assigner
               </Button>
             </div>
@@ -222,8 +227,8 @@ export default function AssignTaskMemberModal({
           <div className="text-center text-theme-muted py-4 font-medium italic opacity-60">Chargement...</div>
         )}
 
-        <div className="flex justify-end pt-4">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex pt-4 sm:justify-end">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Fermer
           </Button>
         </div>

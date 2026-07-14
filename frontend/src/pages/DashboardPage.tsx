@@ -127,37 +127,37 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 bg-theme-page transition-colors duration-300">
-      <div className="max-w-7xl mx-auto space-y-10 sm:space-y-12">
-        
+    <div className="min-h-full min-w-0 overflow-x-hidden bg-theme-page px-3 py-6 transition-colors duration-300 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+      <div className="mx-auto max-w-7xl space-y-8 sm:space-y-12">
+
         {/* Hero Section */}
-        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+          <div className="min-w-0 space-y-3">
+            <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-secondary/30 blur-xl rounded-full"></div>
-                <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-secondary to-orange-400 flex items-center justify-center shadow-2xl shadow-secondary/30 border border-white/10">
-                  <LayoutGrid size={28} className="text-white" />
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-secondary to-orange-400 shadow-2xl shadow-secondary/30 sm:h-14 sm:w-14">
+                  <LayoutGrid className="h-6 w-6 text-white sm:h-7 sm:w-7" />
                 </div>
               </div>
-              <div>
-                <h1 className="text-3xl sm:text-5xl font-black text-theme-main tracking-tight leading-none">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-black leading-tight tracking-tight text-theme-main sm:text-4xl lg:text-5xl">
                   Tableau de bord
                 </h1>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_12px_rgba(255,102,0,0.7)]"></span>
-                  <p className="text-sm font-medium text-theme-muted uppercase tracking-widest">
+                <div className="mt-2 flex min-w-0 items-center gap-2 sm:gap-3">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-secondary shadow-[0_0_12px_rgba(255,102,0,0.7)]"></span>
+                  <p className="min-w-0 text-xs font-medium uppercase tracking-wide text-theme-muted sm:text-sm sm:tracking-widest">
                     Vue d'ensemble de vos projets
                   </p>
-                  <Sparkles size={14} className="text-secondary/60" />
+                  <Sparkles size={14} className="hidden shrink-0 text-secondary/60 sm:block" />
                 </div>
               </div>
             </div>
           </div>
-          <div className="flex w-full md:w-auto flex-col sm:flex-row gap-3">
+          <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-3">
             <Button
               onClick={() => setIsCreateModalOpen(true)}
-              className="w-full sm:w-auto rounded-2xl px-8 py-6 bg-gradient-to-r from-secondary to-orange-500 hover:from-secondary hover:to-orange-400 text-white shadow-2xl shadow-secondary/30 font-black uppercase tracking-widest text-xs transition-all duration-300 hover:scale-[1.02] active:scale-95 border border-white/10"
+              className="w-full rounded-2xl border border-white/10 bg-gradient-to-r from-secondary to-orange-500 px-5 py-4 text-xs font-black uppercase tracking-wider text-white shadow-2xl shadow-secondary/30 transition-all duration-300 hover:scale-[1.02] hover:from-secondary hover:to-orange-400 active:scale-95 sm:w-auto sm:px-8 sm:py-6 sm:tracking-widest"
             >
               <PlusCircle className="w-5 h-5 mr-2" />
               Nouveau workspace

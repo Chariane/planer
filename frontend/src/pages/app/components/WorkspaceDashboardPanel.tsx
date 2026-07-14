@@ -237,23 +237,23 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       )}
 
       {/* Header section */}
-      <div className="flex flex-wrap items-end justify-between gap-8 pb-4">
-        <div className="flex items-center gap-6">
-          <div className="p-5 bg-primary/10 rounded-2xl shadow-xl shadow-primary/5 border border-primary/10 transition-transform hover:scale-105">
-            <Briefcase className="h-8 w-8 text-primary" />
+      <div className="flex flex-col items-stretch gap-5 pb-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-8">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+          <div className="shrink-0 p-4 bg-primary/10 rounded-2xl shadow-xl shadow-primary/5 border border-primary/10 transition-transform hover:scale-105 sm:p-5">
+            <Briefcase className="h-7 w-7 text-primary sm:h-8 sm:w-8" />
           </div>
-          <div>
-            <h1 className="text-4xl font-black text-theme-main tracking-tighter uppercase leading-none">{workspaceName}</h1>
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-black text-theme-main tracking-tighter uppercase leading-tight sm:text-4xl sm:leading-none">{workspaceName}</h1>
             <div className="flex items-center gap-2 mt-3">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]" />
               <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] opacity-60">Dashboard Workspace</p>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <Link
             to={`/messagerie?resource_type=workspace&resource_id=${workspaceId}`}
-            className="inline-flex items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 px-8 py-4 text-[11px] font-black uppercase tracking-widest text-primary shadow-theme-sm transition-all hover:border-secondary/30 hover:bg-secondary hover:text-white hover:shadow-xl hover:shadow-secondary/20"
+            className="inline-flex w-full items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 px-5 py-4 text-[11px] font-black uppercase tracking-widest text-primary shadow-theme-sm transition-all hover:border-secondary/30 hover:bg-secondary hover:text-white hover:shadow-xl hover:shadow-secondary/20 sm:w-auto sm:px-8"
           >
             <MessageCircle size={18} className="mr-3" />
             Ouvrir la discussion
@@ -261,7 +261,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
           {canInviteMembers && (
             <Button
               onClick={() => memberManagementRef.current?.openInviteModal()}
-              className="rounded-2xl px-10 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px]"
+              className="w-full rounded-2xl px-5 py-6 shadow-xl shadow-secondary/20 font-black uppercase tracking-widest text-[11px] sm:w-auto sm:px-10"
             >
               <UserPlus size={18} className="mr-3" />
               Inviter un collaborateur
@@ -277,7 +277,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-8">
         {[
           { label: 'Espaces Actifs', value: stats.spacesCount, icon: FolderTree, color: 'text-blue-500', bg: 'bg-blue-500/10' },
           { label: 'Projets Directs', value: stats.listsCount, icon: ListTodo, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
@@ -289,7 +289,7 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.1 }}
           >
-            <GlassCard className="p-8 group hover:border-primary/30 transition-all cursor-default border-theme-border-subtle/30 bg-theme-surface/40">
+            <GlassCard className="p-5 sm:p-8 group hover:border-primary/30 transition-all cursor-default border-theme-border-subtle/30 bg-theme-surface/40">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.25em] mb-3 opacity-60">{stat.label}</p>
@@ -306,8 +306,8 @@ export default function WorkspaceDashboardPanel({ workspaceId }: WorkspaceDashbo
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
         <div className="xl:col-span-2 space-y-8">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-2xl font-black text-theme-main tracking-tighter flex items-center gap-4 uppercase">
+          <div className="flex flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-xl sm:text-2xl font-black text-theme-main tracking-tighter flex items-center gap-3 sm:gap-4 uppercase">
               <Users className="h-6 w-6 text-primary" />
               Équipe du Workspace
             </h3>

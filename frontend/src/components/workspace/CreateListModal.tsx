@@ -44,9 +44,9 @@ export function CreateListModal({ isOpen, onClose, onCreate }: CreateListModalPr
           rows={2}
           className="w-full p-2 border rounded-lg"
         />
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Annuler</Button>
-          <Button onClick={handleSubmit} loading={loading}>Créer</Button>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Annuler</Button>
+          <Button onClick={handleSubmit} loading={loading} className="w-full sm:w-auto">Créer</Button>
         </div>
       </div>
     </Modal>

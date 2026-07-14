@@ -48,22 +48,22 @@ export function CreateSpaceModal({ isOpen, onClose, onCreate, parentName }: Crea
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
+            className="fixed bottom-2 left-2 right-2 z-50 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2"
           >
-            <GlassCard className="relative overflow-hidden">
+            <GlassCard className="relative max-h-[94dvh] overflow-y-auto overflow-x-hidden">
               {/* Header */}
-              <div className="p-6 border-b border-gray-100">
+              <div className="p-4 border-b border-gray-100 sm:p-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 text-white">
                       <FolderPlus className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-800">
+                    <div className="min-w-0">
+                      <h2 className="break-words text-lg font-bold text-gray-800 sm:text-xl">
                         Créer un espace
                       </h2>
                       {parentName && (
-                        <p className="text-sm text-gray-500">
+                        <p className="break-words text-sm text-gray-500">
                           Dans : {parentName}
                         </p>
                       )}
@@ -71,7 +71,7 @@ export function CreateSpaceModal({ isOpen, onClose, onCreate, parentName }: Crea
                   </div>
                   <button
                     onClick={onClose}
-                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="shrink-0 p-1 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5 text-gray-400" />
                   </button>
@@ -79,7 +79,7 @@ export function CreateSpaceModal({ isOpen, onClose, onCreate, parentName }: Crea
               </div>
 
               {/* Form */}
-              <div className="p-6 space-y-4">
+              <div className="p-4 space-y-4 sm:p-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Nom de l'espace
@@ -107,7 +107,7 @@ export function CreateSpaceModal({ isOpen, onClose, onCreate, parentName }: Crea
                   />
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row">
                   <AnimatedButton variant="outline" onClick={onClose} className="flex-1">
                     Annuler
                   </AnimatedButton>

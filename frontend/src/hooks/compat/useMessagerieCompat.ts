@@ -16,8 +16,11 @@ import {
   useDeleteMessageMutation,
   messagerieWebSocket,
 } from '../../store/api/messagerieApi';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const useMessagerieCompat = (groupId?: string, privateUserId?: string) => {
+  const { user } = useAuth();
+  const userId = user?.id || '';
   // ==========================================================================
   // QUERIES
   // ==========================================================================
@@ -156,9 +159,9 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
       return result.data;
     } catch (error) {
       console.warn('RTK Query fallback -> messagerieService.listGroups');
-      return await messagerieService.listGroups();
+      return await messagerieService.listGroups(userId);
     }
-  }, [refetchGroups]);
+  }, [refetchGroups, userId]);
 
   const getGroupMembers = useCallback(
     async (groupId: string) => {
@@ -192,9 +195,9 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
       return result.data;
     } catch (error) {
       console.warn('RTK Query fallback -> messagerieService.getUnreadSummary');
-      return await messagerieService.getUnreadSummary();
+      return await messagerieService.getUnreadSummary(userId);
     }
-  }, [refetchUnread]);
+  }, [refetchUnread, userId]);
 
   const listPrivateConversations = useCallback(async () => {
     try {
@@ -202,9 +205,9 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
       return result.data;
     } catch (error) {
       console.warn('RTK Query fallback -> messagerieService.listPrivateConversations');
-      return await messagerieService.listPrivateConversations();
+      return await messagerieService.listPrivateConversations(userId);
     }
-  }, [refetchPrivate]);
+  }, [refetchPrivate, userId]);
 
   const getPrivateMessages = useCallback(
     async (otherUserId: string) => {
@@ -213,10 +216,10 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
         return result.data;
       } catch (error) {
         console.warn('RTK Query fallback -> messagerieService.getPrivateMessages');
-        return await messagerieService.getPrivateMessages(otherUserId);
+        return await messagerieService.getPrivateMessages(otherUserId, userId);
       }
     },
-    [refetchPrivateMessages]
+    [refetchPrivateMessages, userId]
   );
 
   const getPresence = useCallback(
@@ -251,10 +254,10 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
         return await updateGroupClosedStateRTK({ groupId, isClosed }).unwrap();
       } catch (error) {
         console.warn('RTK Query fallback -> messagerieService.updateGroupClosedState');
-        return await messagerieService.updateGroupClosedState(groupId, isClosed);
+        return await messagerieService.updateGroupClosedState(groupId, isClosed, userId);
       }
     },
-    [updateGroupClosedStateRTK]
+    [updateGroupClosedStateRTK, userId]
   );
 
   const updateMessage = useCallback(

@@ -219,8 +219,8 @@ export default function EntreprisePage() {
               <input value={form.site_web || ''} onChange={e => handleChange('site_web', e.target.value)} className="w-full rounded-2xl border border-theme-border-subtle bg-theme-surface px-4 py-3 text-theme-main outline-none focus:ring-2 focus:ring-secondary/20" />
             </label>
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button onClick={handleSaveProfile} loading={saving} className="rounded-2xl px-6 py-4 font-black uppercase tracking-widest text-[11px]">
+          <div className="mt-6 flex sm:justify-end">
+            <Button onClick={handleSaveProfile} loading={saving} className="w-full rounded-2xl px-6 py-4 font-black uppercase tracking-widest text-[11px] sm:w-auto">
               {entreprise ? 'Mettre a jour' : 'Creer mon entreprise'}
             </Button>
           </div>

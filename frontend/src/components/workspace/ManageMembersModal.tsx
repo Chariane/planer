@@ -119,7 +119,7 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
         {/* Invitation */}
         <div className="p-4 bg-gray-50 rounded-lg">
           <h4 className="font-medium text-gray-700 mb-2">Inviter un membre</h4>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
               placeholder="Email ou username"
@@ -128,20 +128,20 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
                 setInviteEmail(e.target.value);
                 setInviteError('');
               }}
-              className="flex-1 p-2 border rounded-lg"
+              className="min-w-0 flex-1 p-2 border rounded-lg"
               disabled={!canManageMembers}
             />
             <select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
-              className="p-2 border rounded-lg bg-white"
+              className="w-full p-2 border rounded-lg bg-white sm:w-auto"
               disabled={!canManageMembers}
             >
               <option value="Invité">Invité</option>
               <option value="Membre">Membre</option>
               <option value="Administrateur">Administrateur</option>
             </select>
-            <Button onClick={handleInvite} loading={inviting} size="sm" disabled={!canManageMembers}>
+            <Button onClick={handleInvite} loading={inviting} size="sm" disabled={!canManageMembers} className="w-full sm:w-auto">
               <UserPlus className="h-4 w-4 mr-1" /> Inviter
             </Button>
           </div>
@@ -163,17 +163,17 @@ export function ManageMembersModal({ isOpen, onClose, espaceId }: ManageMembersM
           ) : (
             <div className="space-y-2">
               {members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
-                  <div>
-                    <p className="font-medium">{member.username || member.email}</p>
-                    <p className="text-xs text-gray-500">{member.email}</p>
+                <div key={member.id} className="flex flex-col gap-3 p-3 bg-white border rounded-lg sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium">{member.username || member.email}</p>
+                    <p className="break-all text-xs text-gray-500">{member.email}</p>
                     <p className="text-xs text-gray-400">Statut : {member.statut}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <select
                       value={member.role}
                       onChange={(e) => handleUpdateRole(member.user_id, e.target.value)}
-                      className="text-sm border rounded px-2 py-1"
+                      className="min-w-0 flex-1 text-sm border rounded px-2 py-1 sm:flex-none"
                       disabled={member.role === 'Créateur' || !canManageMembers}
                     >
                       <option value="Invité">Invité</option>

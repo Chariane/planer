@@ -22,12 +22,12 @@ export default function MessagingBell({
     }
 
     try {
-      const summary = await messagerieService.getUnreadSummary();
+      const summary = await messagerieService.getUnreadSummary(user.id);
       setUnreadCount(summary.unread_discussions_count || 0);
     } catch (error) {
       console.warn('Impossible de charger le compteur de discussions', error);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(loadUnreadCount, 0);

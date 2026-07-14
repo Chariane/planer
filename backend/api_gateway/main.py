@@ -244,7 +244,7 @@ else:
 ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
 
 # Headers autorisés (explicites, pas *)
-ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept", "X-Requested-With"]
+ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-CSRF-Token", "x-csrf-token"]
 
 print(f"CORS Allowed Origins: {ALLOWED_ORIGINS}")
 print(f"CORS Allowed Methods: {ALLOWED_METHODS}")

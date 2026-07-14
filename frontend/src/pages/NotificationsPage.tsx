@@ -328,24 +328,24 @@ export default function NotificationsPage() {
                       )}
 
                       {/* Boutons d'action - toujours en dehors du lien */}
-                      <div className="flex items-start gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex shrink-0 items-start gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity self-center sm:self-start">
                         {!notification.est_lu && (
                           <button
                             onClick={() => markRead(notification)}
                             disabled={actionLoading === notification.id}
-                            className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                            className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
                             title="Marquer comme lu"
                           >
-                            <CheckCheck size={18} />
+                            <CheckCheck className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
                           </button>
                         )}
                         <button
                           onClick={() => removeNotification(notification.id)}
                           disabled={actionLoading === notification.id}
-                          className="h-10 w-10 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm"
                           title="Supprimer"
                         >
-                          {actionLoading === notification.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          {actionLoading === notification.id ? <Loader2 className="h-4 w-4 sm:h-[18px] sm:w-[18px] animate-spin" /> : <Trash2 className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />}
                         </button>
                       </div>
                     </motion.div>

@@ -147,7 +147,7 @@ export const ReportList = ({
                     }`}>
                       <FileText size={18} />
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                       {isOwner && onEdit && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onEdit(report); }}
@@ -325,7 +325,7 @@ export const ReportCard = ({
           }`}>
             <FileText size={18} />
           </div>
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
             {isOwner && onEdit && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(report); }}

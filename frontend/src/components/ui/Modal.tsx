@@ -23,13 +23,13 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className={cn('flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-2xl bg-theme-surface shadow-2xl border border-theme-border-subtle transition-all duration-300', sizes[size])}
+              className={cn('flex max-h-[92dvh] w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-theme-surface shadow-2xl border border-theme-border-subtle transition-all duration-300', sizes[size])}
             >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-theme-border-subtle px-4 py-3 sm:px-6 sm:py-4">
-                <h3 className="text-base sm:text-lg font-bold text-theme-main tracking-tight">{sanitizeText(title)}</h3>
-                <button onClick={onClose} className="rounded-full p-1.5 text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-colors"><X className="h-5 w-5" /></button>
+                <h3 className="min-w-0 break-words text-base sm:text-lg font-bold text-theme-main tracking-tight">{sanitizeText(title)}</h3>
+                <button onClick={onClose} className="shrink-0 rounded-full p-1.5 text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main transition-colors"><X className="h-5 w-5" /></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
+              <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">{children}</div>
             </motion.div>
           </div>
         </>

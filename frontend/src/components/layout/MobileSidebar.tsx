@@ -13,11 +13,11 @@ export default function MobileSidebar({ onClose }: { onClose: () => void }) {
         onClick={onClose}
       />
       <motion.div
-        initial={{ x: -300 }}
+        initial={{ x: '-100%' }}
         animate={{ x: 0 }}
-        exit={{ x: -300 }}
+        exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25 }}
-        className="fixed inset-y-0 left-0 z-50 w-64"
+        className="fixed inset-y-0 left-0 z-50 w-[min(88vw,20rem)]"
       >
         <div className="relative h-full">
           <Sidebar isOpen={true} />

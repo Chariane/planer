@@ -60,11 +60,11 @@ export default function ReportsPage() {
         : reports;
 
     return (
-        <div className="p-8 max-w-7xl mx-auto space-y-10 min-h-screen pb-20">
+        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-10 min-h-screen pb-20">
             {/* Header section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-1">
-                    <h1 className="text-4xl font-black text-white italic uppercase tracking-tighter flex items-center gap-4">
+                    <h1 className="text-2xl sm:text-4xl font-black text-white italic uppercase tracking-tighter flex items-center gap-4">
                         Rapports d'Activité
                         <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                     </h1>
@@ -78,7 +78,7 @@ export default function ReportsPage() {
                             placeholder="Rechercher un rapport..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-3 text-sm text-white focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 min-w-[300px] transition-all"
+                            className="bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-3 text-sm text-white focus:outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 w-full sm:min-w-[300px] transition-all"
                         />
                     </div>
                 </div>
@@ -105,24 +105,24 @@ export default function ReportsPage() {
             </div>
 
             {/* Tabs & Actions */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                <div className="flex items-center gap-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-2">
+                <div className="flex items-center gap-4 sm:gap-8 overflow-x-auto pb-2 sm:pb-0 scrollbar-none shrink-0">
                     <button
                         onClick={() => setActiveTab('all')}
-                        className={`text-sm font-black uppercase tracking-widest pb-4 transition-all relative ${activeTab === 'all' ? 'text-white' : 'text-theme-muted hover:text-white'}`}
+                        className={`text-xs sm:text-sm font-black uppercase tracking-widest pb-2 sm:pb-4 transition-all shrink-0 relative ${activeTab === 'all' ? 'text-white' : 'text-theme-muted hover:text-white'}`}
                     >
                         Tous les rapports
                         {activeTab === 'all' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-full" />}
                     </button>
                     <button
                         onClick={() => setActiveTab('mine')}
-                        className={`text-sm font-black uppercase tracking-widest pb-4 transition-all relative ${activeTab === 'mine' ? 'text-white' : 'text-theme-muted hover:text-white'}`}
+                        className={`text-xs sm:text-sm font-black uppercase tracking-widest pb-2 sm:pb-4 transition-all shrink-0 relative ${activeTab === 'mine' ? 'text-white' : 'text-theme-muted hover:text-white'}`}
                     >
                         Mes rapports
                         {activeTab === 'mine' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-full" />}
                     </button>
                 </div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 self-end sm:self-auto">
                     <Button variant="secondary" className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest gap-2">
                         <Filter size={14} /> Filtrer
                     </Button>
@@ -155,30 +155,30 @@ export default function ReportsPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
                             >
-                                <GlassCard className="p-6 flex items-center justify-between group hover:border-primary/30 transition-all duration-300">
-                                    <div className="flex items-center gap-6">
-                                        <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform border border-primary/20">
-                                            <FileText size={24} />
+                                <GlassCard className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:border-primary/30 transition-all duration-300">
+                                    <div className="flex items-start sm:items-center gap-4 sm:gap-6 min-w-0">
+                                        <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform border border-primary/20 shrink-0">
+                                            <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
                                         </div>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-3">
-                                                <h4 className="text-lg font-black text-white uppercase tracking-tighter italic">{sanitizeText(report.titre)}</h4>
-                                                <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-theme-muted uppercase tracking-widest">
+                                        <div className="space-y-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                                <h4 className="min-w-0 break-words text-base sm:text-lg font-black text-white uppercase tracking-tighter italic sm:truncate">{sanitizeText(report.titre)}</h4>
+                                                <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-theme-muted uppercase tracking-widest shrink-0">
                                                     {new Date(report.created_at).toLocaleDateString()}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-theme-muted font-medium line-clamp-1 max-w-2xl leading-relaxed">
+                                            <p className="text-xs text-theme-muted font-medium line-clamp-2 sm:line-clamp-1 max-w-2xl leading-relaxed">
                                                 {report.realisations ? sanitizeText(report.realisations) : "Aucune réalisation détaillée renseignée."}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="text-right hidden md:block px-4 border-r border-white/5">
+                                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-3 sm:pt-0 border-t border-white/5 sm:border-t-0">
+                                        <div className="text-left sm:text-right px-1 sm:px-4 sm:border-r border-white/5">
                                             <p className="text-[9px] font-black text-theme-muted uppercase tracking-widest">Auteur</p>
-                                            <p className="text-xs font-bold text-white italic">{sanitizeText(report.owner_name || 'Inconnu')}</p>
+                                            <p className="break-words text-xs font-bold text-white italic">{sanitizeText(report.owner_name || 'Inconnu')}</p>
                                         </div>
-                                        <button className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center text-theme-muted hover:text-white hover:bg-primary transition-all border border-transparent hover:shadow-lg hover:shadow-primary/20">
-                                            <ChevronRight size={20} />
+                                        <button className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-white/5 flex items-center justify-center text-theme-muted hover:text-white hover:bg-primary transition-all border border-transparent hover:shadow-lg hover:shadow-primary/20 shrink-0">
+                                            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                                         </button>
                                     </div>
                                 </GlassCard>
@@ -190,11 +190,11 @@ export default function ReportsPage() {
 
             {/* Floating Action Tip */}
             {!loading && (
-                <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 z-50">
-                    <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+                <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-lg -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/10 bg-[#0a0a0a]/80 px-4 py-3 shadow-2xl backdrop-blur-xl sm:bottom-10 sm:w-auto sm:gap-4 sm:px-6">
+                    <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0">
                         <Plus size={16} />
                     </div>
-                    <p className="text-xs font-bold text-white">
+                    <p className="text-xs font-bold text-white leading-snug">
                         {sanitizeText('Pour soumettre un rapport, utilisez le panneau Outils du Planer dans vos listes de tâches.')}
                     </p>
                 </div>

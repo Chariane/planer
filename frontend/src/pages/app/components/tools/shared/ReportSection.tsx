@@ -28,9 +28,9 @@ interface ReportSectionProps {
   
   // Formulaires
   reportForm: any;
-  setReportForm: (form: any) => void;
+  setReportForm: React.Dispatch<React.SetStateAction<any>>;
   reportEditForm: any;
-  setReportEditForm: (form: any) => void;
+  setReportEditForm: React.Dispatch<React.SetStateAction<any>>;
   
   // Actions
   onCreate: () => void;
@@ -293,7 +293,7 @@ export const ReportSection = ({
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Objet du rapport</label>
                   <input
                     value={reportForm.titre}
-                    onChange={e => setReportForm(prev => ({ ...prev, titre: e.target.value }))}
+                    onChange={e => setReportForm((prev: any) => ({ ...prev, titre: e.target.value }))}
                     placeholder="Rapport Hebdomadaire..."
                     className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main placeholder:text-theme-muted/30 focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-bold shadow-inner"
                   />
@@ -303,7 +303,7 @@ export const ReportSection = ({
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Ce que vous avez réalisé</label>
                   <textarea
                     value={reportForm.realisations}
-                    onChange={e => setReportForm(prev => ({ ...prev, realisations: e.target.value }))}
+                    onChange={e => setReportForm((prev: any) => ({ ...prev, realisations: e.target.value }))}
                     placeholder="Quels ont été vos accomplissements ?"
                     className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-medium h-40 resize-none shadow-inner"
                   />
@@ -313,7 +313,7 @@ export const ReportSection = ({
                   <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Difficultés & Solutions</label>
                   <textarea
                     value={reportForm.difficultes_et_solutions}
-                    onChange={e => setReportForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
+                    onChange={e => setReportForm((prev: any) => ({ ...prev, difficultes_et_solutions: e.target.value }))}
                     placeholder="Obstacles rencontrés..."
                     className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none transition-all font-medium h-32 resize-none shadow-inner"
                   />
@@ -325,7 +325,7 @@ export const ReportSection = ({
                     <input
                       type="date"
                       value={reportForm.periode_debut}
-                      onChange={e => setReportForm(prev => ({ ...prev, periode_debut: e.target.value }))}
+                      onChange={e => setReportForm((prev: any) => ({ ...prev, periode_debut: e.target.value }))}
                       className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
                       required
                     />
@@ -335,7 +335,7 @@ export const ReportSection = ({
                     <input
                       type="date"
                       value={reportForm.periode_fin}
-                      onChange={e => setReportForm(prev => ({ ...prev, periode_fin: e.target.value }))}
+                      onChange={e => setReportForm((prev: any) => ({ ...prev, periode_fin: e.target.value }))}
                       className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
                       required
                     />
@@ -500,7 +500,7 @@ export const ReportSection = ({
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Titre du rapport</label>
             <input
               value={reportEditForm.titre}
-              onChange={e => setReportEditForm(prev => ({ ...prev, titre: e.target.value }))}
+              onChange={e => setReportEditForm((prev: any) => ({ ...prev, titre: e.target.value }))}
               placeholder="Rectifier le titre..."
               className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold transition-all placeholder:text-theme-muted/30 shadow-inner"
               autoFocus
@@ -510,7 +510,7 @@ export const ReportSection = ({
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Contenu des réalisations</label>
             <textarea
               value={reportEditForm.realisations}
-              onChange={e => setReportEditForm(prev => ({ ...prev, realisations: e.target.value }))}
+              onChange={e => setReportEditForm((prev: any) => ({ ...prev, realisations: e.target.value }))}
               placeholder="Décrivez vos accomplissements..."
               className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-48 resize-none transition-all custom-scrollbar shadow-inner shadow-black/10"
             />
@@ -520,7 +520,7 @@ export const ReportSection = ({
               <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Difficultés rencontrées</label>
               <textarea
                 value={reportEditForm.difficultes_et_solutions}
-                onChange={e => setReportEditForm(prev => ({ ...prev, difficultes_et_solutions: e.target.value }))}
+                onChange={e => setReportEditForm((prev: any) => ({ ...prev, difficultes_et_solutions: e.target.value }))}
                 placeholder="Obstacles et solutions..."
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-32 resize-none transition-all shadow-inner"
               />
@@ -529,7 +529,7 @@ export const ReportSection = ({
               <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] ml-1">Commentaires finaux</label>
               <textarea
                 value={reportEditForm.commentaire}
-                onChange={e => setReportEditForm(prev => ({ ...prev, commentaire: e.target.value }))}
+                onChange={e => setReportEditForm((prev: any) => ({ ...prev, commentaire: e.target.value }))}
                 placeholder="Notes additionnelles..."
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-5 py-4 text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-medium h-32 resize-none transition-all shadow-inner"
               />
@@ -541,7 +541,7 @@ export const ReportSection = ({
               <input
                 type="date"
                 value={reportEditForm.periode_debut}
-                onChange={e => setReportEditForm(prev => ({ ...prev, periode_debut: e.target.value }))}
+                onChange={e => setReportEditForm((prev: any) => ({ ...prev, periode_debut: e.target.value }))}
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
               />
             </div>
@@ -550,7 +550,7 @@ export const ReportSection = ({
               <input
                 type="date"
                 value={reportEditForm.periode_fin}
-                onChange={e => setReportEditForm(prev => ({ ...prev, periode_fin: e.target.value }))}
+                onChange={e => setReportEditForm((prev: any) => ({ ...prev, periode_fin: e.target.value }))}
                 className="w-full bg-theme-surface/50 border border-theme-border-subtle rounded-2xl px-4 py-3 text-sm text-theme-main focus:ring-2 focus:ring-secondary/20 outline-none font-bold"
               />
             </div>

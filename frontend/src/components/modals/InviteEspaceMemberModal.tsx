@@ -150,16 +150,17 @@ export default function InviteEspaceMemberModal({
           <p className="text-xs text-blue-800">
             {sanitizeText('Invitant : accès en lecture seule')}<br />
             {sanitizeText('Administrateur : peut gérer l\'espace et ses membres')}<br />
-            {sanitizeText('⚡ Le rôle Membre sera attribué automatiquement lors de l\'assignation à une liste ou une tâche.')}
+            {sanitizeText('Le rôle Membre sera attribué automatiquement lors de l\'assignation à une liste ou une tâche.')}
           </p>
         </div>
 
         {/* Buttons */}
-        <div className="flex gap-3 justify-end pt-4">
+        <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
             onClick={handleClose}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             Annuler
           </Button>
@@ -167,6 +168,7 @@ export default function InviteEspaceMemberModal({
             type="submit"
             disabled={!isFormValid || loading}
             loading={loading}
+            className="w-full sm:w-auto"
           >
             Inviter
           </Button>
