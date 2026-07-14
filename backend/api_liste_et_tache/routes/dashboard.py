@@ -1,7 +1,8 @@
+# backend/api_liste_et_tache/routes/dashboard.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from typing import List
+from typing import List, Optional
 import re
 from ..core.database import get_db
 from ..core.security import get_current_user
@@ -10,18 +11,23 @@ from ..schemas import DashboardStatsOut, NotificationOut
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-def _format_notification_message(notification: Notification) -> str:
+def _extract_resource_info(message: str) -> tuple[str, Optional[str], Optional[str]]:
     """
-    Retourne un message lisible pour une notification.
-    Supprime les balises [[type:id]] et les espaces superflus.
+    Extrait le type et l'ID de ressource d'un message contenant [[type:id]].
+    Retourne (cleaned_message, resource_type, resource_id)
     """
-    message = notification.message or ""
-    # Supprimer les motifs du type [[tache:123abc]] ou [[liste:456def]]
-    cleaned = re.sub(r'\[\[[a-zA-Z]+:[a-zA-Z0-9]+\]\]\s*', '', message)
-    cleaned = cleaned.strip()
+    cleaned = message
+    resource_type = None
+    resource_id = None
+    pattern = r'\[\[([a-zA-Z]+):([a-zA-Z0-9]+)\]\]'
+    match = re.search(pattern, message)
+    if match:
+        resource_type = match.group(1)
+        resource_id = match.group(2)
+        cleaned = re.sub(pattern, '', message).strip()
     if not cleaned:
-        return "Nouvelle activité"
-    return cleaned
+        cleaned = "Nouvelle activité"
+    return cleaned, resource_type, resource_id
 
 @router.get("/stats", response_model=DashboardStatsOut)
 def get_dashboard_stats(
@@ -96,7 +102,7 @@ def get_dashboard_stats(
         Membre.statut == "Actif"
     ).scalar() or 0
 
-    # 5. Activités récentes avec messages formatés
+    # 5. Activités récentes avec messages formatés et infos de ressource
     recent_activities = db.query(Notification).filter(
         Notification.id_utilisateur == current_user.id
     ).order_by(Notification.date_creation.desc()).limit(10).all()
@@ -104,7 +110,10 @@ def get_dashboard_stats(
     formatted_activities = []
     for act in recent_activities:
         act_dict = {c.key: getattr(act, c.key) for c in act.__table__.columns}
-        act_dict["message"] = _format_notification_message(act)
+        cleaned_msg, resource_type, resource_id = _extract_resource_info(act.message or "")
+        act_dict["message"] = cleaned_msg
+        act_dict["resource_type"] = resource_type
+        act_dict["resource_id"] = resource_id
         formatted_activities.append(act_dict)
 
     return {

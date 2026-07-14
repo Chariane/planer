@@ -188,6 +188,7 @@ export default function WorkspaceToolsPanel({
           getSortedReplacementCandidates={toolData.getSortedReplacementCandidates}
           formatDate={toolData.formatDate}
           getDurationDisplay={toolData.getDurationDisplay}
+          isLoadingImpacts={toolData.isLoadingImpacts} // ✅ Passage de la prop
         />
       )}
     </div>

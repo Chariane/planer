@@ -48,6 +48,9 @@ export interface LoginResponse {
     is_entreprise?: boolean;
     photo?: string;
   };
+  setup_required?: boolean;
+  google_authenticator_secret?: string;
+  google_authenticator_otpauth_url?: string;
 }
 
 export interface PublicUserProfile {
@@ -70,19 +73,17 @@ export interface RefreshTokenResponse {
 }
 
 export const authService = {
-
   register: (data: RegisterPayload) =>
     apiFetch(AUTH_BASE_URL, '/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  // Mise à jour : ajout de credentials: 'include' pour le cookie
   login: async (identifier: string, password: string) => {
     const response = await apiFetch(AUTH_BASE_URL, '/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
-      credentials: 'include', // Pour recevoir le cookie refresh_token
+      credentials: 'include',
     }) as LoginResponse;
 
     if (response.access_token) {
@@ -92,11 +93,10 @@ export const authService = {
     return response;
   },
 
-  // NOUVEAU : Rafraîchir le token
-  refreshToken: async (): Promise<RefreshTokenResponse> => {
+  refreshToken: async () => {
     const response = await apiFetch(AUTH_BASE_URL, '/auth/refresh', {
       method: 'POST',
-      credentials: 'include', // Envoie le cookie refresh_token
+      credentials: 'include',
     }) as RefreshTokenResponse;
 
     if (response.access_token) {
@@ -109,7 +109,7 @@ export const authService = {
     clearAccessToken();
     return apiFetch(AUTH_BASE_URL, '/auth/logout', {
       method: 'POST',
-      credentials: 'include', // Pour supprimer le cookie
+      credentials: 'include',
     });
   },
 
@@ -145,11 +145,10 @@ export const authService = {
 
   getMe: () =>
     apiFetch(AUTH_BASE_URL, '/auth/me', {
-      credentials: 'include', // Pour le refresh token
+      credentials: 'include',
     }),
 
   updateMe: (data: ProfileUpdatePayload) => {
-    // Filtrer les champs vides avant l'envoi
     const cleanedData: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
       if (value !== '' && value !== null && value !== undefined) {
@@ -180,7 +179,7 @@ export const authService = {
       credentials: 'include',
     }),
 
-  getUserProfile: (userId: string): Promise<PublicUserProfile> =>
+  getUserProfile: (userId: string) =>
     apiFetch(AUTH_BASE_URL, `/auth/users/${userId}/profile`, {
       credentials: 'include',
     }) as Promise<PublicUserProfile>,
@@ -190,7 +189,7 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify({ challenge_token, code }),
       credentials: 'include',
-    }) as Promise<LoginResponse>;
+    }) as LoginResponse;
 
     if (response.access_token) {
       setAccessToken(response.access_token);

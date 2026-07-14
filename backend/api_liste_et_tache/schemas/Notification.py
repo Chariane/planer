@@ -11,6 +11,8 @@ class NotificationOut(BaseModel):
     date_modif: Optional[datetime] = None
     date_lecture: Optional[datetime] = None
     id_utilisateur: Optional[str] = None
+    resource_type: Optional[str] = None   # ✅ Ajout
+    resource_id: Optional[str] = None     # ✅ Ajout
 
     model_config = ConfigDict(from_attributes=True)
 

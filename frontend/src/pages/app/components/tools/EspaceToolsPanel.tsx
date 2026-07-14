@@ -191,6 +191,7 @@ export default function EspaceToolsPanel({
           getSortedReplacementCandidates={toolData.getSortedReplacementCandidates}
           formatDate={toolData.formatDate}
           getDurationDisplay={toolData.getDurationDisplay}
+          isLoadingImpacts={toolData.isLoadingImpacts} // ✅ Passage de la prop
         />
       )}
     </div>

@@ -2,7 +2,7 @@
 import { motion } from 'framer-motion';
 import { 
   Calendar, Plus, Check, Archive, AlertTriangle, Users, 
-  FileText, XCircle, Loader2, ShieldAlert, Eye, Link 
+  FileText, XCircle, Loader2, ShieldAlert, Eye
 } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Button } from '../../../../../components/ui/Button';
@@ -66,6 +66,9 @@ interface AbsenceSectionProps {
   setShowNoReplacementNotification: (show: boolean) => void;
   noReplacementTaskId: string | null;
   setNoReplacementTaskId: (id: string | null) => void;
+
+  // ✅ Nouvelle prop
+  isLoadingImpacts?: boolean;
   
   // Actions
   onCreate: () => void;
@@ -132,6 +135,7 @@ export const AbsenceSection = ({
   setShowNoReplacementNotification,
   noReplacementTaskId,
   setNoReplacementTaskId,
+  isLoadingImpacts = false,
   onCreate,
   onApprove,
   onReject,
@@ -280,21 +284,35 @@ export const AbsenceSection = ({
         />
       )}
 
-      {/* Contenu - Impact */}
+      {/* ✅ Contenu - Impact (amélioré pour espaces/workspaces) */}
       {absenceView === 'impact' && (
         <div className="space-y-6">
-          {visibleAbsences.filter(a => a.statut === 'approuvee').length === 0 ? (
+          {/* Spinner de chargement des impacts */}
+          {isLoadingImpacts && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-secondary/60" />
+              <span className="ml-3 text-sm text-theme-muted">Chargement des impacts...</span>
+            </div>
+          )}
+
+          {!isLoadingImpacts && visibleAbsences.filter(a => a.statut === 'approuvee').length === 0 && (
             <div className="py-16 text-center opacity-30 border-2 border-dashed border-theme-border-subtle rounded-3xl bg-theme-surface-hover/20">
               <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-theme-muted" />
               <p className="font-black text-[10px] uppercase tracking-widest">Aucun impact à surveiller</p>
               <p className="text-[10px] text-theme-muted/50 mt-1">Aucune absence approuvée en cours.</p>
             </div>
-          ) : (
+          )}
+
+          {!isLoadingImpacts && visibleAbsences.filter(a => a.statut === 'approuvee').length > 0 && (
             visibleAbsences
               .filter(a => a.statut === 'approuvee')
               .map(absence => {
+                // Récupération des données d'impact
+                const impactData = absenceImpacts[absence.id];
                 const impactedTasks = resourceType === 'liste' ? getTasksImpactedByAbsence(absence) : [];
+                const impactedProjects = resourceType !== 'liste' && impactData?.impacted_projects ? impactData.impacted_projects : [];
                 const showTasks = impactedTasks.length > 0;
+                const showProjects = impactedProjects.length > 0;
 
                 return (
                   <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70 hover:border-secondary/20 transition-all">
@@ -329,28 +347,33 @@ export const AbsenceSection = ({
                       
                       {/* Indicateur d'impact */}
                       <div className={`rounded-2xl border px-4 py-3 text-right ${
-                        showTasks ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
+                        (showTasks || showProjects) ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
                       }`}>
                         <p className={`text-[9px] font-black uppercase tracking-widest ${
-                          showTasks ? 'text-amber-500' : 'text-emerald-500'
+                          (showTasks || showProjects) ? 'text-amber-500' : 'text-emerald-500'
                         }`}>
-                          {showTasks ? '⚠️ Action recommandée' : 'Impact faible'}
+                          {(showTasks || showProjects) ? '⚠️ Action recommandée' : '✅ Impact faible'}
                         </p>
                         <p className="mt-1 text-xs font-bold text-theme-main">
                           {showTasks 
                             ? `${impactedTasks.length} tâche(s) impactée(s)` 
-                            : 'Aucune tâche impactée'
+                            : showProjects
+                              ? `${impactedProjects.length} projet(s) impacté(s)`
+                              : 'Aucun impact'
                           }
                         </p>
-                        {showTasks && (
+                        {(showTasks || showProjects) && (
                           <p className="text-[9px] text-theme-muted/60 mt-0.5">
-                            {impactedTasks.filter(t => t.priority === 'critique' || t.priority === 'haute').length} prioritaire(s)
+                            {showTasks 
+                              ? impactedTasks.filter(t => t.priority === 'critique' || t.priority === 'haute').length
+                              : impactedProjects.filter((p: any) => p.role === 'Administrateur' || p.role === 'Créateur').length
+                            } prioritaire(s)
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* Liste des tâches impactées */}
+                    {/* ✅ Liste des tâches impactées (pour les listes uniquement) */}
                     {showTasks && (
                       <div className="mt-4 pt-4 border-t border-theme-border-subtle">
                         <div className="flex items-center gap-2 mb-3">
@@ -374,6 +397,47 @@ export const AbsenceSection = ({
                           }}
                           isLoading={availabilityLoading}
                         />
+                      </div>
+                    )}
+
+                    {/* ✅ Liste des projets impactés (pour espaces/workspaces) */}
+                    {showProjects && (
+                      <div className="mt-4 pt-4 border-t border-theme-border-subtle">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                            Projets impactés par l'absence
+                          </p>
+                          <span className="ml-auto text-[10px] font-black text-theme-muted/50">
+                            {impactedProjects.length} projet{impactedProjects.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {impactedProjects.map((project: any) => (
+                            <div key={project.id} className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl hover:bg-theme-surface-hover/40 transition-all group">
+                              <div className="flex justify-between items-start">
+                                <div className="min-w-0">
+                                  <RouterLink 
+                                    to={`/liste/${project.id}`}
+                                    className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2"
+                                  >
+                                    {project.nom}
+                                    <Eye size={14} className="shrink-0 opacity-50 group-hover:opacity-100" />
+                                  </RouterLink>
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted mt-1">
+                                    Rôle : {project.role}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-sm font-black text-theme-main">{project.progression}%</span>
+                                  <div className="w-20 h-1.5 bg-theme-border-subtle rounded-full mt-1 overflow-hidden">
+                                    <div className="h-full bg-secondary rounded-full" style={{ width: `${project.progression}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </GlassCard>
@@ -545,7 +609,7 @@ export const AbsenceSection = ({
         </div>
       </Modal>
 
-      {/* ✅ MODALE - Impact d'une absence */}
+      {/* ✅ MODALE - Impact d'une absence (détaillée) */}
       <Modal
         isOpen={!!selectedAbsenceForImpact}
         onClose={() => setSelectedAbsenceForImpact(null)}
@@ -606,6 +670,7 @@ export const AbsenceSection = ({
                 </div>
               </div>
 
+              {/* ✅ Correction du libellé "Ce sous-espace" */}
               {(impactData.sole_admin_resources?.length > 0 || impactData.sole_creator_resources?.length > 0) && (
                 <div className="space-y-4">
                   <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Alerte Gouvernance Critique</p>
@@ -616,7 +681,7 @@ export const AbsenceSection = ({
                       <div>
                         <p className="text-sm font-black text-theme-main">Admin Unique : {res.nom}</p>
                         <p className="text-[11px] text-theme-muted">
-                          {res.type === 'liste' ? 'Cette liste' : 'Ce sous-espace'} n'aura plus d'admin actif durant l'absence.
+                          {res.type === 'liste' ? 'Cette liste' : res.type === 'espace' ? 'Cet espace' : 'Cette ressource'} n'aura plus d'admin actif durant l'absence.
                         </p>
                       </div>
                     </div>
@@ -628,7 +693,7 @@ export const AbsenceSection = ({
                       <div>
                         <p className="text-sm font-black text-theme-main">Créateur Unique : {res.nom}</p>
                         <p className="text-[11px] text-theme-muted">
-                          {res.type === 'liste' ? 'Cette liste' : 'Ce sous-espace'} n'aura plus de créateur direct actif.
+                          {res.type === 'liste' ? 'Cette liste' : res.type === 'espace' ? 'Cet espace' : 'Cette ressource'} n'aura plus de créateur direct actif.
                         </p>
                       </div>
                     </div>

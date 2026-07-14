@@ -234,7 +234,8 @@ def list_espace_members(
     _require_espace_access(db, espace_id, espace.id_workspace, current_user.id)
     return [_serialize_member(m) for m in get_espace_members(db, espace_id)]
 
-# Inviter un membre dans un espace
+# backend/api_espace/routes/utilisateur.py
+
 @router.post("/espaces/{espace_id}/invite_member_espace", response_model=EspaceInvitationResponse, status_code=status.HTTP_201_CREATED)
 def invite_espace_member(
     espace_id: str,
@@ -256,7 +257,7 @@ def invite_espace_member(
         membre_in.role,
     )
 
-    # Delegation de la logique d'invitation au CRUD
+    # Délégation de la logique d'invitation au CRUD
     result = invite_member_to_espace(db, espace_id, membre_in, token=token)
     email_target = membre_in.email or membre_in.username 
 
@@ -264,13 +265,16 @@ def invite_espace_member(
         # Cas utilisateur existant
         membre = result["membre"]
         token = result["invitation_token"]
-        target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else email_target
-        
+
+        # Récupérer l'email de l'utilisateur (si disponible) sinon fallback
+        recipient_email = membre.utilisateur.email if (membre.utilisateur and membre.utilisateur.email) else email_target
+        target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else recipient_email
+
         background_tasks.add_task(
             send_espace_invitation_email,
             current_user.username,
             target_name,
-            email_target,
+            recipient_email,   # ✅ utilisation de l'email valide
             espace.nom,
             membre_in.role,
             token,
@@ -279,7 +283,7 @@ def invite_espace_member(
         return {
             "status": "existing_user",
             "message": "Invitation envoyee a l'utilisateur existant.",
-            "email": email_target,
+            "email": recipient_email,
             "membre": _serialize_member(membre)
         }
     else:

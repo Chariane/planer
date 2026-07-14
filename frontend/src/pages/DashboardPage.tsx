@@ -24,6 +24,28 @@ const formatActivityMessage = (message: string): string => {
   return message;
 };
 
+// ✅ Fonction pour générer le lien vers la ressource
+const getActivityLink = (activity: any): string | null => {
+  const { resource_type, resource_id } = activity;
+
+  if (!resource_type || !resource_id) {
+    return null;
+  }
+
+  switch (resource_type) {
+    case 'workspace':
+      return `/workspace/${resource_id}`;
+    case 'espace':
+      return `/espace/${resource_id}`;
+    case 'liste':
+      return `/liste/${resource_id}`;
+    case 'tache':
+      return `/tache/${resource_id}`;
+    default:
+      return null;
+  }
+};
+
 export default function DashboardPage() {
   const {
     workspaces = [],
@@ -195,31 +217,59 @@ export default function DashboardPage() {
 
             <div className="space-y-3">
               {(dashboardStats?.recent_activities || []).length > 0 ? (
-                (dashboardStats?.recent_activities || []).map((activity: any, idx: number) => (
-                  <motion.div
-                    key={activity.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4 + idx * 0.06, type: 'spring' }}
-                    className="group flex items-center gap-4 p-4 rounded-2xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle hover:bg-theme-surface-hover hover:border-secondary/20 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-secondary/5"
-                  >
-                    <div className="w-11 h-11 rounded-xl bg-secondary/10 flex items-center justify-center border border-secondary/10 group-hover:scale-110 transition-transform duration-300">
-                      <Bell size={18} className="text-secondary/70 group-hover:text-secondary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-theme-main font-medium leading-relaxed">
-                        {formatActivityMessage(activity.message)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Clock size={12} className="text-theme-muted/30" />
-                        <span className="text-[10px] font-black text-theme-muted/30 uppercase tracking-tighter">
-                          {new Date(activity.date_creation).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
+                (dashboardStats?.recent_activities || []).map((activity: any, idx: number) => {
+                  const link = getActivityLink(activity);
+                  const content = (
+                    <>
+                      <div className="w-11 h-11 rounded-xl bg-secondary/10 flex items-center justify-center border border-secondary/10 group-hover:scale-110 transition-transform duration-300">
+                        <Bell size={18} className="text-secondary/70 group-hover:text-secondary" />
                       </div>
-                    </div>
-                    <ChevronRight size={16} className="text-theme-muted/10 group-hover:text-theme-muted/30 transition-all" />
-                  </motion.div>
-                ))
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-theme-main font-medium leading-relaxed">
+                          {formatActivityMessage(activity.message)}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Clock size={12} className="text-theme-muted/30" />
+                          <span className="text-[10px] font-black text-theme-muted/30 uppercase tracking-tighter">
+                            {new Date(activity.date_creation).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-theme-muted/10 group-hover:text-theme-muted/30 transition-all" />
+                    </>
+                  );
+
+                  if (link) {
+                    return (
+                      <motion.div
+                        key={activity.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + idx * 0.06, type: 'spring' }}
+                      >
+                        <Link
+                          to={link}
+                          className="group flex items-center gap-4 p-4 rounded-2xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle hover:bg-theme-surface-hover hover:border-secondary/20 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-secondary/5"
+                        >
+                          {content}
+                        </Link>
+                      </motion.div>
+                    );
+                  } else {
+                    // Pas de lien : affichage statique
+                    return (
+                      <motion.div
+                        key={activity.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + idx * 0.06, type: 'spring' }}
+                        className="group flex items-center gap-4 p-4 rounded-2xl bg-theme-surface/50 backdrop-blur-sm border border-theme-border-subtle hover:bg-theme-surface-hover hover:border-secondary/20 transition-all duration-300 shadow-sm hover:shadow-secondary/5"
+                      >
+                        {content}
+                      </motion.div>
+                    );
+                  }
+                })
               ) : (
                 <div className="py-16 text-center rounded-2xl border border-dashed border-theme-border-subtle bg-theme-surface/30">
                   <Bell size={40} className="text-theme-muted/20 mx-auto mb-4" />
@@ -229,7 +279,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Colonne droite : Favoris, Collaborations, Notifs */}
+          {/* Colonne droite : Favoris, Collaborations, Notifs (inchangée) */}
           <div className="space-y-8">
             {/* Favoris */}
             <div className="space-y-4">
@@ -239,11 +289,8 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-2">
                 {(() => {
-                  // Filtrer les workspaces où l'utilisateur a un rôle
                   const userWorkspaces = workspaces.filter(ws => ws.current_user_role !== null);
-                  // Trier par nombre de membres décroissant
                   const sorted = [...userWorkspaces].sort((a, b) => {
-                    // Utiliser member_count (propriété retournée par l'API) ou membres.length si c'est un tableau
                     const countA = Array.isArray(a.membres) ? a.membres.length : (a.member_count || 0);
                     const countB = Array.isArray(b.membres) ? b.membres.length : (b.member_count || 0);
                     return countB - countA;

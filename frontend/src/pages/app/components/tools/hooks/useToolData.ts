@@ -132,6 +132,13 @@ export const useToolData = ({
   const [noReplacementTaskId, setNoReplacementTaskId] = useState<string | null>(null);
   const [isAbsenceArchiveOpen, setIsAbsenceArchiveOpen] = useState(false);
 
+  // ✅ Nouvel état pour le chargement automatique des impacts
+  const [isLoadingImpacts, setIsLoadingImpacts] = useState(false);
+
+  // ✅ États pour les rapports (éligibilité des administrateurs directs)
+  const [hasCreatedDirectChildInSpace, setHasCreatedDirectChildInSpace] = useState(false);
+  const [hasCreatedDirectChildInWorkspace, setHasCreatedDirectChildInWorkspace] = useState(false);
+
   // Refs pour l'upload de fichiers et le debounce
   const fileInputRef = useRef<HTMLInputElement>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -189,10 +196,6 @@ export const useToolData = ({
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
   const isDirectListMember = !!listeId && isDirectMemberRecord?.role === ROLES.MEMBER;
   const listMemberNeedsAssignedTaskForReport = !!listeId && isDirectListMember && !hasAssignedTask;
-  
-  // États pour les rapports
-  const [hasCreatedDirectChildInSpace, setHasCreatedDirectChildInSpace] = useState(false);
-  const [hasCreatedDirectChildInWorkspace, setHasCreatedDirectChildInWorkspace] = useState(false);
   
   // Calcul des permissions de rapport
   const canCreateReport = listeId
@@ -415,6 +418,9 @@ export const useToolData = ({
     try {
       await loadMembers();
       
+      // Rafraîchir les indicateurs d'éligibilité des rapports
+      await refreshChildCreationStatus();
+      
       if (activeTool === 'files' && canViewFiles) {
         await loadFiles();
       } else if (activeTool === 'reports') {
@@ -428,6 +434,111 @@ export const useToolData = ({
       setLoading(false);
     }
   }, [activeTool, canViewFiles, loadMembers, loadFiles, loadReports, loadAbsences]);
+
+  // ============================================================
+  // RAFRAÎCHISSEMENT DE L'ÉLIGIBILITÉ DES RAPPORTS
+  // ============================================================
+  
+  const refreshChildCreationStatus = useCallback(async () => {
+    // Espace
+    if (espaceId && !listeId && currentUserId && isDirectResourceAdmin) {
+      try {
+        const [subSpacesRaw, listesRaw] = await Promise.all([
+          espaceService.getSubSpaces(espaceId).catch(() => []),
+          listeService.getByEspace(espaceId).catch(() => []),
+        ]);
+        const subSpaces = Array.isArray(subSpacesRaw) ? subSpacesRaw : [];
+        const listes = Array.isArray(listesRaw) ? listesRaw : [];
+
+        let hasChild = false;
+
+        // Vérifier les sous-espaces
+        for (const space of subSpaces) {
+          const spaceMembers = await espaceService.getMembers(space.id).catch(() => []);
+          const isCreator = (Array.isArray(spaceMembers) ? spaceMembers : []).some(
+            (member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId &&
+              member.role === ROLES.CREATOR
+          );
+          if (isCreator) {
+            hasChild = true;
+            break;
+          }
+        }
+
+        if (!hasChild) {
+          for (const liste of listes) {
+            const listeMembers = await listeService.getMembers(liste.id).catch(() => []);
+            const isCreator = (Array.isArray(listeMembers) ? listeMembers : []).some(
+              (member: any) =>
+                (member.id_utilisateur || member.utilisateur?.id) === currentUserId &&
+                member.role === ROLES.CREATOR
+            );
+            if (isCreator) {
+              hasChild = true;
+              break;
+            }
+          }
+        }
+
+        setHasCreatedDirectChildInSpace(hasChild);
+      } catch (err) {
+        console.warn('Erreur lors du chargement de l\'éligibilité des rapports pour l\'espace', err);
+        setHasCreatedDirectChildInSpace(false);
+      }
+    } else {
+      setHasCreatedDirectChildInSpace(false);
+    }
+
+    // Workspace
+    if (workspaceId && !espaceId && !listeId && currentUserId && isDirectResourceAdmin) {
+      try {
+        const [spacesRaw, listesRaw] = await Promise.all([
+          espaceService.getByWorkspace(workspaceId).catch(() => []),
+          listeService.getByWorkspace(workspaceId).catch(() => []),
+        ]);
+        const spaces = Array.isArray(spacesRaw) ? spacesRaw : [];
+        const listes = Array.isArray(listesRaw) ? listesRaw : [];
+
+        let hasChild = false;
+
+        for (const space of spaces) {
+          const spaceMembers = await espaceService.getMembers(space.id).catch(() => []);
+          const isCreator = (Array.isArray(spaceMembers) ? spaceMembers : []).some(
+            (member: any) =>
+              (member.id_utilisateur || member.utilisateur?.id) === currentUserId &&
+              member.role === ROLES.CREATOR
+          );
+          if (isCreator) {
+            hasChild = true;
+            break;
+          }
+        }
+
+        if (!hasChild) {
+          for (const liste of listes) {
+            const listeMembers = await listeService.getMembers(liste.id).catch(() => []);
+            const isCreator = (Array.isArray(listeMembers) ? listeMembers : []).some(
+              (member: any) =>
+                (member.id_utilisateur || member.utilisateur?.id) === currentUserId &&
+                member.role === ROLES.CREATOR
+            );
+            if (isCreator) {
+              hasChild = true;
+              break;
+            }
+          }
+        }
+
+        setHasCreatedDirectChildInWorkspace(hasChild);
+      } catch (err) {
+        console.warn('Erreur lors du chargement de l\'éligibilité des rapports pour le workspace', err);
+        setHasCreatedDirectChildInWorkspace(false);
+      }
+    } else {
+      setHasCreatedDirectChildInWorkspace(false);
+    }
+  }, [workspaceId, espaceId, listeId, currentUserId, isDirectResourceAdmin]);
 
   // ============================================================
   // EFFETS - AVEC DEBOUNCE POUR ÉVITER LE CLIGNOTEMENT
@@ -457,6 +568,11 @@ export const useToolData = ({
     };
   }, [activeTool, listeId, espaceId, workspaceId, selectedMemberId, canViewFiles, refreshCurrentTool]);
 
+  // Rafraîchir l'éligibilité quand le contexte change ou quand l'utilisateur change
+  useEffect(() => {
+    refreshChildCreationStatus();
+  }, [workspaceId, espaceId, listeId, currentUserId, isDirectResourceAdmin, refreshChildCreationStatus]);
+
   // Archives locales
   useEffect(() => {
     try {
@@ -475,6 +591,261 @@ export const useToolData = ({
       setArchivedAbsenceIds([]);
     }
   }, [absenceArchiveKey]);
+
+  // ============================================================
+  // MEMOIZED DATA (suite - dépend des fonctions définies ci-dessus)
+  // ============================================================
+  
+  const absencesWithAuthors = useMemo(() => {
+    const result = (absences || [])
+      .filter(Boolean)
+      .filter(a => a.statut !== 'annulee')
+      .map(a => ({
+        ...a,
+        owner_user_id: a.owner_user_id
+          || members.find(m => m.id === a.id_membre)?.id_utilisateur
+          || membershipMap.get(a.id_membre)?.id_utilisateur
+          || null,
+        authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
+        author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
+      }));
+    return result;
+  }, [absences, members, membershipMap, getAuthorName]);
+
+  // ✅ CORRECTION : Utiliser exclusivement owner_user_id pour identifier les demandes personnelles
+  const ownAbsences = useMemo(
+    () => absencesWithAuthors.filter(a =>
+      a.owner_user_id === currentUserId && !archivedAbsenceIds.includes(a.id)
+    ),
+    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
+  );
+
+  // ✅ CORRECTION : accessibleAbsences = toutes les absences des autres
+  const accessibleAbsences = useMemo(
+    () => absencesWithAuthors.filter(a => {
+      const isOwn = a.owner_user_id === currentUserId;
+      return !isOwn && !archivedAbsenceIds.includes(a.id);
+    }),
+    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
+  );
+
+  const archivedAbsences = useMemo(() => {
+    return absencesWithAuthors.filter(a => archivedAbsenceIds.includes(a.id));
+  }, [absencesWithAuthors, archivedAbsenceIds]);
+
+  const visibleAbsences = useMemo(
+    () => [...ownAbsences, ...accessibleAbsences],
+    [ownAbsences, accessibleAbsences],
+  );
+
+  // ✅ CORRECTION : pendingAbsences = toutes les absences en attente des autres
+  const pendingAbsences = useMemo(() => {
+    return accessibleAbsences.filter(absence => {
+      if (!absence || absence.statut !== 'en_attente') return false;
+
+      // ✅ Vérifier si l'utilisateur a le droit de voir cette demande
+      const hasPermission = (() => {
+        // --- LISTE ---
+        if (listeId) {
+          if (isDirectResourceAdmin) {
+            return absence.author_role === 'Membre' || absence.author_role === 'Administrateur';
+          }
+          if (isDirectResourceCreator) {
+            if (absence.author_role === 'Administrateur') return true;
+            
+            if (availabilityLoading || listAvailability.length === 0) {
+              return absence.author_role === 'Membre';
+            }
+            
+            const hasAvailableAdmin = directMembers.some(m => 
+              m.role === ROLES.ADMIN && 
+              listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+            );
+            
+            return absence.author_role === 'Membre' && !hasAvailableAdmin;
+          }
+        }
+
+        // --- ESPACE ---
+        if (espaceId) {
+          if (isDirectResourceAdmin) {
+            return absence.author_role === 'Membre';
+          }
+          if (isDirectResourceCreator) {
+            if (absence.author_role === 'Administrateur') return true;
+            if (availabilityLoading || listAvailability.length === 0) {
+              return absence.author_role === 'Membre';
+            }
+            const hasAvailableAdmin = directMembers.some(m => 
+              m.role === ROLES.ADMIN && 
+              listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
+            );
+            return absence.author_role === 'Membre' && !hasAvailableAdmin;
+          }
+        }
+
+        // --- WORKSPACE ---
+        if (workspaceId) {
+          if (isDirectResourceCreator) {
+            if (absence.author_role === 'Administrateur') return true;
+            
+            if (absence.author_role === 'Membre') {
+              const absenceStart = new Date(absence.date_debut);
+              const absenceEnd = absence.date_fin ? new Date(absence.date_fin) : absenceStart;
+              
+              const hasAvailableAdmin = directMembers.some(m => 
+                m.role === ROLES.ADMIN && 
+                m.id_utilisateur !== absence.owner_user_id &&
+                listAvailability.some(a => 
+                  a.id_utilisateur === m.id_utilisateur && 
+                  a.is_available &&
+                  (!a.current_absence || 
+                   new Date(a.current_absence.date_debut) > absenceEnd ||
+                   new Date(a.current_absence.date_fin || a.current_absence.date_debut) < absenceStart)
+                )
+              );
+              
+              return !hasAvailableAdmin;
+            }
+            return false;
+          }
+          
+          if (isDirectResourceAdmin) {
+            return absence.author_role === 'Membre';
+          }
+          
+          return false;
+        }
+
+        return false;
+      })();
+
+      return hasPermission;
+    });
+  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, directMembers, listeId, espaceId, workspaceId, availabilityLoading]);
+
+  const calendarAbsences = useMemo(
+    () => [...visibleAbsences]
+      .sort((a, b) => new Date(a.date_debut || 0).getTime() - new Date(b.date_debut || 0).getTime()),
+    [visibleAbsences],
+  );
+
+  const reportsWithAuthors = useMemo(() => {
+    return (reports || []).filter(Boolean).map(report => ({
+      ...report,
+      owner_user_id: report.owner_user_id
+        || members.find(member => member.id === report.id_membre)?.id_utilisateur
+        || membershipMap.get(report.id_membre)?.id_utilisateur
+        || null,
+      authorName: getAuthorName(report.id_membre, report.owner_user_id, report.owner_name)
+    }));
+  }, [reports, members, membershipMap, getAuthorName]);
+
+  const ownReports = useMemo(
+    () => reportsWithAuthors.filter(report =>
+      report.owner_user_id === currentUserId
+      || report.id_membre === isDirectMemberRecord?.id
+    ),
+    [reportsWithAuthors, currentUserId, isDirectMemberRecord?.id],
+  );
+
+  const accessibleReports = useMemo(
+    () => reportsWithAuthors.filter(report =>
+      report.owner_user_id !== currentUserId
+      && report.id_membre !== isDirectMemberRecord?.id
+      && !archivedReportIds.includes(report.id)
+    ),
+    [reportsWithAuthors, archivedReportIds, currentUserId, isDirectMemberRecord?.id],
+  );
+
+  const archivedReports = useMemo(
+    () => reportsWithAuthors.filter(report => archivedReportIds.includes(report.id)),
+    [reportsWithAuthors, archivedReportIds],
+  );
+
+  const filesWithAuthors = useMemo(() => {
+    return (files || []).filter(Boolean).map(file => ({
+      ...file,
+      owner_user_id: file.owner_user_id || file.meta_donnees?.owner_user_id || null,
+      authorName: getAuthorName(file.id_membre, file.meta_donnees?.owner_user_id, file.owner_name)
+    }));
+  }, [files, members, membershipMap, getAuthorName]);
+
+  const impactedTasksForAbsences = useMemo(() => {
+    const impacted = new Set<string>();
+    visibleAbsences
+      .filter(absence => ['en_attente', 'approuvee'].includes(absence.statut))
+      .forEach(absence => {
+        if (!absence) return;
+        tasks.forEach(task => {
+          const assignedToAbsenceOwner = task.assignees?.some(assignee => assignee.id === absence.owner_user_id);
+          if (assignedToAbsenceOwner && rangesOverlap(absence.date_debut, absence.date_fin, task.startDate || task.dueDate, task.dueDate)) {
+            impacted.add(task.id);
+          }
+        });
+      });
+    return impacted.size;
+  }, [tasks, visibleAbsences]);
+
+  const absenceDashboard = useMemo(() => {
+    const unavailableToday = listAvailability.filter(item => !item.is_available).length;
+    const upcoming = visibleAbsences.filter(absence =>
+      absence.statut === 'approuvee' && new Date(absence.date_debut) > new Date()
+    ).length;
+    
+    const impactedProjectsCount = visibleAbsences.reduce((acc, absence) => {
+      const impact = absenceImpacts[absence.id];
+      if (impact && impact.impacted_projects) {
+        return acc + impact.impacted_projects.length;
+      }
+      return acc;
+    }, 0);
+
+    return {
+      unavailableToday,
+      pending: pendingAbsences.length,
+      upcoming,
+      impactedTasks: impactedTasksForAbsences,
+      impactedProjectsCount,
+    };
+  }, [impactedTasksForAbsences, listAvailability, pendingAbsences.length, visibleAbsences, absenceImpacts]);
+
+  // ============================================================
+  // ✅ EFFET : Charger automatiquement les impacts dans l'onglet Impact
+  // (placé ICI après la déclaration de visibleAbsences et absenceDashboard)
+  // ============================================================
+  useEffect(() => {
+    // Ne charger que si l'onglet actif est 'absences' et la vue est 'impact'
+    if (activeTool !== 'absences' || absenceView !== 'impact') return;
+    if (isLoadingImpacts) return;
+    
+    // Récupérer les absences approuvées qui n'ont pas encore d'impact
+    const approvedAbsences = visibleAbsences.filter(
+      a => a.statut === 'approuvee' && !absenceImpacts[a.id]
+    );
+    if (approvedAbsences.length === 0) return;
+
+    setIsLoadingImpacts(true);
+    
+    const loadImpacts = async () => {
+      try {
+        await Promise.all(
+          approvedAbsences.map(async (absence) => {
+            try {
+              const impact = await absenceService.getImpact(absence.id);
+              setAbsenceImpacts(prev => ({ ...prev, [absence.id]: impact }));
+            } catch (err) {
+              console.error(`Erreur lors du chargement de l'impact pour ${absence.id}`, err);
+            }
+          })
+        );
+      } finally {
+        setIsLoadingImpacts(false);
+      }
+    };
+    
+    loadImpacts();
+  }, [activeTool, absenceView, visibleAbsences, absenceImpacts, isLoadingImpacts]);
 
   // ============================================================
   // ACTIONS - FICHIERS
@@ -945,224 +1316,6 @@ export const useToolData = ({
   }, [loading]);
 
   // ============================================================
-  // MEMOIZED DATA (suite - dépend des fonctions définies ci-dessus)
-  // ============================================================
-  
-  const absencesWithAuthors = useMemo(() => {
-    const result = (absences || [])
-      .filter(Boolean)
-      .filter(a => a.statut !== 'annulee')
-      .map(a => ({
-        ...a,
-        owner_user_id: a.owner_user_id
-          || members.find(m => m.id === a.id_membre)?.id_utilisateur
-          || membershipMap.get(a.id_membre)?.id_utilisateur
-          || null,
-        authorName: getAuthorName(a.id_membre, a.owner_user_id, a.owner_name),
-        author_role: members.find(m => m.id === a.id_membre)?.role || 'Membre'
-      }));
-    return result;
-  }, [absences, members, membershipMap, getAuthorName]);
-
-  // ✅ CORRECTION : Utiliser exclusivement owner_user_id pour identifier les demandes personnelles
-  const ownAbsences = useMemo(
-    () => absencesWithAuthors.filter(a =>
-      a.owner_user_id === currentUserId && !archivedAbsenceIds.includes(a.id)
-    ),
-    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
-  );
-
-  // ✅ CORRECTION : accessibleAbsences = toutes les absences des autres
-  const accessibleAbsences = useMemo(
-    () => absencesWithAuthors.filter(a => {
-      const isOwn = a.owner_user_id === currentUserId;
-      return !isOwn && !archivedAbsenceIds.includes(a.id);
-    }),
-    [absencesWithAuthors, archivedAbsenceIds, currentUserId],
-  );
-
-  const archivedAbsences = useMemo(() => {
-    return absencesWithAuthors.filter(a => archivedAbsenceIds.includes(a.id));
-  }, [absencesWithAuthors, archivedAbsenceIds]);
-
-  const visibleAbsences = useMemo(
-    () => [...ownAbsences, ...accessibleAbsences],
-    [ownAbsences, accessibleAbsences],
-  );
-
-  // ✅ CORRECTION : pendingAbsences = toutes les absences en attente des autres
-  const pendingAbsences = useMemo(() => {
-    return accessibleAbsences.filter(absence => {
-      if (!absence || absence.statut !== 'en_attente') return false;
-
-      // ✅ Vérifier si l'utilisateur a le droit de voir cette demande
-      const hasPermission = (() => {
-        // --- LISTE ---
-        if (listeId) {
-          if (isDirectResourceAdmin) {
-            return absence.author_role === 'Membre' || absence.author_role === 'Administrateur';
-          }
-          if (isDirectResourceCreator) {
-            if (absence.author_role === 'Administrateur') return true;
-            
-            if (availabilityLoading || listAvailability.length === 0) {
-              return absence.author_role === 'Membre';
-            }
-            
-            const hasAvailableAdmin = directMembers.some(m => 
-              m.role === ROLES.ADMIN && 
-              listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
-            );
-            
-            return absence.author_role === 'Membre' && !hasAvailableAdmin;
-          }
-        }
-
-        // --- ESPACE ---
-        if (espaceId) {
-          if (isDirectResourceAdmin) {
-            return absence.author_role === 'Membre';
-          }
-          if (isDirectResourceCreator) {
-            if (absence.author_role === 'Administrateur') return true;
-            if (availabilityLoading || listAvailability.length === 0) {
-              return absence.author_role === 'Membre';
-            }
-            const hasAvailableAdmin = directMembers.some(m => 
-              m.role === ROLES.ADMIN && 
-              listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
-            );
-            return absence.author_role === 'Membre' && !hasAvailableAdmin;
-          }
-        }
-
-        // --- WORKSPACE ---
-        if (workspaceId) {
-          if (isDirectResourceCreator) {
-            if (absence.author_role === 'Administrateur') return true;
-            
-            if (absence.author_role === 'Membre') {
-              const absenceStart = new Date(absence.date_debut);
-              const absenceEnd = absence.date_fin ? new Date(absence.date_fin) : absenceStart;
-              
-              const hasAvailableAdmin = directMembers.some(m => 
-                m.role === ROLES.ADMIN && 
-                m.id_utilisateur !== absence.owner_user_id &&
-                listAvailability.some(a => 
-                  a.id_utilisateur === m.id_utilisateur && 
-                  a.is_available &&
-                  (!a.current_absence || 
-                   new Date(a.current_absence.date_debut) > absenceEnd ||
-                   new Date(a.current_absence.date_fin || a.current_absence.date_debut) < absenceStart)
-                )
-              );
-              
-              return !hasAvailableAdmin;
-            }
-            return false;
-          }
-          
-          if (isDirectResourceAdmin) {
-            return absence.author_role === 'Membre';
-          }
-          
-          return false;
-        }
-
-        return false;
-      })();
-
-      return hasPermission;
-    });
-  }, [accessibleAbsences, isDirectResourceAdmin, isDirectResourceCreator, listAvailability, directMembers, listeId, espaceId, workspaceId, availabilityLoading]);
-
-  const calendarAbsences = useMemo(
-    () => [...visibleAbsences]
-      .sort((a, b) => new Date(a.date_debut || 0).getTime() - new Date(b.date_debut || 0).getTime()),
-    [visibleAbsences],
-  );
-
-  const reportsWithAuthors = useMemo(() => {
-    return (reports || []).filter(Boolean).map(report => ({
-      ...report,
-      owner_user_id: report.owner_user_id
-        || members.find(member => member.id === report.id_membre)?.id_utilisateur
-        || membershipMap.get(report.id_membre)?.id_utilisateur
-        || null,
-      authorName: getAuthorName(report.id_membre, report.owner_user_id, report.owner_name)
-    }));
-  }, [reports, members, membershipMap, getAuthorName]);
-
-  const ownReports = useMemo(
-    () => reportsWithAuthors.filter(report =>
-      report.owner_user_id === currentUserId
-      || report.id_membre === isDirectMemberRecord?.id
-    ),
-    [reportsWithAuthors, currentUserId, isDirectMemberRecord?.id],
-  );
-
-  const accessibleReports = useMemo(
-    () => reportsWithAuthors.filter(report =>
-      report.owner_user_id !== currentUserId
-      && report.id_membre !== isDirectMemberRecord?.id
-      && !archivedReportIds.includes(report.id)
-    ),
-    [reportsWithAuthors, archivedReportIds, currentUserId, isDirectMemberRecord?.id],
-  );
-
-  const archivedReports = useMemo(
-    () => reportsWithAuthors.filter(report => archivedReportIds.includes(report.id)),
-    [reportsWithAuthors, archivedReportIds],
-  );
-
-  const filesWithAuthors = useMemo(() => {
-    return (files || []).filter(Boolean).map(file => ({
-      ...file,
-      owner_user_id: file.owner_user_id || file.meta_donnees?.owner_user_id || null,
-      authorName: getAuthorName(file.id_membre, file.meta_donnees?.owner_user_id, file.owner_name)
-    }));
-  }, [files, members, membershipMap, getAuthorName]);
-
-  const impactedTasksForAbsences = useMemo(() => {
-    const impacted = new Set<string>();
-    visibleAbsences
-      .filter(absence => ['en_attente', 'approuvee'].includes(absence.statut))
-      .forEach(absence => {
-        if (!absence) return;
-        tasks.forEach(task => {
-          const assignedToAbsenceOwner = task.assignees?.some(assignee => assignee.id === absence.owner_user_id);
-          if (assignedToAbsenceOwner && rangesOverlap(absence.date_debut, absence.date_fin, task.startDate || task.dueDate, task.dueDate)) {
-            impacted.add(task.id);
-          }
-        });
-      });
-    return impacted.size;
-  }, [tasks, visibleAbsences]);
-
-  const absenceDashboard = useMemo(() => {
-    const unavailableToday = listAvailability.filter(item => !item.is_available).length;
-    const upcoming = visibleAbsences.filter(absence =>
-      absence.statut === 'approuvee' && new Date(absence.date_debut) > new Date()
-    ).length;
-    
-    const impactedProjectsCount = visibleAbsences.reduce((acc, absence) => {
-      const impact = absenceImpacts[absence.id];
-      if (impact && impact.impacted_projects) {
-        return acc + impact.impacted_projects.length;
-      }
-      return acc;
-    }, 0);
-
-    return {
-      unavailableToday,
-      pending: pendingAbsences.length,
-      upcoming,
-      impactedTasks: impactedTasksForAbsences,
-      impactedProjectsCount,
-    };
-  }, [impactedTasksForAbsences, listAvailability, pendingAbsences.length, visibleAbsences, absenceImpacts]);
-
-  // ============================================================
   // RETOUR
   // ============================================================
   
@@ -1283,6 +1436,7 @@ export const useToolData = ({
     loadReports,
     loadAbsences,
     refreshCurrentTool,
+    refreshChildCreationStatus,
     handleUploadFile,
     handleCreateFile,
     handleDeleteFile,
@@ -1312,5 +1466,8 @@ export const useToolData = ({
     getSortedReplacementCandidates,
     rangesOverlap,
     isDirectAdmin,
+
+    // ✅ Nouvel état
+    isLoadingImpacts,
   };
 };
