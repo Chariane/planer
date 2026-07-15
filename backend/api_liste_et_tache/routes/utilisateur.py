@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, Request
-import shutil
 import os
 from pathlib import Path
 from fastapi.responses import RedirectResponse
@@ -13,6 +12,7 @@ from ..core.emails import send_liste_invitation_email
 from ..core.database import get_db
 from ..crud.canevas_enhanced import get_enhanced_canevas
 from ..core.security import get_current_user, decode_invitation_token, config_data, get_access_token_from_request
+from ..core.antivirus import scan_path_with_clamav, unique_storage_name, write_upload_to_temp
 from ..core.function import (
     LISTE_OWNER_ROLE,
     LISTE_MEMBER_ROLE,
@@ -1085,25 +1085,62 @@ async def upload_file_endpoint(
     file: UploadFile = File(...),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    """Télécharge un fichier binaire et retourne son URL."""
-    uploads_dir = Path(__file__).resolve().parent.parent / "uploads"
-    os.makedirs(uploads_dir, exist_ok=True)
+    """Télécharge un fichier binaire après validation et scan antivirus."""
+    base_dir = Path(__file__).resolve().parent.parent
+    tmp_dir = base_dir / "upload_tmp"
+    clean_dir = base_dir / "uploads" / "clean"
+    clean_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = os.path.basename(file.filename)
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    unique_filename = f"{timestamp}_{filename}"
-    file_path = uploads_dir / unique_filename
+    original_filename, tmp_path, size = await write_upload_to_temp(file, tmp_dir)
+    clean_filename = unique_storage_name(original_filename)
+    clean_path = clean_dir / clean_filename
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        scan_status = scan_path_with_clamav(tmp_path)
+        tmp_path.replace(clean_path)
+    except HTTPException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Impossible de finaliser l'envoi du fichier.",
+        ) from exc
 
     base_url = config_data.get("LISTE_TACHE_URL", "http://localhost:8004").rstrip("/")
-    file_url = f"{base_url}/uploads/{unique_filename}"
+    file_url = f"{base_url}/uploads/clean/{clean_filename}"
 
     return {
-        "filename": filename,
+        "filename": original_filename,
+        "stored_filename": clean_filename,
         "url": file_url,
-        "content_type": file.content_type
+        "content_type": file.content_type,
+        "size": size,
+        "scan_status": scan_status,
+    }
+
+
+@router.post("/files/scan")
+async def scan_file_endpoint(
+    file: UploadFile = File(...),
+    current_user: UtilisateurOut = Depends(get_current_user),
+):
+    """Analyse une pièce jointe sans la stocker définitivement."""
+    base_dir = Path(__file__).resolve().parent.parent
+    tmp_dir = base_dir / "upload_tmp"
+    original_filename, tmp_path, size = await write_upload_to_temp(file, tmp_dir)
+
+    try:
+        scan_status = scan_path_with_clamav(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return {
+        "filename": original_filename,
+        "content_type": file.content_type,
+        "size": size,
+        "scan_status": scan_status,
     }
 
 

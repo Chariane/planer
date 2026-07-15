@@ -185,6 +185,35 @@ export function clearAccessToken() {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
 }
 
+const AUTH_ROUTES_WITH_EXPECTED_401 = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/verify-email-code',
+  '/auth/resend-verification-code',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+];
+
+let hasDispatchedSessionExpired = false;
+
+function shouldRedirectOnUnauthorized(endpoint: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!getAccessToken()) return false;
+  return !AUTH_ROUTES_WITH_EXPECTED_401.some((route) => endpoint.startsWith(route));
+}
+
+function handleUnauthorizedResponse(endpoint: string) {
+  if (!shouldRedirectOnUnauthorized(endpoint) || hasDispatchedSessionExpired) return;
+
+  hasDispatchedSessionExpired = true;
+  clearAccessToken();
+  window.dispatchEvent(new CustomEvent('sessionExpired'));
+
+  window.setTimeout(() => {
+    hasDispatchedSessionExpired = false;
+  }, 1500);
+}
+
 export async function apiFetch(baseUrl: string, endpoint: string, options?: RequestInit) {
   // Sanitize l'endpoint
   const sanitizedEndpoint = sanitizeUrl(endpoint);
@@ -219,7 +248,8 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
 
   const fetchWithTimeout = async () => {
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    const timeoutMs = isFormData ? 180000 : 15000;
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await fetch(`${baseUrl}${sanitizedEndpoint}`, {
         ...options,
@@ -245,6 +275,10 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
     } else {
       throw new Error(sanitizeApiErrorMessage(error));
     }
+  }
+
+  if (response.status === 401) {
+    handleUnauthorizedResponse(sanitizedEndpoint);
   }
 
   // Pour les réponses 204 No Content, retourner null sans parser le JSON

@@ -52,6 +52,15 @@ export const plannerToolsService = {
     });
   },
 
+  scanFile: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiFetch(LISTE_TACHE_BASE_URL, '/listes/files/scan', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   createFile: (data: {
     nom: string;
     url_fichier?: string;

@@ -44,6 +44,7 @@ import { sanitizeApiErrorMessage } from '../services/api';
 import { sanitizeHtml, sanitizeText } from '../utils/sanitize';
 import { authService } from '../services/auth.service';
 import type { PublicUserProfile } from '../services/auth.service';
+import { plannerToolsService } from '../services/plannerTools.service';
 import {
   messagerieService,
   ensureChatGroup,  // ✅ AJOUT
@@ -427,6 +428,7 @@ export default function MessageriePage() {
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [attachmentSecurityStatus, setAttachmentSecurityStatus] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1272,6 +1274,8 @@ export default function MessageriePage() {
     }
 
     try {
+      setAttachmentSecurityStatus('Analyse antivirus de la pièce jointe en cours...');
+      await plannerToolsService.scanFile(file);
       const dataUrl = await fileToDataUrl(file);
       const { mimeType, base64 } = splitDataUrl(dataUrl);
       setPendingAttachment({
@@ -1280,9 +1284,12 @@ export default function MessageriePage() {
         mimeType: mimeType || file.type || 'application/octet-stream',
         base64,
       });
+      setAttachmentSecurityStatus('Pièce jointe validée par antivirus.');
       setError(null);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Impossible de lire ce fichier.'));
+      setPendingAttachment(null);
+      setAttachmentSecurityStatus(null);
+      setError(getErrorMessage(err, 'Pièce jointe refusée par l’analyse antivirus.'));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -1430,6 +1437,7 @@ export default function MessageriePage() {
 
     setDraft('');
     setPendingAttachment(null);
+    setAttachmentSecurityStatus(null);
     setSending(true);
     setError(null);
 
@@ -1446,6 +1454,7 @@ export default function MessageriePage() {
     } catch (err: unknown) {
       setDraft(text);
       setPendingAttachment(attachment);
+      if (attachment) setAttachmentSecurityStatus('Pièce jointe validée par antivirus.');
       setError(getErrorMessage(err, "Impossible d'envoyer ce message."));
     } finally {
       setSending(false);
@@ -2203,6 +2212,12 @@ export default function MessageriePage() {
                     onChange={event => handleFileSelect(event.target.files?.[0])}
                     accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
                   />
+                  {attachmentSecurityStatus && (
+                    <div className="mb-3 flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300">
+                      <Shield size={15} className="shrink-0" />
+                      <span className="min-w-0 truncate">{attachmentSecurityStatus}</span>
+                    </div>
+                  )}
                   {pendingAttachment && (
                     <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
                       <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
@@ -2217,7 +2232,10 @@ export default function MessageriePage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setPendingAttachment(null)}
+                        onClick={() => {
+                          setPendingAttachment(null);
+                          setAttachmentSecurityStatus(null);
+                        }}
                         className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
                         title="Retirer la pièce jointe"
                       >

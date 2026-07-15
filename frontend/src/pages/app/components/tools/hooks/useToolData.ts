@@ -855,14 +855,16 @@ export const useToolData = ({
     if (!file) return;
     setIsUploading(true);
     try {
+      toast.info(`Analyse antivirus de "${file.name}" en cours...`);
       const result = await plannerToolsService.uploadFile(file);
+      const scanStatus = result?.scan_status === 'skipped' ? 'non disponible' : 'validée';
       setFileForm(prev => ({
         ...prev,
         nom: prev.nom || file.name,
         url_fichier: result.url,
         type_fichier: file.name.split('.').pop()?.toLowerCase() || 'fichier'
       }));
-      toast.success(`Fichier "${file.name}" prêt à être joint.`);
+      toast.success(`Fichier "${file.name}" prêt à être joint. Analyse antivirus ${scanStatus}.`);
     } catch (err: any) {
       toast.error(`Échec de l'envoi du fichier : ${getErrorMessage(err)}`);
     } finally {

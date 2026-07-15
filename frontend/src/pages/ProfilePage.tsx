@@ -155,22 +155,23 @@ export default function ProfilePage() {
     }
 
     setPhotoLoading(true);
+    toast.info('Analyse antivirus de la photo en cours...');
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const photoDataUrl = String(reader.result);
         const savedPhotoBase64 = await updateProfilePhoto(photoDataUrl);
         setPhotoPreview(buildPhotoSrc(savedPhotoBase64) || photoDataUrl);
-        toast.success('✅ Photo de profil mise à jour');
+        toast.success('Photo de profil mise à jour. Analyse antivirus validée.');
       } catch (err: unknown) {
-        toast.error(getErrorMessage(err, '❌ Impossible de mettre à jour la photo'));
+        toast.error(getErrorMessage(err, 'Impossible de mettre à jour la photo.'));
       } finally {
         setPhotoLoading(false);
       }
     };
     reader.onerror = () => {
       setPhotoLoading(false);
-      toast.error('❌ Impossible de lire cette image.');
+      toast.error('Impossible de lire cette image.');
     };
     reader.readAsDataURL(file);
   };

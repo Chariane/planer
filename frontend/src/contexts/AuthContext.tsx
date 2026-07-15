@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { authService } from '../services/auth.service';
 import { baseApi, clearCacheOnLogout } from '../store/api/baseApi';
-import { getAccessToken } from '../services/api';
+import { clearAccessToken, getAccessToken } from '../services/api';
 import type { ProfileUpdatePayload, RegisterPayload } from '../services/auth.service';
 
 interface User {
@@ -89,6 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     loadUser();
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      clearAccessToken();
+      setUser(null);
+      setToken(null);
+    };
+
+    window.addEventListener('sessionExpired', handleSessionExpired);
+    return () => window.removeEventListener('sessionExpired', handleSessionExpired);
   }, []);
 
   const register = async (data: RegisterPayload) => {

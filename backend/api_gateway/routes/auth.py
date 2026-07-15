@@ -41,6 +41,7 @@ from ..core.security import (
     verify_refresh_token,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
+from ..core.antivirus import scan_image_bytes_with_clamav
 from ..schemas import (
     EmailSchema,
     ChangePasswordRequest,
@@ -114,6 +115,8 @@ def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
 
     if len(photo_bytes) > MAX_PROFILE_PHOTO_BYTES:
         raise HTTPException(status_code=413, detail="La photo de profil ne doit pas depasser 2 Mo.")
+
+    scan_image_bytes_with_clamav(photo_bytes)
     return photo_bytes
 
 

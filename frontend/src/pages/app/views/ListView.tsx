@@ -159,7 +159,7 @@ function TaskFilesSection({
   const handleUpload = async (file: File | null) => {
     if (!file || !canAttach) return;
     setUploading(true);
-    setError(null);
+    setError('Analyse antivirus du fichier en cours...');
     try {
       const uploaded = await plannerToolsService.uploadFile(file);
       await plannerToolsService.createFile({
@@ -176,6 +176,7 @@ function TaskFilesSection({
         target_id: task.id,
       });
       await loadFiles();
+      setError(null);
     } catch (err: any) {
       setError(err?.message || 'Impossible de rattacher ce fichier à la tâche.');
     } finally {
