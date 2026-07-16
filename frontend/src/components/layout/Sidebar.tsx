@@ -88,9 +88,17 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
     refetch(); // ✅ Rafraîchit le cache RTK Query
   };
 
+  const isWorkspaceCreator = (workspace?: Workspace | null) =>
+    !!workspace && (
+      workspace.id_utilisateur === user?.id
+      || workspace.current_user_role === 'Créateur'
+      || workspace.current_user_role === 'Createur'
+    );
+
   const openWorkspaceMenu = (event: MouseEvent, workspace: Workspace) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!isWorkspaceCreator(workspace)) return;
     setContextMenu({
       visible: true,
       x: event.clientX,
@@ -101,6 +109,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
 
   const openEditWorkspace = () => {
     if (!contextMenu.workspace) return;
+    if (!isWorkspaceCreator(contextMenu.workspace)) return;
     setEditName(contextMenu.workspace.nom || '');
     setEditDescription(contextMenu.workspace.description || '');
     setIsEditModalOpen(true);
@@ -109,6 +118,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
 
   const handleEditWorkspace = async () => {
     if (!contextMenu.workspace || !editName.trim()) return;
+    if (!isWorkspaceCreator(contextMenu.workspace)) return;
     await updateWorkspace(contextMenu.workspace.id, {
       nom: editName,
       description: editDescription,
@@ -120,6 +130,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
   const handleDeleteWorkspace = async () => {
     const workspace = contextMenu.workspace;
     if (!workspace) return;
+    if (!isWorkspaceCreator(workspace)) return;
     setContextMenu(prev => ({ ...prev, visible: false }));
 
     setConfirmData({
@@ -501,7 +512,7 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-all duration-200"
             >
               <Edit size={14} className="text-secondary" />
-              Modifier l'Espace
+              Modifier le workspace
             </button>
             <div className="h-[1px] bg-white/5 my-1 mx-2" />
             <button
@@ -522,10 +533,10 @@ export default function Sidebar({ isOpen, isCompact = false }: SidebarProps) {
       />
 
       {/* Edit Workspace Modal */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Éditer l'Organisation" size="md">
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Éditer le workspace" size="md">
         <div className="space-y-6 py-2">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom de l'espace</label>
+            <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Nom du workspace</label>
             <input
               type="text"
               value={editName}

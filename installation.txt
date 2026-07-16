@@ -1,0 +1,73 @@
+sudo apt update
+sudo apt install clamav clamav-daemon
+sudo freshclam
+sudo systemctl enable --now clamav-daemon
+sudo systemctl restart clamav-daemon
+
+printf '%s\n' 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > /tmp/eicar.txt
+clamscan /tmp/eicar.txt
+
+#Vérifier si c'est rapide 
+time clamdscan --fdpass --no-summary /etc/hosts
+
+sudo apt update
+sudo apt install clamav clamav-daemon
+sudo freshclam
+sudo systemctl enable --now clamav-daemon
+sudo systemctl restart clamav-daemon
+Je l'installe sur Render ainsi ?
+
+
+
+
+
+
+11:46 AM
+
+
+
+
+
+
+Worked for 35s
+
+
+
+Pas exactement comme ça sur Render.
+Sur Render, tu n’as généralement pas un serveur VPS où tu peux faire durablement :
+sudo apt install ...
+sudo systemctl ...
+Render reconstruit ton environnement à chaque déploiement. Donc si tu veux ClamAV fiable en production, le mieux est de passer ton backend en Docker. La doc Render dit d’utiliser Docker quand ton service a besoin de packages OS non inclus dans les runtimes natifs, et avec Docker tu contrôles les paquets installés dans l’image.
+Dans ton cas : oui à apt install clamav clamav-daemon, mais dans un Dockerfile, pas manuellement dans le terminal Render.
+Exemple simplifié :
+FROM python:3.11-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clamav clamav-daemon \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN freshclam || true
+
+CMD service clamav-daemon start && uvicorn api_liste_et_tache.main:app --host 0.0.0.0 --port $PORT
+Dans Render :
+Language : Docker
+Dockerfile Path : le chemin vers ton Dockerfile
+Env vars :
+ANTIVIRUS_REQUIRED=true
+CLAMD_SOCKET=/var/run/clamav/clamd.ctl
+CLAMAV_SCAN_TIMEOUT_SECONDS=120
+MAX_UPLOAD_BYTES=10485760
+Mais attention : ta plateforme a plusieurs APIs (api_gateway, api_liste_et_tache, etc.). ClamAV doit être dans les services qui scannent :
+api_liste_et_tache : uploads fichiers/listes/messagerie pré-scan
+api_gateway : photo de profil
+Donc soit tu mets ClamAV dans ces deux services Docker, soit tu crées un service antivirus séparé, mais ça demande d’adapter le code.
+Pour ton cas, le plus simple sur Render : Dockeriser les backends concernés avec ClamAV intégré.
+Sources Render : Render recommande Docker quand il faut des packages OS spécifiques, et indique que les services Docker peuvent être construits depuis un Dockerfile dans ton repo.
+https://render.com/docs/docker

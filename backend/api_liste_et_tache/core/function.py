@@ -1426,7 +1426,8 @@ def _require_task_management_access(db: Session, tache_id: str, current_user_id:
     """
     Vérifie l'accès de gestion d'une tâche.
     - Créateur/Admin de la liste, du workspace ou d'un espace parent : peuvent gérer toutes les tâches
-    - Membre direct de liste : lecture seule, même sur les tâches assignées
+    - Créateur direct de la tâche : peut gérer cette tâche précise
+    - Membre direct de liste ou assigné simple : accès opérationnel limité
     """
     tache = _get_tache_or_404(db, tache_id)
     liste = _get_liste_or_404(db, tache.id_liste)
@@ -1436,6 +1437,19 @@ def _require_task_management_access(db: Session, tache_id: str, current_user_id:
         return True
     except HTTPException:
         pass
+
+    direct_task_member = (
+        db.query(Membre)
+        .filter(
+            Membre.id_tache == tache_id,
+            Membre.id_utilisateur == current_user_id,
+            Membre.statut == "Actif",
+            Membre.role == LISTE_OWNER_ROLE,
+        )
+        .first()
+    )
+    if direct_task_member:
+        return True
     
     raise HTTPException(status_code=403, detail="Acces non autorise a cette tache")
 

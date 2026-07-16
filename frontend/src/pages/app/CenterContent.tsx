@@ -687,11 +687,21 @@ export default function CenterContent() {
     return false;
   };
 
+  const canManageTaskFully = (task: Task): boolean => {
+    if (canCreateContent) return true;
+    if (!user?.id) return false;
+
+    return task.assignees.some(assignee =>
+      assignee.id === user.id &&
+      assignee.role === 'Créateur'
+    );
+  };
+
   const openEditTask = (task: Task) => {
     if (!canCreateContent && !canOperateAssignedTask(task)) return;
     setEditingTask(task);
     setParentTaskForCreation(null);
-    setIsTaskModalLimited(!canCreateContent && canOperateAssignedTask(task));
+    setIsTaskModalLimited(!canManageTaskFully(task) && canOperateAssignedTask(task));
     setTaskModalError(null);
     setIsTaskModalOpen(true);
   };

@@ -11,12 +11,12 @@ PLAN_CATALOG = [
         "highlight": False,
         "billing": {"montant": 0, "devise": "XOF", "duree_jours": 30},
         "limits": {
-            "workspaces": 1,
-            "espaces": 5,
-            "projets": 10,
-            "membres": 5,
-            "stockage_mo": 250,
-            "historique_jours": 30,
+            "workspaces": None,
+            "espaces": None,
+            "projets": None,
+            "membres": None,
+            "stockage_mo": None,
+            "historique_jours": None,
         },
         "features": [
             "Workspace personnel cree automatiquement",
@@ -24,11 +24,9 @@ PLAN_CATALOG = [
             "Canevas de projet et suivi d'avancement",
             "Messagerie de groupe basique",
             "Notifications essentielles",
+            "Acces sans quotas de plan",
         ],
-        "restrictions": [
-            "Quotas limites pour les membres et fichiers",
-            "Pas de supervision avancee d'organisation",
-        ],
+        "restrictions": [],
     },
     {
         "code": "PROFESSIONNEL",
@@ -39,12 +37,12 @@ PLAN_CATALOG = [
         "highlight": True,
         "billing": {"montant": 5000, "devise": "XOF", "duree_jours": 30},
         "limits": {
-            "workspaces": 5,
+            "workspaces": None,
             "espaces": None,
             "projets": None,
-            "membres": 50,
-            "stockage_mo": 5120,
-            "historique_jours": 365,
+            "membres": None,
+            "stockage_mo": None,
+            "historique_jours": None,
         },
         "features": [
             "Plusieurs workspaces",
@@ -53,11 +51,9 @@ PLAN_CATALOG = [
             "Fichiers plus volumineux",
             "Notifications avancees",
             "Appels audio et video",
-            "Historique plus long",
+            "Historique illimite",
         ],
-        "restrictions": [
-            "Facturation et supervision limitees",
-        ],
+        "restrictions": [],
     },
     {
         "code": "ENTREPRISE",
@@ -76,7 +72,7 @@ PLAN_CATALOG = [
             "historique_jours": None,
         },
         "features": [
-            "Workspaces, espaces et projets a quotas eleves",
+            "Workspaces, espaces et projets sans quotas de plan",
             "Rapports de travail avances",
             "Absences et conges",
             "Facturation centralisee",

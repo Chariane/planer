@@ -837,6 +837,10 @@ export default function LeftSidebar() {
   };
 
   const openEditWorkspaceModal = (workspace: any) => {
+    if (!canManageCurrentWorkspace) {
+      showMessage('Seul le créateur du workspace peut le modifier.', 'error');
+      return;
+    }
     setEditingWorkspace(workspace);
     setEditWorkspaceName(workspace.nom || '');
     setEditWorkspaceDesc(workspace.description || '');
@@ -846,6 +850,10 @@ export default function LeftSidebar() {
 
   const handleEditWorkspace = async () => {
     if (!editingWorkspace || !editWorkspaceName.trim()) return;
+    if (!canManageCurrentWorkspace) {
+      showMessage('Seul le créateur du workspace peut le modifier.', 'error');
+      return;
+    }
     try {
       await updateWorkspace(editingWorkspace.id, {
         nom: editWorkspaceName,
@@ -860,6 +868,10 @@ export default function LeftSidebar() {
   };
 
   const handleDeleteWorkspace = async (workspace: any) => {
+    if (!canManageCurrentWorkspace) {
+      showMessage('Seul le créateur du workspace peut le supprimer.', 'error');
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       type: 'workspace',
@@ -871,6 +883,11 @@ export default function LeftSidebar() {
   const confirmDeleteWorkspace = async () => {
     const workspace = confirmModal.item;
     if (!workspace) return;
+    if (!canManageCurrentWorkspace) {
+      showMessage('Seul le créateur du workspace peut le supprimer.', 'error');
+      setConfirmModal(prev => ({ ...prev, isOpen: false, item: null }));
+      return;
+    }
     try {
       await deleteWorkspace(workspace.id);
       showMessage(`Workspace "${workspace.nom}" supprimé avec succès`, 'success');
