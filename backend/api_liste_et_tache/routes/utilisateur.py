@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
-from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, status, File, UploadFile, Request
 import os
 from pathlib import Path
 from fastapi.responses import RedirectResponse
@@ -1484,10 +1484,9 @@ def delete_absence_endpoint(
 # -----------------------------------------------------------------------------
 
 @router.post("/{liste_id}/invite_member_liste", status_code=status.HTTP_201_CREATED)
-def invite_liste_member(
+async def invite_liste_member(
     liste_id: str,
     membre_in: WorkspaceMemberInvite,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
     token: Optional[str] = Depends(get_access_token_from_request),
@@ -1523,16 +1522,21 @@ def invite_liste_member(
         recipient_email = membre.utilisateur.email if (membre.utilisateur and membre.utilisateur.email) else email_target
         target_name = membre.utilisateur.username if (membre.utilisateur and membre.utilisateur.username) else recipient_email
         
-        background_tasks.add_task(
-            send_liste_invitation_email,
-            current_user.username,
-            target_name,
-            recipient_email,
-            liste.nom,
-            membre_in.role,
-            token,
-            is_guest=False
-        )
+        try:
+            await send_liste_invitation_email(
+                current_user.username,
+                target_name,
+                recipient_email,
+                liste.nom,
+                membre_in.role,
+                token,
+                is_guest=False
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Invitation créée, mais l'email n'a pas pu être envoyé. Vérifiez la configuration SMTP du service liste.",
+            ) from exc
         return {
             "status": "existing_user",
             "message": "Invitation envoyée à l'utilisateur existant.",
@@ -1541,16 +1545,21 @@ def invite_liste_member(
         }
     else:
         token = result["token"]
-        background_tasks.add_task(
-            send_liste_invitation_email,
-            current_user.username,
-            email_target,
-            email_target,
-            liste.nom,
-            membre_in.role,
-            token,
-            is_guest=True
-        )
+        try:
+            await send_liste_invitation_email(
+                current_user.username,
+                email_target,
+                email_target,
+                liste.nom,
+                membre_in.role,
+                token,
+                is_guest=True
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Invitation créée, mais l'email n'a pas pu être envoyé. Vérifiez la configuration SMTP du service liste.",
+            ) from exc
         return {
             "status": "guest_invitation",
             "message": "Invitation envoyée par lien (utilisateur non inscrit).",

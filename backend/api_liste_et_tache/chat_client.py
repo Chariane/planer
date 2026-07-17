@@ -94,6 +94,88 @@ def _convert_role_to_messenger(role: str) -> str:
         return "member"
 
 
+ROLE_RANK = {
+    "Invité": 1,
+    "Membre": 2,
+    "Administrateur": 3,
+    "Créateur": 4,
+}
+
+
+def _strongest_role(*roles: str | None) -> str | None:
+    valid_roles = [role for role in roles if role]
+    if not valid_roles:
+        return None
+    return max(valid_roles, key=lambda role: ROLE_RANK.get(role, 0))
+
+
+def _get_direct_resource_role(db, resource_type: str, resource_id: str, user_id: str) -> Optional[str]:
+    column_by_type = {
+        "liste": "id_liste",
+    }
+    column_name = column_by_type.get(resource_type)
+    if not column_name:
+        return None
+
+    row = db.execute(
+        text(f"""
+            SELECT role
+            FROM planer.membre
+            WHERE {column_name} = :resource_id
+            AND id_utilisateur = :user_id
+            AND statut = 'Actif'
+            LIMIT 1
+        """),
+        {"resource_id": resource_id, "user_id": user_id}
+    ).first()
+    return row[0] if row else None
+
+
+def _get_effective_resource_role(db, resource_type: str, resource_id: str, user_id: str, fallback_role: str | None = None) -> Optional[str]:
+    direct_role = _get_direct_resource_role(db, resource_type, resource_id, user_id)
+    inherited_role = None
+
+    if resource_type == "liste":
+        try:
+            from .core.function import ResourceType, get_parent_inherited_role
+            inherited = get_parent_inherited_role(db, user_id, ResourceType.LISTE, resource_id)
+            inherited_role = inherited[0] if inherited else None
+        except Exception as exc:
+            logger.debug(f"Aucun rôle hérité liste trouvé pour {user_id}: {exc}")
+
+    return _strongest_role(direct_role, inherited_role, fallback_role)
+
+
+def _add_or_update_group_member(db, group_id: str, user_id: str, actor_id: str, messenger_role: str, token: str | None = None):
+    """Ajoute un membre au groupe ou met à jour son rôle s'il existe déjà."""
+    if not token:
+        logger.error("❌ Token manquant pour ajouter ou mettre à jour un membre")
+        return False
+
+    if not actor_id:
+        row = db.execute(text("SELECT creator FROM messagerie.groupe WHERE id = :group_id"), {"group_id": str(group_id)}).first()
+        actor_id = row[0] if row else user_id
+
+    cookies = {"access_token": token}
+    
+    try:
+        response = requests.post(
+            f"{K_CHAT_URL}/group/group/{group_id}/add-member",
+            json={"user_id": user_id, "actor": actor_id, "role": messenger_role},
+            cookies=cookies,
+            timeout=5
+        )
+        if response.status_code == 200:
+            logger.info(f"✅ Membre {user_id} synchronisé dans le groupe {group_id} avec rôle {messenger_role}")
+            return True
+        logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
+    except requests.exceptions.ConnectionError:
+        logger.error("❌ Impossible de contacter K-Messenger pour synchroniser le membre")
+    except Exception as e:
+        logger.error(f"Error syncing member to K-Chat group: {e}")
+    return False
+
+
 def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str, name: str, creator_id: str, role: str = "member", token: str | None = None):
     """
     Synchronise un membre vers K-Messenger.
@@ -115,26 +197,11 @@ def sync_resource_member(db, resource_type: str, resource_id: str, user_id: str,
     
     group_id = _get_group_id_by_resource(db, resource_type, resource_id)
     if not group_id:
-        ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id, user_id], token=token)
+        group_id = ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id], token=token)
+    if not group_id:
         return
-    
-    cookies = {"access_token": token}
-    
-    try:
-        response = requests.post(
-            f"{K_CHAT_URL}/group/group/{group_id}/add-member",
-            json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
-            cookies=cookies,
-            timeout=5
-        )
-        if response.status_code == 200:
-            logger.info(f"✅ Membre {user_id} ajouté au groupe {group_id} avec rôle {messenger_role} (source: {resource_type}:{resource_id})")
-        else:
-            logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
-    except requests.exceptions.ConnectionError:
-        logger.error("❌ Impossible de contacter K-Messenger pour ajouter le membre")
-    except Exception as e:
-        logger.error(f"Error adding member to K-Chat group: {e}")
+
+    _add_or_update_group_member(db, group_id, user_id, creator_id, messenger_role, token=token)
 
 
 def remove_resource_member(db, resource_type: str, resource_id: str, user_id: str, actor_id: str = None, token: str | None = None):
@@ -211,35 +278,11 @@ def ensure_chat_group_for_user(db, resource_type: str, resource_id: str, user_id
             token=token
         )
     
-    # Ajouter l'utilisateur au groupe
+    effective_role = _get_effective_resource_role(db, resource_type, resource_id, user_id, role)
+    messenger_role = _convert_role_to_messenger(effective_role or role)
+
+    # Ajouter l'utilisateur au groupe ou mettre à jour son rôle s'il existe déjà.
     if group_id:
-        # Vérifier si l'utilisateur est déjà membre
-        try:
-            row = db.execute(
-                text("SELECT 1 FROM messagerie.groupe_members WHERE id_groupe = :group_id AND member = :user_id"),
-                {"group_id": str(group_id), "user_id": str(user_id)}
-            ).first()
-        except Exception as exc:
-            logger.error("Erreur lors de la vérification des membres du groupe : %s", exc)
-            row = None
-        
-        if not row:
-            messenger_role = _convert_role_to_messenger(role)
-            try:
-                cookies = {"access_token": token}
-                response = requests.post(
-                    f"{K_CHAT_URL}/group/group/{group_id}/add-member",
-                    json={"user_id": user_id, "actor": creator_id, "role": messenger_role},
-                    cookies=cookies,
-                    timeout=5
-                )
-                if response.status_code == 200:
-                    logger.info(f"✅ Membre {user_id} ajouté au groupe {group_id} via ensure_chat_group_for_user")
-                else:
-                    logger.warning(f"⚠️ Erreur K-Messenger: {response.status_code} - {response.text}")
-            except requests.exceptions.ConnectionError:
-                logger.error("❌ Impossible de contacter K-Messenger pour ajouter le membre")
-            except Exception as e:
-                logger.error(f"Error adding member to K-Chat group: {e}")
+        _add_or_update_group_member(db, group_id, user_id, creator_id, messenger_role, token=token)
     
     return group_id

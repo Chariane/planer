@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..core.database import get_db
-from ..core.security import get_current_user
+from ..core.security import get_current_user, get_access_token_from_request
 from ..schemas import UtilisateurOut
 from backend.api_liste_et_tache.chat_client import ensure_chat_group_for_user
 
@@ -14,6 +14,7 @@ async def ensure_chat_group(
     resource_id: str,
     db: Session = Depends(get_db),
     current_user: UtilisateurOut = Depends(get_current_user),
+    token: str | None = Depends(get_access_token_from_request),
 ):
     """
     Garantit qu'un groupe de discussion existe pour une liste.
@@ -27,7 +28,8 @@ async def ensure_chat_group(
         resource_type=resource_type,
         resource_id=resource_id,
         user_id=current_user.id,
-        role="Membre"
+        role="Membre",
+        token=token,
     )
     
     if not group_id:

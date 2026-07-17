@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 def _clean_env_val(key: str, default: str = "") -> str:
     """Nettoie une valeur d'environnement (supprime quotes et espaces)."""
-    val = config_data.get(key, default)
+    val = os.getenv(key)
+    if val is None:
+        val = config_data.get(key, default)
     if val is None:
         return default
     return str(val).strip().strip("'").strip('"').strip()
@@ -38,18 +40,32 @@ def _as_bool(value, default: bool = False) -> bool:
     return str(value).strip().strip("'").strip('"').lower() in {"1", "true", "yes", "on"}
 
 
+class MailConfigurationError(RuntimeError):
+    """Erreur de configuration SMTP sans exposer de secret dans les logs."""
+
+
+def _required_env_val(key: str) -> str:
+    value = _clean_env_val(key)
+    if not value:
+        raise MailConfigurationError(f"Configuration SMTP incomplète: {key} est manquant.")
+    return value
+
+
 def _get_mail_config() -> ConnectionConfig:
     """Crée la configuration mail à la demande (lazy) pour éviter un crash au démarrage."""
+    use_ssl = _as_bool(os.getenv("MAIL_SSL_TLS", config_data.get("MAIL_SSL_TLS")))
+    default_port = "465" if use_ssl else "587"
+    mail_username = _required_env_val("MAIL_USERNAME")
     return ConnectionConfig(
-        MAIL_USERNAME=_clean_env_val("MAIL_USERNAME"),
-        MAIL_PASSWORD=_clean_env_val("MAIL_PASSWORD"),
-        MAIL_FROM=_clean_env_val("MAIL_FROM"),
-        MAIL_PORT=int(_clean_env_val("MAIL_PORT", "587")),
-        MAIL_SERVER=_clean_env_val("MAIL_SERVER"),
-        MAIL_STARTTLS=_as_bool(config_data.get("MAIL_STARTTLS")),
-        MAIL_SSL_TLS=_as_bool(config_data.get("MAIL_SSL_TLS")),
-        USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS"), default=True),
-        VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"), default=True),
+        MAIL_USERNAME=mail_username,
+        MAIL_PASSWORD=_required_env_val("MAIL_PASSWORD"),
+        MAIL_FROM=_clean_env_val("MAIL_FROM", mail_username),
+        MAIL_PORT=int(_clean_env_val("MAIL_PORT", default_port)),
+        MAIL_SERVER=_required_env_val("MAIL_SERVER"),
+        MAIL_STARTTLS=_as_bool(os.getenv("MAIL_STARTTLS", config_data.get("MAIL_STARTTLS"))),
+        MAIL_SSL_TLS=use_ssl,
+        USE_CREDENTIALS=_as_bool(os.getenv("USE_CREDENTIALS", config_data.get("USE_CREDENTIALS")), default=True),
+        VALIDATE_CERTS=_as_bool(os.getenv("VALIDATE_CERTS", config_data.get("VALIDATE_CERTS")), default=True),
     )
 
 
@@ -144,10 +160,7 @@ async def send_liste_invitation_email(
         subtype=MessageType.html,
     )
 
-    try:
-        fm = FastMail(_get_mail_config())
-        await fm.send_message(message)
-        logger.debug(f"send_liste_invitation_email SUCCESS to {email}")
-    except Exception as e:
-        logger.error(f"send_liste_invitation_email ERROR to {email}: {e}")
+    fm = FastMail(_get_mail_config())
+    await fm.send_message(message)
+    logger.debug(f"send_liste_invitation_email SUCCESS to {email}")
     return token
