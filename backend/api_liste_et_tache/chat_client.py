@@ -84,6 +84,25 @@ def ensure_resource_group(db, resource_type: str, resource_id: str, name: str, c
         return None
 
 
+def sync_resource_group_name(db, resource_type: str, resource_id: str, name: str, creator_id: str | None = None, token: str | None = None):
+    """Synchronise le nom du groupe K-Messenger associé à une ressource."""
+    result = db.execute(
+        text("""
+            UPDATE messagerie.groupe
+            SET name = :name,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE resource_type = :resource_type
+            AND resource_id = :resource_id
+        """),
+        {"name": name, "resource_type": resource_type, "resource_id": resource_id},
+    )
+    if result.rowcount:
+        return True
+    if creator_id and token:
+        return bool(ensure_resource_group(db, resource_type, resource_id, name, creator_id, members=[creator_id], token=token))
+    return False
+
+
 def _convert_role_to_messenger(role: str) -> str:
     """Convertit un rôle K-Planner en rôle K-Messenger."""
     if role in ["Créateur", "Administrateur"]:

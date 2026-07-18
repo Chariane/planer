@@ -13,6 +13,7 @@ from ..schemas import WorkspaceCreate, WorkspaceMemberUpdate, WorkspaceUpdate, W
 from backend.api_workspace.chat_client import (
     ensure_resource_group,
     remove_resource_member,
+    sync_resource_group_name,
     sync_resource_member,
 )
 from ..core.plan_limits import require_plan_capacity
@@ -114,7 +115,7 @@ def update_workspace(db: Session, workspace_id: str, workspace_in: WorkspaceUpda
         setattr(workspace, key, value)
     workspace.updated_at = datetime.utcnow()
     if "nom" in update_data:
-        ensure_resource_group(
+        sync_resource_group_name(
             db,
             resource_type="workspace",
             resource_id=workspace.id,

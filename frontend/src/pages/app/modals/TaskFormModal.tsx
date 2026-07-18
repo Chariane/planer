@@ -60,6 +60,7 @@ export default function TaskFormModal({
   onAssignMemberTrigger,
   tasks = [],
 }: TaskFormModalProps) {
+  const editingTaskAssignees = Array.isArray(editingTask?.assignees) ? editingTask.assignees : [];
   const [newChecklistText, setNewChecklistText] = useState('');
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const canEditTaskFields = !limitedOperational;
@@ -171,8 +172,8 @@ export default function TaskFormModal({
               </Button>
             </div>
             <div className="flex flex-wrap gap-2 min-h-[42px] p-2 bg-theme-surface/30 border border-dashed border-theme-border-subtle rounded-2xl">
-              {editingTask.assignees.length > 0 ? (
-                editingTask.assignees.map(assignee => (
+              {editingTaskAssignees.length > 0 ? (
+                editingTaskAssignees.map(assignee => (
                   <div key={assignee.id} className="inline-flex items-center gap-2 px-2.5 py-1 bg-theme-surface border border-theme-border-subtle rounded-xl shadow-sm group">
                     <div className="h-5 w-5 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center text-[9px] font-black">
                       {assignee.name.charAt(0).toUpperCase()}

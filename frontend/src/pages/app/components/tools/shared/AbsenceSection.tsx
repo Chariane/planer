@@ -152,6 +152,20 @@ export const AbsenceSection = ({
   formatDate,
   getDurationDisplay,
 }: AbsenceSectionProps) => {
+  const getImpactTaskTitle = (task: any) => task?.title || task?.titre || 'Tâche sans titre';
+  const getImpactTaskDueDate = (task: any) => task?.dueDate || task?.date_fin_prevue || task?.date_fin || null;
+  const getImpactTaskPriority = (task: any) => task?.priority || task?.priorite || 'priorité non définie';
+  const getImpactTaskAssignees = (task: any) => Array.isArray(task?.assignees)
+    ? task.assignees
+    : Array.isArray(task?.membres)
+      ? task.membres.map((member: any) => {
+        const user = member.utilisateur || {};
+        const name = user.prenoms || user.nom
+          ? `${user.prenoms || ''} ${user.nom || ''}`.trim()
+          : user.username || member.name || 'Membre';
+        return { id: member.id_utilisateur || user.id || member.id, name };
+      })
+      : [];
   
   // Fonction renderAbsenceList avec type correct
   const renderAbsenceList = (items: any[], emptyLabel: string) => {
@@ -628,6 +642,7 @@ export const AbsenceSection = ({
 
           const needsBackupAdmin = isPendingAdminRequest &&
             impactData.sole_admin_resources && impactData.sole_admin_resources.length > 0;
+          const impactedTasksInModal = Array.isArray(impactData.overlapping_tasks) ? impactData.overlapping_tasks : [];
 
           return (
             <div className="space-y-6">
@@ -669,6 +684,33 @@ export const AbsenceSection = ({
                   )}
                 </div>
               </div>
+
+              {impactedTasksInModal.length > 0 && (
+                <div className="rounded-2xl border border-theme-border-subtle bg-theme-surface/50 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Tâches impactées</p>
+                    <span className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-500">
+                      {impactedTasksInModal.length} tâche{impactedTasksInModal.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {impactedTasksInModal.map((task: any) => {
+                      const dueDate = getImpactTaskDueDate(task);
+                      return (
+                        <div key={task.id} className="flex flex-col gap-2 rounded-xl border border-theme-border-subtle/60 bg-theme-surface/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <RouterLink to={`/tache/${task.id}`} className="min-w-0 text-sm font-black text-theme-main hover:text-secondary hover:underline">
+                            {getImpactTaskTitle(task)}
+                          </RouterLink>
+                          <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                            <span>Échéance : {dueDate ? formatDate?.(dueDate) || dueDate : 'Non définie'}</span>
+                            <span className="rounded-md bg-theme-surface-hover px-2 py-1">{getImpactTaskPriority(task)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* ✅ Correction du libellé "Ce sous-espace" */}
               {(impactData.sole_admin_resources?.length > 0 || impactData.sole_creator_resources?.length > 0) && (
@@ -751,6 +793,8 @@ export const AbsenceSection = ({
                   <div className="space-y-4">
                     {impactData.overlapping_tasks.map((t: any) => {
                       const task = t;
+                      const dueDate = getImpactTaskDueDate(task);
+                      const assignees = getImpactTaskAssignees(task);
                       const candidates = getSortedReplacementCandidates(task, selectedAbsenceForImpact);
 
                       return (
@@ -758,15 +802,15 @@ export const AbsenceSection = ({
                           <div className="flex justify-between items-start gap-4">
                             <div className="min-w-0">
                               <RouterLink to={`/tache/${task.id}`} className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2">
-                                {task.title}
+                                {getImpactTaskTitle(task)}
                                 <Eye size={12} className="shrink-0" />
                               </RouterLink>
                               <p className="text-[9px] text-theme-muted uppercase font-black mt-1">
-                                Échéance: {formatDate?.(task.dueDate)} · {task.priority}
+                                Échéance: {dueDate ? formatDate?.(dueDate) || dueDate : 'Non définie'} · {getImpactTaskPriority(task)}
                               </p>
                             </div>
                             <div className="flex -space-x-2">
-                              {task.assignees?.map((a: any) => (
+                              {assignees.map((a: any) => (
                                 <div key={a.id} className="h-6 w-6 rounded-lg bg-theme-surface border border-theme-border-subtle flex items-center justify-center text-[8px] font-black" title={a.name}>
                                   {a.name.substring(0, 2).toUpperCase()}
                                 </div>

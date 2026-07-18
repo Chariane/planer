@@ -17,6 +17,7 @@ from datetime import timedelta
 from backend.api_espace.chat_client import (
     ensure_resource_group,
     remove_resource_member,
+    sync_resource_group_name,
     sync_resource_member,
 )
 from ..core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
@@ -381,7 +382,7 @@ def update_espace(db: Session, espace_id: str, espace_in: EspaceUpdate, token: s
             )
             .scalar()
         )
-        ensure_resource_group(
+        sync_resource_group_name(
             db,
             resource_type="espace",
             resource_id=espace.id,

@@ -22,6 +22,7 @@ from ..schemas import WorkspaceMemberInvite
 from backend.api_liste_et_tache.chat_client import (
     ensure_resource_group,
     remove_resource_member,
+    sync_resource_group_name,
     sync_resource_member,
 )
 from ..core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
@@ -199,7 +200,7 @@ def update_liste(db: Session, liste_id: str, token: str | None = None, **kwargs)
             )
             .scalar()
         )
-        ensure_resource_group(
+        sync_resource_group_name(
             db,
             resource_type="liste",
             resource_id=liste_id,

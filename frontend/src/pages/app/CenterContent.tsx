@@ -670,9 +670,11 @@ export default function CenterContent() {
     setIsTaskModalOpen(true);
   };
 
+  const getTaskAssignees = (task?: Task | null) => Array.isArray(task?.assignees) ? task.assignees : [];
+
   const canOperateAssignedTask = (task: Task): boolean => {
     if (!user?.id) return false;
-    if (task.assignees.some(assignee => assignee.id === user.id)) return true;
+    if (getTaskAssignees(task).some(assignee => assignee.id === user.id)) return true;
 
     let parentId = task.parentTaskId || null;
     const visited = new Set<string>();
@@ -680,7 +682,7 @@ export default function CenterContent() {
       visited.add(parentId);
       const parentTask = tasks.find(item => item.id === parentId);
       if (!parentTask) return false;
-      if (parentTask.assignees.some(assignee => assignee.id === user.id)) return true;
+      if (getTaskAssignees(parentTask).some(assignee => assignee.id === user.id)) return true;
       parentId = parentTask.parentTaskId || null;
     }
 
@@ -691,7 +693,7 @@ export default function CenterContent() {
     if (canCreateContent) return true;
     if (!user?.id) return false;
 
-    return task.assignees.some(assignee =>
+    return getTaskAssignees(task).some(assignee =>
       assignee.id === user.id &&
       assignee.role === 'Créateur'
     );
@@ -763,7 +765,7 @@ export default function CenterContent() {
       (task.description?.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatut = !taskFilters.statut || task.status === taskFilters.statut;
     const matchesPriorite = !taskFilters.priorite || task.priority === taskFilters.priorite;
-    const matchesMembre = !taskFilters.membre_id || task.assignees.some(a => a.id === taskFilters.membre_id);
+    const matchesMembre = !taskFilters.membre_id || getTaskAssignees(task).some(a => a.id === taskFilters.membre_id);
 
     let matchesOverdue = true;
     if (taskFilters.overdue) {
@@ -885,7 +887,6 @@ export default function CenterContent() {
             tasks={tasks}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            onEditTask={() => {}}
             onDeleteTask={() => {}}
             onAssignTask={() => {}}
             getTaskProgress={getTaskProgress}
@@ -1053,7 +1054,6 @@ export default function CenterContent() {
               tasks={filteredTasks}
               searchTerm=""
               onSearchChange={() => {}}
-              onEditTask={openEditTask}
               onDeleteTask={deleteTask}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
               onUpdateTaskStatus={updateTaskStatus as any}
@@ -1061,9 +1061,11 @@ export default function CenterContent() {
               onToggleChecklist={toggleTaskChecklist}
               onDeleteChecklist={deleteTaskChecklist}
               onCreateSubtask={openCreateSubtask}
+              onTasksChanged={loadTasks}
               getTaskProgress={getTaskProgress}
               readOnly={!canCreateContent}
-              canEditTask={(task) => canCreateContent || canOperateAssignedTask(task)}
+              canOperateTask={(task) => canCreateContent || canOperateAssignedTask(task)}
+              canEditTask={canManageTaskFully}
               canDeleteTask={(task) => canCreateContent}
               canAssignTask={() => canCreateContent}
               canAttachTaskFiles={(task) => canCreateContent || canOperateAssignedTask(task)}

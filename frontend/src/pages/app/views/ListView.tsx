@@ -58,7 +58,6 @@ interface ListViewProps {
   tasks: Task[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void | Promise<void>;
   onAssignTask: (task: Task) => void;
   onUpdateTaskStatus?: (taskId: string, status: Task['status']) => Promise<void>;
@@ -66,8 +65,10 @@ interface ListViewProps {
   onToggleChecklist?: (taskId: string, checklistId: string, currentChecked: boolean) => Promise<void>;
   onDeleteChecklist?: (taskId: string, checklistId: string) => Promise<void>;
   onCreateSubtask?: (parentTask: Task) => void;
+  onTasksChanged?: () => void | Promise<void>;
   getTaskProgress: (task: Task) => number;
   readOnly?: boolean;
+  canOperateTask?: (task: Task) => boolean;
   canEditTask?: (task: Task) => boolean;
   canDeleteTask?: (task: Task) => boolean;
   canAssignTask?: (task: Task) => boolean;
@@ -91,6 +92,8 @@ const getShortFileType = (file: File): string => {
 };
 
 // ✅ Fonction pour récupérer le nom du créateur d'une tâche
+const getTaskAssignees = (task: Task) => Array.isArray(task.assignees) ? task.assignees : [];
+
 const getTaskCreator = (task: Task): { name: string; id: string } | null => {
   if (task.createur) {
     const prenoms = task.createur.prenoms?.trim() || '';
@@ -101,7 +104,7 @@ const getTaskCreator = (task: Task): { name: string; id: string } | null => {
     else if (nom) name = nom;
     return { name, id: task.createur.id };
   }
-  const creator = task.assignees?.find(a => a.role === 'Créateur');
+  const creator = getTaskAssignees(task).find(a => a.role === 'Créateur');
   if (creator) {
     return { name: creator.name, id: creator.id };
   }
@@ -443,8 +446,8 @@ function TaskDetailModal({
         <div className="space-y-2">
           <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1 opacity-60">Équipe assignée</label>
           <div className="flex flex-wrap gap-2">
-            {task.assignees.length > 0 ? (
-              task.assignees.map(assignee => (
+            {getTaskAssignees(task).length > 0 ? (
+              getTaskAssignees(task).map(assignee => (
                 <div key={assignee.id} className="inline-flex items-center gap-2 px-3 py-1.5 bg-theme-surface-hover border border-theme-border-subtle rounded-xl shadow-sm">
                   <MemberAvatar member={assignee} size="xs" />
                   <div className="flex flex-col">
@@ -585,7 +588,6 @@ function TaskDetailModal({
 export default function ListView({
   tasks,
   searchTerm,
-  onEditTask,
   onDeleteTask,
   onAssignTask,
   onUpdateTaskStatus,
@@ -593,8 +595,10 @@ export default function ListView({
   onToggleChecklist,
   onDeleteChecklist,
   onCreateSubtask,
+  onTasksChanged,
   getTaskProgress,
   readOnly = false,
+  canOperateTask,
   canEditTask,
   canDeleteTask,
   canAssignTask,
@@ -870,8 +874,8 @@ export default function ListView({
       } else {
         payload.date_fin_prevue = null;
       }
-      const updated = await tacheService.update(editingTask.id, payload);
-      onEditTask(updated);
+      await tacheService.update(editingTask.id, payload);
+      await onTasksChanged?.();
       setIsEditModalOpen(false);
       setEditingTask(null);
     } catch (err: any) {
@@ -908,17 +912,18 @@ export default function ListView({
     const taskChecklists = task.checklists || [];
     const childTasks = tasksByParent[task.id] || [];
     const isTaskExpanded = !!expandedTasks[task.id];
-    const canOperateTask = canEditTask ? canEditTask(task) : !readOnly;
+    const canOperateCurrentTask = canOperateTask ? canOperateTask(task) : canEditTask ? canEditTask(task) : !readOnly;
+    const canEditCurrentTask = canEditTask ? canEditTask(task) : canOperateCurrentTask;
     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
-    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
+    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateCurrentTask;
     const checklistSummary = taskChecklists.length > 0
       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
       : '0';
     const progress = getTaskProgress(task);
     const contentMode = getTaskMode(task);
-    const canAddChecklistHere = canOperateTask && !!onAddChecklist && canTaskReceiveChecklist(task);
-    const canAddSubtaskHere = canOperateTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
+    const canAddChecklistHere = canOperateCurrentTask && !!onAddChecklist && canTaskReceiveChecklist(task);
+    const canAddSubtaskHere = canOperateCurrentTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
     const isSubtaskMode = contentMode === 'subtasks';
     const isChecklistMode = contentMode === 'checklist';
     const structureSummary = isSubtaskMode
@@ -937,11 +942,11 @@ export default function ListView({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (canOperateTask) {
+                if (canOperateCurrentTask) {
                   handleCompleteTask(task);
                 }
               }}
-              disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
+              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
               className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
               title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
             >
@@ -1001,7 +1006,7 @@ export default function ListView({
 
           <div className="flex w-full flex-col gap-3 border-t border-theme-border-subtle/30 pt-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
             <div className="flex items-center -space-x-2">
-              {task.assignees.slice(0, 3).map((a, i) => (
+              {getTaskAssignees(task).slice(0, 3).map((a, i) => (
                 <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
               ))}
             </div>
@@ -1035,7 +1040,7 @@ export default function ListView({
                   {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={15} />}
                 </button>
               )}
-              {canOperateTask && (
+              {canEditCurrentTask && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1060,7 +1065,7 @@ export default function ListView({
               className="overflow-hidden"
             >
               <div className="ml-0 space-y-3 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/25 p-3 sm:ml-10 sm:p-4">
-                {isChecklistMode && canOperateTask && onCreateSubtask && (
+                {isChecklistMode && canOperateCurrentTask && onCreateSubtask && (
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
                     Sous-tâches indisponibles : cette tâche contient déjà des checklists.
                   </div>
@@ -1092,7 +1097,7 @@ export default function ListView({
                   </div>
                 )}
 
-                {isSubtaskMode && canOperateTask && onAddChecklist && (
+                {isSubtaskMode && canOperateCurrentTask && onAddChecklist && (
                   <div className="rounded-xl border border-secondary/20 bg-secondary/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-secondary">
                     Checklists indisponibles : cette tâche contient déjà des sous-tâches.
                   </div>
@@ -1115,8 +1120,8 @@ export default function ListView({
                     {taskChecklists.map((checklist) => (
                       <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
                         <button
-                          onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                          disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                          onClick={() => canOperateCurrentTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                          disabled={!canOperateCurrentTask || actionLoading === `toggle-checklist-${checklist.id}`}
                           className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                           title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
                         >
@@ -1245,18 +1250,19 @@ export default function ListView({
                   statusTasks.map((task, idx) => {
                     const taskChecklists = task.checklists || [];
                     const isTaskExpanded = !!expandedTasks[task.id];
-                    const canOperateTask = canEditTask ? canEditTask(task) : !readOnly;
+                    const canOperateCurrentTask = canOperateTask ? canOperateTask(task) : canEditTask ? canEditTask(task) : !readOnly;
+                    const canEditCurrentTask = canEditTask ? canEditTask(task) : canOperateCurrentTask;
                     const canDeleteCurrentTask = canDeleteTask ? canDeleteTask(task) : !readOnly;
                     const canAssignCurrentTask = canAssignTask ? canAssignTask(task) : !readOnly;
-                    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateTask;
+                    const canAttachCurrentTaskFiles = canAttachTaskFiles ? canAttachTaskFiles(task) : canOperateCurrentTask;
                     const childTasks = tasksByParent[task.id] || [];
                     const progress = getTaskProgress(task);
                     const checklistSummary = taskChecklists.length > 0
                       ? `${taskChecklists.filter(c => c.is_checked).length}/${taskChecklists.length}`
                       : '0';
                     const contentMode = getTaskMode(task);
-                    const canAddChecklistHere = canOperateTask && !!onAddChecklist && canTaskReceiveChecklist(task);
-                    const canAddSubtaskHere = canOperateTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
+                    const canAddChecklistHere = canOperateCurrentTask && !!onAddChecklist && canTaskReceiveChecklist(task);
+                    const canAddSubtaskHere = canOperateCurrentTask && !!onCreateSubtask && canTaskReceiveSubtask(task);
                     const isSubtaskMode = contentMode === 'subtasks';
                     const isChecklistMode = contentMode === 'checklist';
                     const structureSummary = isSubtaskMode
@@ -1280,11 +1286,11 @@ export default function ListView({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (canOperateTask) {
+                                if (canOperateCurrentTask) {
                                   handleCompleteTask(task);
                                 }
                               }}
-                              disabled={!canOperateTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
+                              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
                               className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
                               title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
                             >
@@ -1346,16 +1352,16 @@ export default function ListView({
                           <div className="flex w-full flex-col gap-3 border-t border-theme-border-subtle/30 pt-3 lg:w-auto lg:flex-row lg:items-center lg:justify-end lg:border-t-0 lg:pt-0">
                             <div className="flex items-center justify-between gap-3 lg:justify-end">
                               <div className="flex items-center -space-x-2">
-                              {task.assignees.slice(0, 3).map((a, i) => (
+                              {getTaskAssignees(task).slice(0, 3).map((a, i) => (
                                 <MemberAvatar key={i} member={a} size="xs" className="border-2 border-theme-border-subtle shadow-sm" />
                               ))}
-                              {task.assignees.length > 3 && (
+                              {getTaskAssignees(task).length > 3 && (
                                 <div className="h-7 w-7 rounded-lg bg-theme-surface-hover border-2 border-theme-border-subtle flex items-center justify-center text-[8px] font-black text-theme-muted">
-                                  +{task.assignees.length - 3}
+                                  +{getTaskAssignees(task).length - 3}
                                 </div>
                               )}
                               </div>
-                              {task.assignees.length === 0 && (
+                              {getTaskAssignees(task).length === 0 && (
                                 <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted/50">
                                   Non assignée
                                 </span>
@@ -1393,7 +1399,7 @@ export default function ListView({
                                   {actionLoading === `delete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash size={16} />}
                                 </button>
                               )}
-                              {canOperateTask && (
+                              {canEditCurrentTask && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1418,7 +1424,7 @@ export default function ListView({
                               className="overflow-hidden"
                             >
                               <div className="ml-0 space-y-3 rounded-2xl border border-theme-border-subtle/50 bg-theme-surface/30 p-3 sm:p-4 xl:ml-28">
-                                {isChecklistMode && canOperateTask && onCreateSubtask && (
+                                {isChecklistMode && canOperateCurrentTask && onCreateSubtask && (
                                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-500">
                                     Sous-tâches indisponibles : cette tâche contient déjà des checklists.
                                   </div>
@@ -1458,7 +1464,7 @@ export default function ListView({
                                   </div>
                                 )}
 
-                                {isSubtaskMode && canOperateTask && onAddChecklist && (
+                                {isSubtaskMode && canOperateCurrentTask && onAddChecklist && (
                                   <div className="rounded-xl border border-secondary/20 bg-secondary/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-secondary">
                                     Checklists indisponibles : cette tâche contient déjà des sous-tâches.
                                   </div>
@@ -1481,8 +1487,8 @@ export default function ListView({
                                     {taskChecklists.map((checklist) => (
                                       <div key={checklist.id} className="flex items-center gap-3 rounded-xl border border-theme-border-subtle/40 bg-theme-surface/40 px-3 py-2 group/checklist">
                                         <button
-                                          onClick={() => canOperateTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
-                                          disabled={!canOperateTask || actionLoading === `toggle-checklist-${checklist.id}`}
+                                          onClick={() => canOperateCurrentTask && handleToggleChecklist(task.id, checklist.id, checklist.is_checked)}
+                                          disabled={!canOperateCurrentTask || actionLoading === `toggle-checklist-${checklist.id}`}
                                           className="flex-shrink-0 text-theme-muted hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
                                           title={checklist.is_checked ? 'Marquer inachevée' : 'Marquer achevée'}
                                         >
