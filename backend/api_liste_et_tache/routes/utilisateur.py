@@ -363,10 +363,10 @@ def unassign_liste_endpoint(
     _, actor_role, actor_source_type, actor_source_id = _get_list_member_management_grant(
         db, liste_id, current_user.id
     )
-    if actor_role != LISTE_OWNER_ROLE:
+    if actor_role != LISTE_OWNER_ROLE or actor_source_type != ResourceType.LISTE:
         raise HTTPException(
             status_code=403,
-            detail="Seul le createur de la ressource peut retirer un membre.",
+            detail="Seul le createur direct de la liste peut retirer un membre.",
         )
     _validate_list_member_management_permissions(
         liste_id=liste_id,
