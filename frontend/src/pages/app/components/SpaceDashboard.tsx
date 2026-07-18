@@ -93,9 +93,9 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const effectiveSpaceRole = isDirectEspaceCreator
     ? ROLES.CREATOR
     : inheritedSpaceRole
-      || (isEspaceCreator ? ROLES.CREATOR : null)
-      || (isEspaceAdmin ? ROLES.ADMIN : null)
-      || (isEspaceGuest ? ROLES.GUEST : null);
+    || (isEspaceCreator ? ROLES.CREATOR : null)
+    || (isEspaceAdmin ? ROLES.ADMIN : null)
+    || (isEspaceGuest ? ROLES.GUEST : null);
 
   const isInheritedSpaceAdmin = !!spaceId
     && (isWorkspaceAdmin || isWorkspaceCreator)
@@ -275,44 +275,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
           <button
             onClick={() => setHideGuestMessage(true)}
             className="p-1 hover:bg-primary-200/70 dark:hover:bg-primary-400/10 rounded-xl transition-colors"
-            title="Masquer ce message"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {!hideAdminMessage && showAdminMessage && (
-        <div className="rounded-2xl border border-amber-400/40 bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
-          <Info className="h-5 w-5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-black uppercase tracking-widest text-[10px]">Gestion des membres restreinte</p>
-            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
-              En tant qu'administrateur direct de cet espace, vous ne pouvez pas modifier les rôles des membres. Seul le créateur de l'espace peut gérer les rôles des membres.
-            </p>
-          </div>
-          <button
-            onClick={() => setHideAdminMessage(true)}
-            className="p-1 hover:bg-amber-200/70 dark:hover:bg-amber-400/10 rounded-xl transition-colors"
-            title="Masquer ce message"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {!hideInheritedAdminMessage && showInheritedAdminMessage && (
-        <div className="rounded-2xl border border-emerald-400/40 bg-emerald-100 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-400/30 px-5 py-4 text-sm flex items-start gap-4 shadow-theme-sm">
-          <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-300 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-black uppercase tracking-widest text-[10px]">Administration par héritage - Promotions uniquement</p>
-            <p className="text-xs text-theme-muted mt-1 leading-relaxed">
-              En tant qu'administrateur hérité de cet espace, vous pouvez promouvoir les membres directs (Invité → Membre/Admin, Membre → Admin). Vous ne pouvez pas rétrograder ni retirer de membres.
-            </p>
-          </div>
-          <button
-            onClick={() => setHideInheritedAdminMessage(true)}
-            className="p-1 hover:bg-emerald-200/70 dark:hover:bg-emerald-400/10 rounded-xl transition-colors"
             title="Masquer ce message"
           >
             <X className="h-4 w-4" />
