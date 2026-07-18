@@ -68,8 +68,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
   const [pulseLoading, setPulseLoading] = useState(true);
 
   // États pour masquer les messages
-  const [hideAdminMessage, setHideAdminMessage] = useState(false);
-  const [hideInheritedAdminMessage, setHideInheritedAdminMessage] = useState(false);
   const [hideGuestMessage, setHideGuestMessage] = useState(false);
 
   const memberManagementRef = useRef<MemberManagementRef>(null);
@@ -253,8 +251,6 @@ export default function SpaceDashboard({ spaceId, onMemberInvited }: SpaceDashbo
     );
   }
 
-  const showAdminMessage = isDirectEspaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
-  const showInheritedAdminMessage = isInheritedSpaceAdmin && !isDirectEspaceCreator && !isWorkspaceCreator;
   const showGuestMessage = isEspaceGuest && !canInviteMembers;
 
   return (

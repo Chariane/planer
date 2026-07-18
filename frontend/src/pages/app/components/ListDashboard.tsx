@@ -68,8 +68,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
   const [roleActionNotice, setRoleActionNotice] = useState<string | null>(null);
 
   // États pour masquer les messages
-  const [hideDirectAdminMessage, setHideDirectAdminMessage] = useState(false);
-  const [hideInheritedAdminMessage, setHideInheritedAdminMessage] = useState(false);
 
   const { isGuest: isListeGuest, isAdmin: isListeAdmin, isCreator: isListeCreator } = useResourceRole(listId, 'liste');
   const { isAdmin: isWorkspaceAdmin, isCreator: isWorkspaceCreator } = useWorkspaceRole(workspaceId || undefined);
@@ -313,9 +311,6 @@ export default function ListDashboard({ listId, listName, workspaceId, espaceId,
     const blocked = inProgress + (stats.blockedTasksCount / stats.tasksCount) * 100;
     return `conic-gradient(#10b981 0 ${done}%, #3b82f6 ${done}% ${inProgress}%, #ef4444 ${inProgress}% ${blocked}%, #e5e7eb ${blocked}% 100%)`;
   })();
-
-  const showDirectAdminMessage = isDirectListAdmin && !isDirectListCreator && !isWorkspaceCreator;
-  const showInheritedAdminMessage = isInheritedListAdmin && !isDirectListCreator && !isWorkspaceCreator;
 
   const effectiveListRole = isDirectListCreator
     ? ROLES.CREATOR

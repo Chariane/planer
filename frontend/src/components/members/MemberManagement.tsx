@@ -501,10 +501,10 @@ const MemberManagement = forwardRef<MemberManagementRef, MemberManagementProps>(
     const filteredGuests = directGuests.filter(matchesSearch);
     const hasFilteredPeople = filteredMembers.length > 0 || filteredGuests.length > 0;
 
-    // ✅ Messages d'information pour les ESPACES
-    const showDirectEspaceCreatorMessage = isDirectEspaceCreator && !!espaceId;
-    const showDirectEspaceAdminMessage = isDirectEspaceAdmin && !isDirectEspaceCreator && !!espaceId;
-    const showInheritedEspaceAdminMessage = isInheritedEspaceAdmin && !isDirectEspaceCreator && !!espaceId;
+    // ✅ Messages d'information pour les ESPACES (Masqués si contexte = Liste)
+    const showDirectEspaceCreatorMessage = isDirectEspaceCreator && !!espaceId && !listeId;
+    const showDirectEspaceAdminMessage = isDirectEspaceAdmin && !isDirectEspaceCreator && !!espaceId && !listeId;
+    const showInheritedEspaceAdminMessage = isInheritedEspaceAdmin && !isDirectEspaceCreator && !!espaceId && !listeId;
 
     // ✅ Messages d'information pour les LISTES
     const showDirectListCreatorMessage = isDirectListCreator && !!listeId;
