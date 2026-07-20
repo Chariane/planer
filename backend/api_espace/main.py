@@ -161,8 +161,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-app.add_middleware(SecurityHeadersMiddleware)
-
 # ============================================================================
 # CORS CONFIGURATION
 # ============================================================================
@@ -205,6 +203,8 @@ app.add_middleware(
     expose_headers=["X-Total-Count", "X-Page-Count"],
     max_age=86400,
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # ROUTES

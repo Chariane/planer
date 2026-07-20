@@ -164,8 +164,6 @@ app = FastAPI(
     lifespan=lifespan  
 )
 
-# Ajouter le middleware de sécurité (doit être le premier)
-app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # CORS CONFIGURATION SÉCURISÉE
@@ -209,6 +207,8 @@ app.add_middleware(
     expose_headers=["X-Total-Count", "X-Page-Count"],
     max_age=86400,
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # ROUTES
