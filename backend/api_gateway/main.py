@@ -299,7 +299,8 @@ async def csrf_middleware(request: Request, call_next):
         "/auth/refresh",
         "/csrf-token",
         "/health",
-        "/"
+        "/",
+        "/auth/resend-verification-code"
     ]
     if request.url.path in public_paths:
         return await call_next(request)
