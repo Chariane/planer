@@ -114,7 +114,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "connect-src 'self' https://*.k-planer.com wss://*.k-planer.com; "
@@ -124,11 +124,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         else:
-            # CSP PERMISSIVE pour développement
+            # CSP PERMISSIVE pour développement (inclut le CDN pour Swagger)
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' data:; "
                 "connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com; "
