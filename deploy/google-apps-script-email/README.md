@@ -17,11 +17,13 @@ Google currently allows consumer accounts up to 100 email recipients per day.
    The shared secret in each request protects the public endpoint.
 6. Authorize the requested mail permission and deploy. Copy the URL ending in
    `/exec`.
-7. In Render, open `k-planer-api-gateway > Environment` and set:
+7. In Render, open **Environment Groups > `planer-demo-shared`** and set:
    - `GOOGLE_APPS_SCRIPT_EMAIL_URL` = the deployed `/exec` URL
    - `GOOGLE_APPS_SCRIPT_EMAIL_SECRET` = the exact same secret
-8. Save and redeploy `k-planer-api-gateway`.
+8. Save and redeploy the services that use this group. This includes the
+   Planer APIs and K-Messenger.
 
-The gateway will use this HTTPS relay when both variables are set. The code
-reports email success only when the relay confirms it accepted the message.
-After setup, use **renvoyer le code** for an account that already exists.
+All Planer APIs and K-Messenger use this HTTPS relay when both variables are
+set. The gateway reports email success only when the relay confirms it accepted
+the message. After setup, use **renvoyer le code** for an account that already
+exists.

@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import threading
+import httpx
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from .security import config_data
 from dotenv import load_dotenv
@@ -69,6 +70,34 @@ def _get_mail_config() -> ConnectionConfig:
         USE_CREDENTIALS=_as_bool(os.getenv("USE_CREDENTIALS", config_data.get("USE_CREDENTIALS")), default=True),
         VALIDATE_CERTS=_as_bool(os.getenv("VALIDATE_CERTS", config_data.get("VALIDATE_CERTS")), default=True),
     )
+
+
+async def _deliver_email(recipients: list[str], subject: str, html_body: str) -> None:
+    relay_url = _clean_env_val("GOOGLE_APPS_SCRIPT_EMAIL_URL")
+    relay_secret = _clean_env_val("GOOGLE_APPS_SCRIPT_EMAIL_SECRET")
+    if relay_url or relay_secret:
+        if not relay_url or not relay_secret:
+            raise RuntimeError("Google Apps Script mail relay is only partially configured")
+        async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+            response = await client.post(relay_url, json={
+                "secret": relay_secret,
+                "to": recipients[0],
+                "subject": subject,
+                "html": html_body,
+            })
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            reason = result.get("error", "invalid relay response") if isinstance(result, dict) else "invalid relay response"
+            raise RuntimeError(f"Google Apps Script mail relay rejected the message: {reason}")
+        return
+
+    await FastMail(_get_mail_config()).send_message(MessageSchema(
+        subject=subject,
+        recipients=recipients,
+        body=html_body,
+        subtype=MessageType.html,
+    ))
 
 
 # -----------------------------
@@ -155,15 +184,7 @@ async def send_liste_invitation_email(
     """
     template = get_html_template(f"Invitation Liste - {liste_name}", body, "Accepter l'invitation", invitation_link)
 
-    message = MessageSchema(
-        subject=f"K-Planer - Invitation dans la liste {liste_name}",
-        recipients=[email],
-        body=template,
-        subtype=MessageType.html,
-    )
-
-    fm = FastMail(_get_mail_config())
-    await fm.send_message(message)
+    await _deliver_email([email], f"K-Planer - Invitation dans la liste {liste_name}", template)
     logger.debug(f"send_liste_invitation_email SUCCESS to {email}")
     return token
 
@@ -224,16 +245,8 @@ async def send_notification_email(
     
     template = get_html_template(title, body, button_text, button_url)
     
-    msg = MessageSchema(
-        subject=subject,
-        recipients=[email],
-        body=template,
-        subtype=MessageType.html,
-    )
-    
     try:
-        fm = FastMail(_get_mail_config())
-        await fm.send_message(msg)
+        await _deliver_email([email], subject, template)
         logger.debug(f"Notification email envoyée avec succès à {email}")
     except Exception as exc:
         logger.warning(f"Impossible d'envoyer l'email de notification à {email}: {exc}")
