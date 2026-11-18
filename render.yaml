@@ -14,7 +14,7 @@ envVarGroups:
       - key: REFRESH_TOKEN_EXPIRE_DAYS
         value: "7"
       - key: ALLOW_ORIGINS
-        value: https://nadege-planer-demo.onrender.com
+        value: https://k-planer-demo.onrender.com
       - key: ALLOW_CREDENTIALS
         value: "true"
       - key: ALLOW_METHODS
@@ -22,7 +22,7 @@ envVarGroups:
       - key: ALLOW_HEADERS
         value: "*"
       - key: FRONT_BASE_URL
-        value: https://nadege-planer-demo.onrender.com
+        value: https://k-planer-demo.onrender.com
       - key: FRONT_REGISTER_URL
         value: /register
       - key: MAIL_PORT
@@ -42,13 +42,13 @@ envVarGroups:
 
 services:
   - type: keyvalue
-    name: nadege-planer-cache
+    name: k-planer-cache
     plan: free
     region: frankfurt
     ipAllowList: []
 
   - type: web
-    name: nadege-planer-api-espace
+    name: k-planer-api-espace
     runtime: python
     plan: free
     region: frankfurt
@@ -61,21 +61,21 @@ services:
         value: Prod
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: nadege-planer-cache
+          name: k-planer-cache
           type: keyvalue
           property: connectionString
       - key: K_CHAT_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: BACK_BASE_URL
         fromService:
-          name: nadege-planer-api-espace
+          name: k-planer-api-espace
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: MAIL_USERNAME
@@ -88,7 +88,7 @@ services:
         sync: false
 
   - type: web
-    name: nadege-planer-api-gateway
+    name: k-planer-api-gateway
     runtime: python
     plan: free
     region: frankfurt
@@ -101,27 +101,27 @@ services:
         value: Prod
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: nadege-planer-cache
+          name: k-planer-cache
           type: keyvalue
           property: connectionString
       - key: K_CHAT_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: BACK_BASE_URL
         fromService:
-          name: nadege-planer-api-gateway
+          name: k-planer-api-gateway
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: FRONT_ACCOUNT_VERIFICATION_URL
-        value: https://nadege-planer-demo.onrender.com/auth/verify
+        value: https://k-planer-demo.onrender.com/auth/verify
       - key: FRONT_PASSWORD_RESET_URL
-        value: https://nadege-planer-demo.onrender.com/auth/reset-password
+        value: https://k-planer-demo.onrender.com/auth/reset-password
       - key: MAIL_USERNAME
         sync: false
       - key: MAIL_PASSWORD
@@ -134,7 +134,7 @@ services:
         sync: false
 
   - type: web
-    name: nadege-planer-api-workspace
+    name: k-planer-api-workspace
     runtime: python
     plan: free
     region: frankfurt
@@ -147,21 +147,21 @@ services:
         value: Prod
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: nadege-planer-cache
+          name: k-planer-cache
           type: keyvalue
           property: connectionString
       - key: K_CHAT_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: BACK_BASE_URL
         fromService:
-          name: nadege-planer-api-workspace
+          name: k-planer-api-workspace
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: MAIL_USERNAME
@@ -174,7 +174,7 @@ services:
         sync: false
 
   - type: web
-    name: nadege-planer-api-tasks
+    name: k-planer-api-tasks
     runtime: python
     plan: free
     region: frankfurt
@@ -187,26 +187,26 @@ services:
         value: Prod
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: nadege-planer-cache
+          name: k-planer-cache
           type: keyvalue
           property: connectionString
       - key: K_CHAT_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: LISTE_TACHE_URL
         fromService:
-          name: nadege-planer-api-tasks
+          name: k-planer-api-tasks
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: BACK_BASE_URL
         fromService:
-          name: nadege-planer-api-tasks
+          name: k-planer-api-tasks
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: MAIL_USERNAME
@@ -219,7 +219,7 @@ services:
         sync: false
 
   - type: web
-    name: nadege-planer-api-notification
+    name: k-planer-api-notification
     runtime: python
     plan: free
     region: frankfurt
@@ -232,21 +232,21 @@ services:
         value: Prod
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: nadege-planer-cache
+          name: k-planer-cache
           type: keyvalue
           property: connectionString
       - key: K_CHAT_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
-    name: nadege-k-messenger
+    name: k-messenger
     repo: https://github.com/Chariane/K-Messenger.git
     branch: main
     runtime: python
@@ -261,7 +261,7 @@ services:
         value: Production
       - key: DATABASE_URL
         fromDatabase:
-          name: nadege-planer-db
+          name: k-planer-db
           property: connectionString
       - key: UPLOAD_DIR
         value: uploads
@@ -275,7 +275,7 @@ services:
         sync: false
 
   - type: web
-    name: nadege-planer-demo
+    name: k-planer-demo
     runtime: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: frontend/dist
@@ -288,52 +288,52 @@ services:
         value: 22.12.0
       - key: VITE_API_URL
         fromService:
-          name: nadege-planer-api-gateway
+          name: k-planer-api-gateway
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_API_GATEWAY_URL
         fromService:
-          name: nadege-planer-api-gateway
+          name: k-planer-api-gateway
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_AUTH_URL
         fromService:
-          name: nadege-planer-api-gateway
+          name: k-planer-api-gateway
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_WORKSPACE_URL
         fromService:
-          name: nadege-planer-api-workspace
+          name: k-planer-api-workspace
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_ESPACE_URL
         fromService:
-          name: nadege-planer-api-espace
+          name: k-planer-api-espace
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_LISTE_TACHE_URL
         fromService:
-          name: nadege-planer-api-tasks
+          name: k-planer-api-tasks
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_LIST_URL
         fromService:
-          name: nadege-planer-api-tasks
+          name: k-planer-api-tasks
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_NOTIFICATION_URL
         fromService:
-          name: nadege-planer-api-notification
+          name: k-planer-api-notification
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: VITE_MESSAGERIE_URL
         fromService:
-          name: nadege-k-messenger
+          name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
 
 databases:
-  - name: nadege-planer-db
+  - name: k-planer-db
     databaseName: planer_demo
     user: planer_demo
     plan: free
