@@ -72,13 +72,10 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token = request.cookies.get("access_token")
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get("access_token")
     if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-        else:
-            raise credentials_exception
+        raise credentials_exception
 
     if is_token_blacklisted(token):
         logger.warning(f"Tentative d'utilisation d'un token blacklisté")
@@ -218,5 +215,5 @@ def get_access_token_from_request(request: Request) -> Optional[str]:
     Extrait le token JWT du cookie 'access_token' dans la requête.
     Utilisé comme dépendance FastAPI pour injecter le token dans les routes.
     """
-    token = request.cookies.get("access_token")
-    return token
+    auth_header = request.headers.get("Authorization", "")
+    return auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get("access_token")

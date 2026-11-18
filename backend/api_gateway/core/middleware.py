@@ -41,11 +41,8 @@ class TokenRefreshMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # ✅ Vérifier si c'est une requête avec token
-        token = request.cookies.get("access_token")
-        if not token:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header[7:]
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get("access_token")
         
         if not token:
             return await call_next(request)

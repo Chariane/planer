@@ -3,7 +3,7 @@ import base64
 import binascii
 import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.cookies import COOKIE_SECURE, COOKIE_SAMESITE
@@ -374,6 +374,7 @@ def login(
             # short-lived access token as well so the SPA can authenticate
             # requests sent directly to the other Render API subdomains.
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": UtilisateurOut.model_validate(user),
         }
@@ -771,6 +772,25 @@ def verify_two_factor_code(
         data={"sub": str(user.id)},
         expires_delta=access_token_expires,
     )
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/auth/refresh",
+    )
     security_logger.log_auth(
         action="verify_2fa_success",
         user_id=user.id,
@@ -778,7 +798,12 @@ def verify_two_factor_code(
         status="success",
         details={}
     )
-    return {"access_token": access_token, "token_type": "bearer", "user": user}
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user,
+    }
 
 
 @router.post("/change-password", response_model=MessageResponse)
@@ -968,10 +993,16 @@ def update_me(
 def logout(
     request: Request,
     response: Response,
+    payload: dict | None = Body(default=None),
     current_user: UtilisateurOut = Depends(get_current_user),
 ):
-    access_token = request.cookies.get("access_token")
-    refresh_token = request.cookies.get("refresh_token")
+    auth_header = request.headers.get("Authorization", "")
+    access_token = (
+        auth_header[7:]
+        if auth_header.startswith("Bearer ")
+        else request.cookies.get("access_token")
+    )
+    refresh_token = (payload or {}).get("refresh_token") or request.cookies.get("refresh_token")
 
     if access_token:
         add_to_blacklist(access_token)
@@ -1003,6 +1034,7 @@ def logout(
 def refresh_token(
     request: Request,
     response: Response,
+    payload: dict | None = Body(default=None),
     db: Session = Depends(get_db),
 ):
     """
@@ -1015,7 +1047,7 @@ def refresh_token(
     - Optionnel: fait la rotation du refresh_token
     """
     # 1. Lire le refresh token depuis le cookie
-    refresh_token = request.cookies.get("refresh_token")
+    refresh_token = (payload or {}).get("refresh_token") or request.cookies.get("refresh_token")
     if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1074,5 +1106,6 @@ def refresh_token(
     return {
         "message": "Token rafraîchi",
         "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer",
     }

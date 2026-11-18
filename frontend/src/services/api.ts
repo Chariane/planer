@@ -165,6 +165,7 @@ async function getCsrfToken(): Promise<string> {
 }
 
 const ACCESS_TOKEN_KEY = 'kplanner_access_token';
+const REFRESH_TOKEN_KEY = 'kplanner_refresh_token';
 
 export function setAccessToken(token: string | null) {
   if (typeof window === 'undefined') return;
@@ -178,6 +179,21 @@ export function setAccessToken(token: string | null) {
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function setRefreshToken(token: string | null) {
+  if (typeof window === 'undefined') return;
+  if (token) window.sessionStorage.setItem(REFRESH_TOKEN_KEY, token);
+  else window.sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.sessionStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function clearRefreshToken() {
+  setRefreshToken(null);
 }
 
 export function createAuthenticatedWebSocket(url: string): WebSocket {
@@ -215,6 +231,7 @@ function handleUnauthorizedResponse(endpoint: string) {
 
   hasDispatchedSessionExpired = true;
   clearAccessToken();
+  clearRefreshToken();
   window.dispatchEvent(new CustomEvent('sessionExpired'));
 
   window.setTimeout(() => {

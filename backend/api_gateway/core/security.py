@@ -142,15 +142,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Lire le token depuis le cookie (pas l'header Authorization)
-    token = request.cookies.get("access_token")
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get("access_token")
     if not token:
-        # Fallback: essayer l'header Authorization (pour compatibilité)
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-        else:
-            raise credentials_exception
+        raise credentials_exception
     
     # Vérifie si le token est blacklisté
     if is_token_blacklisted(token):

@@ -1,5 +1,5 @@
 // src/services/auth.service.ts
-import { apiFetch, setAccessToken, clearAccessToken } from './api';
+import { apiFetch, setAccessToken, clearAccessToken, getRefreshToken, setRefreshToken, clearRefreshToken } from './api';
 
 const AUTH_BASE_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:8002';
 
@@ -69,6 +69,7 @@ export interface PublicUserProfile {
 
 export interface RefreshTokenResponse {
   access_token: string;
+  refresh_token?: string;
   token_type: string;
 }
 
@@ -89,6 +90,7 @@ export const authService = {
     if (response.access_token) {
       setAccessToken(response.access_token);
     }
+    if (response.refresh_token) setRefreshToken(response.refresh_token);
 
     return response;
   },
@@ -96,21 +98,28 @@ export const authService = {
   refreshToken: async () => {
     const response = await apiFetch(AUTH_BASE_URL, '/auth/refresh', {
       method: 'POST',
+      body: JSON.stringify({ refresh_token: getRefreshToken() }),
       credentials: 'include',
     }) as RefreshTokenResponse;
 
     if (response.access_token) {
       setAccessToken(response.access_token);
     }
+    if (response.refresh_token) setRefreshToken(response.refresh_token);
     return response;
   },
 
   logout: async () => {
-    clearAccessToken();
-    return apiFetch(AUTH_BASE_URL, '/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    try {
+      return await apiFetch(AUTH_BASE_URL, '/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: getRefreshToken() }),
+        credentials: 'include',
+      });
+    } finally {
+      clearAccessToken();
+      clearRefreshToken();
+    }
   },
 
   verifyEmail: (email: string, code: string) =>
@@ -194,6 +203,7 @@ export const authService = {
     if (response.access_token) {
       setAccessToken(response.access_token);
     }
+    if (response.refresh_token) setRefreshToken(response.refresh_token);
     return response;
   },
 

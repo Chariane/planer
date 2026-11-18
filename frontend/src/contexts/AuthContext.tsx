@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { authService } from '../services/auth.service';
 import { baseApi, clearCacheOnLogout } from '../store/api/baseApi';
-import { clearAccessToken, getAccessToken } from '../services/api';
+import { clearAccessToken, clearRefreshToken, getAccessToken } from '../services/api';
 import type { ProfileUpdatePayload, RegisterPayload } from '../services/auth.service';
 
 interface User {
@@ -113,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleSessionExpired = () => {
       clearAccessToken();
+      clearRefreshToken();
       setUser(null);
       setToken(null);
     };
@@ -144,6 +145,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!response.user) {
       throw new Error('Réponse de connexion invalide.');
     }
+    if (!response.access_token || !getAccessToken()) {
+      throw new Error('Connexion non finalisée : le serveur n’a pas fourni de jeton de session.');
+    }
     
     clearCacheOnLogout({ dispatch });
     
@@ -157,6 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!response.user) {
       throw new Error('Réponse de vérification 2FA invalide.');
+    }
+    if (!response.access_token || !getAccessToken()) {
+      throw new Error('Connexion non finalisée : le serveur n’a pas fourni de jeton de session.');
     }
     
     clearCacheOnLogout({ dispatch });

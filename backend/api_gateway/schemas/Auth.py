@@ -133,6 +133,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(MessageResponse):
     requires_2fa: bool = False
     access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
     token_type: Optional[str] = None
     user: Optional[UtilisateurOut] = None
     challenge_token: Optional[str] = None
