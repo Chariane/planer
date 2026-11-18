@@ -12,7 +12,7 @@ from ..schemas import UtilisateurOut
 from .database import get_db
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
+config_data = {**dotenv_values(os.path.join(BASE_DIR, ".env")), **os.environ}
 SECRET_KEY = config_data.get("SECRET_KEY") or os.getenv("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM") or os.getenv("ALGORITHM", "HS256")
 

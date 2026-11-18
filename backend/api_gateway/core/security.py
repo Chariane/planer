@@ -17,7 +17,7 @@ from .database import get_db
 # Configuration
 # -----------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
+config_data = {**dotenv_values(os.path.join(BASE_DIR, ".env")), **os.environ}
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
@@ -33,15 +33,19 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 try:
     import redis
-    REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_DB = int(os.getenv("REDIS_DB", "1"))
-    redis_client = redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        decode_responses=True
-    )
+    REDIS_URL = os.getenv("REDIS_URL")
+    if REDIS_URL:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    else:
+        REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+        REDIS_DB = int(os.getenv("REDIS_DB", "1"))
+        redis_client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            decode_responses=True
+        )
     redis_client.ping()
     REDIS_AVAILABLE = True
     logger.info("Redis connecté pour la blacklist des tokens")

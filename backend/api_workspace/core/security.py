@@ -16,7 +16,7 @@ from .database import get_db
 # Configuration
 # -----------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
+config_data = {**dotenv_values(os.path.join(BASE_DIR, ".env")), **os.environ}
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(config_data.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Réduit à 30 minutes par défaut

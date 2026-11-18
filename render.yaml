@@ -1,0 +1,339 @@
+# Render demo stack for Planer. Free resources are intentionally used.
+# Public URLs follow the service names below; keep the static-site name stable
+# because it is also used as the exact CORS origin.
+
+envVarGroups:
+  - name: planer-demo-shared
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: ALLOW_ORIGINS
+        value: https://nadege-planer-demo.onrender.com
+      - key: ALLOW_CREDENTIALS
+        value: "true"
+      - key: ALLOW_METHODS
+        value: GET,POST,PUT,DELETE,PATCH,OPTIONS
+      - key: ALLOW_HEADERS
+        value: "*"
+      - key: FRONT_BASE_URL
+        value: https://nadege-planer-demo.onrender.com
+      - key: FRONT_REGISTER_URL
+        value: /register
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_SSL_TLS
+        value: "false"
+      - key: MAIL_STARTTLS
+        value: "true"
+      - key: USE_CREDENTIALS
+        value: "true"
+      - key: VALIDATE_CERTS
+        value: "true"
+      - key: ANTIVIRUS_REQUIRED
+        value: "true"
+      - key: MAX_UPLOAD_BYTES
+        value: "10485760"
+
+services:
+  - type: keyvalue
+    name: nadege-planer-cache
+    plan: free
+    region: frankfurt
+
+  - type: web
+    name: nadege-planer-api-espace
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r backend/api_espace/requirements.txt
+    startCommand: python deploy/start_api.py api_espace
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: nadege-planer-cache
+          type: keyvalue
+          property: connectionString
+      - key: K_CHAT_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACK_BASE_URL
+        fromService:
+          name: nadege-planer-api-espace
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_SERVER
+        sync: false
+
+  - type: web
+    name: nadege-planer-api-gateway
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r backend/api_gateway/requirements.txt
+    startCommand: python deploy/start_api.py api_gateway
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: nadege-planer-cache
+          type: keyvalue
+          property: connectionString
+      - key: K_CHAT_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACK_BASE_URL
+        fromService:
+          name: nadege-planer-api-gateway
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FRONT_ACCOUNT_VERIFICATION_URL
+        value: https://nadege-planer-demo.onrender.com/auth/verify
+      - key: FRONT_PASSWORD_RESET_URL
+        value: https://nadege-planer-demo.onrender.com/auth/reset-password
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_SERVER
+        sync: false
+      - key: FEDAPAY_SECRET_KEY
+        sync: false
+
+  - type: web
+    name: nadege-planer-api-workspace
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r backend/api_workspace/requirements.txt
+    startCommand: python deploy/start_api.py api_workspace
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: nadege-planer-cache
+          type: keyvalue
+          property: connectionString
+      - key: K_CHAT_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACK_BASE_URL
+        fromService:
+          name: nadege-planer-api-workspace
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_SERVER
+        sync: false
+
+  - type: web
+    name: nadege-planer-api-tasks
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r backend/api_liste_et_tache/requirements.txt
+    startCommand: python deploy/start_api.py api_liste_et_tache
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: nadege-planer-cache
+          type: keyvalue
+          property: connectionString
+      - key: K_CHAT_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: LISTE_TACHE_URL
+        fromService:
+          name: nadege-planer-api-tasks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: BACK_BASE_URL
+        fromService:
+          name: nadege-planer-api-tasks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_SERVER
+        sync: false
+
+  - type: web
+    name: nadege-planer-api-notification
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r backend/api_notification/requirements.txt
+    startCommand: python deploy/start_api.py api_notification
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: nadege-planer-cache
+          type: keyvalue
+          property: connectionString
+      - key: K_CHAT_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: web
+    name: nadege-k-messenger
+    repo: https://github.com/Chariane/K-Messenger.git
+    branch: main
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python deploy/start.py
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: planer-demo-shared
+      - key: ENV
+        value: Production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nadege-planer-db
+          property: connectionString
+      - key: UPLOAD_DIR
+        value: uploads
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_SERVER
+        sync: false
+
+  - type: web
+    name: nadege-planer-demo
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: VITE_API_URL
+        fromService:
+          name: nadege-planer-api-gateway
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_API_GATEWAY_URL
+        fromService:
+          name: nadege-planer-api-gateway
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_AUTH_URL
+        fromService:
+          name: nadege-planer-api-gateway
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_WORKSPACE_URL
+        fromService:
+          name: nadege-planer-api-workspace
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_ESPACE_URL
+        fromService:
+          name: nadege-planer-api-espace
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_LISTE_TACHE_URL
+        fromService:
+          name: nadege-planer-api-tasks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_LIST_URL
+        fromService:
+          name: nadege-planer-api-tasks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_NOTIFICATION_URL
+        fromService:
+          name: nadege-planer-api-notification
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_MESSAGERIE_URL
+        fromService:
+          name: nadege-k-messenger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+databases:
+  - name: nadege-planer-db
+    databaseName: planer_demo
+    user: planer_demo
+    plan: free
+    region: frankfurt

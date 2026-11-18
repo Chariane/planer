@@ -10,7 +10,7 @@ dotenv_path = os.path.join(BASE_DIR, ".env")
 
 load_dotenv(dotenv_path)
 
-config_data = dotenv_values(dotenv_path)
+config_data = {**dotenv_values(dotenv_path), **os.environ}
 
 def _clean_env_value(value: str | None) -> str | None:
     if value in (None, "", "None"):

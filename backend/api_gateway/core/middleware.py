@@ -11,7 +11,7 @@ from dotenv import dotenv_values
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-config_data = dotenv_values(os.path.join(BASE_DIR, ".env"))
+config_data = {**dotenv_values(os.path.join(BASE_DIR, ".env")), **os.environ}
 SECRET_KEY = config_data.get("SECRET_KEY")
 ALGORITHM = config_data.get("ALGORITHM", "HS256")
 
