@@ -30,6 +30,7 @@ export interface LoginResponse {
   requires_2fa: boolean;
   challenge_token?: string;
   access_token?: string;
+  refresh_token?: string;
   token_type?: string;
   user?: {
     id: string;
