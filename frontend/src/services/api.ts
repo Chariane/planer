@@ -243,6 +243,11 @@ export async function apiFetch(baseUrl: string, endpoint: string, options?: Requ
   const headers: HeadersInit = {
     ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...options?.headers,
+    // The access cookie is host-only on the gateway, while APIs run on
+    // separate Render subdomains. Send the token returned at login to each API.
+    ...(getAccessToken() && !new Headers(options?.headers).has('Authorization')
+      ? { Authorization: `Bearer ${getAccessToken()}` }
+      : {}),
     ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
   };
 

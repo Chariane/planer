@@ -370,6 +370,11 @@ def login(
         return {
             "message": "Connexion réussie.",
             "requires_2fa": False,
+            # The HttpOnly cookie is scoped to the gateway host. Return the
+            # short-lived access token as well so the SPA can authenticate
+            # requests sent directly to the other Render API subdomains.
+            "access_token": access_token,
+            "token_type": "bearer",
             "user": UtilisateurOut.model_validate(user),
         }
 

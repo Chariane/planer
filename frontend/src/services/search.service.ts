@@ -1,5 +1,6 @@
 // frontend/src/services/search.service.ts
 import { LISTE_TACHE_BASE_URL } from './plannerTools.service';
+import { getAccessToken } from './api';
 
 export interface SearchResult {
   tasks: any[];
@@ -12,9 +13,9 @@ export interface SearchResult {
 }
 
 const getHeaders = () => {
-  const token = localStorage.getItem('access_token');
+  const token = getAccessToken();
   return {
-    'Authorization': token ? `Bearer ${token}` : '',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'Content-Type': 'application/json',
   };
 };

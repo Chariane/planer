@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, RefreshCw, Filter, Search, Clock, User, Activity, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { GlassCard } from '../../../../../components/ui/GlassCard';
+import { getAccessToken } from '../../../../../services/api';
 
 interface AuditLog {
   id: string;
@@ -75,10 +76,10 @@ export const AuditSection: React.FC<AuditSectionProps> = ({
         url += `&workspace_id=${encodeURIComponent(workspaceId)}`;
       }
 
+      const token = getAccessToken();
       const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-        }
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
