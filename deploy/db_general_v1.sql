@@ -165,29 +165,6 @@ CREATE TABLE public.charte (
 );
 
 
--- Table notification
-CREATE TABLE public.notification (
-    id varchar(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('info', 'alerte', 'warning', 'promotion', 'evenement', 'systeme')),
-    message TEXT NOT NULL,
-    est_lu BOOLEAN DEFAULT FALSE,
-    est_globale BOOLEAN DEFAULT FALSE,
-    id_utilisateur VARCHAR(12) REFERENCES public.utilisateur(id) ON DELETE SET NULL,
-    id_publication VARCHAR(12) REFERENCES public.publication(id) ON DELETE SET NULL,
-    id_product VARCHAR(12) REFERENCES boutique.products(id) ON DELETE SET NULL,
-    id_evenement VARCHAR(12) REFERENCES public.evenement(id) ON DELETE SET NULL,
-    id_commentaire VARCHAR(12) REFERENCES public.commentaire(id) ON DELETE SET NULL,
-    id_reponsecommentaire VARCHAR(12) REFERENCES public.reponsecommentaire(id) ON DELETE SET NULL,
-    id_message VARCHAR(12) REFERENCES messagerie.message(id) ON DELETE SET NULL,
-    id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL,
-    id_reaction VARCHAR(12) REFERENCES public.reaction(id) ON DELETE SET NULL,
-    id_historique_connexion VARCHAR(12) REFERENCES public.historique_connexion(id) ON DELETE SET NULL,
-    id_mention VARCHAR(12) REFERENCES public.mention(id) ON DELETE SET NULL,
-    id_suivi_utilisateur VARCHAR(12) REFERENCES public.suivi_utilisateur(id) ON DELETE SET NULL,
-    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    date_modif TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    date_lecture TIMESTAMP
-);
 
 
 -- ===========================
@@ -1276,6 +1253,30 @@ ON planer.paiement_abonnement
 FOR EACH ROW
 EXECUTE FUNCTION planer.fn_trg_paiement_abonnement();
 
+
+-- Table notification
+CREATE TABLE public.notification (
+    id varchar(12) NOT NULL DEFAULT encode(gen_random_bytes(6), 'hex') PRIMARY KEY,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('info', 'alerte', 'warning', 'promotion', 'evenement', 'systeme')),
+    message TEXT NOT NULL,
+    est_lu BOOLEAN DEFAULT FALSE,
+    est_globale BOOLEAN DEFAULT FALSE,
+    id_utilisateur VARCHAR(12) REFERENCES public.utilisateur(id) ON DELETE SET NULL,
+    id_publication VARCHAR(12) REFERENCES public.publication(id) ON DELETE SET NULL,
+    id_product VARCHAR(12) REFERENCES boutique.products(id) ON DELETE SET NULL,
+    id_evenement VARCHAR(12) REFERENCES public.evenement(id) ON DELETE SET NULL,
+    id_commentaire VARCHAR(12) REFERENCES public.commentaire(id) ON DELETE SET NULL,
+    id_reponsecommentaire VARCHAR(12) REFERENCES public.reponsecommentaire(id) ON DELETE SET NULL,
+    id_message VARCHAR(12) REFERENCES messagerie.message(id) ON DELETE SET NULL,
+    id_groupe VARCHAR(12) REFERENCES messagerie.groupe(id) ON DELETE SET NULL,
+    id_reaction VARCHAR(12) REFERENCES public.reaction(id) ON DELETE SET NULL,
+    id_historique_connexion VARCHAR(12) REFERENCES public.historique_connexion(id) ON DELETE SET NULL,
+    id_mention VARCHAR(12) REFERENCES public.mention(id) ON DELETE SET NULL,
+    id_suivi_utilisateur VARCHAR(12) REFERENCES public.suivi_utilisateur(id) ON DELETE SET NULL,
+    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date_modif TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date_lecture TIMESTAMP
+);
 
 -- INDEXES du schema planer
 CREATE INDEX IF NOT EXISTS idx_workspace_utilisateur ON planer.workspace (id_utilisateur);
