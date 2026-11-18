@@ -72,9 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Existing sessions only have an HttpOnly cookie scoped to the gateway.
-        // Exchange its refresh cookie for the Bearer token used by sibling APIs.
-        if (!getAccessToken()) {
+        // Refresh missing/expired Bearer tokens from the gateway's HttpOnly
+        // refresh cookie before loading data from sibling API subdomains.
+        const storedToken = getAccessToken();
+        let tokenNeedsRefresh = !storedToken;
+        if (storedToken) {
+          try {
+            const payload = JSON.parse(atob(storedToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            tokenNeedsRefresh = !payload.exp || payload.exp * 1000 <= Date.now() + 30_000;
+          } catch {
+            tokenNeedsRefresh = true;
+          }
+        }
+        if (tokenNeedsRefresh) {
           try {
             await authService.refreshToken();
           } catch {

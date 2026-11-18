@@ -194,6 +194,7 @@ export function clearAccessToken() {
 
 const AUTH_ROUTES_WITH_EXPECTED_401 = [
   '/auth/login',
+  '/auth/refresh',
   '/auth/register',
   '/auth/verify-email-code',
   '/auth/resend-verification-code',
