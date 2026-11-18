@@ -45,6 +45,7 @@ services:
     name: nadege-planer-cache
     plan: free
     region: frankfurt
+    ipAllowList: []
 
   - type: web
     name: nadege-planer-api-espace
