@@ -289,6 +289,13 @@ services:
     runtime: static
     buildCommand: cd frontend && npm ci --legacy-peer-deps && npm run build
     staticPublishPath: frontend/dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'"
     routes:
       - type: rewrite
         source: /*

@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, createAuthenticatedWebSocket } from './api';
 
 export const NOTIFICATION_BASE_URL = import.meta.env.VITE_NOTIFICATION_URL || 'http://localhost:8005';
 
@@ -77,7 +77,8 @@ export const notificationService = {
     apiFetch(NOTIFICATION_BASE_URL, `/notifications/${notificationId}`, { method: 'DELETE' }),
 
   socketUrl: () => {
-    // ✅ Le token est automatiquement envoyé dans les cookies
     return `${wsBaseUrl()}/notifications/ws`;
   },
+
+  connectSocket: () => createAuthenticatedWebSocket(`${wsBaseUrl()}/notifications/ws`),
 };

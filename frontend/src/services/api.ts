@@ -180,6 +180,13 @@ export function getAccessToken(): string | null {
   return window.localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
+export function createAuthenticatedWebSocket(url: string): WebSocket {
+  const token = getAccessToken();
+  // Browsers cannot attach an Authorization header to a WebSocket handshake.
+  // Offer the token as a secondary subprotocol; servers select only "bearer".
+  return token ? new WebSocket(url, ['bearer', token]) : new WebSocket(url);
+}
+
 export function clearAccessToken() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);

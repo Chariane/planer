@@ -1093,7 +1093,7 @@ export default function MessageriePage() {
 
     const wsUrl = messagerieService.groupSocketUrl(activeGroupId, user?.username || 'Utilisateur');
     if (!wsUrl) return;
-    const socket = new WebSocket(wsUrl);
+    const socket = messagerieService.connectSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -1231,7 +1231,7 @@ export default function MessageriePage() {
 
     const wsUrl = user?.id ? messagerieService.privateSocketUrl(user.id, privateUserId) : null;
     if (!wsUrl) return;
-    const socket = new WebSocket(wsUrl);
+    const socket = messagerieService.connectSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {

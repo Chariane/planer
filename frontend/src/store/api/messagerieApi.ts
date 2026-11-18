@@ -1,5 +1,6 @@
 // src/store/api/messagerieApi.ts
 import { baseApi } from './baseApi';
+import { createAuthenticatedWebSocket } from '../../services/api';
 
 // ============================================================================
 // TYPES - Compatibles avec vos services existants
@@ -293,6 +294,7 @@ export const messagerieWebSocket = {
     const userId = getCurrentUserId();
     return `${wsBaseUrl()}/chat/ws/private/${userId}/${receiverId}`;
   },
+  connect: (url: string) => createAuthenticatedWebSocket(url),
 };
 
 // ============================================================================

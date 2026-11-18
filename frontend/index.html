@@ -14,14 +14,12 @@
       img-src 'self' data: https: blob:;
       font-src 'self' data: https://fonts.gstatic.com;
       connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com wss://k-planer-api-notification.onrender.com;
-      frame-ancestors 'none';
       form-action 'self';
       base-uri 'self';
       upgrade-insecure-requests;
     " />
     
     <!-- HEADERS DE SÉCURITÉ -->
-    <meta http-equiv="X-Frame-Options" content="DENY" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
     

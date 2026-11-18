@@ -72,6 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // Existing sessions only have an HttpOnly cookie scoped to the gateway.
+        // Exchange its refresh cookie for the Bearer token used by sibling APIs.
+        if (!getAccessToken()) {
+          try {
+            await authService.refreshToken();
+          } catch {
+            // No refresh session: getMe below will resolve to signed-out state.
+          }
+        }
         const userData = await authService.getMe();
         setUser(userData);
         setToken(getAccessToken());

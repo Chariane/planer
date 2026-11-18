@@ -94,7 +94,7 @@ export const useMessagerieCompat = (groupId?: string, privateUserId?: string) =>
     if (wsConnection?.readyState === WebSocket.OPEN) return;
 
     const url = messagerieWebSocket.groupSocketUrl(groupId);
-    const ws = new WebSocket(url);
+    const ws = messagerieWebSocket.connect(url);
 
     ws.onopen = () => {
       console.log('🔌 WebSocket groupe connecté:', groupId);

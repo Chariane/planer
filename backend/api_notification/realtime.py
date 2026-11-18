@@ -25,8 +25,8 @@ class NotificationConnectionManager:
     def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
-    async def connect(self, user_id: str, websocket: WebSocket) -> None:
-        await websocket.accept()
+    async def connect(self, user_id: str, websocket: WebSocket, subprotocol: str | None = None) -> None:
+        await websocket.accept(subprotocol=subprotocol)
         self._connections.setdefault(user_id, set()).add(websocket)
         await websocket.send_json({"event": "connected"})
 

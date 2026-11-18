@@ -1071,4 +1071,8 @@ def refresh_token(
         path="/auth/refresh",
     )
 
-    return {"message": "Token rafraîchi"}
+    return {
+        "message": "Token rafraîchi",
+        "access_token": new_access_token,
+        "token_type": "bearer",
+    }

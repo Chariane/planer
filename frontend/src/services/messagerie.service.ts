@@ -1,6 +1,6 @@
 // frontend/src/services/messagerie.service.ts
 
-import { apiFetch } from './api';
+import { apiFetch, createAuthenticatedWebSocket } from './api';
 
 export const MESSAGERIE_BASE_URL = import.meta.env.VITE_MESSAGERIE_URL || 'http://localhost:8000';
 
@@ -228,4 +228,6 @@ export const messagerieService = {
     }
     return `${wsBaseUrl()}/chat/ws/private/${senderId}/${receiverId}`;
   },
+
+  connectSocket: (url: string) => createAuthenticatedWebSocket(url),
 };

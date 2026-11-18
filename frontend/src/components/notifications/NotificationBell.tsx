@@ -57,7 +57,7 @@ export default function NotificationBell({
     let socket: WebSocket | null = null;
 
     const connect = () => {
-      socket = new WebSocket(notificationService.socketUrl());
+      socket = notificationService.connectSocket();
       socket.onmessage = event => {
         try {
           const payload = JSON.parse(event.data) as NotificationRealtimeEvent;

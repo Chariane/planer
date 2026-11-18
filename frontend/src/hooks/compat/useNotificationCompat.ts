@@ -38,7 +38,7 @@ class NotificationWebSocketService {
     try {
       const wsUrl = this.getWebSocketUrl();
       console.log('🔌 Connexion WebSocket notifications:', wsUrl);
-      this.ws = new WebSocket(wsUrl);
+      this.ws = notificationService.connectSocket();
 
       this.ws.onopen = () => {
         console.log('🔌 WebSocket notifications connecté');

@@ -35,20 +35,19 @@ def _get_user_from_token(token: str | None):
 
 
 def _get_user_from_cookies(websocket: WebSocket):
-    """Lire access_token depuis les cookies HttpOnly et décoder."""
-    # ✅ DEBUG - Voir les cookies reçus
-    logger.info(f"🔍 Cookies reçus: {list(websocket.cookies.keys())}")
-    
-    token = websocket.cookies.get("access_token")
+    """Read the session token from the cookie or Bearer WebSocket subprotocol."""
+    protocols = websocket.scope.get("subprotocols", [])
+    protocol_token = protocols[1] if len(protocols) > 1 and protocols[0] == "bearer" else None
+    token = websocket.cookies.get("access_token") or protocol_token
     if not token:
-        logger.warning("❌ No access_token in cookies")
+        logger.warning("WebSocket request has no access token")
         return None
     return _get_user_from_token(token)
 
 
 @router.websocket("/ws")
 async def notifications_ws(websocket: WebSocket):
-    """WebSocket pour notifications temps réel. Authentification via cookies uniquement."""
+    """WebSocket pour notifications temps réel."""
     user = _get_user_from_cookies(websocket)
     
     if not user:
@@ -58,7 +57,12 @@ async def notifications_ws(websocket: WebSocket):
 
     logger.info(f"WebSocket connected for user {user.id}")
     
-    await notification_manager.connect(user.id, websocket)
+    protocols = websocket.scope.get("subprotocols", [])
+    await notification_manager.connect(
+        user.id,
+        websocket,
+        subprotocol="bearer" if len(protocols) > 1 and protocols[0] == "bearer" else None,
+    )
     try:
         while True:
             message = await websocket.receive_text()
