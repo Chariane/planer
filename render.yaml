@@ -279,7 +279,7 @@ services:
   - type: web
     name: k-planer-demo
     runtime: static
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && npm ci --legacy-peer-deps && npm run build
     staticPublishPath: frontend/dist
     routes:
       - type: rewrite
