@@ -4,12 +4,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import httpx
 from fastapi import HTTPException, status
 
 
 ANTIVIRUS_REQUIRED = os.getenv("ANTIVIRUS_REQUIRED", "true").lower() != "false"
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 CLAMAV_SCAN_TIMEOUT_SECONDS = int(os.getenv("CLAMAV_SCAN_TIMEOUT_SECONDS", "120"))
+TASKS_API_URL = os.getenv("TASKS_API_URL", "").rstrip("/")
 
 
 def validate_image_bytes(payload: bytes) -> str:
@@ -69,8 +71,66 @@ def _scan_path(path: Path) -> str:
     )
 
 
-def scan_image_bytes_with_clamav(payload: bytes) -> str:
+def scan_image_bytes_with_clamav(payload: bytes, access_token: str | None = None) -> str:
     suffix = validate_image_bytes(payload)
+    if TASKS_API_URL:
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Le service d'analyse antivirus n'a pas reçu le jeton de session.",
+            )
+
+        content_types = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+        }
+        try:
+            response = httpx.post(
+                f"{TASKS_API_URL}/listes/files/scan",
+                headers={"Authorization": f"Bearer {access_token}"},
+                files={"file": (f"profile-photo{suffix}", payload, content_types[suffix])},
+                timeout=CLAMAV_SCAN_TIMEOUT_SECONDS + 5,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Le service d'analyse antivirus est injoignable.",
+            ) from exc
+
+        if response.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Photo refusée : menace détectée par l'antivirus.",
+            )
+        if response.status_code != status.HTTP_200_OK:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Le service d'analyse antivirus n'a pas pu vérifier la photo.",
+            )
+
+        try:
+            scan_result = response.json()
+            scan_status = scan_result.get("scan_status") if isinstance(scan_result, dict) else None
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Réponse invalide du service d'analyse antivirus.",
+            ) from exc
+
+        if scan_status == "clean":
+            return "clean"
+        if scan_status == "skipped":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="ClamAV est indisponible : la photo n'a pas été enregistrée.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Le service d'analyse antivirus n'a pas confirmé que la photo est saine.",
+        )
+
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:

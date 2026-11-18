@@ -102,7 +102,7 @@ router = APIRouter(prefix="/auth", tags=["Authentification"])
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 
 
-def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
+def _decode_profile_photo(photo_base64: str | None, access_token: str | None = None) -> bytes | None:
     if not photo_base64:
         return None
 
@@ -118,7 +118,7 @@ def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
     if len(photo_bytes) > MAX_PROFILE_PHOTO_BYTES:
         raise HTTPException(status_code=413, detail="La photo de profil ne doit pas depasser 2 Mo.")
 
-    scan_image_bytes_with_clamav(photo_bytes)
+    scan_image_bytes_with_clamav(photo_bytes, access_token=access_token)
     return photo_bytes
 
 
@@ -857,6 +857,7 @@ def get_my_profile_photo(
 @router.put("/me/photo", response_model=ProfilePhotoResponse)
 def update_my_profile_photo(
     payload: ProfilePhotoUpdate,
+    request: Request,
     current_user: UtilisateurOut = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -864,7 +865,13 @@ def update_my_profile_photo(
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouve")
 
-    user.photo = _decode_profile_photo(payload.photo_base64)
+    authorization = request.headers.get("Authorization", "")
+    access_token = (
+        authorization[7:]
+        if authorization.startswith("Bearer ")
+        else request.cookies.get("access_token")
+    )
+    user.photo = _decode_profile_photo(payload.photo_base64, access_token=access_token)
     commit_or_raise(
         db,
         detail="Impossible de mettre a jour la photo de profil.",

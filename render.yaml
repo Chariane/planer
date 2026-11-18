@@ -119,6 +119,11 @@ services:
           name: k-messenger
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: TASKS_API_URL
+        fromService:
+          name: k-planer-api-tasks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: BACK_BASE_URL
         fromService:
           name: k-planer-api-gateway
