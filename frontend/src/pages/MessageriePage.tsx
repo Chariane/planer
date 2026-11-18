@@ -1725,7 +1725,7 @@ export default function MessageriePage() {
 
     try {
       setAttachmentSecurityStatus('Analyse antivirus de la pièce jointe en cours...');
-      await plannerToolsService.scanFile(file);
+      const scanResult = await plannerToolsService.scanFile(file) as { scan_status?: string };
       const dataUrl = await fileToDataUrl(file);
       const { mimeType, base64 } = splitDataUrl(dataUrl);
       setPendingAttachment({
@@ -1734,7 +1734,11 @@ export default function MessageriePage() {
         mimeType: mimeType || file.type || 'application/octet-stream',
         base64,
       });
-      setAttachmentSecurityStatus('Pièce jointe validée par antivirus.');
+      setAttachmentSecurityStatus(
+        scanResult?.scan_status === 'skipped'
+          ? 'Pièce jointe ajoutée sans analyse antivirus (scanner indisponible sur la démo).'
+          : 'Pièce jointe validée par antivirus.'
+      );
       setError(null);
     } catch (err: unknown) {
       setPendingAttachment(null);

@@ -11,6 +11,9 @@ from fastapi import HTTPException, UploadFile, status
 
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 ANTIVIRUS_REQUIRED = os.getenv("ANTIVIRUS_REQUIRED", "true").lower() != "false"
+UPLOAD_ANTIVIRUS_REQUIRED = os.getenv(
+    "UPLOAD_ANTIVIRUS_REQUIRED", str(ANTIVIRUS_REQUIRED).lower()
+).lower() != "false"
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 CLAMAV_SCAN_TIMEOUT_SECONDS = int(os.getenv("CLAMAV_SCAN_TIMEOUT_SECONDS", "120"))
 
@@ -191,7 +194,7 @@ def _scanner_commands(path: Path) -> Iterable[list[str]]:
 def scan_path_with_clamav(path: Path) -> str:
     commands = list(_scanner_commands(path))
     if not commands:
-        if ANTIVIRUS_REQUIRED:
+        if UPLOAD_ANTIVIRUS_REQUIRED:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Analyse antivirus indisponible. ClamAV n'est pas installé ou accessible.",
@@ -221,6 +224,9 @@ def scan_path_with_clamav(path: Path) -> str:
                 detail="Fichier refusé : menace détectée par l'antivirus.",
             )
         last_error = output or f"Code retour ClamAV: {result.returncode}"
+
+    if not UPLOAD_ANTIVIRUS_REQUIRED:
+        return "skipped"
 
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
