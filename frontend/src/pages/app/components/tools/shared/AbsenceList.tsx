@@ -53,7 +53,7 @@ const getDurationDisplayDefault = (startDate: string, endDate?: string | null) =
   const end = endDate ? new Date(endDate) : new Date(startDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  
+
   if (diffDays === 1) return '1 jour';
   if (diffDays < 7) return `${diffDays} jours`;
   const weeks = Math.floor(diffDays / 7);
@@ -126,12 +126,12 @@ export const AbsenceList = ({
           const isOwn = absence.owner_user_id === currentUserId;
           const statusDisplay = absence.statut || 'en_attente';
           const isArchive = type === 'archive';
-          
+
           const typeCfg = absence.is_absence
             ? { color: 'amber', icon: AlertTriangle, bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-500' }
             : { color: 'primary', icon: Calendar, bg: 'bg-primary/10', border: 'border-primary/20', text: 'text-primary' };
 
-          const isUrgentAbsence = absence.is_absence && statusDisplay === 'en_attente' && 
+          const isUrgentAbsence = absence.is_absence && statusDisplay === 'en_attente' &&
             new Date(absence.date_debut).toDateString() === new Date().toDateString();
 
           const durationDisplay = getDurationDisplay(absence.date_debut, absence.date_fin);
@@ -145,81 +145,89 @@ export const AbsenceList = ({
               exit={{ opacity: 0, scale: 0.95 }}
             >
               <GlassCard
-                className={`p-5 border-theme-border-subtle hover:bg-theme-surface-hover/40 transition-all group/card ${
-                  absence.is_absence ? 'hover:border-amber-500/30' : 'hover:border-primary/30'
-                }`}
+                className={`relative overflow-hidden p-6 border transition-all duration-300 group/card shadow-theme-md hover:shadow-theme-xl hover:-translate-y-1 ${absence.is_absence
+                    ? 'border-amber-500/20 hover:border-amber-500/50 bg-gradient-to-br from-amber-50/50 via-white/40 to-white/80 dark:from-amber-950/40 dark:via-slate-900/90 dark:to-slate-950/90 dark:border-amber-500/30'
+                    : 'border-primary/20 hover:border-primary/50 bg-gradient-to-br from-primary/5 via-white/40 to-white/80 dark:from-cyan-950/40 dark:via-slate-900/90 dark:to-slate-950/90 dark:border-cyan-500/30'
+                  }`}
               >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex gap-2">
-                    <div className={`p-2 rounded-xl border ${typeCfg.bg} ${typeCfg.border} ${typeCfg.text}`}>
-                      <typeCfg.icon size={20} />
+                {/* Lueur d'arrière-plan animée */}
+                <div className={`absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full blur-3xl opacity-20 transition-opacity duration-500 group-hover/card:opacity-40 object-cover pointer-events-none ${absence.is_absence ? 'bg-amber-500' : 'bg-cyan-500'}`} />
+
+                <div className="flex justify-between items-start mb-5 relative z-10">
+                  <div className="flex gap-3">
+                    <div className={`p-3 rounded-2xl border shadow-sm backdrop-blur-md ${typeCfg.bg} ${typeCfg.border} ${typeCfg.text} transition-transform duration-300 group-hover/card:scale-110 group-hover/card:rotate-3`}>
+                      <typeCfg.icon size={22} className="drop-shadow-sm" />
                     </div>
                     {isUrgentAbsence && (
                       <motion.div
                         initial={{ scale: 0.8 }}
-                        animate={{ scale: [1, 1.1, 1] }}
+                        animate={{ scale: [1, 1.05, 1], boxShadow: ['0 0 0 0 rgba(244, 63, 94, 0)', '0 0 16px 2px rgba(244, 63, 94, 0.4)', '0 0 0 0 rgba(244, 63, 94, 0)'] }}
                         transition={{ repeat: Infinity, duration: 2 }}
-                        className="px-2 py-1 bg-rose-500 text-white text-[8px] font-black uppercase rounded-lg h-fit self-center shadow-lg shadow-rose-500/20"
+                        className="px-3 py-1 bg-gradient-to-r from-rose-500 to-rose-600 text-white text-[9px] font-black tracking-widest uppercase rounded-xl h-fit self-center shadow-lg"
                       >
                         Urgent
                       </motion.div>
                     )}
                   </div>
-                  <StatusBadge status={statusDisplay} />
+                  <div className="transform transition-transform duration-300 group-hover/card:scale-105">
+                    <StatusBadge status={statusDisplay} />
+                  </div>
                 </div>
 
-                <div className="mb-4">
-                  <p className="font-black text-theme-main text-sm mb-1">
-                    {absence.is_absence ? 'Absence' : 'Congé'}
+                <div className="mb-5 relative z-10">
+                  <p className="font-extrabold text-theme-main text-lg tracking-tight mb-2">
+                    {absence.is_absence ? 'Absence' : 'Congé'} <span className="opacity-40 font-medium text-sm ml-1">• {durationDisplay}</span>
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <AvailabilityBadge availability={availability} />
-                    <p className="text-[10px] font-black text-theme-muted/40 uppercase tracking-widest">
+                    <p className="text-xs font-bold text-theme-muted uppercase tracking-[0.15em]">
                       {absence.authorName || absence.owner_name || 'Utilisateur'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 text-xs font-bold text-theme-main mb-4 bg-theme-surface-hover/30 p-3 rounded-xl border border-theme-border-subtle">
-                  <div className="flex-1 text-center">
-                    <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Début</p>
-                    <p>{formatDate(absence.date_debut)}</p>
+                <div className="flex items-center justify-between text-xs font-bold text-theme-main mb-5 bg-white/50 dark:bg-slate-900/80 p-4 rounded-2xl border border-white/60 dark:border-white/10 shadow-inner relative z-10">
+                  <div className="flex-1">
+                    <p className="text-[9px] uppercase tracking-widest text-theme-muted mb-1.5 font-black">Date de début</p>
+                    <p className="text-sm">{formatDate(absence.date_debut)}</p>
                   </div>
-                  <div className="h-6 w-[1px] bg-theme-border-subtle" />
-                  <div className="flex-1 text-center">
-                    <p className="text-[8px] uppercase text-theme-muted mb-1 font-black">Fin</p>
-                    <p>{formatDate(absence.date_fin)}</p>
+                  <div className="h-8 w-px bg-theme-border-subtle/50 mx-2" />
+                  <div className="flex-1 text-right">
+                    <p className="text-[9px] uppercase tracking-widest text-theme-muted mb-1.5 font-black">Date de fin</p>
+                    <p className="text-sm">{formatDate(absence.date_fin)}</p>
                   </div>
                 </div>
 
                 {absence.motif && (
-                  <p className="text-[11px] text-theme-muted italic mb-3 font-medium line-clamp-2">
-                    "{absence.motif}"
-                  </p>
+                  <div className="mb-4 relative z-10 pl-3 border-l-2 border-secondary/40">
+                    <p className="text-[12px] text-theme-muted italic font-medium leading-relaxed line-clamp-2">
+                      "{absence.motif}"
+                    </p>
+                  </div>
                 )}
 
                 {(absence.decision_commentaire || absence.decision_by_name) && (
-                  <div className="mb-6 rounded-xl border border-theme-border-subtle bg-theme-surface-hover/30 p-3">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-theme-muted">
+                  <div className="mb-6 rounded-2xl border border-theme-border-subtle bg-white/60 dark:bg-slate-900/90 p-4 relative z-10 shadow-sm backdrop-blur-sm transition-all hover:bg-white/80">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted/60 mb-2">
                       Décision {absence.decision_by_name ? `par ${absence.decision_by_name}` : ''}
                       {absence.decision_at ? ` · ${formatDate(absence.decision_at)}` : ''}
                     </p>
                     {absence.decision_commentaire && (
-                      <p className="mt-1 text-[11px] font-bold text-theme-main line-clamp-2">
+                      <p className="text-xs font-bold text-theme-main leading-relaxed line-clamp-2">
                         {absence.decision_commentaire}
                       </p>
                     )}
                   </div>
                 )}
 
-                <div className="flex flex-col gap-2 pt-4 border-t border-theme-border-subtle">
+                <div className="flex flex-col gap-2 pt-5 mt-auto border-t border-theme-border-subtle/30 relative z-10">
                   {/* ✅ Bouton Vérifier Impact - pour les demandes en attente */}
                   {statusDisplay === 'en_attente' && type === 'pending' && onViewImpact && (
                     <button
                       onClick={() => onViewImpact(absence)}
-                      className="w-full py-2 bg-secondary/10 hover:bg-secondary/20 text-secondary text-[10px] font-black uppercase rounded-lg transition-all border border-secondary/10"
+                      className="w-full py-2.5 bg-secondary/10 hover:bg-secondary/20 text-secondary text-[11px] font-black uppercase tracking-[0.1em] rounded-xl transition-all border border-secondary/20 shadow-sm"
                     >
-                      Vérifier Impact
+                      Analyser l'impact
                     </button>
                   )}
 

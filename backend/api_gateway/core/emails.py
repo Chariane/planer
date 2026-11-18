@@ -3,11 +3,18 @@ import logging
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from dotenv import load_dotenv
 from ..schemas import EmailSchema
+from .database import config_data
 
-# Charge le .env si présent (utile en local)
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# Set up logging for persistent debugging
+logging.basicConfig(
+    filename=os.path.join(BASE_DIR, 'email_debug.log'),
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True
+)
 logger = logging.getLogger(__name__)
 
 
@@ -16,8 +23,8 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 
 def _clean_env_val(key: str, default: str = "") -> str:
-    """Récupère une variable d'environnement et nettoie les guillemets/espaces."""
-    val = os.getenv(key)
+    """Nettoie une valeur d'environnement (supprime quotes et espaces)."""
+    val = config_data.get(key, default)
     if val is None:
         return default
     return str(val).strip().strip("'").strip('"').strip()
@@ -33,17 +40,17 @@ def _as_bool(value, default: bool = False) -> bool:
 
 
 def _get_mail_config() -> ConnectionConfig:
-    """Crée la configuration mail à partir des variables d'environnement."""
+    """Crée la configuration mail à la demande (lazy) pour éviter un crash au démarrage."""
     return ConnectionConfig(
         MAIL_USERNAME=_clean_env_val("MAIL_USERNAME"),
         MAIL_PASSWORD=_clean_env_val("MAIL_PASSWORD"),
         MAIL_FROM=_clean_env_val("MAIL_FROM"),
         MAIL_PORT=int(_clean_env_val("MAIL_PORT", "587")),
         MAIL_SERVER=_clean_env_val("MAIL_SERVER"),
-        MAIL_STARTTLS=_as_bool(os.getenv("MAIL_STARTTLS")),
-        MAIL_SSL_TLS=_as_bool(os.getenv("MAIL_SSL_TLS")),
-        USE_CREDENTIALS=_as_bool(os.getenv("USE_CREDENTIALS"), default=True),
-        VALIDATE_CERTS=_as_bool(os.getenv("VALIDATE_CERTS"), default=True),
+        MAIL_STARTTLS=_as_bool(config_data.get("MAIL_STARTTLS")),
+        MAIL_SSL_TLS=_as_bool(config_data.get("MAIL_SSL_TLS")),
+        USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS"), default=True),
+        VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"), default=True),
     )
 
 
@@ -57,7 +64,7 @@ front_password_reset_url = _clean_env_val("FRONT_PASSWORD_RESET_URL")
 
 
 # -----------------------------
-# Template HTML (inchangé)
+# Template HTML commun
 # -----------------------------
 
 def get_html_template(title, body_content, button_text=None, button_url=None):
@@ -111,6 +118,7 @@ def get_html_template(title, body_content, button_text=None, button_url=None):
 # -----------------------------
 
 def _extract_recipients(email) -> list:
+    """Extrait une liste de destinataires à partir d'un EmailSchema ou d'une chaîne."""
     if isinstance(email, str):
         return [email]
     recipients = email.email if hasattr(email, 'email') else [email]
@@ -120,11 +128,11 @@ def _extract_recipients(email) -> list:
 
 
 # -----------------------------
-# Fonctions d'envoi d'emails (avec logs explicites)
+# Fonctions d'envoi d'emails
 # -----------------------------
 
 async def send_verification_email(username: str, email: EmailSchema, code: str):
-    logger.info(f"📧 Tentative d'envoi du code de vérification à {email}")
+    logger.debug(f"Entering send_verification_email for {email}")
     recipients = _extract_recipients(email)
 
     body = f"""
@@ -147,15 +155,14 @@ async def send_verification_email(username: str, email: EmailSchema, code: str):
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.info(f"✅ Email de vérification envoyé avec succès à {recipients}")
+        logger.debug(f"send_verification_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"❌ ERREUR envoi email de vérification à {recipients}: {type(e).__name__} - {str(e)}")
-        # On relève l'exception pour qu'elle soit visible dans les logs de l'appelant
-        raise
+        logger.error(f"send_verification_email ERROR to {recipients}: {e}")
+    return code
 
 
 async def resend_verification_email(username: str, email: EmailSchema, code: str):
-    logger.info(f"📧 Tentative de renvoi du code de vérification à {email}")
+    logger.debug(f"Entering resend_verification_email for {email}")
     recipients = _extract_recipients(email)
 
     body = f"""
@@ -177,14 +184,14 @@ async def resend_verification_email(username: str, email: EmailSchema, code: str
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.info(f"✅ Nouveau code de vérification envoyé à {recipients}")
+        logger.debug(f"resend_verification_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"❌ ERREUR renvoi code à {recipients}: {type(e).__name__} - {str(e)}")
-        raise
+        logger.error(f"resend_verification_email ERROR to {recipients}: {e}")
+    return code
 
 
 async def send_reset_password_email(username: str, email: EmailSchema, token: str):
-    logger.info(f"📧 Tentative d'envoi du code de réinitialisation à {email}")
+    logger.debug(f"Entering send_reset_password_email for {email}")
     recipients = _extract_recipients(email)
 
     body = f"""
@@ -208,7 +215,7 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
     try:
         fm = FastMail(_get_mail_config())
         await fm.send_message(message)
-        logger.info(f"✅ Email de réinitialisation envoyé à {recipients}")
+        logger.debug(f"send_reset_password_email SUCCESS to {recipients}")
     except Exception as e:
-        logger.error(f"❌ ERREUR envoi réinitialisation à {recipients}: {type(e).__name__} - {str(e)}")
-        raise
+        logger.error(f"send_reset_password_email ERROR to {recipients}: {e}")
+    return token

@@ -8,12 +8,15 @@ import { ReportSection } from './shared/ReportSection';
 import { AbsenceSection } from './shared/AbsenceSection';
 import type { Task } from '../../../../types';
 
+import { AuditSection } from './shared/AuditSection';
+
 interface WorkspaceToolsPanelProps {
   workspaceId: string;
   currentUserId?: string | null;
   effectiveRole: string | null;
   tasks: Task[];
-  initialTool?: 'files' | 'reports' | 'absences';
+  initialTool?: 'files' | 'reports' | 'absences' | 'audit';
+  onTasksChanged?: () => void;
 }
 
 export default function WorkspaceToolsPanel({
@@ -22,6 +25,7 @@ export default function WorkspaceToolsPanel({
   effectiveRole,
   tasks,
   initialTool = 'files',
+  onTasksChanged,
 }: WorkspaceToolsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,6 +36,7 @@ export default function WorkspaceToolsPanel({
     effectiveRole,
     tasks,
     initialTool,
+    onTasksChanged,
   });
 
   // ✅ Wrappers pour adapter la signature
@@ -51,6 +56,7 @@ export default function WorkspaceToolsPanel({
         canViewFiles={toolData.canViewFiles}
         canViewReports={toolData.canViewReports}
         canViewAbsences={toolData.canViewAbsences}
+        canViewAudit={toolData.isManager || toolData.isDirectResourceAdmin || toolData.isDirectResourceCreator}
       />
 
       {(toolData.activeTool === 'files' || toolData.activeTool === 'reports') && (
@@ -188,8 +194,12 @@ export default function WorkspaceToolsPanel({
           getSortedReplacementCandidates={toolData.getSortedReplacementCandidates}
           formatDate={toolData.formatDate}
           getDurationDisplay={toolData.getDurationDisplay}
-          isLoadingImpacts={toolData.isLoadingImpacts} // ✅ Passage de la prop
+          isLoadingImpacts={toolData.isLoadingImpacts}
         />
+      )}
+
+      {toolData.activeTool === 'audit' && (
+        <AuditSection workspaceId={workspaceId} />
       )}
     </div>
   );

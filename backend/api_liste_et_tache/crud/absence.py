@@ -33,6 +33,7 @@ from ..core.function import (
 )
 from ..models import AbsenceEtConge, Membre, Tache, Utilisateur, Espace, Liste, Workspace
 from .notification_events import commit_notification_events, notify_absence_created, notify_absence_decision
+from .audit import log_action
 
 
 ABSENCE_STATUS_ALIASES = {
@@ -365,71 +366,92 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
             for espace in espaces:
                 listes.extend(_get_all_descendant_lists(db, espace.id))
 
-        # 2. Pour chaque projet, analyser le rôle de l'utilisateur
+        # 2. Pour chaque projet, analyser le rôle et les tâches de l'utilisateur
+        now = datetime.utcnow()
         for liste in listes:
+            # Récupérer les tâches assignées à l'utilisateur dans cette liste
+            assigned_tasks = (
+                db.query(Tache)
+                .join(Membre, Tache.id == Membre.id_tache)
+                .filter(
+                    Membre.id_utilisateur == target_membre.id_utilisateur,
+                    Membre.statut == "Actif",
+                    Tache.id_liste == liste.id,
+                    Tache.statut != "terminé",
+                )
+                .all()
+            )
+            list_overlapping_tasks = []
+            for task in assigned_tasks:
+                if _date_overlap(absence.date_debut, absence.date_fin, task.date_debut, task.date_fin_prevue):
+                    overlapping_tasks.append(task)
+                    list_overlapping_tasks.append(task)
+                    if task.priorite in {"haute", "critique"}:
+                        high_priority_tasks.append(task)
+                if task.date_fin_prevue and task.date_fin_prevue < now and task.statut != "terminé":
+                    overdue_tasks.append(task)
+
             # Récupérer le rôle direct du membre sur cette liste
             member_role = _get_liste_member_record(db, liste.id, target_membre.id_utilisateur)
             
-            # Si l'utilisateur n'a pas de rôle direct sur cette liste, passer
-            if not member_role or member_role.role not in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]:
-                continue
-            
             # Calculer la progression du projet
             progress = _calculate_list_progress(db, liste.id)
-            
-            # Récupérer tous les administrateurs de cette liste
-            admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
-            
-            # Filtrer les administrateurs disponibles sur la période
-            available_admins = [
-                a for a in admins
-                if a.id_utilisateur and not _has_overlapping_approved_leave(
-                    db,
-                    user_id=a.id_utilisateur,
-                    date_debut=absence.date_debut,
-                    date_fin=absence.date_fin,
-                    scope_type=ResourceType.LISTE,
-                    scope_id=liste.id,
-                )
-            ]
-            
-            # Ajouter le projet à la liste des projets impactés
-            impacted_projects.append({
-                "id": liste.id,
-                "nom": liste.nom,
-                "progression": progress,
-                "role": member_role.role
-            })
-            
-            # ✅ NOUVELLE LOGIQUE : Détection d'impact basée sur progression et gouvernance
-            
-            # Cas 1 : L'utilisateur est administrateur de la liste
-            if member_role.role == LISTE_ADMIN_ROLE:
-                # Vérifier s'il est le SEUL administrateur disponible
-                available_admin_count = len(available_admins)
+            has_gov_impact = False
+
+            if member_role and member_role.role in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]:
+                # Récupérer tous les administrateurs de cette liste
+                admins = _direct_resource_members(db, resource_type="liste", resource_id=liste.id, role=LISTE_ADMIN_ROLE)
                 
-                # Si c'est le seul admin disponible ET progression < 50% → projet impacté
-                if available_admin_count == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur:
+                # Filtrer les administrateurs disponibles sur la période
+                available_admins = [
+                    a for a in admins
+                    if a.id_utilisateur and not _has_overlapping_approved_leave(
+                        db,
+                        user_id=a.id_utilisateur,
+                        date_debut=absence.date_debut,
+                        date_fin=absence.date_fin,
+                        scope_type=ResourceType.LISTE,
+                        scope_id=liste.id,
+                    )
+                ]
+                
+                # Cas 1 : L'utilisateur est administrateur de la liste
+                if member_role.role == LISTE_ADMIN_ROLE:
+                    available_admin_count = len(available_admins)
+                    is_impacted = available_admin_count == 1 and available_admins[0].id_utilisateur == target_membre.id_utilisateur and progress < 50
+                    if is_impacted:
+                        has_gov_impact = True
                     sole_admin_projects.append({
                         "id": liste.id, 
                         "nom": liste.nom,
                         "progression": progress,
-                        "impact": progress < 50  # True si progression < 50%
+                        "impact": is_impacted
                     })
-            
-            # Cas 2 : L'utilisateur est créateur de la liste
-            elif member_role.role == LISTE_OWNER_ROLE:
-                # Vérifier s'il est le SEUL créateur (pas d'admin disponible)
-                no_admin_available = len(available_admins) == 0
                 
-                # Si c'est le seul créateur (pas d'admin) ET progression < 30% → projet impacté
-                if no_admin_available:
+                # Cas 2 : L'utilisateur est créateur de la liste
+                elif member_role.role == LISTE_OWNER_ROLE:
+                    no_admin_available = len(available_admins) == 0
+                    is_impacted = no_admin_available and progress < 30
+                    if is_impacted:
+                        has_gov_impact = True
                     sole_creator_projects.append({
                         "id": liste.id, 
                         "nom": liste.nom,
                         "progression": progress,
-                        "impact": progress < 30  # True si progression < 30%
+                        "impact": is_impacted
                     })
+
+            # Inclure le projet dans impacted_projects s'il y a des tâches impactées ou de la gouvernance à risque
+            project_impact = has_gov_impact or len(list_overlapping_tasks) > 0
+            if project_impact or (member_role and member_role.role in [LISTE_OWNER_ROLE, LISTE_ADMIN_ROLE]):
+                impacted_projects.append({
+                    "id": liste.id,
+                    "nom": liste.nom,
+                    "progression": progress,
+                    "role": member_role.role if member_role else "Membre",
+                    "impact": project_impact,
+                    "impacted_tasks_count": len(list_overlapping_tasks)
+                })
 
     conflicts = detect_leave_conflicts_for_member(
         db,
@@ -457,11 +479,11 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
         elif conflicts:
             risk_level = "moyen"
     else:
-        # ✅ Vérifier s'il y a des projets avec impact réel (True)
-        has_impact = any(p.get("impact", False) for p in sole_admin_projects) or any(p.get("impact", False) for p in sole_creator_projects)
+        # ✅ Vérifier s'il y a des projets ou tâches avec impact réel (True)
+        has_impact = any(p.get("impact", False) for p in sole_admin_projects) or any(p.get("impact", False) for p in sole_creator_projects) or len(high_priority_tasks) > 0 or len(overdue_tasks) > 0
         if has_impact:
             risk_level = "eleve"
-        elif sole_admin_projects or sole_creator_projects:
+        elif sole_admin_projects or sole_creator_projects or len(overlapping_tasks) > 0:
             risk_level = "moyen"
         elif conflicts:
             risk_level = "moyen"
@@ -487,6 +509,12 @@ def get_absence_impact(db: Session, *, absence_id: str, current_user_id: str) ->
                 else:
                     risk_reasons.append(f"Créateur unique sur '{res['nom']}' (progression {res['progression']}% ≥ 30%)")
     else:
+        if high_priority_tasks:
+            risk_reasons.append(f"{len(high_priority_tasks)} tâche(s) prioritaire(s) touchée(s)")
+        if overdue_tasks:
+            risk_reasons.append(f"{len(overdue_tasks)} tâche(s) déjà en retard")
+        if overlapping_tasks:
+            risk_reasons.append(f"{len(overlapping_tasks)} tâche(s) au total chevauchent la période")
         if sole_admin_projects:
             for p in sole_admin_projects:
                 if p.get("impact", False):
@@ -789,6 +817,21 @@ def create_leave_request(
     )
     notify_absence_created(db, absence_member=membre, actor_user_id=current_user_id, is_absence=is_absence)
     commit_notification_events(db)
+
+    user = db.query(Utilisateur).filter(Utilisateur.id == current_user_id).first()
+    user_name = f"{user.nom or ''} {user.prenoms or ''}".strip() if user else "Utilisateur"
+    log_action(
+        db,
+        user_id=current_user_id,
+        user_name=user_name,
+        action="CREATE_LEAVE_REQUEST",
+        resource_type="absence",
+        resource_id=absence.id,
+        resource_name=f"{'Absence' if is_absence else 'Congé'}",
+        status="SUCCESS",
+        details={"is_absence": is_absence, "motif": motif, "duree_jours": duree_demandee_en_jours}
+    )
+
     return _serialize_absence(db, absence) 
 
 
@@ -1022,6 +1065,19 @@ def approve_leave(db: Session, *, absence_id: str, current_user_id: str, comment
     commit_or_raise(db, detail="Impossible d'approuver cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=True)
     commit_notification_events(db)
+
+    log_action(
+        db,
+        user_id=current_user_id,
+        user_name=user_name,
+        action="APPROVE_LEAVE_REQUEST",
+        resource_type="absence",
+        resource_id=absence.id,
+        resource_name=f"Demande d'absence/congé",
+        status="SUCCESS",
+        details={"commentaire": commentaire, "target_member_id": target_membre.id}
+    )
+
     return _serialize_absence(db, absence)
 
 
@@ -1121,6 +1177,19 @@ def reject_leave(db: Session, *, absence_id: str, current_user_id: str, motif_re
     commit_or_raise(db, detail="Impossible de refuser cette demande.", refresh_instance=absence)
     notify_absence_decision(db, absence_member=target_membre, accepted=False)
     commit_notification_events(db)
+
+    log_action(
+        db,
+        user_id=current_user_id,
+        user_name=user_name,
+        action="REJECT_LEAVE_REQUEST",
+        resource_type="absence",
+        resource_id=absence.id,
+        resource_name=f"Demande d'absence/congé",
+        status="SUCCESS",
+        details={"motif_rejet": motif_rejet, "target_member_id": target_membre.id}
+    )
+
     return _serialize_absence(db, absence)
 
 

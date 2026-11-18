@@ -23,6 +23,7 @@ from .Canevas import Canevas
 from .Section import Section
 from .Checklist import Checklist
 from .Notification import Notification
+from .AuditLog import AuditLog
 
 
 __all__ = [
@@ -44,5 +45,5 @@ __all__ = [
     "Section",
     "Checklist",
     "Notification",
-    
+    "AuditLog",
 ] 

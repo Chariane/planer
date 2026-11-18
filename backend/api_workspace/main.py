@@ -114,7 +114,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "connect-src 'self' https://*.k-planer.com wss://*.k-planer.com; "
@@ -124,11 +124,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         else:
-            # CSP PERMISSIVE pour développement (inclut le CDN pour Swagger)
+            # CSP PERMISSIVE pour développement
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' data:; "
                 "connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com; "
@@ -164,6 +164,8 @@ app = FastAPI(
     lifespan=lifespan  
 )
 
+# Ajouter le middleware de sécurité (doit être le premier)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # CORS CONFIGURATION SÉCURISÉE
@@ -207,8 +209,6 @@ app.add_middleware(
     expose_headers=["X-Total-Count", "X-Page-Count"],
     max_age=86400,
 )
-
-app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # ROUTES

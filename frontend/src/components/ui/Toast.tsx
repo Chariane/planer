@@ -20,7 +20,7 @@ const listeners: ((toasts: ToastMessage[]) => void)[] = [];
 let toasts: ToastMessage[] = [];
 
 // Fonction interne pour ajouter un toast
-const notify = (message: string, type: ToastType = 'success', duration: number = 4000) => {
+const notify = (message: string, type: ToastType = 'success', duration: number = 3000) => {
   const id = String(++toastIdCounter);
   const safeMessage = typeof message === 'string' ? sanitizeText(message) : message;
   const newToast: ToastMessage = { id, message: safeMessage, type, duration };
@@ -34,13 +34,13 @@ const notify = (message: string, type: ToastType = 'success', duration: number =
 
 // API publique
 export const toast = {
-  success: (msg: string, options?: { duration?: number }) => 
+  success: (msg: string, options?: { duration?: number }) =>
     notify(msg, 'success', options?.duration || 4000),
-  error: (msg: string, options?: { duration?: number }) => 
+  error: (msg: string, options?: { duration?: number }) =>
     notify(msg, 'error', options?.duration || 5000),
-  warning: (msg: string, options?: { duration?: number }) => 
+  warning: (msg: string, options?: { duration?: number }) =>
     notify(msg, 'warning', options?.duration || 4000),
-  info: (msg: string, options?: { duration?: number }) => 
+  info: (msg: string, options?: { duration?: number }) =>
     notify(msg, 'info', options?.duration || 4000),
 };
 

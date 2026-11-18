@@ -15,8 +15,10 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Paperclip,
+  Pause,
   Phone,
   PhoneOff,
+  Play,
   RefreshCw,
   Search,
   Send,
@@ -181,13 +183,110 @@ const fileToDataUrl = (file: Blob): Promise<string> =>
 
 const splitDataUrl = (dataUrl?: string | null) => {
   if (!dataUrl) return { mimeType: 'application/octet-stream', base64: '' };
-  const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
-  if (!match) return { mimeType: 'application/octet-stream', base64: dataUrl };
+  // Strip any ;codecs=... parameter which breaks HTML5 <audio src="data:..."> playback
+  const cleanedUrl = dataUrl.replace(/;codecs=[^;,]+/gi, '');
+  const match = cleanedUrl.match(/^data:(.*?);base64,(.*)$/s);
+  if (!match) return { mimeType: 'application/octet-stream', base64: cleanedUrl };
   return { mimeType: match[1], base64: match[2] };
 };
 
-const dataUrlFromBase64 = (base64?: string | null, mimeType = 'application/octet-stream') =>
-  base64 ? `data:${mimeType};base64,${base64}` : '';
+const parseAudioData = (rawAudioData?: string | null) => {
+  if (!rawAudioData) return { url: '', buffer: null, mime: '' };
+  let trimmed = rawAudioData.trim();
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:')) {
+    return { url: trimmed, buffer: null, mime: '' };
+  }
+  if (trimmed.startsWith('/') || trimmed.startsWith('uploads/')) {
+    return { url: trimmed.startsWith('/') ? trimmed : `/${trimmed}`, buffer: null, mime: '' };
+  }
+
+  trimmed = trimmed.replace(/;codecs=[^;,]+/gi, '');
+
+  let rawBase64 = trimmed;
+  let detectedMime = 'audio/webm';
+
+  if (trimmed.includes(';base64,')) {
+    const parts = trimmed.split(';base64,');
+    const header = parts[0].replace(/^data:/i, '').trim();
+    if (header && header.includes('/')) {
+      detectedMime = header;
+    }
+    rawBase64 = parts[1];
+  } else if (trimmed.startsWith('data:')) {
+    rawBase64 = trimmed.replace(/^data:[^;]*;?/i, '');
+  }
+
+  let cleanBase64 = rawBase64.replace(/\s+/g, '');
+  cleanBase64 = cleanBase64.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = cleanBase64.length % 4;
+  if (pad) {
+    cleanBase64 += '='.repeat(4 - pad);
+  }
+
+  if (cleanBase64.startsWith('GkXf')) detectedMime = 'audio/webm;codecs=opus';
+  else if (cleanBase64.startsWith('T2dnUw')) detectedMime = 'audio/ogg;codecs=opus';
+  else if (cleanBase64.startsWith('SUQz') || cleanBase64.startsWith('//NI') || cleanBase64.startsWith('//MU')) detectedMime = 'audio/mp3';
+  else if (cleanBase64.startsWith('AAAA') || cleanBase64.startsWith('ftyp')) detectedMime = 'audio/mp4';
+  else if (cleanBase64.startsWith('UklGR') || cleanBase64.startsWith('UkZGR')) detectedMime = 'audio/wav';
+
+  try {
+    const binaryStr = atob(cleanBase64);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const cleanBlobMime = detectedMime.replace(/;codecs=[^;,]+/gi, '');
+    const blob = new Blob([bytes], { type: cleanBlobMime });
+    const url = URL.createObjectURL(blob);
+    return { url, buffer: bytes.buffer, mime: detectedMime };
+  } catch (err) {
+    console.error("Erreur lors du décodage base64 audio:", err);
+    return { url: '', buffer: null, mime: detectedMime };
+  }
+};
+
+const dataUrlFromBase64 = (base64?: string | null, defaultMime = 'audio/webm') => {
+  if (!base64) return '';
+  let trimmed = base64.trim();
+
+  // Handle network / relative URLs
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/') || trimmed.startsWith('uploads/')) {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
+
+  // Strip any ;codecs=... parameter everywhere
+  trimmed = trimmed.replace(/;codecs=[^;,]+/gi, '');
+
+  let rawBase64 = trimmed;
+  let detectedMime = defaultMime;
+
+  if (trimmed.includes(';base64,')) {
+    const parts = trimmed.split(';base64,');
+    const header = parts[0].replace(/^data:/i, '').trim();
+    if (header && header.includes('/')) {
+      detectedMime = header;
+    }
+    rawBase64 = parts[1];
+  } else if (trimmed.startsWith('data:')) {
+    rawBase64 = trimmed.replace(/^data:[^;]*;?/i, '');
+  }
+
+  // Remove any whitespace or newlines inside base64 payload
+  const cleanBase64 = rawBase64.replace(/\s+/g, '');
+
+  // Detect mime type from magic base64 headers if generic default
+  if (cleanBase64.startsWith('GkXf')) detectedMime = 'audio/webm';
+  else if (cleanBase64.startsWith('T2dnUw')) detectedMime = 'audio/ogg';
+  else if (cleanBase64.startsWith('SUQz') || cleanBase64.startsWith('//NI') || cleanBase64.startsWith('//MU')) detectedMime = 'audio/mp3';
+  else if (cleanBase64.startsWith('AAAA') || cleanBase64.startsWith('ftyp')) detectedMime = 'audio/mp4';
+
+  return `data:${detectedMime};base64,${cleanBase64}`;
+};
 
 const attachmentKindFromFile = (file: File): PendingAttachment['kind'] => {
   if (file.type.startsWith('image/')) return 'image';
@@ -246,20 +345,353 @@ const canEditMessage = (message: MessageItem) => {
   return Date.now() - createdAt <= MESSAGE_EDIT_WINDOW_MS;
 };
 
+function CustomAudioPlayer({ src, isMine }: { src: string; isMine: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string>('');
+
+  const isPlayingRef = useRef(false);
+  const updatePlayingState = (val: boolean) => {
+    isPlayingRef.current = val;
+    setIsPlaying(val);
+  };
+
+  // Web Audio API Fallback state & refs
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const startOffsetRef = useRef<number>(0);
+  const timerRef = useRef<number | null>(null);
+  const isWebAudioModeRef = useRef<boolean>(false);
+  const rawArrayBufferRef = useRef<ArrayBuffer | null>(null);
+
+  useEffect(() => {
+    updatePlayingState(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setPlaybackError(null);
+    isWebAudioModeRef.current = false;
+    audioBufferRef.current = null;
+
+    if (!src) {
+      setAudioUrl('');
+      rawArrayBufferRef.current = null;
+      return;
+    }
+
+    const { url, buffer } = parseAudioData(src);
+    setAudioUrl(url);
+    rawArrayBufferRef.current = buffer;
+
+    return () => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+      if (sourceNodeRef.current) {
+        try { sourceNodeRef.current.stop(); } catch {}
+      }
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+      }
+    };
+  }, [src]);
+
+  useEffect(() => {
+    if (audioRef.current && audioUrl) {
+      audioRef.current.load();
+    }
+  }, [audioUrl]);
+
+  // Active polling timer for HTML5 audio playback (essential for WebM blobs in Chrome)
+  useEffect(() => {
+    if (!isPlaying || isWebAudioModeRef.current) return;
+
+    const interval = setInterval(() => {
+      const audio = audioRef.current;
+      if (audio && !audio.paused && !audio.ended) {
+        const cur = audio.currentTime || 0;
+        setCurrentTime(cur);
+        const dur = audio.duration;
+        if (Number.isFinite(dur) && dur > 0) {
+          setDuration(dur);
+        } else if (cur > 0) {
+          setDuration(prev => Math.max(prev, cur));
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  const initWebAudio = useCallback(async () => {
+    if (audioBufferRef.current) return true;
+
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return false;
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      let arrayBuffer: ArrayBuffer | null = rawArrayBufferRef.current;
+      if (!arrayBuffer && (audioUrl || src)) {
+        const targetUrl = audioUrl || src;
+        const res = await fetch(targetUrl);
+        arrayBuffer = await res.arrayBuffer();
+        rawArrayBufferRef.current = arrayBuffer;
+      }
+
+      if (!arrayBuffer) return false;
+
+      const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      audioBufferRef.current = decoded;
+      if (Number.isFinite(decoded.duration) && decoded.duration > 0) {
+        setDuration(decoded.duration);
+      }
+      return true;
+    } catch (e) {
+      console.warn("Erreur Web Audio API decodeAudioData:", e);
+      return false;
+    }
+  }, [audioUrl, src]);
+
+  const playWebAudio = async (offset = currentTime) => {
+    const ready = await initWebAudio();
+    if (!ready || !audioBufferRef.current || !audioCtxRef.current) {
+      setPlaybackError("Lecture impossible");
+      return;
+    }
+
+    const ctx = audioCtxRef.current;
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.stop(); } catch {}
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBufferRef.current;
+    source.connect(ctx.destination);
+
+    const startOffset = Math.min(offset, audioBufferRef.current.duration);
+    source.start(0, startOffset);
+
+    sourceNodeRef.current = source;
+    startTimeRef.current = ctx.currentTime;
+    startOffsetRef.current = startOffset;
+    isWebAudioModeRef.current = true;
+    updatePlayingState(true);
+    setPlaybackError(null);
+
+    source.onended = () => {
+      if (isWebAudioModeRef.current) {
+        updatePlayingState(false);
+        setCurrentTime(0);
+        if (timerRef.current) window.clearInterval(timerRef.current);
+      }
+    };
+
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(() => {
+      if (audioCtxRef.current && isPlayingRef.current) {
+        const elapsed = audioCtxRef.current.currentTime - startTimeRef.current;
+        const cur = startOffsetRef.current + elapsed;
+        if (cur >= audioBufferRef.current!.duration) {
+          setCurrentTime(audioBufferRef.current!.duration);
+          updatePlayingState(false);
+          if (timerRef.current) window.clearInterval(timerRef.current);
+        } else {
+          setCurrentTime(cur);
+        }
+      }
+    }, 100);
+  };
+
+  const pauseWebAudio = () => {
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.stop(); } catch {}
+    }
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    updatePlayingState(false);
+  };
+
+  const togglePlay = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPlaybackError(null);
+
+    if (isWebAudioModeRef.current) {
+      if (isPlaying) pauseWebAudio();
+      else await playWebAudio();
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) {
+      await playWebAudio();
+      return;
+    }
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      try {
+        if (audio.readyState === 0) {
+          audio.load();
+        }
+        await audio.play();
+      } catch (err: unknown) {
+        console.warn("Lecture HTML5 échouée, passage à la Web Audio API:", err);
+        await playWebAudio();
+      }
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      const dur = audioRef.current.duration;
+      if (Number.isFinite(dur) && dur > 0) {
+        setDuration(dur);
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      const cur = audioRef.current.currentTime || 0;
+      setCurrentTime(cur);
+      const dur = audioRef.current.duration;
+      if (Number.isFinite(dur) && dur > 0) {
+        setDuration(dur);
+      } else if (cur > duration) {
+        setDuration(cur);
+      }
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const time = parseFloat(e.target.value);
+    setCurrentTime(time);
+    if (isWebAudioModeRef.current) {
+      if (isPlaying) {
+        playWebAudio(time);
+      }
+    } else if (audioRef.current) {
+      audioRef.current.currentTime = time;
+    }
+  };
+
+  const handleHtml5AudioError = async () => {
+    if (!audioUrl) return;
+    console.warn("Événement onError sur la balise audio HTML5, tentative avec Web Audio API...");
+    const success = await initWebAudio();
+    if (!success) {
+      setPlaybackError("Lecture impossible");
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds === Infinity || seconds < 0) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const remainingTime = duration > currentTime ? duration - currentTime : 0;
+  const maxRange = duration > 0 ? duration : (currentTime > 0 ? currentTime + 1 : 100);
+
+  return (
+    <div
+      onClick={e => e.stopPropagation()}
+      className={`flex flex-col gap-1.5 p-3 rounded-2xl min-w-[240px] max-w-full border shadow-sm transition-all ${
+        isMine
+          ? 'bg-white/15 text-white border-white/20'
+          : 'bg-theme-surface-hover/80 text-theme-main border-theme-subtle'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {audioUrl ? (
+          <audio
+            ref={audioRef}
+            src={audioUrl}
+            onPlay={() => updatePlayingState(true)}
+            onPause={() => updatePlayingState(false)}
+            onEnded={() => {
+              updatePlayingState(false);
+              setCurrentTime(0);
+              if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
+                setDuration(audioRef.current.duration);
+              }
+            }}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onDurationChange={handleLoadedMetadata}
+            onCanPlay={handleLoadedMetadata}
+            onError={handleHtml5AudioError}
+            preload="metadata"
+          />
+        ) : null}
+
+        <button
+          type="button"
+          onClick={togglePlay}
+          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 shadow-md hover:shadow-lg ${
+            isMine
+              ? 'bg-white text-secondary hover:bg-white/90 hover:scale-105'
+              : 'bg-secondary text-white hover:bg-secondary/90 hover:scale-105'
+          }`}
+          title={isPlaying ? "Pause" : "Écouter le message vocal"}
+          aria-label={isPlaying ? "Mettre en pause le message vocal" : "Écouter le message vocal"}
+        >
+          {isPlaying ? <Pause size={18} className="fill-current" /> : <Play size={18} className="fill-current ml-0.5" />}
+        </button>
+
+        <div className="flex-1 min-w-0 space-y-1">
+          <input
+            type="range"
+            min={0}
+            max={maxRange}
+            step={0.1}
+            value={currentTime}
+            onChange={handleSeek}
+            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-current/20 accent-secondary"
+          />
+          <div className="flex justify-between text-[10px] font-bold opacity-80 tabular-nums">
+            <span>{formatTime(currentTime)}</span>
+            <span>
+              {isPlaying || currentTime > 0
+                ? formatTime(remainingTime)
+                : formatTime(duration)}
+            </span>
+          </div>
+        </div>
+      </div>
+      {playbackError && (
+        <p className="text-[10px] font-bold text-red-400 px-1">{playbackError}</p>
+      )}
+    </div>
+  );
+}
+
 function MessageContent({ message, isMine }: { message: MessageItem; isMine: boolean }) {
   const textColor = isMine ? 'text-white/90' : 'text-theme-main';
   const subtleColor = isMine ? 'text-white/70' : 'text-theme-muted';
   const cleanedMessage = sanitizeHtml(cleanMessageText(message.message));
 
   if (message.audio) {
-    const src = dataUrlFromBase64(message.audio, 'audio/webm');
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-[240px] max-w-full">
         <div className={`flex items-center gap-2 text-xs font-black ${subtleColor}`}>
           <Mic size={14} />
           Message vocal
         </div>
-        <audio controls src={src} className="max-w-full h-10" />
+        <CustomAudioPlayer src={message.audio} isMine={isMine} />
         {cleanedMessage && <p className={`text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
       </div>
     );
@@ -287,6 +719,24 @@ function MessageContent({ message, isMine }: { message: MessageItem; isMine: boo
 
   if (message.file) {
     const src = dataUrlFromBase64(message.file, 'application/octet-stream');
+    const isAudioAttachment =
+      src.startsWith('data:audio/') ||
+      /\.(mp3|wav|ogg|m4a|aac|flac|webm)($|\?)/i.test(src) ||
+      (message.file && (message.file.includes('audio/') || message.file.startsWith('GkXf') || message.file.startsWith('T2dnUw') || message.file.startsWith('SUQz')));
+
+    if (isAudioAttachment) {
+      return (
+        <div className="space-y-2 min-w-[240px] max-w-full">
+          <div className={`flex items-center gap-2 text-xs font-black ${subtleColor}`}>
+            <Mic size={14} />
+            Fichier audio
+          </div>
+          <CustomAudioPlayer src={message.file} isMine={isMine} />
+          {cleanedMessage && <p className={`text-sm ${textColor}`} dangerouslySetInnerHTML={{ __html: cleanedMessage }} />}
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center gap-3">
         <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${isMine ? 'bg-white/15 text-white' : 'bg-secondary/10 text-secondary'}`}>
@@ -1216,7 +1666,7 @@ export default function MessageriePage() {
 
       if (payload.type === 'call_offer') {
         if (callStatus !== 'idle') {
-          sendCallSignal({ type: 'call_reject' });
+          sendCallSignal({ type: 'call_reject', to: payload.from });
           return;
         }
         setCallKind(payload.call_type || 'audio');
@@ -2219,28 +2669,38 @@ export default function MessageriePage() {
                     </div>
                   )}
                   {pendingAttachment && (
-                    <div className="mb-3 flex items-center gap-3 rounded-2xl border border-theme-subtle bg-theme-surface-hover px-3 py-2">
-                      <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                        {pendingAttachment.kind === 'audio' ? <Mic size={18} />
-                          : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
-                            : pendingAttachment.kind === 'video' ? <Video size={18} />
-                              : <FileText size={18} />}
+                    <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-theme-subtle bg-theme-surface-hover p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 shrink-0 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                          {pendingAttachment.kind === 'audio' ? <Mic size={18} />
+                            : pendingAttachment.kind === 'image' ? <ImageIcon size={18} />
+                              : pendingAttachment.kind === 'video' ? <Video size={18} />
+                                : <FileText size={18} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
+                          <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingAttachment(null);
+                            setAttachmentSecurityStatus(null);
+                          }}
+                          className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center cursor-pointer"
+                          title="Retirer la pièce jointe"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-black text-theme-main">{pendingAttachment.name}</p>
-                        <p className="truncate text-xs text-theme-muted">{pendingAttachment.mimeType}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingAttachment(null);
-                          setAttachmentSecurityStatus(null);
-                        }}
-                        className="h-8 w-8 rounded-xl text-theme-muted hover:text-red-500 hover:bg-red-500/10 transition flex items-center justify-center"
-                        title="Retirer la pièce jointe"
-                      >
-                        <X size={16} />
-                      </button>
+                      {pendingAttachment.kind === 'audio' && (
+                        <div className="mt-1">
+                          <CustomAudioPlayer
+                            src={dataUrlFromBase64(pendingAttachment.base64, pendingAttachment.mimeType)}
+                            isMine={false}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                   {isRecording && (

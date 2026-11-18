@@ -22,7 +22,8 @@ interface UseToolDataProps {
   currentUserId?: string | null;
   effectiveRole: string | null;
   tasks: Task[];
-  initialTool?: 'files' | 'reports' | 'absences';
+  initialTool?: 'files' | 'reports' | 'absences' | 'audit';
+  onTasksChanged?: () => void;
 }
 
 const getErrorMessage = (err: any): string => {
@@ -39,7 +40,7 @@ const getDurationDisplay = (startDate: string, endDate?: string | null) => {
   const end = endDate ? new Date(endDate) : new Date(startDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  
+
   if (diffDays === 1) return '1 jour';
   if (diffDays < 7) return `${diffDays} jours`;
   const weeks = Math.floor(diffDays / 7);
@@ -66,20 +67,21 @@ export const useToolData = ({
   effectiveRole,
   tasks,
   initialTool = 'files',
+  onTasksChanged,
 }: UseToolDataProps) => {
   // ============================================================
   // ÉTATS
   // ============================================================
-  
-  const [activeTool, setActiveTool] = useState<'files' | 'reports' | 'absences'>(initialTool);
+
+  const [activeTool, setActiveTool] = useState<'files' | 'reports' | 'absences' | 'audit'>(initialTool);
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // Fichiers
   const [files, setFiles] = useState<any[]>([]);
   const [fileForm, setFileForm] = useState({ nom: '', url_fichier: '', type_fichier: '' });
-  
+
   // Rapports
   const [reports, setReports] = useState<any[]>([]);
   const [reportForm, setReportForm] = useState({
@@ -104,7 +106,7 @@ export const useToolData = ({
     periode_fin: '',
   });
   const [archivedReportIds, setArchivedReportIds] = useState<string[]>([]);
-  
+
   // Absences
   const [absences, setAbsences] = useState<any[]>([]);
   const [absenceView, setAbsenceView] = useState<'mine' | 'pending' | 'calendar' | 'impact'>('mine');
@@ -147,7 +149,7 @@ export const useToolData = ({
   // ============================================================
   // HOOKS
   // ============================================================
-  
+
   const {
     members,
     directMembers,
@@ -172,12 +174,12 @@ export const useToolData = ({
   // ============================================================
   // PERMISSIONS
   // ============================================================
-  
+
   const isGuestAccess = effectiveRole === ROLES.GUEST || isDirectMemberRecord?.role === ROLES.GUEST;
   const isManager = effectiveRole === ROLES.CREATOR || effectiveRole === ROLES.ADMIN;
   const isInheritedManager = isManager && !isDirectAdmin;
   const isListInheritedOnlyManager = !!listeId && isManager && !isDirectMemberRecord;
-  
+
   const hasReportScope = !!(listeId || espaceId || workspaceId);
   const canViewFiles = !!(listeId || espaceId || workspaceId);
   const canViewListReports = !!listeId && !!isDirectMemberRecord && !isGuestAccess;
@@ -188,43 +190,43 @@ export const useToolData = ({
       ? !!isDirectMemberRecord
       : !!workspaceId && !!isDirectMemberRecord
   );
-  
+
   const canAddFiles = isManager;
   const fileTargetType = listeId ? 'liste' : espaceId ? 'espace' : 'workspace';
   const fileTargetId = listeId || espaceId || workspaceId || '';
-  
+
   const hasAssignedTask = !!currentUserId && tasks.some(task => task.assignees.some(assignee => assignee.id === currentUserId));
   const isDirectListMember = !!listeId && isDirectMemberRecord?.role === ROLES.MEMBER;
   const listMemberNeedsAssignedTaskForReport = !!listeId && isDirectListMember && !hasAssignedTask;
-  
+
   // Calcul des permissions de rapport
   const canCreateReport = listeId
     ? ((isDirectListMember && hasAssignedTask) || isDirectResourceAdmin)
     : espaceId
       ? isDirectResourceAdmin && hasCreatedDirectChildInSpace
       : isDirectResourceAdmin && hasCreatedDirectChildInWorkspace;
-  
+
   const directAdminNeedsChildForReport = !listeId && isDirectResourceAdmin && (
     espaceId
       ? !hasCreatedDirectChildInSpace
       : !!workspaceId && !hasCreatedDirectChildInWorkspace
   );
-  
+
   const canReceiveReports = listeId
     ? isDirectMemberRecord?.role === ROLES.CREATOR || isDirectMemberRecord?.role === ROLES.ADMIN
     : isDirectMemberRecord?.role === ROLES.CREATOR;
-  
+
   const canShowReportComposer = !isInheritedManager && !isDirectResourceCreator;
   const canShowOwnReportHistory = !isInheritedManager && !isDirectResourceCreator;
   const useFullReportWidth = isInheritedManager || isDirectResourceCreator;
-  
+
   // Absences
   const canCreateAbsence = !!isDirectMemberRecord && (
     (!!listeId || !!espaceId) && isDirectMemberRecord.role !== ROLES.CREATOR && isDirectMemberRecord.role !== ROLES.GUEST
     || (!!workspaceId && !listeId && !espaceId && (isDirectResourceAdmin || isDirectMemberRecord?.role === ROLES.MEMBER))
   );
   const canViewOwnAbsenceRequests = !isDirectResourceCreator;
-  
+
   // Membres contact pour les rapports
   const reportContactMembers = listeId
     ? (() => {
@@ -238,13 +240,13 @@ export const useToolData = ({
   // ============================================================
   // CLÉS D'ARCHIVAGE
   // ============================================================
-  
+
   const scope = useMemo(() => ({
     workspace_id: workspaceId || undefined,
     espace_id: espaceId || undefined,
     liste_id: listeId || undefined,
   }), [workspaceId, espaceId, listeId]);
-  
+
   const activeScopeKey = listeId ? `liste:${listeId}` : espaceId ? `espace:${espaceId}` : workspaceId ? `workspace:${workspaceId}` : 'global';
   const reportArchiveKey = `kplanner:archived-reports:${currentUserId || 'anonymous'}:${activeScopeKey}`;
   const absenceArchiveKey = `kplanner:archived-absences:${currentUserId || 'anonymous'}:${activeScopeKey}`;
@@ -252,7 +254,7 @@ export const useToolData = ({
   // ============================================================
   // MEMOIZED DATA (déclaré AVANT les fonctions qui les utilisent)
   // ============================================================
-  
+
   const flattenedTasks = useMemo(() => {
     const result: Task[] = [];
     const walk = (items: any[]) => {
@@ -279,7 +281,7 @@ export const useToolData = ({
   // ============================================================
   // UTILITAIRES (déclarés AVANT les fonctions qui les utilisent)
   // ============================================================
-  
+
   const getAuthorName = useCallback((id_membre: string | null, owner_user_id?: string | null, fallback_name?: string | null) => {
     if (owner_user_id === currentUserId || (id_membre && members.find(m => m.id === id_membre && m.id_utilisateur === currentUserId))) {
       return 'Moi';
@@ -308,13 +310,13 @@ export const useToolData = ({
 
   const getTaskReplacementCandidates = useCallback((task: Task, absence: any) => {
     if (!absence) return [];
-    
+
     const eligible = directMembers.filter(member =>
       member.role === ROLES.MEMBER
       && member.id_utilisateur !== absence.owner_user_id
       && !task.assignees?.some(assignee => assignee.id === member.id_utilisateur)
     );
-    
+
     return eligible.map(member => {
       const availability = listAvailability.find(
         a => a.id_utilisateur === member.id_utilisateur
@@ -329,17 +331,14 @@ export const useToolData = ({
 
   const getSortedReplacementCandidates = useCallback((task: Task, absence: any) => {
     const candidates = getTaskReplacementCandidates(task, absence);
-    return candidates.sort((a, b) => {
-      if (a.isAvailable && !b.isAvailable) return -1;
-      if (!a.isAvailable && b.isAvailable) return 1;
-      return 0;
-    });
+    // Exclure les membres indisponibles et ceux déjà assignés (déjà géré dans getTaskReplacementCandidates)
+    return candidates.filter(c => c.isAvailable).sort((a, b) => 0);
   }, [getTaskReplacementCandidates]);
 
   // ============================================================
   // CHARGEMENT DES DONNÉES
   // ============================================================
-  
+
   const loadFiles = useCallback(async () => {
     if (!fileTargetId) return;
     try {
@@ -374,7 +373,7 @@ export const useToolData = ({
       setAbsences([]);
       return;
     }
-    
+
     try {
       // ✅ Charger TOUTES les absences de la ressource
       const data = await absenceService.list({
@@ -387,18 +386,18 @@ export const useToolData = ({
       // ✅ Enrichir les absences avec owner_user_id
       const enrichedData = (Array.isArray(data) ? data : []).map(absence => ({
         ...absence,
-        owner_user_id: absence.owner_user_id 
+        owner_user_id: absence.owner_user_id
           || members.find(m => m.id === absence.id_membre)?.id_utilisateur
           || membershipMap.get(absence.id_membre)?.id_utilisateur
           || null
       }));
 
       setAbsences(enrichedData);
-      
+
       // ✅ Charger la disponibilité des membres
       const userIds = members.map(m => m.id_utilisateur).filter(Boolean);
       const resourceId = listeId || espaceId || workspaceId || '';
-      
+
       if (userIds.length > 0) {
         setAvailabilityLoading(true);
         const availability = await absenceService.getAvailability(resourceId, userIds);
@@ -417,10 +416,10 @@ export const useToolData = ({
     setLoading(true);
     try {
       await loadMembers();
-      
+
       // Rafraîchir les indicateurs d'éligibilité des rapports
       await refreshChildCreationStatus();
-      
+
       if (activeTool === 'files' && canViewFiles) {
         await loadFiles();
       } else if (activeTool === 'reports') {
@@ -438,7 +437,7 @@ export const useToolData = ({
   // ============================================================
   // RAFRAÎCHISSEMENT DE L'ÉLIGIBILITÉ DES RAPPORTS
   // ============================================================
-  
+
   const refreshChildCreationStatus = useCallback(async () => {
     // Espace
     if (espaceId && !listeId && currentUserId && isDirectResourceAdmin) {
@@ -543,7 +542,7 @@ export const useToolData = ({
   // ============================================================
   // EFFETS - AVEC DEBOUNCE POUR ÉVITER LE CLIGNOTEMENT
   // ============================================================
-  
+
   useEffect(() => {
     // ✅ Éviter le refresh au montage si tout est déjà chargé
     if (isInitialMountRef.current) {
@@ -595,7 +594,7 @@ export const useToolData = ({
   // ============================================================
   // MEMOIZED DATA (suite - dépend des fonctions définies ci-dessus)
   // ============================================================
-  
+
   const absencesWithAuthors = useMemo(() => {
     const result = (absences || [])
       .filter(Boolean)
@@ -652,16 +651,16 @@ export const useToolData = ({
           }
           if (isDirectResourceCreator) {
             if (absence.author_role === 'Administrateur') return true;
-            
+
             if (availabilityLoading || listAvailability.length === 0) {
               return absence.author_role === 'Membre';
             }
-            
-            const hasAvailableAdmin = directMembers.some(m => 
-              m.role === ROLES.ADMIN && 
+
+            const hasAvailableAdmin = directMembers.some(m =>
+              m.role === ROLES.ADMIN &&
               listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
             );
-            
+
             return absence.author_role === 'Membre' && !hasAvailableAdmin;
           }
         }
@@ -676,8 +675,8 @@ export const useToolData = ({
             if (availabilityLoading || listAvailability.length === 0) {
               return absence.author_role === 'Membre';
             }
-            const hasAvailableAdmin = directMembers.some(m => 
-              m.role === ROLES.ADMIN && 
+            const hasAvailableAdmin = directMembers.some(m =>
+              m.role === ROLES.ADMIN &&
               listAvailability.some(a => a.id_utilisateur === m.id_utilisateur && a.is_available)
             );
             return absence.author_role === 'Membre' && !hasAvailableAdmin;
@@ -688,32 +687,32 @@ export const useToolData = ({
         if (workspaceId) {
           if (isDirectResourceCreator) {
             if (absence.author_role === 'Administrateur') return true;
-            
+
             if (absence.author_role === 'Membre') {
               const absenceStart = new Date(absence.date_debut);
               const absenceEnd = absence.date_fin ? new Date(absence.date_fin) : absenceStart;
-              
-              const hasAvailableAdmin = directMembers.some(m => 
-                m.role === ROLES.ADMIN && 
+
+              const hasAvailableAdmin = directMembers.some(m =>
+                m.role === ROLES.ADMIN &&
                 m.id_utilisateur !== absence.owner_user_id &&
-                listAvailability.some(a => 
-                  a.id_utilisateur === m.id_utilisateur && 
+                listAvailability.some(a =>
+                  a.id_utilisateur === m.id_utilisateur &&
                   a.is_available &&
-                  (!a.current_absence || 
-                   new Date(a.current_absence.date_debut) > absenceEnd ||
-                   new Date(a.current_absence.date_fin || a.current_absence.date_debut) < absenceStart)
+                  (!a.current_absence ||
+                    new Date(a.current_absence.date_debut) > absenceEnd ||
+                    new Date(a.current_absence.date_fin || a.current_absence.date_debut) < absenceStart)
                 )
               );
-              
+
               return !hasAvailableAdmin;
             }
             return false;
           }
-          
+
           if (isDirectResourceAdmin) {
             return absence.author_role === 'Membre';
           }
-          
+
           return false;
         }
 
@@ -792,11 +791,12 @@ export const useToolData = ({
     const upcoming = visibleAbsences.filter(absence =>
       absence.statut === 'approuvee' && new Date(absence.date_debut) > new Date()
     ).length;
-    
+
     const impactedProjectsCount = visibleAbsences.reduce((acc, absence) => {
       const impact = absenceImpacts[absence.id];
-      if (impact && impact.impacted_projects) {
-        return acc + impact.impacted_projects.length;
+      if (impact && Array.isArray(impact.impacted_projects)) {
+        const realImpacts = impact.impacted_projects.filter((p: any) => p.impact === true || (p.impacted_tasks_count && p.impacted_tasks_count > 0));
+        return acc + realImpacts.length;
       }
       return acc;
     }, 0);
@@ -818,7 +818,7 @@ export const useToolData = ({
     // Ne charger que si l'onglet actif est 'absences' et la vue est 'impact'
     if (activeTool !== 'absences' || absenceView !== 'impact') return;
     if (isLoadingImpacts) return;
-    
+
     // Récupérer les absences approuvées qui n'ont pas encore d'impact
     const approvedAbsences = visibleAbsences.filter(
       a => a.statut === 'approuvee' && !absenceImpacts[a.id]
@@ -826,7 +826,7 @@ export const useToolData = ({
     if (approvedAbsences.length === 0) return;
 
     setIsLoadingImpacts(true);
-    
+
     const loadImpacts = async () => {
       try {
         await Promise.all(
@@ -843,14 +843,14 @@ export const useToolData = ({
         setIsLoadingImpacts(false);
       }
     };
-    
+
     loadImpacts();
   }, [activeTool, absenceView, visibleAbsences, absenceImpacts, isLoadingImpacts]);
 
   // ============================================================
   // ACTIONS - FICHIERS
   // ============================================================
-  
+
   const handleUploadFile = useCallback(async (file: File) => {
     if (!file) return;
     setIsUploading(true);
@@ -930,7 +930,7 @@ export const useToolData = ({
   // ============================================================
   // ACTIONS - RAPPORTS
   // ============================================================
-  
+
   const startEditReport = useCallback((report: any) => {
     setEditingReport(report);
     setReportEditForm({
@@ -1155,7 +1155,7 @@ export const useToolData = ({
   // ============================================================
   // ACTIONS - ABSENCES
   // ============================================================
-  
+
   const handleCreateAbsence = useCallback(async () => {
     const currentUserMemberRecord = directMembers.find(m => m.id_utilisateur === currentUserId);
     const targetMemberId = currentUserMemberRecord?.id;
@@ -1235,29 +1235,34 @@ export const useToolData = ({
 
   const handleAssignTaskReplacement = useCallback(async (task: Task, absence: any) => {
     const replacementUserId = taskReplacementByTaskId[task.id];
-    
+
     if (!replacementUserId) {
       const candidates = getSortedReplacementCandidates(task, absence);
       const availableCandidates = candidates.filter(c => c.isAvailable);
-      
+
       if (availableCandidates.length === 0) {
         setNoReplacementTaskId(task.id);
         setShowNoReplacementNotification(true);
         return;
       }
-      
+
       toast.error('Choisissez un membre à ajouter sur cette tâche.');
       return;
     }
-    
+
     setLoading(true);
     try {
       await tacheService.assignMember(task.id, replacementUserId);
       const replacement = directMembers.find(member => member.id_utilisateur === replacementUserId);
-      toast.success(`${replacement?.name || 'Le membre'} a été ajouté sur "${task.title}".`);
       setTaskReplacementByTaskId(prev => ({ ...prev, [task.id]: '' }));
       setShowNoReplacementNotification(false);
       setNoReplacementTaskId(null);
+      
+      onTasksChanged?.();
+      
+      if (selectedAbsenceForImpact) {
+        checkImpact(selectedAbsenceForImpact);
+      }
     } catch (err: any) {
       toast.error(getErrorMessage(err) || "Impossible d'ajouter ce membre sur la tâche.");
     } finally {
@@ -1320,7 +1325,7 @@ export const useToolData = ({
   // ============================================================
   // RETOUR
   // ============================================================
-  
+
   return {
     // États
     activeTool,
@@ -1382,7 +1387,7 @@ export const useToolData = ({
     isUploading,
     setIsUploading,
     fileInputRef,
-    
+
     // Données mémorisées
     ownAbsences,
     accessibleAbsences,
@@ -1398,7 +1403,7 @@ export const useToolData = ({
     flattenedTasks,
     taskById,
     impactedTasksForAbsences,
-    
+
     // Permissions
     canViewFiles,
     canViewReports,
@@ -1431,7 +1436,7 @@ export const useToolData = ({
     activeScopeKey,
     reportArchiveKey,
     absenceArchiveKey,
-    
+
     // Actions
     loadMembers,
     loadFiles,

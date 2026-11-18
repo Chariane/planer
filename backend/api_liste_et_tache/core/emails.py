@@ -1,5 +1,7 @@
 import os
 import logging
+import asyncio
+import threading
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from .security import config_data
 from dotenv import load_dotenv
@@ -164,3 +166,94 @@ async def send_liste_invitation_email(
     await fm.send_message(message)
     logger.debug(f"send_liste_invitation_email SUCCESS to {email}")
     return token
+
+
+def _run_async_in_thread(coro):
+    def runner():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(coro)
+        finally:
+            loop.close()
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+
+
+async def send_notification_email(
+    email: str,
+    message_text: str,
+    type_: str = "info",
+    target_type: str | None = None,
+    target_id: str | None = None,
+):
+    """Envoie un email de notification formaté."""
+    if not email:
+        return
+    
+    subject_prefixes = {
+        "info": "K-Planner - Information",
+        "alerte": "K-Planner - Alerte",
+        "warning": "K-Planner - Attention",
+        "evenement": "K-Planner - Événement",
+    }
+    prefix = subject_prefixes.get(type_, "K-Planner - Notification")
+    
+    clean_message = message_text
+    if clean_message.startswith("[[") and "]] " in clean_message:
+        clean_message = clean_message.split("]] ", 1)[1]
+        
+    subject = f"{prefix} : {clean_message[:60]}..." if len(clean_message) > 60 else f"{prefix} : {clean_message}"
+    
+    title_labels = {
+        "info": "Nouvelle notification",
+        "alerte": "Alerte de sécurité / gestion",
+        "warning": "Attention requise",
+        "evenement": "Mise à jour d'événement",
+    }
+    title = title_labels.get(type_, "Notification K-Planner")
+    
+    body = f"""
+        <p>Bonjour,</p>
+        <p>{clean_message}</p>
+        <p style="color: #64748b; font-size: 13px; margin-top: 20px;">Connectez-vous à votre espace K-Planner pour consulter les détails.</p>
+    """
+    
+    button_url = f"{front_base_url}" if front_base_url else None
+    button_text = "Accéder à K-Planner" if button_url else None
+    
+    template = get_html_template(title, body, button_text, button_url)
+    
+    msg = MessageSchema(
+        subject=subject,
+        recipients=[email],
+        body=template,
+        subtype=MessageType.html,
+    )
+    
+    try:
+        fm = FastMail(_get_mail_config())
+        await fm.send_message(msg)
+        logger.debug(f"Notification email envoyée avec succès à {email}")
+    except Exception as exc:
+        logger.warning(f"Impossible d'envoyer l'email de notification à {email}: {exc}")
+
+
+def send_notification_email_background(
+    email: str,
+    message_text: str,
+    type_: str = "info",
+    target_type: str | None = None,
+    target_id: str | None = None,
+):
+    """Déclenche l'envoi de l'email de notification en arrière-plan (non bloquant)."""
+    if not email:
+        return
+    _run_async_in_thread(send_notification_email(
+        email=email,
+        message_text=message_text,
+        type_=type_,
+        target_type=target_type,
+        target_id=target_id,
+    ))
+

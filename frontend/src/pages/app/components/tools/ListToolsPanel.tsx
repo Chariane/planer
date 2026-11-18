@@ -6,6 +6,7 @@ import { MemberFilter } from './shared/MemberFilter';
 import { FileSection } from './shared/FileSection';
 import { ReportSection } from './shared/ReportSection';
 import { AbsenceSection } from './shared/AbsenceSection';
+import { AuditSection } from './shared/AuditSection';
 import type { Task } from '../../../../types';
 
 interface ListToolsPanelProps {
@@ -15,7 +16,8 @@ interface ListToolsPanelProps {
   currentUserId?: string | null;
   effectiveRole: string | null;
   tasks: Task[];
-  initialTool?: 'files' | 'reports' | 'absences';
+  initialTool?: 'files' | 'reports' | 'absences' | 'audit';
+  onTasksChanged?: () => void;
 }
 
 export default function ListToolsPanel({
@@ -26,6 +28,7 @@ export default function ListToolsPanel({
   effectiveRole,
   tasks,
   initialTool = 'files',
+  onTasksChanged,
 }: ListToolsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,6 +41,7 @@ export default function ListToolsPanel({
     effectiveRole,
     tasks,
     initialTool,
+    onTasksChanged,
   });
 
   // ✅ Wrappers pour adapter la signature
@@ -58,6 +62,7 @@ export default function ListToolsPanel({
         canViewFiles={toolData.canViewFiles}
         canViewReports={toolData.canViewReports}
         canViewAbsences={toolData.canViewAbsences}
+        canViewAudit={toolData.isManager || toolData.isDirectResourceAdmin || toolData.isDirectResourceCreator}
       />
 
       {/* Filtre par membre */}
@@ -196,6 +201,14 @@ export default function ListToolsPanel({
           getSortedReplacementCandidates={toolData.getSortedReplacementCandidates}
           formatDate={toolData.formatDate}
           getDurationDisplay={toolData.getDurationDisplay}
+        />
+      )}
+
+      {toolData.activeTool === 'audit' && (
+        <AuditSection
+          workspaceId={workspaceId}
+          espaceId={espaceId}
+          listeId={listeId}
         />
       )}
     </div>

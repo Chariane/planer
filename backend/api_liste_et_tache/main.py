@@ -30,14 +30,18 @@ if __package__ in {None, ""}:
     from backend.api_liste_et_tache.routes.entreprise import router as entreprise_router
     from backend.api_liste_et_tache.routes.dashboard import router as dashboard_router
     from backend.api_liste_et_tache.routes.chat import router as chat_router
+    from backend.api_liste_et_tache.routes.audit import router as audit_router
     from backend.api_liste_et_tache.core.database import engine
+    from backend.api_liste_et_tache.models.Base import Base
     from backend.api_liste_et_tache.core.deadline_scheduler import deadline_reminder_scheduler
 else:
     from .routes.utilisateur import router as utilisateur_router
     from .routes.entreprise import router as entreprise_router
     from .routes.dashboard import router as dashboard_router
     from .routes.chat import router as chat_router
+    from .routes.audit import router as audit_router
     from .core.database import engine
+    from .models.Base import Base
     from .core.deadline_scheduler import deadline_reminder_scheduler
 
 # ============================================================================
@@ -49,15 +53,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        
         env = os.getenv("ENV", "Dev")
         
         if env == "Production":
-            # CSP STRICTE pour production
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "connect-src 'self' https://*.k-planer.com wss://*.k-planer.com; "
@@ -67,11 +69,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         else:
-            # CSP PERMISSIVE pour développement (inclut le CDN pour Swagger)
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' data:; "
                 "connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com; "
@@ -82,17 +83,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         
         if env == "Production":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains; preload"
-            )
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=()"
-        )
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
         return response
 
@@ -160,7 +157,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
+# Ajouter le middleware de sécurité
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # CORS CONFIGURATION SÉCURISÉE
@@ -205,8 +203,6 @@ app.add_middleware(
     max_age=86400,
 )
 
-app.add_middleware(SecurityHeadersMiddleware)
-
 # ============================================================================
 # ROUTES
 # ============================================================================
@@ -215,6 +211,7 @@ app.include_router(utilisateur_router)
 app.include_router(entreprise_router)
 app.include_router(dashboard_router)
 app.include_router(chat_router)
+app.include_router(audit_router)
 
 # Monter le dossier des uploads
 uploads_dir = Path(__file__).resolve().parent / "uploads"
@@ -268,6 +265,11 @@ def deadline_reminders_status():
 @app.on_event("startup")
 async def startup():
     env = os.getenv("ENV", "Dev")
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Table audit_logs et schémas initialisés en base")
+    except Exception as e:
+        print(f"⚠️ Initialisation tables audit: {e}")
     print("API Liste & Tâche démarrée avec sécurité renforcée")
     print(f"Security Headers activés (CSP {'strict' if env == 'Production' else 'permissive'})")
     print(f"CORS: {ALLOWED_ORIGINS}")

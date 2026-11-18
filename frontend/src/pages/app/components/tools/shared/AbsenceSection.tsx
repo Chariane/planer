@@ -1,7 +1,7 @@
 // frontend/src/pages/app/components/tools/shared/AbsenceSection.tsx
 import { motion } from 'framer-motion';
-import { 
-  Calendar, Plus, Check, Archive, AlertTriangle, Users, 
+import {
+  Calendar, Plus, Check, Archive, AlertTriangle, Users,
   FileText, XCircle, Loader2, ShieldAlert, Eye
 } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
@@ -24,7 +24,7 @@ interface AbsenceSectionProps {
   calendarAbsences: any[];
   archivedAbsences: any[];
   loading: boolean;
-  
+
   // Permissions
   canCreateAbsence: boolean;
   canViewOwnAbsenceRequests: boolean;
@@ -32,7 +32,7 @@ interface AbsenceSectionProps {
   isDirectResourceCreator?: boolean;
   isDirectResourceAdmin?: boolean;
   currentUserId?: string | null;
-  
+
   // États
   absenceView: 'mine' | 'pending' | 'calendar' | 'impact';
   setAbsenceView: (view: 'mine' | 'pending' | 'calendar' | 'impact') => void;
@@ -69,7 +69,7 @@ interface AbsenceSectionProps {
 
   // ✅ Nouvelle prop
   isLoadingImpacts?: boolean;
-  
+
   // Actions
   onCreate: () => void;
   onApprove: (absence: any) => void;
@@ -166,11 +166,11 @@ export const AbsenceSection = ({
         return { id: member.id_utilisateur || user.id || member.id, name };
       })
       : [];
-  
+
   // Fonction renderAbsenceList avec type correct
   const renderAbsenceList = (items: any[], emptyLabel: string) => {
     let listType: 'personal' | 'pending' | 'calendar' | 'impact' | 'archive' = 'personal';
-    
+
     if (absenceView === 'pending') {
       listType = 'pending';
     } else if (absenceView === 'calendar') {
@@ -180,9 +180,9 @@ export const AbsenceSection = ({
     } else {
       listType = 'personal';
     }
-    
+
     const isPendingView = absenceView === 'pending';
-    
+
     return (
       <AbsenceList
         absences={items}
@@ -207,16 +207,19 @@ export const AbsenceSection = ({
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-black text-theme-main uppercase tracking-widest">Absences & Congés</h3>
+    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-8">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-2xl font-black text-theme-main uppercase tracking-widest relative">
+          <span className="relative z-10">Gestion des Présences</span>
+          <div className="absolute -bottom-2 left-0 w-1/3 h-1 bg-gradient-to-r from-primary to-transparent rounded-full opacity-70" />
+        </h3>
         {canCreateAbsence && (
           <Button
             onClick={() => setIsAbsentModalOpen(true)}
-            className="rounded-2xl bg-secondary px-6 py-3 shadow-premium-lg group hover:scale-105 active:scale-95 transition-all"
+            className="rounded-xl bg-gradient-to-r from-secondary to-secondary/80 px-5 py-2.5 shadow-theme-md group hover:shadow-theme-xl hover:-translate-y-0.5 transition-all"
           >
-            <Plus size={20} className="mr-2 group-hover:rotate-90 transition-transform" />
-            <span className="font-black uppercase tracking-widest text-[10px]">Demander / Signaler</span>
+            <Plus size={18} className="mr-2 group-hover:rotate-90 transition-transform" />
+            <span className="font-extrabold uppercase tracking-widest text-[10px]">Demander / Signaler</span>
           </Button>
         )}
       </div>
@@ -225,22 +228,51 @@ export const AbsenceSection = ({
       {isManager && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { label: "Indisponibles aujourd'hui", value: absenceDashboard.unavailableToday, tone: 'text-rose-500', icon: Users },
-            { label: 'Demandes en attente', value: absenceDashboard.pending, tone: 'text-amber-500', icon: AlertTriangle },
-            { label: 'Absences à venir', value: absenceDashboard.upcoming, tone: 'text-primary', icon: Calendar },
-            { label: resourceType === 'liste' ? 'Tâches impactées' : 'Projets impactés', 
-              value: absenceDashboard.impactedTasks || absenceDashboard.impactedProjectsCount, 
-              tone: 'text-secondary', 
-              icon: FileText },
+            {
+              label: "Indisponibles aujourd'hui",
+              value: absenceDashboard.unavailableToday,
+              tone: 'text-rose-500 dark:text-rose-400',
+              bgGrad: 'dark:from-rose-950/40 dark:to-slate-900/90 dark:border-rose-500/30',
+              iconBg: 'bg-rose-500/10 dark:bg-rose-500/20 text-rose-500 dark:text-rose-400',
+              icon: Users
+            },
+            {
+              label: 'Demandes en attente',
+              value: absenceDashboard.pending,
+              tone: 'text-amber-500 dark:text-amber-400',
+              bgGrad: 'dark:from-amber-950/40 dark:to-slate-900/90 dark:border-amber-500/30',
+              iconBg: 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 dark:text-amber-400',
+              icon: AlertTriangle
+            },
+            {
+              label: 'Absences à venir',
+              value: absenceDashboard.upcoming,
+              tone: 'text-primary dark:text-cyan-400',
+              bgGrad: 'dark:from-cyan-950/40 dark:to-slate-900/90 dark:border-cyan-500/30',
+              iconBg: 'bg-primary/10 dark:bg-cyan-500/20 text-primary dark:text-cyan-400',
+              icon: Calendar
+            },
+            {
+              label: resourceType === 'liste' ? 'Tâches impactées' : 'Projets impactés',
+              value: absenceDashboard.impactedTasks || absenceDashboard.impactedProjectsCount,
+              tone: 'text-secondary dark:text-orange-400',
+              bgGrad: 'dark:from-orange-950/40 dark:to-slate-900/90 dark:border-orange-500/30',
+              iconBg: 'bg-secondary/10 dark:bg-orange-500/20 text-secondary dark:text-orange-400',
+              icon: FileText
+            },
           ].map(item => (
-            <GlassCard key={item.label} className="p-5 border-theme-border-subtle bg-theme-surface/60">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-theme-muted">{item.label}</p>
-                  <p className={`mt-3 text-3xl font-black ${item.tone}`}>{item.value}</p>
+            <GlassCard
+              key={item.label}
+              className={`relative overflow-hidden p-6 border-theme-border-subtle bg-white/60 dark:bg-gradient-to-br ${item.bgGrad} hover:bg-white/80 transition-all duration-300 shadow-theme-md hover:shadow-theme-xl hover:-translate-y-0.5 group`}
+            >
+              <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl opacity-20 ${item.tone.replace('text-', 'bg-')} transition-opacity group-hover:opacity-40 pointer-events-none`} />
+              <div className="flex items-start justify-between relative z-10">
+                <div className="flex flex-col gap-1">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-theme-muted">{item.label}</p>
+                  <p className={`mt-2 text-4xl font-black tracking-tighter drop-shadow-sm ${item.tone}`}>{item.value}</p>
                 </div>
-                <div className="h-11 w-11 rounded-2xl bg-theme-surface-hover/70 border border-theme-border-subtle flex items-center justify-center">
-                  <item.icon className={`h-5 w-5 ${item.tone}`} />
+                <div className={`mt-1 h-12 w-12 rounded-xl border border-white/40 dark:border-white/10 flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 group-hover:rotate-3 ${item.iconBg}`}>
+                  <item.icon className="h-5 w-5" />
                 </div>
               </div>
             </GlassCard>
@@ -260,13 +292,13 @@ export const AbsenceSection = ({
             key={tab.id}
             type="button"
             onClick={() => setAbsenceView(tab.id as typeof absenceView)}
-            className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-              absenceView === tab.id 
-                ? 'bg-primary/10 text-primary shadow-inner' 
-                : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main'
-            }`}
+            className={`relative overflow-hidden rounded-xl px-5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${absenceView === tab.id
+                ? 'bg-primary text-white shadow-theme-md scale-105'
+                : 'text-theme-muted hover:bg-theme-surface-hover hover:text-theme-main hover:scale-105'
+              }`}
           >
-            {tab.label}
+            {absenceView === tab.id && <div className="absolute inset-0 bg-white/20 blur-[2px]" />}
+            <span className="relative z-10">{tab.label}</span>
           </button>
         ))}
         <button
@@ -323,10 +355,18 @@ export const AbsenceSection = ({
               .map(absence => {
                 // Récupération des données d'impact
                 const impactData = absenceImpacts[absence.id];
-                const impactedTasks = resourceType === 'liste' ? getTasksImpactedByAbsence(absence) : [];
-                const impactedProjects = resourceType !== 'liste' && impactData?.impacted_projects ? impactData.impacted_projects : [];
+                const impactedTasks = resourceType === 'liste'
+                  ? getTasksImpactedByAbsence(absence)
+                  : (impactData?.overlapping_tasks || []);
+
+                const allProjects = resourceType !== 'liste' && impactData?.impacted_projects ? impactData.impacted_projects : [];
+                const impactedProjects = allProjects.filter((p: any) => p.impact === true || (p.impacted_tasks_count && p.impacted_tasks_count > 0));
+                const safeProjects = allProjects.filter((p: any) => !p.impact && (!p.impacted_tasks_count || p.impacted_tasks_count === 0));
+
                 const showTasks = impactedTasks.length > 0;
                 const showProjects = impactedProjects.length > 0;
+                const isHighRisk = impactData?.risk_level === 'eleve';
+                const hasActionRequired = showTasks || showProjects || isHighRisk;
 
                 return (
                   <GlassCard key={absence.id} className="p-6 border-theme-border-subtle bg-theme-surface/70 hover:border-secondary/20 transition-all">
@@ -334,9 +374,8 @@ export const AbsenceSection = ({
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
-                            absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'
-                          }`}>
+                          <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${absence.is_absence ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'
+                            }`}>
                             {absence.is_absence ? 'Absence' : 'Congé'}
                           </span>
                           <span className="rounded-full border border-theme-border-subtle bg-theme-surface-hover/50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-theme-muted">
@@ -358,36 +397,34 @@ export const AbsenceSection = ({
                           {formatDate?.(absence.date_debut)} → {formatDate?.(absence.date_fin)}
                         </p>
                       </div>
-                      
+
                       {/* Indicateur d'impact */}
-                      <div className={`rounded-2xl border px-4 py-3 text-right ${
-                        (showTasks || showProjects) ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
-                      }`}>
-                        <p className={`text-[9px] font-black uppercase tracking-widest ${
-                          (showTasks || showProjects) ? 'text-amber-500' : 'text-emerald-500'
+                      <div className={`rounded-2xl border px-4 py-3 text-right ${hasActionRequired ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'
                         }`}>
-                          {(showTasks || showProjects) ? '⚠️ Action recommandée' : '✅ Impact faible'}
+                        <p className={`text-[9px] font-black uppercase tracking-widest ${hasActionRequired ? 'text-amber-500' : 'text-emerald-500'
+                          }`}>
+                          {hasActionRequired ? '⚠️ Action recommandée' : '✅ Impact faible'}
                         </p>
                         <p className="mt-1 text-xs font-bold text-theme-main">
-                          {showTasks 
-                            ? `${impactedTasks.length} tâche(s) impactée(s)` 
+                          {showTasks
+                            ? `${impactedTasks.length} tâche(s) impactée(s)`
                             : showProjects
-                              ? `${impactedProjects.length} projet(s) impacté(s)`
-                              : 'Aucun impact'
+                              ? `${impactedProjects.length} projet(s) à risque`
+                              : 'Aucun impact bloquant'
                           }
                         </p>
-                        {(showTasks || showProjects) && (
+                        {hasActionRequired && (
                           <p className="text-[9px] text-theme-muted/60 mt-0.5">
-                            {showTasks 
-                              ? impactedTasks.filter(t => t.priority === 'critique' || t.priority === 'haute').length
-                              : impactedProjects.filter((p: any) => p.role === 'Administrateur' || p.role === 'Créateur').length
-                            } prioritaire(s)
+                            {showTasks
+                              ? `${impactedTasks.filter((t: any) => t.priority === 'critique' || t.priority === 'haute' || t.priorite === 'haute' || t.priorite === 'critique').length} prioritaire(s)`
+                              : `${impactedProjects.length} projet(s) nécessitant une attention`
+                            }
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* ✅ Liste des tâches impactées (pour les listes uniquement) */}
+                    {/* ✅ Liste des tâches impactées (pour les listes, espaces ou workspaces) */}
                     {showTasks && (
                       <div className="mt-4 pt-4 border-t border-theme-border-subtle">
                         <div className="flex items-center gap-2 mb-3">
@@ -414,13 +451,13 @@ export const AbsenceSection = ({
                       </div>
                     )}
 
-                    {/* ✅ Liste des projets impactés (pour espaces/workspaces) */}
+                    {/* ✅ Liste des projets impactés à risque (pour espaces/workspaces) */}
                     {showProjects && (
                       <div className="mt-4 pt-4 border-t border-theme-border-subtle">
                         <div className="flex items-center gap-2 mb-3">
                           <AlertTriangle className="h-4 w-4 text-amber-500" />
                           <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                            Projets impactés par l'absence
+                            Projets à risque / impactés
                           </p>
                           <span className="ml-auto text-[10px] font-black text-theme-muted/50">
                             {impactedProjects.length} projet{impactedProjects.length > 1 ? 's' : ''}
@@ -428,26 +465,56 @@ export const AbsenceSection = ({
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {impactedProjects.map((project: any) => (
-                            <div key={project.id} className="p-4 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl hover:bg-theme-surface-hover/40 transition-all group">
+                            <div key={project.id} className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl hover:bg-amber-500/10 transition-all group">
                               <div className="flex justify-between items-start">
                                 <div className="min-w-0">
-                                  <RouterLink 
+                                  <RouterLink
                                     to={`/liste/${project.id}`}
                                     className="text-sm font-black text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-2"
                                   >
                                     {project.nom}
                                     <Eye size={14} className="shrink-0 opacity-50 group-hover:opacity-100" />
                                   </RouterLink>
-                                  <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted mt-1">
-                                    Rôle : {project.role}
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mt-1">
+                                    Rôle : {project.role} · {project.impacted_tasks_count ? `${project.impacted_tasks_count} tâche(s) ouverte(s)` : 'Gouvernance à risque'}
                                   </p>
                                 </div>
                                 <div className="text-right">
                                   <span className="text-sm font-black text-theme-main">{project.progression}%</span>
                                   <div className="w-20 h-1.5 bg-theme-border-subtle rounded-full mt-1 overflow-hidden">
-                                    <div className="h-full bg-secondary rounded-full" style={{ width: `${project.progression}%` }} />
+                                    <div className="h-full bg-amber-500 rounded-full" style={{ width: `${project.progression}%` }} />
                                   </div>
                                 </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ✅ Liste des projets sous contrôle (pour espaces/workspaces) */}
+                    {safeProjects.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-theme-border-subtle">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Check className="h-4 w-4 text-emerald-500" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                            Projets associés sous contrôle ({safeProjects.length})
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {safeProjects.map((project: any) => (
+                            <div key={project.id} className="p-3 bg-theme-surface/40 border border-theme-border-subtle/60 rounded-2xl">
+                              <div className="flex justify-between items-center">
+                                <div className="min-w-0">
+                                  <RouterLink
+                                    to={`/liste/${project.id}`}
+                                    className="text-xs font-bold text-theme-main truncate hover:text-secondary hover:underline flex items-center gap-1"
+                                  >
+                                    {project.nom}
+                                  </RouterLink>
+                                  <p className="text-[9px] font-medium text-theme-muted">Rôle : {project.role}</p>
+                                </div>
+                                <span className="text-xs font-bold text-emerald-500">{project.progression}%</span>
                               </div>
                             </div>
                           ))}
@@ -480,17 +547,15 @@ export const AbsenceSection = ({
               <div className="flex gap-2 p-1 bg-theme-surface/50 border border-theme-border-subtle rounded-2xl">
                 <button
                   onClick={() => setAbsenceForm((prev: any) => ({ ...prev, is_absence: true, is_conge_planifie: false }))}
-                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    absenceForm.is_absence ? 'bg-amber-500 text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
-                  }`}
+                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${absenceForm.is_absence ? 'bg-amber-500 text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
+                    }`}
                 >
                   Absence
                 </button>
                 <button
                   onClick={() => setAbsenceForm((prev: any) => ({ ...prev, is_absence: false, is_conge_planifie: true }))}
-                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    !absenceForm.is_absence ? 'bg-primary text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
-                  }`}
+                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!absenceForm.is_absence ? 'bg-primary text-white shadow-lg' : 'text-theme-muted hover:text-theme-main'
+                    }`}
                 >
                   Congé
                 </button>
@@ -533,9 +598,8 @@ export const AbsenceSection = ({
             <Button
               onClick={onCreate}
               disabled={loading || !absenceForm.date_debut}
-              className={`flex-1 h-14 rounded-2xl shadow-premium-lg group ${
-                absenceForm.is_absence ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'bg-primary hover:bg-primary/90 shadow-primary/20'
-              }`}
+              className={`flex-1 h-14 rounded-2xl shadow-premium-lg group ${absenceForm.is_absence ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'bg-primary hover:bg-primary/90 shadow-primary/20'
+                }`}
             >
               <Check size={20} className="mr-2 group-hover:scale-125 transition-transform" />
               <span className="font-black uppercase tracking-widest text-[10px]">{absenceForm.is_absence ? 'Signaler l\'absence' : 'Demander le congé'}</span>
@@ -574,9 +638,8 @@ export const AbsenceSection = ({
               <Button
                 onClick={onDecision}
                 disabled={loading || (decisionAction === 'reject' && !decisionComment.trim())}
-                className={`flex-1 rounded-2xl ${
-                  decisionAction === 'reject' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'
-                }`}
+                className={`flex-1 rounded-2xl ${decisionAction === 'reject' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'
+                  }`}
               >
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                 {decisionAction === 'approve' ? 'Approuver' : 'Rejeter'}
@@ -606,7 +669,7 @@ export const AbsenceSection = ({
               </div>
             ))}
           </div>
-          
+
           <AbsenceList
             absences={archivedAbsences}
             type="archive"
@@ -646,16 +709,14 @@ export const AbsenceSection = ({
 
           return (
             <div className="space-y-6">
-              <div className={`border rounded-2xl p-4 flex gap-4 ${
-                impactData.risk_level === 'eleve' ? 'bg-red-500/5 border-red-500/10' :
-                impactData.risk_level === 'moyen' ? 'bg-amber-500/5 border-amber-500/10' :
-                'bg-emerald-500/5 border-emerald-500/10'
-              }`}>
-                <AlertTriangle className={`h-6 w-6 shrink-0 ${
-                  impactData.risk_level === 'eleve' ? 'text-red-500' :
-                  impactData.risk_level === 'moyen' ? 'text-amber-500' :
-                  'text-emerald-500'
-                }`} />
+              <div className={`border rounded-2xl p-4 flex gap-4 ${impactData.risk_level === 'eleve' ? 'bg-red-500/5 border-red-500/10' :
+                  impactData.risk_level === 'moyen' ? 'bg-amber-500/5 border-amber-500/10' :
+                    'bg-emerald-500/5 border-emerald-500/10'
+                }`}>
+                <AlertTriangle className={`h-6 w-6 shrink-0 ${impactData.risk_level === 'eleve' ? 'text-red-500' :
+                    impactData.risk_level === 'moyen' ? 'text-amber-500' :
+                      'text-emerald-500'
+                  }`} />
                 <div>
                   <p className="text-xs font-black text-theme-main uppercase tracking-widest mb-1">
                     Risque {impactData.risk_level || 'faible'}
@@ -836,15 +897,15 @@ export const AbsenceSection = ({
                                 >
                                   <option value="">Remplaçant / Renfort...</option>
                                   {candidates.map((candidate: any) => (
-                                    <option 
-                                      key={candidate.id_utilisateur} 
+                                    <option
+                                      key={candidate.id_utilisateur}
                                       value={candidate.id_utilisateur}
                                       disabled={!candidate.isAvailable}
                                       className={!candidate.isAvailable ? 'text-theme-muted/50' : ''}
                                     >
-                                      {candidate.name} 
-                                      {candidate.isAvailable 
-                                        ? ' ✅ Disponible' 
+                                      {candidate.name}
+                                      {candidate.isAvailable
+                                        ? ' ✅ Disponible'
                                         : ` ⚠️ Absent(e)`
                                       }
                                     </option>

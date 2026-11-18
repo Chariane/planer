@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timezone
 from ..models import Tache, Membre, Checklist, Liste, Espace
 from .notification_events import commit_notification_events, notify_task_assigned
+from .audit import log_action
 
 def get_tache_by_id(db: Session, tache_id: str) -> Optional[Tache]:
     return db.query(Tache).filter(Tache.id == tache_id).first()
@@ -407,6 +408,19 @@ def create_tache(
     try:
         db.commit()
         db.refresh(tache)
+        liste = db.query(Liste).filter(Liste.id == id_liste).first() if id_liste else None
+        log_action(
+            db=db,
+            user_id=creator_user_id,
+            user_name=None,
+            action="CREATE_TACHE",
+            resource_type="TACHE",
+            resource_id=tache.id,
+            resource_name=tache.titre,
+            workspace_id=liste.id_workspace if liste else None,
+            espace_id=liste.id_espace if liste else None,
+            details={"titre": tache.titre, "id_liste": id_liste, "statut": statut, "priorite": priorite}
+        )
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -421,6 +435,7 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
     if not tache:
         return None
 
+    updated_by_id = kwargs.pop("updated_by_user_id", None)
     target_titre = kwargs.get("titre", tache.titre)
     target_liste_id = kwargs.get("id_liste", tache.id_liste)
     target_parent_id = kwargs.get("id_tache_parent", tache.id_tache_parent)
@@ -473,6 +488,19 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
         if tache.id_liste:
             progressions = _recompute_liste_task_progressions(db, tache.id_liste)
             tache.progression = progressions.get(tache.id, 0.0)
+        liste = db.query(Liste).filter(Liste.id == tache.id_liste).first() if tache.id_liste else None
+        log_action(
+            db=db,
+            user_id=updated_by_id,
+            user_name=None,
+            action="UPDATE_TACHE",
+            resource_type="TACHE",
+            resource_id=tache.id,
+            resource_name=tache.titre,
+            workspace_id=liste.id_workspace if liste else None,
+            espace_id=liste.id_espace if liste else None,
+            details={k: str(v) for k, v in kwargs.items() if k != "updated_by_user_id"}
+        )
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -482,13 +510,17 @@ def update_tache(db: Session, tache_id: str, **kwargs) -> Optional[Tache]:
     return tache
 
 
-def delete_tache(db: Session, tache_id: str) -> bool:
+def delete_tache(db: Session, tache_id: str, deleted_by_user_id: str | None = None) -> bool:
     from ..models import Checklist
     
     tache = get_tache_by_id(db, tache_id)
     if not tache:
         return False
     
+    saved_titre = tache.titre
+    saved_liste_id = tache.id_liste
+    liste = db.query(Liste).filter(Liste.id == saved_liste_id).first() if saved_liste_id else None
+
     def delete_tree(current_id: str) -> None:
         children = db.query(Tache).filter(Tache.id_tache_parent == current_id).all()
         for child in children:
@@ -504,6 +536,17 @@ def delete_tache(db: Session, tache_id: str) -> bool:
     
     try:
         db.commit()
+        log_action(
+            db=db,
+            user_id=deleted_by_user_id,
+            user_name=None,
+            action="DELETE_TACHE",
+            resource_type="TACHE",
+            resource_id=tache_id,
+            resource_name=saved_titre,
+            workspace_id=liste.id_workspace if liste else None,
+            espace_id=liste.id_espace if liste else None,
+        )
     except Exception:
         db.rollback()
         return False
@@ -599,6 +642,18 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
         db.refresh(assignation)
         notify_task_assigned(db, tache=tache, assigned_user_id=utilisateur_id)
         commit_notification_events(db)
+        log_action(
+            db=db,
+            user_id=utilisateur_id,
+            user_name=None,
+            action="ASSIGN_TACHE_MEMBER",
+            resource_type="TACHE",
+            resource_id=tache_id,
+            resource_name=tache.titre,
+            workspace_id=tache.liste.id_workspace if (tache and tache.liste) else None,
+            espace_id=tache.liste.id_espace if (tache and tache.liste) else None,
+            details={"assigned_user_id": utilisateur_id}
+        )
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Erreur lors de l'assignation du membre.")
@@ -607,6 +662,7 @@ def assign_member_to_tache(db: Session, tache_id: str, utilisateur_id: str) -> M
 
 def unassign_member_from_tache(db: Session, tache_id: str, utilisateur_id: str) -> bool:
     """Retire l'assignation d'un membre sur une tâche."""
+    tache = _get_tache_with_scope(db, tache_id)
     assignation = db.query(Membre).filter(
         Membre.id_tache == tache_id,
         Membre.id_utilisateur == utilisateur_id
@@ -615,6 +671,18 @@ def unassign_member_from_tache(db: Session, tache_id: str, utilisateur_id: str) 
     if assignation:
         db.delete(assignation)
         db.commit()
+        log_action(
+            db=db,
+            user_id=utilisateur_id,
+            user_name=None,
+            action="UNASSIGN_TACHE_MEMBER",
+            resource_type="TACHE",
+            resource_id=tache_id,
+            resource_name=tache.titre if tache else None,
+            workspace_id=tache.liste.id_workspace if (tache and tache.liste) else None,
+            espace_id=tache.liste.id_espace if (tache and tache.liste) else None,
+            details={"unassigned_user_id": utilisateur_id}
+        )
         return True
     return False
 

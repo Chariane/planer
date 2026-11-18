@@ -43,7 +43,7 @@ function AppContent() {
   // ✅ Gérer les différents paramètres de redirection
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    
+
     // 🔵 Déconnexion volontaire - Message "À bientôt !"
     if (params.get('logout') === 'true') {
       toast.info('À bientôt ! Vous êtes bien déconnecté.', {
@@ -55,11 +55,11 @@ function AppContent() {
       }, 100);
       return;
     }
-    
+
     // 🔴 Session expirée - Message "Votre session a expiré"
     if (params.get('session_expired') === 'true') {
       toast.error('Votre session a expiré. Veuillez vous reconnecter.', {
-        duration: 5000,
+        duration: 3000,
       });
       // Nettoyer l'URL
       setTimeout(() => {
@@ -67,11 +67,11 @@ function AppContent() {
       }, 100);
       return;
     }
-    
+
     // 🟢 Invitation acceptée - Message "Invitation acceptée !"
     if (params.get('accepted') === 'true') {
       toast.success('Invitation acceptée ! Bienvenue dans votre nouvel espace.', {
-        duration: 4000,
+        duration: 3000,
       });
       setTimeout(() => {
         navigate('/login', { replace: true });

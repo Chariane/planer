@@ -4,7 +4,7 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 
 export type ViewType = 'kanban' | 'liste' | 'gantt' | 'dashboard';
 
-export type ModalName = 
+export type ModalName =
   | 'createWorkspace'
   | 'createEspace'
   | 'createListe'
@@ -114,11 +114,11 @@ const uiSlice = createSlice({
 
     // Toasts
     addToast: (state, action: PayloadAction<Omit<ToastState, 'id'>>) => {
-      const id = Date.now().toString();
       state.toasts.push({
-        ...action.payload,
-        id,
-        duration: action.payload.duration || 5000,
+        id: Date.now().toString(),
+        message: action.payload.message,
+        type: action.payload.type,
+        duration: action.payload.duration || 3000,
       });
     },
     removeToast: (state, action: PayloadAction<string>) => {

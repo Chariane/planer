@@ -135,17 +135,22 @@ export const ReportList = ({
               transition={{ delay: i * 0.05 }}
             >
               <div
-                className="p-5 group hover:bg-theme-surface-hover/40 transition-all border border-theme-border-subtle bg-theme-surface rounded-2xl cursor-pointer h-full flex flex-col justify-between shadow-theme-sm hover:shadow-theme-md hover:border-secondary/20"
+                className={`relative overflow-hidden p-6 group transition-all duration-300 border cursor-pointer h-full flex flex-col justify-between rounded-3xl shadow-theme-md hover:-translate-y-1 hover:shadow-theme-xl ${type === 'personal'
+                    ? 'border-secondary/10 hover:border-secondary/40 bg-gradient-to-br from-secondary/5 via-white/40 to-white/80 dark:from-secondary/10 dark:via-theme-surface/40 dark:to-theme-surface/80'
+                    : 'border-primary/10 hover:border-primary/40 bg-gradient-to-br from-primary/5 via-white/40 to-white/80 dark:from-primary/10 dark:via-theme-surface/40 dark:to-theme-surface/80'
+                  }`}
                 onClick={() => onView?.(report)}
               >
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className={`p-2 rounded-xl ${
-                      type === 'personal' 
-                        ? 'bg-secondary/10 border border-secondary/20 text-secondary'
-                        : 'bg-primary/10 border border-primary/20 text-primary'
-                    }`}>
-                      <FileText size={18} />
+                {/* Lueur d'arrière-plan animée */}
+                <div className={`absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full blur-3xl opacity-20 transition-opacity duration-500 group-hover:opacity-40 object-cover pointer-events-none ${type === 'personal' ? 'bg-secondary' : 'bg-primary'}`} />
+
+                <div className="relative z-10 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className={`p-3 rounded-2xl backdrop-blur-md shadow-sm border transition-transform duration-300 group-hover:rotate-3 group-hover:scale-110 ${type === 'personal'
+                        ? 'bg-secondary/10 border-secondary/20 text-secondary'
+                        : 'bg-primary/10 border-primary/20 text-primary'
+                      }`}>
+                      <FileText size={22} className="drop-shadow-sm" />
                     </div>
                     <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                       {isOwner && onEdit && (
@@ -228,7 +233,7 @@ export const ReportList = ({
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-theme-border-subtle">
+                <div className="relative z-10 flex items-center justify-between pt-4 mt-auto border-t border-theme-border-subtle/30">
                   <div className="flex items-center gap-2 min-w-0">
                     <MemberAvatar
                       member={{ username: authorName } as any}
@@ -313,17 +318,22 @@ export const ReportCard = ({
 
   return (
     <div
-      className={`p-5 group hover:bg-theme-surface-hover/40 transition-all border border-theme-border-subtle bg-theme-surface rounded-2xl cursor-pointer h-full flex flex-col justify-between shadow-theme-sm hover:shadow-theme-md hover:border-secondary/20 ${className}`}
+      className={`relative overflow-hidden p-6 group transition-all duration-300 border cursor-pointer h-full flex flex-col justify-between rounded-3xl shadow-theme-md hover:-translate-y-1 hover:shadow-theme-xl ${className} ${type === 'personal'
+          ? 'border-secondary/10 hover:border-secondary/40 bg-gradient-to-br from-secondary/5 via-white/40 to-white/80 dark:from-secondary/10 dark:via-theme-surface/40 dark:to-theme-surface/80'
+          : 'border-primary/10 hover:border-primary/40 bg-gradient-to-br from-primary/5 via-white/40 to-white/80 dark:from-primary/10 dark:via-theme-surface/40 dark:to-theme-surface/80'
+        }`}
       onClick={() => onView?.(report)}
     >
-      <div>
-        <div className="flex justify-between items-start mb-3">
-          <div className={`p-2 rounded-xl ${
-            type === 'personal' 
-              ? 'bg-secondary/10 border border-secondary/20 text-secondary'
-              : 'bg-primary/10 border border-primary/20 text-primary'
-          }`}>
-            <FileText size={18} />
+      {/* Lueur d'arrière-plan animée */}
+      <div className={`absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full blur-3xl opacity-20 transition-opacity duration-500 group-hover:opacity-40 object-cover pointer-events-none ${type === 'personal' ? 'bg-secondary' : 'bg-primary'}`} />
+
+      <div className="relative z-10 flex-1 flex flex-col">
+        <div className="flex justify-between items-start mb-6">
+          <div className={`p-3 rounded-2xl backdrop-blur-md shadow-sm border transition-transform duration-300 group-hover:rotate-3 group-hover:scale-110 ${type === 'personal'
+              ? 'bg-secondary/10 border-secondary/20 text-secondary'
+              : 'bg-primary/10 border-primary/20 text-primary'
+            }`}>
+            <FileText size={22} className="drop-shadow-sm" />
           </div>
           <div className="flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
             {isOwner && onEdit && (
@@ -406,7 +416,7 @@ export const ReportCard = ({
         )}
       </div>
 
-      <div className="flex items-center justify-between pt-3 border-t border-theme-border-subtle">
+      <div className="relative z-10 flex items-center justify-between pt-4 mt-auto border-t border-theme-border-subtle/30">
         <div className="flex items-center gap-2 min-w-0">
           <MemberAvatar
             member={{ username: authorName } as any}

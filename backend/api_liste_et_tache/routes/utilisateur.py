@@ -459,11 +459,6 @@ def update_tache_endpoint(
     except HTTPException as exc:
         if exc.status_code != 403:
             raise
-        if tache.statut == "terminé":
-            raise HTTPException(
-                status_code=403,
-                detail="Seul un responsable de la liste peut rouvrir une tache terminee.",
-            ) from exc
         _require_assigned_task_operational_access(db, tache_id, current_user.id)
         forbidden_fields = set(updates) - {"statut"}
         if forbidden_fields:
@@ -471,14 +466,6 @@ def update_tache_endpoint(
                 status_code=403,
                 detail="Un membre assigne peut uniquement modifier le statut de la tache.",
             ) from exc
-    
-    if tache.statut == "terminé" and "statut" in updates:
-        allowed_reopen_statuses = {"en cours", "bloqué", "terminé"}
-        if updates["statut"] not in allowed_reopen_statuses:
-            raise HTTPException(
-                status_code=403,
-                detail="Une tache terminee peut uniquement etre remise en cours ou bloquee.",
-            )
     
     return update_tache(db, tache_id, **updates)
 

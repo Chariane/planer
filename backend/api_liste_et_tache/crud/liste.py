@@ -26,6 +26,7 @@ from backend.api_liste_et_tache.chat_client import (
     sync_resource_member,
 )
 from ..core.plan_limits import require_plan_capacity, resolve_workspace_owner_id
+from .audit import log_action
 
 
 def get_liste_by_id(db: Session, liste_id: str) -> Optional[Liste]:
@@ -160,6 +161,18 @@ def create_liste(
     try:
         db.commit()
         db.refresh(liste)
+        log_action(
+            db=db,
+            user_id=creator_user_id,
+            user_name=None,
+            action="CREATE_LISTE",
+            resource_type="LISTE",
+            resource_id=liste.id,
+            resource_name=liste.nom,
+            workspace_id=liste.id_workspace,
+            espace_id=liste.id_espace,
+            details={"nom": liste.nom, "description": liste.description}
+        )
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -187,6 +200,7 @@ def update_liste(db: Session, liste_id: str, token: str | None = None, **kwargs)
             exclude_id=liste.id,
         )
     
+    updated_by_id = kwargs.pop("updated_by_user_id", None)
     for key, value in kwargs.items():
         if hasattr(liste, key) and value is not None:
             setattr(liste, key, value)
@@ -212,6 +226,18 @@ def update_liste(db: Session, liste_id: str, token: str | None = None, **kwargs)
     try:
         db.commit()
         db.refresh(liste)
+        log_action(
+            db=db,
+            user_id=updated_by_id,
+            user_name=None,
+            action="UPDATE_LISTE",
+            resource_type="LISTE",
+            resource_id=liste.id,
+            resource_name=liste.nom,
+            workspace_id=liste.id_workspace,
+            espace_id=liste.id_espace,
+            details=kwargs
+        )
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -221,7 +247,7 @@ def update_liste(db: Session, liste_id: str, token: str | None = None, **kwargs)
     return liste
 
 
-def delete_liste(db: Session, liste_id: str) -> bool:
+def delete_liste(db: Session, liste_id: str, deleted_by_user_id: str | None = None) -> bool:
     """
     Supprime une liste et toutes ses dépendances :
     - Tâches et leurs checklists
@@ -232,6 +258,10 @@ def delete_liste(db: Session, liste_id: str) -> bool:
     if not liste:
         return False
     
+    saved_nom = liste.nom
+    saved_ws = liste.id_workspace
+    saved_esp = liste.id_espace
+
     # 1. Récupérer toutes les tâches de la liste
     taches = db.query(Tache).filter(Tache.id_liste == liste_id).all()
     tache_ids = [t.id for t in taches]
@@ -275,6 +305,17 @@ def delete_liste(db: Session, liste_id: str) -> bool:
     
     try:
         db.commit()
+        log_action(
+            db=db,
+            user_id=deleted_by_user_id,
+            user_name=None,
+            action="DELETE_LISTE",
+            resource_type="LISTE",
+            resource_id=liste_id,
+            resource_name=saved_nom,
+            workspace_id=saved_ws,
+            espace_id=saved_esp,
+        )
     except Exception as e:
         db.rollback()
         print(f"❌ Erreur suppression liste {liste_id}: {str(e)}")
@@ -367,6 +408,18 @@ def assign_member_to_liste(
         try:
             db.commit()
             db.refresh(existing)
+            log_action(
+                db=db,
+                user_id=utilisateur_id,
+                user_name=None,
+                action="UPDATE_LISTE_MEMBER_ROLE",
+                resource_type="LISTE",
+                resource_id=liste_id,
+                resource_name=liste.nom if liste else None,
+                workspace_id=liste.id_workspace if liste else None,
+                espace_id=liste.id_espace if liste else None,
+                details={"role": role, "target_user_id": utilisateur_id}
+            )
         except IntegrityError as exc:
             db.rollback()
             raise HTTPException(
@@ -403,6 +456,18 @@ def assign_member_to_liste(
     try:
         db.commit()
         db.refresh(assignation)
+        log_action(
+            db=db,
+            user_id=utilisateur_id,
+            user_name=None,
+            action="ASSIGN_LISTE_MEMBER",
+            resource_type="LISTE",
+            resource_id=liste_id,
+            resource_name=liste.nom if liste else None,
+            workspace_id=liste.id_workspace if liste else None,
+            espace_id=liste.id_espace if liste else None,
+            details={"role": role, "target_user_id": utilisateur_id}
+        )
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
@@ -414,6 +479,7 @@ def assign_member_to_liste(
 
 def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str, token: str | None = None) -> bool:
     """Retire l'assignation directe d'un membre sur une liste."""
+    liste = _get_liste_with_scope(db, liste_id)
     assignation = (
         db.query(Membre)
         .filter(
@@ -435,6 +501,18 @@ def unassign_member_from_liste(db: Session, liste_id: str, utilisateur_id: str, 
     )
     db.delete(assignation)
     db.commit()
+    log_action(
+        db=db,
+        user_id=utilisateur_id,
+        user_name=None,
+        action="UNASSIGN_LISTE_MEMBER",
+        resource_type="LISTE",
+        resource_id=liste_id,
+        resource_name=liste.nom if liste else None,
+        workspace_id=liste.id_workspace if liste else None,
+        espace_id=liste.id_espace if liste else None,
+        details={"removed_user_id": utilisateur_id}
+    )
     return True
 
 

@@ -745,19 +745,20 @@ export default function ListView({
     }
   };
 
-  const handleCompleteTask = async (task: Task) => {
-    if (!onUpdateTaskStatus || task.status === 'terminé') return;
+  const handleToggleTaskStatus = async (task: Task) => {
+    if (!onUpdateTaskStatus) return;
+    const newStatus = task.status === 'terminé' ? 'en cours' : 'terminé';
     setActionLoading(`complete-task-${task.id}`);
     setActionError(null);
     try {
-      await onUpdateTaskStatus(task.id, 'terminé');
+      await onUpdateTaskStatus(task.id, newStatus);
       setExpandedTasks(prev => ({ ...prev, [task.id]: true }));
     } catch (err: unknown) {
       setActionError(sanitizeApiErrorMessage(
         err,
         task.parentTaskId
-          ? 'Impossible de marquer cette sous-tâche comme terminée.'
-          : 'Impossible de marquer cette tâche comme terminée.'
+          ? 'Impossible de modifier le statut de cette sous-tâche.'
+          : 'Impossible de modifier le statut de cette tâche.'
       ));
     } finally {
       setActionLoading(null);
@@ -943,12 +944,12 @@ export default function ListView({
               onClick={(e) => {
                 e.stopPropagation();
                 if (canOperateCurrentTask) {
-                  handleCompleteTask(task);
+                  handleToggleTaskStatus(task);
                 }
               }}
-              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
-              className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
-              title={task.status === 'terminé' ? 'Sous-tâche terminée' : 'Marquer la sous-tâche comme terminée'}
+              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || actionLoading === `complete-task-${task.id}`}
+              className={`h-9 w-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted hover:bg-secondary/10 hover:text-secondary disabled:opacity-50'}`}
+              title={task.status === 'terminé' ? 'Remettre en cours' : 'Marquer la sous-tâche comme terminée'}
             >
               {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={18} /> : <Circle size={18} />}
             </button>
@@ -1287,12 +1288,12 @@ export default function ListView({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (canOperateCurrentTask) {
-                                  handleCompleteTask(task);
+                                  handleToggleTaskStatus(task);
                                 }
                               }}
-                              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || task.status === 'terminé' || actionLoading === `complete-task-${task.id}`}
-                              className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
-                              title={task.status === 'terminé' ? 'Tâche terminée' : 'Marquer comme terminée'}
+                              disabled={!canOperateCurrentTask || !onUpdateTaskStatus || actionLoading === `complete-task-${task.id}`}
+                              className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all disabled:cursor-not-allowed ${task.status === 'terminé' ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' : 'bg-theme-surface-hover text-theme-muted group-hover:text-secondary group-hover:bg-secondary/10 hover:bg-secondary/20 disabled:opacity-50'}`}
+                              title={task.status === 'terminé' ? 'Remettre en cours' : 'Marquer comme terminée'}
                             >
                               {actionLoading === `complete-task-${task.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : task.status === 'terminé' ? <CheckCircle size={20} /> : <Circle size={20} />}
                             </button>

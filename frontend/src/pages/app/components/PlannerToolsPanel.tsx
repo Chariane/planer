@@ -11,6 +11,7 @@ interface PlannerToolsPanelProps {
   effectiveRole: string | null;
   tasks: Task[];
   initialTool?: 'files' | 'reports' | 'absences';
+  onTasksChanged?: () => void;
 }
 
 export default function PlannerToolsPanel({
@@ -21,6 +22,7 @@ export default function PlannerToolsPanel({
   effectiveRole,
   tasks,
   initialTool,
+  onTasksChanged,
 }: PlannerToolsPanelProps) {
   // ✅ Mémoriser le contexte pour éviter les re-rendus inutiles
   const context = useMemo(() => ({
@@ -31,7 +33,8 @@ export default function PlannerToolsPanel({
     effectiveRole,
     tasks,
     initialTool,
-  }), [workspaceId, espaceId, listeId, currentUserId, effectiveRole, tasks, initialTool]);
+    onTasksChanged,
+  }), [workspaceId, espaceId, listeId, currentUserId, effectiveRole, tasks, initialTool, onTasksChanged]);
 
   // ✅ Sélection du bon composant selon le contexte avec des clés stables
   if (listeId) {
@@ -45,6 +48,7 @@ export default function PlannerToolsPanel({
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}
         initialTool={context.initialTool}
+        onTasksChanged={context.onTasksChanged}
       />
     );
   }
@@ -59,6 +63,7 @@ export default function PlannerToolsPanel({
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}
         initialTool={context.initialTool}
+        onTasksChanged={context.onTasksChanged}
       />
     );
   }
@@ -72,6 +77,7 @@ export default function PlannerToolsPanel({
         effectiveRole={context.effectiveRole}
         tasks={context.tasks}
         initialTool={context.initialTool}
+        onTasksChanged={context.onTasksChanged}
       />
     );
   }

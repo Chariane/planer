@@ -7,6 +7,7 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from ..core.emails import send_notification_email_background
 from ..core.function import commit_or_raise, _has_overlapping_approved_leave
 from ..models import AbsenceEtConge, Espace, Liste, Membre, Rapport, Tache, Utilisateur, Workspace
 
@@ -109,6 +110,19 @@ def _create_notification(
                 "message": message,
             },
         )
+        user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+        if user and user.email:
+            try:
+                send_notification_email_background(
+                    email=user.email,
+                    message_text=message,
+                    type_=type_,
+                    target_type=target_type,
+                    target_id=target_id,
+                )
+            except Exception as mail_exc:
+                logger.warning("Erreur déclenchement email notification: %s", mail_exc)
+
         return True
     except Exception as exc:
         logger.error("Erreur lors de la création de la notification locale : %s", exc)

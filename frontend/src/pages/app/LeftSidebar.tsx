@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { toast } from '../../components/ui/Toast';
 import { useActiveResource } from '../../contexts/ActiveResourceContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,69 +22,7 @@ import { useResourceRole } from '../../hooks/useResourceRole';
 import { getRoleLabel, getRoleRank, ROLES } from '../../lib/roleHierarchy';
 import { sanitizeHtml, sanitizeText } from '../../utils/sanitize';
 
-// Composant Toast simple
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = window.setTimeout(onClose, type === 'error' ? 6000 : 4200);
-    return () => window.clearTimeout(timer);
-  }, [onClose, type]);
-
-  const config = {
-    success: {
-      title: 'Succès',
-      icon: CheckCircle2,
-      accent: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      border: 'border-emerald-200',
-    },
-    error: {
-      title: 'Action impossible',
-      icon: AlertTriangle,
-      accent: 'text-red-600',
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-    },
-    info: {
-      title: 'Information',
-      icon: Info,
-      accent: 'text-primary',
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-    },
-  }[type];
-  const Icon = config.icon;
-
-  const toastContent = (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: -16, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -12, scale: 0.98, transition: { duration: 0.2 } }}
-        className="fixed left-4 right-4 top-6 z-[9999] sm:left-1/2 sm:right-auto sm:w-[min(92vw,560px)] sm:-translate-x-1/2"
-      >
-        <div className={`mx-auto flex max-w-xl items-start gap-4 rounded-2xl border ${config.border} ${config.bg} px-5 py-4 text-slate-900 shadow-2xl shadow-slate-950/10`}>
-          <div className={`mt-0.5 rounded-xl bg-white p-2 shadow-sm ${config.accent}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${config.accent}`}>
-              {config.title}
-            </p>
-            <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-800">
-              {message}
-            </p>
-          </div>
-          <button onClick={onClose} className="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-slate-700">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-
-  if (typeof document === 'undefined') return null;
-  return createPortal(toastContent, document.body);
-};
+// Utilise désormais le Toast global importé depuis ui/Toast
 
 export default function LeftSidebar() {
   const location = useLocation();
@@ -112,12 +51,17 @@ export default function LeftSidebar() {
 
   const canManageSpaceListe = spacePermissions.canManageListe || isWorkspaceAdmin || isWorkspaceCreator;
 
-  // États pour les notifications toast
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  // États pour les notifications toast supprimés, on utilise le toast global
   const [showGuestNotice, setShowGuestNotice] = useState(true);
 
   const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
+    if (type === 'success') {
+      toast.success(message, { duration: 3000 });
+    } else if (type === 'error') {
+      toast.error(message, { duration: 3000 });
+    } else {
+      toast.info(message, { duration: 3000 });
+    }
   };
 
   const scrollToToolsPanel = () => {
@@ -1339,14 +1283,6 @@ export default function LeftSidebar() {
 
   return (
     <div className="p-2">
-      {/* Toast Notifications */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
 
       {currentWorkspace && (
         <Link

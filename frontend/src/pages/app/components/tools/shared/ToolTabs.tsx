@@ -1,13 +1,14 @@
 // frontend/src/pages/app/components/tools/shared/ToolTabs.tsx
 import { motion } from 'framer-motion';
-import { Paperclip, FileText, Calendar } from 'lucide-react';
+import { Paperclip, FileText, Calendar, ShieldCheck } from 'lucide-react';
 
 interface ToolTabsProps {
-  activeTool: 'files' | 'reports' | 'absences';
-  setActiveTool: (tool: 'files' | 'reports' | 'absences') => void;
+  activeTool: 'files' | 'reports' | 'absences' | 'audit';
+  setActiveTool: (tool: 'files' | 'reports' | 'absences' | 'audit') => void;
   canViewFiles: boolean;
   canViewReports: boolean;
   canViewAbsences: boolean;
+  canViewAudit?: boolean;
 }
 
 export const ToolTabs = ({
@@ -16,11 +17,13 @@ export const ToolTabs = ({
   canViewFiles,
   canViewReports,
   canViewAbsences,
+  canViewAudit = true,
 }: ToolTabsProps) => {
   const tabs = [
     { id: 'files' as const, label: 'Fichiers', icon: Paperclip, visible: canViewFiles },
     { id: 'reports' as const, label: 'Rapports', icon: FileText, visible: canViewReports },
     { id: 'absences' as const, label: 'Absences', icon: Calendar, visible: canViewAbsences },
+    { id: 'audit' as const, label: 'Journal d\'activités', icon: ShieldCheck, visible: canViewAudit },
   ].filter(t => t.visible);
 
   if (tabs.length === 0) {

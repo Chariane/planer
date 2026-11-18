@@ -4,7 +4,7 @@ import { FileText, Plus, Upload, ShieldAlert, Info, MessageCircle, Archive, Edit
 import { Link } from 'react-router-dom';
 import { Button } from '../../../../../components/ui/Button';
 import { GlassCard } from '../../../../../components/ui/GlassCard';
-import Modal  from '../../../../../components/ui/Modal';
+import Modal from '../../../../../components/ui/Modal';
 import { ReportList } from './ReportList';
 import { toast } from '../../../../../components/ui/Toast';
 
@@ -15,7 +15,7 @@ interface ReportSectionProps {
   accessibleReports: any[];
   archivedReports: any[];
   loading: boolean;
-  
+
   // Permissions
   canCreateReport: boolean;
   canReceiveReports: boolean;
@@ -25,13 +25,13 @@ interface ReportSectionProps {
   reportContactMembers: any[];
   listMemberNeedsAssignedTask: boolean;
   directAdminNeedsChild: boolean;
-  
+
   // Formulaires
   reportForm: any;
   setReportForm: React.Dispatch<React.SetStateAction<any>>;
   reportEditForm: any;
   setReportEditForm: React.Dispatch<React.SetStateAction<any>>;
-  
+
   // Actions
   onCreate: () => void;
   onEdit: (report: any) => void;
@@ -40,7 +40,7 @@ interface ReportSectionProps {
   onUnarchive: (id: string) => void;
   onPrint: (report: any) => void;
   onUpdate: () => void;
-  
+
   // États modaux
   selectedReport: any;
   setSelectedReport: (report: any) => void;
@@ -49,7 +49,7 @@ interface ReportSectionProps {
   isReportArchiveOpen: boolean;
   setIsReportArchiveOpen: (open: boolean) => void;
   onViewReport: (report: any) => void;
-  
+
   // Labels
   spaceOrWorkspaceLabel?: string;
   formatDate?: (date?: string | null) => string;
@@ -113,7 +113,7 @@ export const ReportSection = ({
       onPrint(report);
       return;
     }
-    
+
     const win = window.open('', '_blank');
     if (!win) return;
 
@@ -188,16 +188,16 @@ export const ReportSection = ({
       {/* Formulaire de création */}
       {canShowOwnHistory && (
         <div className="lg:col-span-4 lg:sticky lg:top-4 self-start">
-          <GlassCard className="p-6 border-secondary/10 bg-secondary/5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12">
-              <FileText size={120} className="text-secondary" />
+          <GlassCard className="p-8 border border-secondary/20 bg-gradient-to-br from-secondary/5 via-white/50 to-white/90 dark:from-secondary/10 dark:via-theme-surface/50 dark:to-theme-surface/90 relative overflow-hidden shadow-theme-xl rounded-[2.5rem] backdrop-blur-2xl transition-all duration-300">
+            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12 transition-transform duration-700 hover:rotate-45">
+              <FileText size={160} className="text-secondary drop-shadow-lg" />
             </div>
 
-            <div className="flex items-center gap-3 mb-8 relative">
-              <div className="p-2 bg-secondary rounded-xl shadow-lg ring-4 ring-secondary/10">
-                <Plus className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-4 mb-10 relative">
+              <div className="p-3 bg-gradient-to-br from-secondary to-secondary/80 rounded-2xl shadow-theme-lg ring-4 ring-secondary/20">
+                <Plus className="h-6 w-6 text-white drop-shadow-sm" />
               </div>
-              <h4 className="text-sm font-black text-theme-main uppercase tracking-widest">Nouveau Rapport</h4>
+              <h4 className="text-sm font-black text-theme-main uppercase tracking-widest drop-shadow-sm">Nouveau Rapport</h4>
             </div>
 
             {!canCreateReport ? (
@@ -342,9 +342,9 @@ export const ReportSection = ({
                   </div>
                 </div>
 
-                <Button 
-                  onClick={onCreate} 
-                  disabled={loading || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin} 
+                <Button
+                  onClick={onCreate}
+                  disabled={loading || !reportForm.titre.trim() || !reportForm.periode_debut || !reportForm.periode_fin}
                   className="w-full py-7 rounded-2xl shadow-theme-lg group relative overflow-hidden"
                 >
                   <Upload className="h-5 w-5 mr-2 group-hover:-translate-y-1 transition-transform" />
@@ -389,8 +389,8 @@ export const ReportSection = ({
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-[10px] font-black uppercase text-theme-muted/50 tracking-widest">{accessibleReports.length} reçus</span>
-                <button 
-                  onClick={() => setIsReportArchiveOpen(true)} 
+                <button
+                  onClick={() => setIsReportArchiveOpen(true)}
                   className="flex items-center gap-2 text-[10px] font-black uppercase text-secondary tracking-widest hover:brightness-125 transition-all"
                 >
                   <Archive size={14} /> Archives
@@ -414,48 +414,49 @@ export const ReportSection = ({
       <Modal isOpen={!!selectedReport} onClose={() => setSelectedReport(null)} title="Détails du Document" size="lg">
         {selectedReport && (
           <div className="space-y-6 pt-2">
-            <div className="flex items-center justify-between p-6 rounded-3xl bg-theme-surface/50 border border-theme-border-subtle shadow-inner">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-secondary/20 rounded-2xl text-secondary shadow-[0_0_20px_rgba(var(--secondary-rgb),0.2)]">
-                  <FileText size={28} />
+            <div className="flex items-center justify-between p-6 rounded-[2rem] bg-gradient-to-r from-secondary/5 via-white/40 to-transparent dark:from-secondary/10 dark:via-theme-surface/40 dark:to-transparent border border-secondary/20 shadow-inner backdrop-blur-sm relative overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 dark:bg-black/10 mix-blend-overlay pointer-events-none" />
+              <div className="flex items-center gap-5 relative z-10">
+                <div className="p-4 bg-secondary/20 rounded-[1.5rem] text-secondary shadow-[0_0_20px_rgba(var(--secondary-rgb),0.3)] backdrop-blur-md border border-secondary/30">
+                  <FileText size={32} className="drop-shadow-sm" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-theme-main tracking-tight line-clamp-1">{selectedReport.titre}</h3>
-                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest mt-1">
-                    Émis par {selectedReport.authorName} le {formatDate(selectedReport.created_at)}
+                  <h3 className="text-2xl font-black text-theme-main tracking-tight line-clamp-1 drop-shadow-sm">{selectedReport.titre}</h3>
+                  <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest mt-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" /> Émis par {selectedReport.authorName} le {formatDate(selectedReport.created_at)}
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => handlePrintReport(selectedReport)} className="rounded-xl border-theme-border-subtle px-4 text-theme-main hover:bg-theme-surface-hover transition-all">
-                <Download className="h-4 w-4 mr-2" /> PDF
+              <Button variant="outline" size="sm" onClick={() => handlePrintReport(selectedReport)} className="relative z-10 rounded-2xl border-secondary/30 px-5 py-2.5 text-secondary hover:bg-secondary hover:text-white transition-all shadow-theme-sm group flex items-center gap-2 h-auto text-[10px] font-black uppercase tracking-widest">
+                <Download className="h-4 w-4 group-hover:-translate-y-0.5 transition-transform" /> Tél. PDF
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
-              <div className="p-6 bg-theme-surface-hover/20 border border-theme-border-subtle rounded-3xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-secondary">
-                  <CheckCircle2 size={60} />
+            <div className="grid grid-cols-1 gap-6 relative">
+              <div className="p-6 bg-gradient-to-br from-theme-surface-hover/40 to-theme-surface/10 border border-theme-border-subtle rounded-[2rem] relative overflow-hidden group shadow-inner">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all duration-700 text-secondary">
+                  <CheckCircle2 size={80} />
                 </div>
                 <p className="text-[10px] font-black text-secondary uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full bg-secondary" /> I. Réalisations
+                  <div className="h-1.5 w-1.5 rounded-full bg-secondary shadow-[0_0_8px_rgba(var(--secondary-rgb),0.6)]" /> I. Réalisations
                 </p>
-                <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner">
-                  <p className="text-sm text-theme-main font-medium leading-relaxed whitespace-pre-wrap">
+                <div className="bg-white/40 dark:bg-theme-surface/30 p-5 rounded-[1.5rem] border border-white/60 dark:border-theme-border-subtle shadow-sm backdrop-blur-sm">
+                  <p className="text-[13px] text-theme-main font-medium leading-[1.8] whitespace-pre-wrap">
                     {selectedReport.realisations || 'Aucune réalisation renseignée.'}
                   </p>
                 </div>
               </div>
 
               {selectedReport.difficultes_et_solutions && (
-                <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-red-500">
-                    <AlertTriangle size={60} />
+                <div className="p-6 bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/20 rounded-[2rem] relative overflow-hidden group shadow-inner">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all duration-700 text-red-500">
+                    <AlertTriangle size={80} />
                   </div>
                   <p className="text-[10px] font-black text-red-500 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-red-500" /> II. Difficultés & Solutions
+                    <div className="h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" /> II. Difficultés & Solutions
                   </p>
-                  <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner">
-                    <p className="text-sm text-theme-muted font-medium leading-relaxed whitespace-pre-wrap">
+                  <div className="bg-white/40 dark:bg-theme-surface/30 p-5 rounded-[1.5rem] border border-white/60 dark:border-theme-border-subtle shadow-sm backdrop-blur-sm">
+                    <p className="text-[13px] text-theme-muted font-medium leading-[1.8] whitespace-pre-wrap">
                       {selectedReport.difficultes_et_solutions}
                     </p>
                   </div>
@@ -463,15 +464,15 @@ export const ReportSection = ({
               )}
 
               {selectedReport.commentaire && (
-                <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-3xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all text-blue-500">
-                    <Info size={60} />
+                <div className="p-6 bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-[2rem] relative overflow-hidden group shadow-inner">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-all duration-700 text-blue-500">
+                    <Info size={80} />
                   </div>
                   <p className="text-[10px] font-black text-blue-500 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-blue-500" /> III. Commentaires
+                    <div className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" /> III. Commentaires
                   </p>
-                  <div className="bg-theme-surface/30 p-5 rounded-2xl border border-theme-border-subtle shadow-inner text-blue-400">
-                    <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap italic">
+                  <div className="bg-white/40 dark:bg-theme-surface/30 p-5 rounded-[1.5rem] border border-white/60 dark:border-theme-border-subtle shadow-sm backdrop-blur-sm text-blue-500/80 dark:text-blue-400">
+                    <p className="text-[13px] font-medium leading-[1.8] whitespace-pre-wrap italic">
                       {selectedReport.commentaire}
                     </p>
                   </div>

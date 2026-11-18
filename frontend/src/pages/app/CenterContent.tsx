@@ -435,15 +435,13 @@ export default function CenterContent() {
             <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Export</span>
             <button
               onClick={() => setExportVisible(!exportVisible)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                exportVisible ? 'bg-secondary' : 'bg-theme-muted/30'
-              }`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${exportVisible ? 'bg-secondary' : 'bg-theme-muted/30'
+                }`}
               aria-label="Basculer la visibilité de l'export"
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  exportVisible ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${exportVisible ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
               />
             </button>
             <span className="text-[10px] font-black text-theme-muted">
@@ -510,44 +508,68 @@ export default function CenterContent() {
       const doneTasks = tasksData.filter((t: any) => t.statut === 'terminé').length;
       const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
-      const renderTaskHTML = (task: any, level: number = 0): string => {
-        const statusLabels: Record<string, string> = {
-          'en attente': 'En attente',
-          'en cours': 'En cours',
-          'terminé': 'Terminé',
-          'bloqué': 'Bloqué'
+      const renderTaskHTML = (task: any, level: number = 0, isLast: boolean = false): string => {
+        const statusColors: Record<string, { bg: string, text: string, border: string }> = {
+          'en attente': { bg: '#fffbeb', text: '#d97706', border: '#fcd34d' },
+          'en cours': { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' },
+          'terminé': { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0' },
+          'bloqué': { bg: '#fef2f2', text: '#dc2626', border: '#fecaca' }
         };
-        const statusColor = task.statut === 'terminé' ? '#10b981' :
-                           task.statut === 'bloqué' ? '#ef4444' :
-                           task.statut === 'en cours' ? '#3b82f6' : '#6b7280';
+        const st = statusColors[task.statut] || { bg: '#f3f4f6', text: '#4b5563', border: '#e5e7eb' };
+
+        const priorityColors: Record<string, { bg: string, text: string }> = {
+          'basse': { bg: '#f1f5f9', text: '#64748b' },
+          'moyenne': { bg: '#e0f2fe', text: '#0284c7' },
+          'haute': { bg: '#ffedd5', text: '#c2410c' },
+          'critique': { bg: '#fee2e2', text: '#b91c1c' }
+        };
+        const pt = task.priority ? (priorityColors[task.priority] || priorityColors['moyenne']) : null;
+
         const assignees = task.assignees?.map((a: any) => a.name).join(', ') || 'Non assigné';
         const taskTitle = sanitizeText(task.titre || 'Sans titre');
         const checklistsHTML = task.checklists && task.checklists.length > 0
-          ? `<ul style="margin-left: 16px; list-style: none; padding: 0;">
+          ? `<ul class="checklist">
               ${task.checklists.map((c: any) => `
-                <li style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${c.is_checked ? '#10b981' : '#6b7280'};">
-                  <span>${c.is_checked ? '✅' : '⬜'}</span>
-                  ${c.texte}
+                <li class="${c.is_checked ? 'checked' : ''}">
+                  <span class="icon">${c.is_checked ? '✓' : '○'}</span>
+                  ${sanitizeText(c.texte)}
                 </li>
               `).join('')}
             </ul>`
           : '';
 
+        const hasChildren = task.children && task.children.length > 0;
+
         return `
-          <div style="margin-left: ${level * 24}px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-              <span style="font-weight: 700; color: #111827;">${taskTitle}</span>
-              <span style="background: ${statusColor}; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">${statusLabels[task.statut] || task.statut}</span>
-              <span style="font-size: 12px; color: #6b7280;">${assignees}</span>
-              ${task.priority ? `<span style="font-size: 10px; background: #f3f4f6; padding: 2px 8px; border-radius: 8px;">${task.priority}</span>` : ''}
+          <div class="task-node" style="margin-left: ${level > 0 ? 32 : 0}px;">
+            ${level > 0 ? `<div class="tree-line ${isLast ? 'last' : ''}"></div>` : ''}
+            <div class="task-card">
+              <div class="task-header">
+                <span class="task-title">${taskTitle}</span>
+                <div class="task-badges">
+                  <span class="badge" style="background: ${st.bg}; color: ${st.text}; border: 1px solid ${st.border};">${task.statut}</span>
+                  ${pt ? `<span class="badge" style="background: ${pt.bg}; color: ${pt.text};">${task.priority}</span>` : ''}
+                </div>
+              </div>
+              
+              <div class="task-meta">
+                <span class="assignees">👤 ${assignees}</span>
+                <span class="dates">
+                  ${task.date_debut ? `Début: <strong>${new Date(task.date_debut).toLocaleDateString('fr-FR')}</strong>` : ''}
+                  ${task.date_debut && task.date_fin_prevue ? ' • ' : ''}
+                  ${task.date_fin_prevue ? `Échéance: <strong>${new Date(task.date_fin_prevue).toLocaleDateString('fr-FR')}</strong>` : ''}
+                </span>
+              </div>
+              
+              ${task.description ? `<div class="task-desc">${sanitizeText(task.description)}</div>` : ''}
+              ${checklistsHTML}
             </div>
-            ${task.description ? `<div style="margin-top: 4px; font-size: 13px; color: #4b5563;">${task.description}</div>` : ''}
-            <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
-              ${task.date_debut ? `Début: ${new Date(task.date_debut).toLocaleDateString('fr-FR')}` : ''}
-              ${task.date_fin_prevue ? ` • Échéance: ${new Date(task.date_fin_prevue).toLocaleDateString('fr-FR')}` : ''}
-            </div>
-            ${checklistsHTML}
-            ${task.children && task.children.length > 0 ? task.children.map((child: any) => renderTaskHTML(child, level + 1)).join('') : ''}
+            
+            ${hasChildren ? `
+              <div class="task-children">
+                ${task.children.map((child: any, i: number) => renderTaskHTML(child, level + 1, i === task.children.length - 1)).join('')}
+              </div>
+            ` : ''}
           </div>
         `;
       };
@@ -565,66 +587,181 @@ export default function CenterContent() {
           <head>
             <meta charset="UTF-8">
             <title>${docTitle}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
             <style>
-              body { font-family: Inter, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; max-width: 1000px; margin: 0 auto; }
-              .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-              .title { font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; }
-              .meta { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-              .section { margin-bottom: 30px; }
-              .section-title { font-size: 14px; font-weight: 900; color: #059669; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-              .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
-              .info-item .label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-              .info-item .value { font-weight: 600; color: #0f172a; }
-              .member-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-              .member-tag { background: #f1f5f9; padding: 4px 12px; border-radius: 16px; font-size: 12px; }
-              .member-tag.creator { background: #dbeafe; color: #1d4ed8; font-weight: 700; }
-              .task-tree { margin-top: 12px; }
-              .footer { margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; display: flex; justify-content: space-between; color: #64748b; }
+              :root {
+                --primary: #4f46e5;
+                --primary-soft: #eef2ff;
+                --text-main: #0f172a;
+                --text-muted: #64748b;
+                --bg-main: #f8fafc;
+                --bg-card: #ffffff;
+                --border-color: #e2e8f0;
+              }
+              body { 
+                font-family: 'Inter', sans-serif; 
+                padding: 40px; 
+                color: var(--text-main); 
+                line-height: 1.6; 
+                max-width: 1100px; 
+                margin: 0 auto; 
+                background: white;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+              }
+              h1, h2, h3, h4, .title-font { font-family: 'Outfit', sans-serif; }
+              
+              /* Header Styling */
+              .header { 
+                position: relative;
+                padding: 40px; 
+                margin-bottom: 40px; 
+                border-radius: 24px;
+                background: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%);
+                border: 1px solid #dcfce7;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+              }
+              .header::before {
+                content: '';
+                position: absolute;
+                top: 0; left: 0; right: 0; height: 8px;
+                background: linear-gradient(90deg, #10b981 0%, #06b6d4 100%);
+                border-radius: 24px 24px 0 0;
+              }
+              .header-content { display: flex; justify-content: space-between; align-items: flex-end; }
+              .meta-label { font-family: 'Outfit'; font-size: 13px; color: #10b981; text-transform: uppercase; font-weight: 800; letter-spacing: 2px; }
+              .title { font-size: 38px; font-weight: 800; color: #0f172a; margin: 4px 0 0 0; letter-spacing: -0.5px; line-height: 1.1; }
+              .export-date { text-align: right; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+              
+              .project-desc { font-size: 15px; color: #475569; margin: 24px 0 0 0; background: white; padding: 16px 24px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+              
+              .section { margin-bottom: 40px; page-break-inside: auto; }
+              .section-title { 
+                display: flex; align-items: center; gap: 10px;
+                font-family: 'Outfit'; font-size: 18px; font-weight: 800; color: var(--text-main); 
+                margin-bottom: 20px; padding-bottom: 12px; 
+                border-bottom: 2px solid var(--border-color); 
+              }
+              
+              /* Info Grid */
+              .info-grid { 
+                display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; 
+              }
+              .info-item { 
+                background: var(--bg-card); padding: 20px; border-radius: 16px; 
+                border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;
+                box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+              }
+              .info-item .label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+              .info-item .value { font-size: 24px; font-family: 'Outfit'; font-weight: 800; color: var(--primary); }
+              
+              /* Members */
+              .member-list { display: flex; flex-wrap: wrap; gap: 12px; }
+              .member-tag { 
+                display: inline-flex; align-items: center; gap: 6px;
+                background: var(--bg-card); padding: 8px 16px; border-radius: 20px; 
+                font-size: 13px; font-weight: 600; color: var(--text-main);
+                border: 1px solid var(--border-color);
+              }
+              .member-tag.creator { background: var(--primary-soft); color: var(--primary); border-color: #c7d2fe; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1); }
+              .member-role { font-size: 11px; opacity: 0.7; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+              
+              /* Task Tree */
+              .task-tree { margin-top: 20px; }
+              .task-node { position: relative; margin-top: 16px; }
+              .tree-line { 
+                position: absolute; top: -16px; bottom: 20px; left: -16px; 
+                width: 1px; background: #cbd5e1; 
+              }
+              .tree-line::after {
+                content: ''; position: absolute; bottom: 0; left: 0; width: 12px; height: 1px; background: #cbd5e1;
+              }
+              .tree-line.last { bottom: auto; height: 36px; }
+              
+              .task-card {
+                background: var(--bg-card); padding: 16px 20px; border-radius: 16px; 
+                border: 1px solid var(--border-color);
+                box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+              }
+              .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+              .task-title { font-family: 'Outfit'; font-size: 16px; font-weight: 700; color: var(--text-main); line-height: 1.3; }
+              .task-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+              .badge { 
+                font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; 
+                padding: 4px 10px; border-radius: 12px; 
+              }
+              
+              .task-meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; margin-bottom: 8px; color: var(--text-muted); }
+              .task-meta .assignees { display: flex; align-items: center; gap: 4px; font-weight: 500; }
+              .task-meta .dates strong { color: var(--text-main); }
+              
+              .task-desc { font-size: 13px; color: #475569; margin-top: 8px; background: var(--bg-main); padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid #f1f5f9; }
+              
+              .checklist { margin: 12px 0 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+              .checklist li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-main); }
+              .checklist li.checked { color: var(--text-muted); text-decoration: line-through; }
+              .checklist .icon { font-weight: bold; font-family: monospace; font-size: 14px; }
+              .checklist li.checked .icon { color: #10b981; }
+              
+              .footer { 
+                margin-top: 60px; border-top: 1px solid var(--border-color); padding-top: 24px; 
+                font-family: 'Outfit'; font-size: 13px; display: flex; justify-content: space-between; 
+                color: var(--text-muted); font-weight: 500; 
+              }
+              
+              @media print {
+                body { padding: 0; max-width: none; }
+                .header { border: 1px solid var(--border-color); box-shadow: none; }
+                .task-card { border: 1px solid #cbd5e1; box-shadow: none; break-inside: avoid; }
+              }
             </style>
           </head>
           <body>
             <div class="header">
-              <div>
-                <div class="meta">Projet</div>
-                <h1 class="title">${listeData.nom || 'Projet'}</h1>
+              <div class="header-content">
+                <div>
+                  <div class="meta-label">Rapport de Projet</div>
+                  <h1 class="title">${listeData.nom || 'Projet'}</h1>
+                </div>
+                <div class="export-date">Date d'export<br><strong>${exportDate}</strong></div>
               </div>
-              <div class="meta">Exporté le ${exportDate}</div>
+              ${listeData.description ? `<div class="project-desc">${sanitizeText(listeData.description)}</div>` : ''}
             </div>
 
-            ${listeData.description ? `<p style="font-size: 14px; color: #475569; margin-bottom: 20px;">${listeData.description}</p>` : ''}
-
             <div class="section">
-              <div class="section-title">📊 Informations générales</div>
               <div class="info-grid">
-                <div class="info-item"><span class="label">Avancement global</span><span class="value">${progress}%</span></div>
-                <div class="info-item"><span class="label">Tâches totales</span><span class="value">${totalTasks}</span></div>
+                <div class="info-item"><span class="label">Avancement Global</span><span class="value">${progress}%</span></div>
+                <div class="info-item"><span class="label">Tâches Totales</span><span class="value">${totalTasks}</span></div>
+                <div class="info-item"><span class="label">Tâches Terminées</span><span style="color:#10b981;" class="value">${doneTasks}</span></div>
               </div>
             </div>
 
             <div class="section">
-              <div class="section-title">👥 Équipe</div>
+              <div class="section-title">👥 Équipe du Projet</div>
               <div class="member-list">
-                ${creator ? `<span class="member-tag creator">👑 ${getMemberDisplayName(creator)}</span>` : ''}
+                ${creator ? `<span class="member-tag creator"><span>👑</span> ${getMemberDisplayName(creator)} <span class="member-role">(${getRoleLabel(creator.role)})</span></span>` : ''}
                 ${directMembers.map((m: any) => `
-                  <span class="member-tag">${getMemberDisplayName(m)} (${getRoleLabel(m.role)})</span>
+                  <span class="member-tag"><span>👤</span> ${getMemberDisplayName(m)} <span class="member-role">(${getRoleLabel(m.role)})</span></span>
                 `).join('')}
               </div>
             </div>
 
+            ${canevasHTML ? `
             <div class="section">
-              <div class="section-title">🗺️ Feuille de route (Canevas)</div>
+              <div class="section-title">🗺️ Stratégie (Canevas)</div>
               <div>${canevasHTML}</div>
-            </div>
+            </div>` : ''}
 
-            <div class="section">
-              <div class="section-title">📋 Tâches</div>
+            <div class="section" style="break-inside: auto;">
+              <div class="section-title">📋 Répartition des Tâches</div>
               <div class="task-tree">
-                ${tasksHTML || '<p style="color: #6b7280;">Aucune tâche dans ce projet.</p>'}
+                ${tasksHTML || '<p style="color: #64748b; font-style: italic;">Aucune tâche dans ce projet pour le moment.</p>'}
               </div>
             </div>
 
             <div class="footer">
-              <span>Document généré automatiquement par K-Planer</span>
+              <span>Généré par <strong>K-Planner</strong></span>
+              <span>Propriété confidentielle</span>
             </div>
 
             <script>
@@ -752,10 +889,6 @@ export default function CenterContent() {
       setIsTaskModalLimited(false);
     } catch (err: any) {
       const message = sanitizeApiErrorMessage(err, 'Erreur lors de l’enregistrement de la tâche');
-      if (message.toLowerCase().includes('uniquement etre remise en cours ou bloquee')) {
-        setTaskModalError('Une tâche terminée ne peut être remise qu’en cours ou bloquée.');
-        return;
-      }
       setTaskModalError(message);
     }
   };
@@ -790,6 +923,7 @@ export default function CenterContent() {
               effectiveRole={selectedSpacePanelRole}
               tasks={[]}
               initialTool={requestedTool}
+              onTasksChanged={loadTasks}
             />
           </div>
         </div>
@@ -806,6 +940,7 @@ export default function CenterContent() {
               effectiveRole={userWorkspaceRole}
               tasks={[]}
               initialTool={requestedTool}
+              onTasksChanged={loadTasks}
             />
           </div>
         </div>
@@ -887,14 +1022,14 @@ export default function CenterContent() {
             tasks={tasks}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            onDeleteTask={() => {}}
-            onAssignTask={() => {}}
+            onDeleteTask={() => { }}
+            onAssignTask={() => { }}
             getTaskProgress={getTaskProgress}
             readOnly={true}
           />
         )}
 
-        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => {}} />}
+        {activeTab === 'kanban' && <KanbanView tasks={tasks} onUpdateTask={() => { }} />}
         {activeTab === 'gantt' && <GanttView tasks={tasks} />}
         {activeTab === 'membres' && (
           <MemberManagement
@@ -914,6 +1049,7 @@ export default function CenterContent() {
             effectiveRole={effectiveRole}
             tasks={tasks}
             initialTool={requestedTool}
+            onTasksChanged={loadTasks}
           />
         )}
       </div>
@@ -1053,7 +1189,7 @@ export default function CenterContent() {
             <ListView
               tasks={filteredTasks}
               searchTerm=""
-              onSearchChange={() => {}}
+              onSearchChange={() => { }}
               onDeleteTask={deleteTask}
               onAssignTask={(task) => { if (canCreateContent) { setSelectedTaskForAssignment(task); setIsAssignTaskModalOpen(true); } }}
               onUpdateTaskStatus={updateTaskStatus as any}
@@ -1074,9 +1210,26 @@ export default function CenterContent() {
             />
           )}
 
-          {activeTab === 'kanban' && <KanbanView tasks={filteredTasks} onUpdateTask={canCreateContent ? updateTask : () => {}} />}
+          {activeTab === 'kanban' && (
+            <KanbanView
+              tasks={filteredTasks}
+              onUpdateTask={async (updatedTask) => {
+                const canOperate = canCreateContent || canOperateAssignedTask(updatedTask);
+                if (!canOperate) return;
+                try {
+                  if (canManageTaskFully(updatedTask) || canCreateContent) {
+                    await updateTask(updatedTask);
+                  } else {
+                    await updateTaskStatus(updatedTask.id, updatedTask.status);
+                  }
+                } catch (err: any) {
+                  toast.error(sanitizeApiErrorMessage(err, "Impossible de modifier le statut de la tâche."));
+                }
+              }}
+            />
+          )}
           {activeTab === 'gantt' && <GanttView tasks={filteredTasks} />}
-          
+
           {activeTab === 'outils' && (
             // ✅ Utilisation de isToolsReady pour éviter le clignotement
             <div className="tools-panel">
@@ -1089,6 +1242,7 @@ export default function CenterContent() {
                   effectiveRole={effectiveRole}
                   tasks={tasks}
                   initialTool={requestedTool}
+                  onTasksChanged={loadTasks}
                 />
               ) : (
                 <div className="flex justify-center py-12">

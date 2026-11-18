@@ -3,6 +3,17 @@ from .Checklist import ChecklistOut
 from .Membre import WorkspaceMemberOut, WorkspaceMemberUserOut
 
 
+def _normalize_statut(v: str) -> str:
+    if not v:
+        return v
+    norm = v.strip().replace("_", " ")
+    if norm in {"terminee", "terminée", "done", "fait"}:
+        return "terminé"
+    if norm in {"bloque", "bloquée"}:
+        return "bloqué"
+    return norm
+
+
 class TacheBase(BaseModel):
     titre: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -15,10 +26,11 @@ class TacheBase(BaseModel):
     @field_validator("statut")
     @classmethod
     def validate_statut(cls, v: str) -> str:
-        if v not in TACHE_STATUSES:
+        v_norm = _normalize_statut(v)
+        if v_norm not in TACHE_STATUSES:
             allowed = ", ".join(TACHE_STATUSES)
             raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
-        return v
+        return v_norm
 
     @field_validator("priorite")
     @classmethod
@@ -46,9 +58,12 @@ class TacheUpdate(BaseModel):
     @field_validator("statut")
     @classmethod
     def validate_statut_update(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in TACHE_STATUSES:
-            allowed = ", ".join(TACHE_STATUSES)
-            raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+        if v is not None:
+            v_norm = _normalize_statut(v)
+            if v_norm not in TACHE_STATUSES:
+                allowed = ", ".join(TACHE_STATUSES)
+                raise ValueError(f"Statut invalide. Valeurs autorisees : {allowed}")
+            return v_norm
         return v
 
     @field_validator("priorite")

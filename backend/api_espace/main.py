@@ -99,19 +99,15 @@ async def lifespan(app: FastAPI):
 # ============================================================================
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Ajoute les headers de sécurité à toutes les réponses"""
-    
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        
         env = os.getenv("ENV", "Dev")
         
         if env == "Production":
-            # CSP STRICTE pour production
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "connect-src 'self' https://*.k-planer.com wss://*.k-planer.com; "
@@ -121,11 +117,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "upgrade-insecure-requests"
             )
         else:
-            # CSP PERMISSIVE pour développement (inclut le CDN pour Swagger)
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self' data:; "
                 "connect-src 'self' https: http://localhost:* ws://localhost:* wss://*.k-planer.com; "
@@ -136,17 +131,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         
         if env == "Production":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains; preload"
-            )
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=()"
-        )
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
         return response
 
@@ -160,6 +151,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # CORS CONFIGURATION
@@ -203,8 +196,6 @@ app.add_middleware(
     expose_headers=["X-Total-Count", "X-Page-Count"],
     max_age=86400,
 )
-
-app.add_middleware(SecurityHeadersMiddleware)
 
 # ============================================================================
 # ROUTES
