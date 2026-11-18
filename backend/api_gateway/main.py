@@ -27,6 +27,7 @@ except Exception:
     RedisBucket = None
 
 from core.logging import security_logger
+from core.cookies import COOKIE_SECURE, COOKIE_SAMESITE
 
 # ============================================================================
 # ROUTES IMPORTS
@@ -63,9 +64,9 @@ class CsrfSettings(BaseModel):
     secret_key: str = CSRF_SECRET
     cookie_key: str = "_csrf_token"
     header_name: str = "X-CSRF-Token"
-    cookie_secure: bool = os.getenv("ENV", "Dev") == "Production"
+    cookie_secure: bool = COOKIE_SECURE
     cookie_httponly: bool = True
-    cookie_samesite: str = "lax"
+    cookie_samesite: str = COOKIE_SAMESITE
 
 try:
     # ✅ Configuration pour fastapi-csrf-protect 1.0.7

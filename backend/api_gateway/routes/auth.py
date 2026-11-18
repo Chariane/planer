@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from ..core.database import get_db
+from ..core.cookies import COOKIE_SECURE, COOKIE_SAMESITE
 from ..core.emails import (
     resend_verification_email,
     send_reset_password_email,
@@ -346,8 +347,8 @@ def login(
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=True,
-            samesite="lax",
+            secure=COOKIE_SECURE,
+            samesite=COOKIE_SAMESITE,
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
         )
@@ -356,8 +357,8 @@ def login(
             key="refresh_token",
             value=refresh_token,
             httponly=True,
-            secure=True,
-            samesite="lax",
+            secure=COOKIE_SECURE,
+            samesite=COOKIE_SAMESITE,
             max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/auth/refresh",
         )
@@ -1041,8 +1042,8 @@ def refresh_token(
         key="access_token",
         value=new_access_token,
         httponly=True,
-        secure=True,
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -1051,8 +1052,8 @@ def refresh_token(
         key="refresh_token",
         value=new_refresh_token,
         httponly=True,
-        secure=True,
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/auth/refresh",
     )

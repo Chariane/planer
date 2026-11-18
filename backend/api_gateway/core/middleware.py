@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from jose import JWTError, jwt
 import os
 from dotenv import dotenv_values
+from .cookies import COOKIE_SECURE, COOKIE_SAMESITE
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +119,8 @@ class TokenRefreshMiddleware(BaseHTTPMiddleware):
                                     key="access_token",
                                     value=new_access_token,
                                     httponly=True,
-                                    secure=True,
-                                    samesite="lax",
+                                    secure=COOKIE_SECURE,
+                                    samesite=COOKIE_SAMESITE,
                                     max_age=30 * 60,  # 30 minutes
                                     path="/",
                                 )
@@ -128,8 +129,8 @@ class TokenRefreshMiddleware(BaseHTTPMiddleware):
                                         key="refresh_token",
                                         value=new_refresh_token,
                                         httponly=True,
-                                        secure=True,
-                                        samesite="lax",
+                                        secure=COOKIE_SECURE,
+                                        samesite=COOKIE_SAMESITE,
                                         max_age=30 * 24 * 60 * 60,  # 30 jours
                                         path="/auth/refresh",
                                     )

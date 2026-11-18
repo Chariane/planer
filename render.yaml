@@ -23,6 +23,10 @@ envVarGroups:
         value: GET,POST,PUT,DELETE,PATCH,OPTIONS
       - key: ALLOW_HEADERS
         value: "*"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: none
       - key: FRONT_BASE_URL
         value: https://k-planer-demo.onrender.com
       - key: FRONT_REGISTER_URL
