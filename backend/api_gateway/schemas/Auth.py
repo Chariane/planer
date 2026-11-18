@@ -46,6 +46,10 @@ class EmailVerificationResendRequest(BaseModel):
 class MessageResponse(BaseModel):
     message: str
 
+class EmailSendResponse(BaseModel):
+    message: str
+    email_sent: bool
+
 class RegisterResponse(BaseModel):
     message: str
     user: UtilisateurOut

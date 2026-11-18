@@ -27,6 +27,7 @@ class WorkspaceWithContextOut(WorkspaceOut):
 
 class RegisterWithWorkspaceResponse(BaseModel):
     message: str
+    email_sent: bool = False
     user: UtilisateurOut
     workspace: WorkspaceOut
 

@@ -70,9 +70,13 @@ export default function RegisterPage() {
         is_entreprise: false,
       };
 
-      await register(registerData);
+      const result = await register(registerData);
       sessionStorage.removeItem('pendingInvitation');
-      toast.success('Inscription réussie ! Un code de vérification vous a été envoyé par email.');
+      if (result.emailSent) {
+        toast.success('Inscription réussie ! Le code de vérification a été accepté pour envoi.');
+      } else {
+        toast.error("Compte créé, mais le code n'a pas pu être envoyé. Réessayez après la configuration de l'envoi email.");
+      }
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       toast.error(sanitizeApiErrorMessage(err, 'Erreur d’inscription'));

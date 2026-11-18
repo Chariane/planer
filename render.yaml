@@ -136,6 +136,10 @@ services:
         sync: false
       - key: MAIL_SERVER
         sync: false
+      - key: GOOGLE_APPS_SCRIPT_EMAIL_URL
+        sync: false
+      - key: GOOGLE_APPS_SCRIPT_EMAIL_SECRET
+        sync: false
       - key: FEDAPAY_SECRET_KEY
         sync: false
 

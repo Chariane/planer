@@ -45,6 +45,7 @@ from ..core.security import (
 from ..core.antivirus import scan_image_bytes_with_clamav
 from ..schemas import (
     EmailSchema,
+    EmailSendResponse,
     ChangePasswordRequest,
     EmailVerificationCodeRequest,
     EmailVerificationResendRequest,
@@ -166,9 +167,8 @@ def _guess_profile_photo_mime(photo: bytes | None) -> str | None:
 
 
 @router.post("/register", response_model=RegisterWithWorkspaceResponse, status_code=status.HTTP_201_CREATED)
-def register(
+async def register(
     user: UtilisateurCreate,
-    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
 ):
@@ -192,8 +192,7 @@ def register(
     # Créer l'utilisateur
     new_user, default_workspace = create_utilisateur(db, user_data, invitation_token=invitation_token)
 
-    background_tasks.add_task(
-        send_verification_email,
+    email_sent = await send_verification_email(
         new_user.username,
         EmailSchema(email=[new_user.email]),
         new_user.code_verification_email,
@@ -208,7 +207,12 @@ def register(
     )
     
     return {
-        "message": "Compte cree. Un code de verification email a ete envoye.",
+        "message": (
+            "Compte créé. Le code de vérification a été accepté pour envoi."
+            if email_sent
+            else "Compte créé, mais l'envoi du code a échoué. Utilisez le renvoi du code après configuration de l'email."
+        ),
+        "email_sent": email_sent,
         "user": new_user,
         "workspace": default_workspace,
     }
@@ -450,10 +454,9 @@ def verify_email_code(
     return {"message": "Votre adresse email a ete verifiee avec succes."}
 
 
-@router.post("/resend-verification-code", response_model=MessageResponse)
-def resend_verification_code(
+@router.post("/resend-verification-code", response_model=EmailSendResponse)
+async def resend_verification_code(
     payload: EmailVerificationResendRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     user = get_utilisateur_by_email(db, payload.email)
@@ -476,23 +479,28 @@ def resend_verification_code(
         detail="Impossible de renvoyer le code de verification a cause d'une contrainte d'integrite.",
     )
 
-    background_tasks.add_task(
-        resend_verification_email,
+    email_sent = await resend_verification_email(
         user.username,
         EmailSchema(email=[user.email]),
         user.code_verification_email,
     )
 
-    return {"message": "Un nouveau code de verification a ete envoye."}
+    return {
+        "message": (
+            "Un nouveau code de vérification a été accepté pour envoi."
+            if email_sent
+            else "Le code n'a pas pu être envoyé. Vérifiez la configuration email puis réessayez."
+        ),
+        "email_sent": email_sent,
+    }
 
 
 @router.post("/resend-verification-email", response_model=MessageResponse, include_in_schema=False)
-def resend_verification_email_legacy(
+async def resend_verification_email_legacy(
     payload: EmailVerificationResendRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return resend_verification_code(payload, background_tasks, db)
+    return await resend_verification_code(payload, db)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

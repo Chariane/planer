@@ -46,8 +46,12 @@ export default function VerifyEmailPage() {
     if (!email) return;
     setResendLoading(true);
     try {
-      await resendVerificationCode(email);
-      toast.success('Un nouveau code a été envoyé à votre adresse email.');
+      const sent = await resendVerificationCode(email);
+      if (sent) {
+        toast.success('Un nouveau code a été accepté pour envoi à votre adresse email.');
+      } else {
+        toast.error("Le code n'a pas pu être envoyé. Le service email n'est pas encore configuré.");
+      }
     } catch (err) {
       toast.error(sanitizeApiErrorMessage(err, 'Erreur lors du renvoi'));
     } finally {

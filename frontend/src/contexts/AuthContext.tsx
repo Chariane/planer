@@ -43,9 +43,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<{ requires2fa: boolean; challengeToken?: string }>;
   verify2FA: (challengeToken: string, code: string) => Promise<void>;
-  register: (data: RegisterPayload) => Promise<{ email: string }>;
+  register: (data: RegisterPayload) => Promise<{ email: string; emailSent: boolean }>;
   verifyEmail: (email: string, code: string) => Promise<void>;
-  resendVerificationCode: (email: string) => Promise<void>;
+  resendVerificationCode: (email: string) => Promise<boolean>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -103,8 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = async (data: RegisterPayload) => {
-    await authService.register(data);
-    return { email: data.email };
+    const response = await authService.register(data) as { email_sent?: boolean };
+    return { email: data.email, emailSent: response.email_sent === true };
   };
 
   const verifyEmail = async (email: string, code: string) => {
@@ -112,7 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resendVerificationCode = async (email: string) => {
-    await authService.resendVerificationCode(email);
+    const response = await authService.resendVerificationCode(email) as { email_sent?: boolean };
+    return response.email_sent === true;
   };
 
   const login = async (identifier: string, password: string) => {

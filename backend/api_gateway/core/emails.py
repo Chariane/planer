@@ -1,5 +1,6 @@
 import os
 import logging
+import httpx
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from dotenv import load_dotenv
 from ..schemas import EmailSchema
@@ -52,6 +53,45 @@ def _get_mail_config() -> ConnectionConfig:
         USE_CREDENTIALS=_as_bool(config_data.get("USE_CREDENTIALS"), default=True),
         VALIDATE_CERTS=_as_bool(config_data.get("VALIDATE_CERTS"), default=True),
     )
+
+
+async def _deliver_email(recipients: list[str], subject: str, html: str) -> bool:
+    """Send using a free Google Apps Script HTTPS relay when configured.
+
+    Render's free services block outbound SMTP ports. The relay runs as the
+    account owner and uses Google's daily MailApp quota instead.
+    """
+    relay_url = _clean_env_val("GOOGLE_APPS_SCRIPT_EMAIL_URL")
+    relay_secret = _clean_env_val("GOOGLE_APPS_SCRIPT_EMAIL_SECRET")
+    if relay_url or relay_secret:
+        if not relay_url or not relay_secret:
+            raise RuntimeError("Google Apps Script mail relay is only partially configured")
+        async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+            response = await client.post(
+                relay_url,
+                json={
+                    "secret": relay_secret,
+                    "to": recipients[0],
+                    "subject": subject,
+                    "html": html,
+                },
+            )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            reason = result.get("error", "invalid relay response") if isinstance(result, dict) else "invalid relay response"
+            raise RuntimeError(f"Google Apps Script mail relay rejected the message: {reason}")
+        return True
+
+    fm = FastMail(_get_mail_config())
+    message = MessageSchema(
+        subject=subject,
+        recipients=recipients,
+        body=html,
+        subtype=MessageType.html,
+    )
+    await fm.send_message(message)
+    return True
 
 
 # -----------------------------
@@ -145,20 +185,13 @@ async def send_verification_email(username: str, email: EmailSchema, code: str):
     """
     template = get_html_template("Vérification d'inscription", body)
 
-    message = MessageSchema(
-        subject="K-Planner - Vérification de compte",
-        recipients=recipients,
-        body=template,
-        subtype=MessageType.html
-    )
-
     try:
-        fm = FastMail(_get_mail_config())
-        await fm.send_message(message)
+        await _deliver_email(recipients, "K-Planner - Vérification de compte", template)
         logger.debug(f"send_verification_email SUCCESS to {recipients}")
+        return True
     except Exception as e:
         logger.error(f"send_verification_email ERROR to {recipients}: {e}")
-    return code
+        return False
 
 
 async def resend_verification_email(username: str, email: EmailSchema, code: str):
@@ -174,20 +207,13 @@ async def resend_verification_email(username: str, email: EmailSchema, code: str
     """
     template = get_html_template("Nouveau code de vérification", body)
 
-    message = MessageSchema(
-        subject="K-Planner - Nouveau code de vérification",
-        recipients=recipients,
-        body=template,
-        subtype=MessageType.html
-    )
-
     try:
-        fm = FastMail(_get_mail_config())
-        await fm.send_message(message)
+        await _deliver_email(recipients, "K-Planner - Nouveau code de vérification", template)
         logger.debug(f"resend_verification_email SUCCESS to {recipients}")
+        return True
     except Exception as e:
         logger.error(f"resend_verification_email ERROR to {recipients}: {e}")
-    return code
+        return False
 
 
 async def send_reset_password_email(username: str, email: EmailSchema, token: str):
@@ -205,17 +231,10 @@ async def send_reset_password_email(username: str, email: EmailSchema, token: st
     url = f"{front_base_url}{front_password_reset_url}?token={token}"
     template = get_html_template("Réinitialisation de mot de passe", body, "Réinitialiser mon mot de passe", url)
 
-    message = MessageSchema(
-        subject="K-Planner - Réinitialisation de mot de passe",
-        recipients=recipients,
-        body=template,
-        subtype=MessageType.html
-    )
-
     try:
-        fm = FastMail(_get_mail_config())
-        await fm.send_message(message)
+        await _deliver_email(recipients, "K-Planner - Réinitialisation de mot de passe", template)
         logger.debug(f"send_reset_password_email SUCCESS to {recipients}")
+        return True
     except Exception as e:
         logger.error(f"send_reset_password_email ERROR to {recipients}: {e}")
-    return token
+        return False
