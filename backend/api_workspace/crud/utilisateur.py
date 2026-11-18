@@ -190,7 +190,13 @@ def delete_workspace(db: Session, workspace_id: str) -> bool:
     for liste_id in dependency_ids["liste_ids"]:
         _delete_resource_group_safely(db, resource_type="liste", resource_id=liste_id)
     _delete_resource_group_safely(db, resource_type="workspace", resource_id=workspace_id)
-    db.delete(workspace)
+    # The workspace was loaded with its `membres` relationship during the
+    # owner-access check. Those membership rows have already been removed by
+    # the bulk DELETE above; deleting the ORM instance would make SQLAlchemy
+    # try to NULL their workspace FK again and raise StaleDataError.
+    db.query(Workspace).filter(Workspace.id == workspace_id).delete(
+        synchronize_session=False
+    )
     commit_or_raise(
         db,
         detail="Impossible de supprimer le workspace et ses dépendances.",
