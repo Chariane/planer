@@ -712,6 +712,7 @@ def disable_two_factor_for_profile(
 def verify_two_factor_code(
     payload: TwoFactorVerifyRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     _rate_limit=Depends(login_rate_limit),
 ):

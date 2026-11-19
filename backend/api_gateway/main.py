@@ -264,16 +264,6 @@ security_logger.log_auth(
     }
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=ALLOWED_METHODS,
-    allow_headers=ALLOWED_HEADERS,
-    expose_headers=["X-Total-Count", "X-Page-Count"],
-    max_age=86400,  # 24 heures
-)
-
 # ============================================================================
 # CSRF MIDDLEWARE
 # ============================================================================
@@ -294,6 +284,9 @@ async def csrf_middleware(request: Request, call_next):
     public_paths = [
         "/auth/login", 
         "/auth/register", 
+        # The signed 2FA challenge token is the proof for this public login step.
+        # Cross-site CSRF cookies are unavailable between the Render subdomains.
+        "/auth/verify-2fa",
         "/auth/reset-password",
         "/auth/forgot-password",
         "/auth/refresh",
@@ -346,6 +339,19 @@ async def csrf_middleware(request: Request, call_next):
                 "detail": f"Validation CSRF échouée: {str(e)}"
             }
         )
+
+# Keep CORS outermost so even middleware-generated 4xx/5xx responses carry the
+# appropriate CORS headers. Starlette wraps middleware in reverse registration
+# order, so this must be registered after the CSRF middleware above.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
+    expose_headers=["X-Total-Count", "X-Page-Count"],
+    max_age=86400,
+)
 
 # ============================================================================
 # ROUTES
