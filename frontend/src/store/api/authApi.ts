@@ -108,6 +108,7 @@ export interface ProfileUpdatePayload {
 export interface ProfilePhotoResponse {
   photo_base64: string | null;
   mime_type?: string | null;
+  scan_status?: string | null;
 }
 
 export interface ProfilePhotoUpdate {

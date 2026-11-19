@@ -214,6 +214,7 @@ class ProfilePhotoUpdate(BaseModel):
 class ProfilePhotoResponse(BaseModel):
     photo_base64: Optional[str] = None
     mime_type: Optional[str] = None
+    scan_status: Optional[str] = None
 
 
 class PublicUserProfileOut(BaseModel):

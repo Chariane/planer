@@ -36,6 +36,11 @@ interface ProfilePhotoPayload {
   mimeType?: string | null;
 }
 
+interface ProfilePhotoUpdateResult {
+  photoBase64: string | null;
+  scanStatus?: string | null;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -51,7 +56,7 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   updateProfile: (data: ProfileUpdatePayload) => Promise<void>;
   getProfilePhoto: () => Promise<ProfilePhotoPayload | null>;
-  updateProfilePhoto: (photoBase64: string | null) => Promise<string | null>;
+  updateProfilePhoto: (photoBase64: string | null) => Promise<ProfilePhotoUpdateResult>;
   setup2FA: () => Promise<TwoFASetupPayload>;
   enable2FA: (code: string) => Promise<void>;
   disable2FA: (currentPassword: string) => Promise<void>;
@@ -198,7 +203,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfilePhoto = useCallback(async (photoBase64: string | null) => {
     const response = await authService.updateMyProfilePhoto(photoBase64);
-    return response?.photo_base64 || null;
+    return {
+      photoBase64: response?.photo_base64 || null,
+      scanStatus: response?.scan_status || null,
+    };
   }, []);
 
   const setup2FA = async () => {

@@ -126,10 +126,7 @@ def scan_image_bytes_with_clamav(payload: bytes, access_token: str | None = None
         if scan_status == "clean":
             return "clean"
         if scan_status == "skipped":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="ClamAV est indisponible : la photo n'a pas été enregistrée.",
-            )
+            return "skipped"
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Le service d'analyse antivirus n'a pas confirmé que la photo est saine.",

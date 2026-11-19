@@ -14,6 +14,9 @@ ANTIVIRUS_REQUIRED = os.getenv("ANTIVIRUS_REQUIRED", "true").lower() != "false"
 UPLOAD_ANTIVIRUS_REQUIRED = os.getenv(
     "UPLOAD_ANTIVIRUS_REQUIRED", str(ANTIVIRUS_REQUIRED).lower()
 ).lower() != "false"
+if os.getenv("RENDER", "").lower() == "true":
+    # Keep scanning whenever ClamAV works, but let demo uploads continue if it is down.
+    UPLOAD_ANTIVIRUS_REQUIRED = False
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 CLAMAV_SCAN_TIMEOUT_SECONDS = int(os.getenv("CLAMAV_SCAN_TIMEOUT_SECONDS", "120"))
 

@@ -160,9 +160,15 @@ export default function ProfilePage() {
     reader.onload = async () => {
       try {
         const photoDataUrl = String(reader.result);
-        const savedPhotoBase64 = await updateProfilePhoto(photoDataUrl);
-        setPhotoPreview(buildPhotoSrc(savedPhotoBase64) || photoDataUrl);
-        toast.success('Photo de profil mise à jour. Analyse antivirus validée.');
+        const result = await updateProfilePhoto(photoDataUrl);
+        setPhotoPreview(buildPhotoSrc(result.photoBase64) || photoDataUrl);
+        toast.success(
+          result.scanStatus === 'skipped'
+            ? 'Photo mise à jour. Antivirus indisponible : photo enregistrée sans analyse.'
+            : result.scanStatus === 'clean'
+              ? 'Photo de profil mise à jour. Analyse antivirus validée.'
+              : 'Photo de profil mise à jour.'
+        );
       } catch (err: unknown) {
         toast.error(getErrorMessage(err, 'Impossible de mettre à jour la photo.'));
       } finally {

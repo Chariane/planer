@@ -102,7 +102,7 @@ router = APIRouter(prefix="/auth", tags=["Authentification"])
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 
 
-def _decode_profile_photo(photo_base64: str | None, access_token: str | None = None) -> bytes | None:
+def _decode_profile_photo(photo_base64: str | None) -> bytes | None:
     if not photo_base64:
         return None
 
@@ -118,7 +118,6 @@ def _decode_profile_photo(photo_base64: str | None, access_token: str | None = N
     if len(photo_bytes) > MAX_PROFILE_PHOTO_BYTES:
         raise HTTPException(status_code=413, detail="La photo de profil ne doit pas depasser 2 Mo.")
 
-    scan_image_bytes_with_clamav(photo_bytes, access_token=access_token)
     return photo_bytes
 
 
@@ -871,7 +870,13 @@ def update_my_profile_photo(
         if authorization.startswith("Bearer ")
         else request.cookies.get("access_token")
     )
-    user.photo = _decode_profile_photo(payload.photo_base64, access_token=access_token)
+    photo_bytes = _decode_profile_photo(payload.photo_base64)
+    scan_status = (
+        scan_image_bytes_with_clamav(photo_bytes, access_token=access_token)
+        if photo_bytes is not None
+        else "not_scanned"
+    )
+    user.photo = photo_bytes
     commit_or_raise(
         db,
         detail="Impossible de mettre a jour la photo de profil.",
@@ -884,6 +889,7 @@ def update_my_profile_photo(
     return {
         "photo_base64": photo_b64,
         "mime_type": _guess_profile_photo_mime(user.photo),
+        "scan_status": scan_status,
     }
 
 
