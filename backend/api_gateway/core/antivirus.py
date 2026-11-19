@@ -12,6 +12,10 @@ ANTIVIRUS_REQUIRED = os.getenv("ANTIVIRUS_REQUIRED", "true").lower() != "false"
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 CLAMAV_SCAN_TIMEOUT_SECONDS = int(os.getenv("CLAMAV_SCAN_TIMEOUT_SECONDS", "120"))
 TASKS_API_URL = os.getenv("TASKS_API_URL", "").rstrip("/")
+if not TASKS_API_URL and os.getenv("RENDER", "").lower() == "true":
+    # The Render Blueprint normally supplies this URL. Keep the photo scanner
+    # working if a service's environment has not synced the reference yet.
+    TASKS_API_URL = "https://k-planer-api-tasks.onrender.com"
 
 
 def validate_image_bytes(payload: bytes) -> str:
